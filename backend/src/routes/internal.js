@@ -5,6 +5,7 @@ import { tenantUsers, customRoles, userRoleAssignments } from '../db/schema/inde
 import { eq, and } from 'drizzle-orm';
 import DistributedSSOCache, { CacheKeys, CacheTTL } from '../utils/distributed-sso-cache.js';
 import crypto from 'crypto';
+import ErrorResponses from '../utils/error-responses.js';
 
 export default async function internalRoutes(fastify, options) {
     // Internal health check for tools
@@ -32,7 +33,7 @@ export default async function internalRoutes(fastify, options) {
         const tenant = await TenantService.getTenantDetails(tenantId);
         
         if (!tenant) {
-          return reply.code(404).send({ error: 'Tenant not found' });
+          return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
         }
   
         const subscription = await SubscriptionService.getCurrentSubscription(tenantId);
@@ -207,7 +208,7 @@ export default async function internalRoutes(fastify, options) {
         const subscription = await SubscriptionService.getCurrentSubscription(tenantId);
         
         if (!subscription) {
-          return reply.code(404).send({ error: 'Subscription not found' });
+          return ErrorResponses.notFound(reply, 'Subscription', 'Subscription not found');
         }
   
         // Default feature flags based on plan
@@ -323,10 +324,7 @@ export default async function internalRoutes(fastify, options) {
         // Step 2: Fetch fresh data from database
         const tenant = await TenantService.getByKindeOrgId(kinde_org_code);
         if (!tenant) {
-          return reply.code(404).send({ 
-            error: 'Tenant not found',
-            kinde_org_code 
-          });
+          return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found', { kinde_org_code });
         }
 
         const userResult = await db
@@ -347,8 +345,7 @@ export default async function internalRoutes(fastify, options) {
           .limit(1);
 
         if (!userResult.length) {
-          return reply.code(404).send({ 
-            error: 'User not found in tenant',
+          return ErrorResponses.notFound(reply, 'User', 'User not found in tenant', { 
             kinde_user_id,
             tenant_id: tenant.tenantId
           });
@@ -774,7 +771,7 @@ export default async function internalRoutes(fastify, options) {
         
         const tenant = await TenantService.getByKindeOrgId(kinde_org_code);
         if (!tenant) {
-          return reply.code(404).send({ error: 'Tenant not found' });
+          return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
         }
 
         // Get user roles
@@ -790,7 +787,7 @@ export default async function internalRoutes(fastify, options) {
           .limit(1);
 
         if (!userResult.length) {
-          return reply.code(404).send({ error: 'User not found' });
+          return ErrorResponses.notFound(reply, 'User', 'User not found');
         }
 
         const userRolesResult = await db

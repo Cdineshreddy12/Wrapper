@@ -9,6 +9,7 @@ import { checkUserLimit } from '../middleware/planRestrictions.js';
 import { deleteTenantData, deleteTenantsByDomain, getTenantDataSummary } from '../utils/tenant-cleanup.js';
 import Logger from '../utils/logger.js';
 import trialManager from '../utils/trial-manager.js';
+import ErrorResponses from '../utils/error-responses.js';
 
 export default async function adminRoutes(fastify, options) {
   // Debug auth status endpoint
@@ -544,9 +545,7 @@ export default async function adminRoutes(fastify, options) {
         .returning();
 
       if (result.length === 0) {
-        return reply.code(404).send({
-          success: false,
-          error: 'No subscription found for tenant',
+        return ErrorResponses.notFound(reply, 'Subscription', 'No subscription found for tenant', {
           tenantId,
           requestId
         });
@@ -625,7 +624,7 @@ export default async function adminRoutes(fastify, options) {
 
         console.log(`🚫 [${requestId}] TRIAL EXPIRED during initialization - expired ${expiredDuration}`);
 
-        return reply.code(402).send({
+        return reply.code(200).send({
           success: false,
           error: 'Trial Expired',
           message: 'Your trial period has ended. Please upgrade your subscription to access your dashboard and data.',
@@ -644,7 +643,8 @@ export default async function adminRoutes(fastify, options) {
           requestId,
           isTrialExpired: true,
           showUpgradePrompt: true,
-          blockAppLoading: true
+          blockAppLoading: true,
+          subscriptionExpired: true
         });
       }
 
@@ -765,9 +765,7 @@ export default async function adminRoutes(fastify, options) {
         .returning();
 
       if (result.length === 0) {
-        return reply.code(404).send({
-          success: false,
-          error: 'User not found',
+        return ErrorResponses.notFound(reply, 'User', 'User not found', {
           requestId
         });
       }
@@ -811,9 +809,7 @@ export default async function adminRoutes(fastify, options) {
         .returning();
 
       if (result.length === 0) {
-        return reply.code(404).send({
-          success: false,
-          error: 'User not found',
+        return ErrorResponses.notFound(reply, 'User', 'User not found', {
           requestId
         });
       }
@@ -855,9 +851,7 @@ export default async function adminRoutes(fastify, options) {
         .limit(1);
 
       if (tenant.length === 0) {
-        return reply.code(404).send({
-          success: false,
-          error: 'Tenant not found',
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found', {
           requestId
         });
       }
@@ -897,9 +891,7 @@ export default async function adminRoutes(fastify, options) {
         .limit(1);
 
       if (!tenant) {
-        return reply.code(404).send({
-          success: false,
-          error: 'Tenant not found',
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found', {
           requestId
         });
       }
@@ -1015,9 +1007,7 @@ export default async function adminRoutes(fastify, options) {
         .returning();
 
       if (result.length === 0) {
-        return reply.code(404).send({
-          success: false,
-          error: 'Tenant not found',
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found', {
           requestId
         });
       }
@@ -1149,9 +1139,7 @@ export default async function adminRoutes(fastify, options) {
         .returning();
 
       if (result.length === 0) {
-        return reply.code(404).send({
-          success: false,
-          error: 'Role not found',
+        return ErrorResponses.notFound(reply, 'Role', 'Role not found', {
           requestId
         });
       }
@@ -1196,9 +1184,7 @@ export default async function adminRoutes(fastify, options) {
         .returning();
 
       if (result.length === 0) {
-        return reply.code(404).send({
-          success: false,
-          error: 'Role not found or cannot be deleted',
+        return ErrorResponses.notFound(reply, 'Role', 'Role not found or cannot be deleted', {
           requestId
         });
       }

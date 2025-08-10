@@ -227,7 +227,7 @@ export function useTrialStatus() {
       console.error('❌ useTrialStatus: Error checking status:', error)
       
       // Only show trial expiry if we get a specific trial expired error
-      if (error.response?.status === 402 && error.response?.data?.code === 'TRIAL_EXPIRED') {
+      if (error.response?.status === 200 && (error.response.data as any)?.subscriptionExpired && error.response?.data?.code === 'TRIAL_EXPIRED') {
         const errorData = error.response.data
         console.log('🚫 useTrialStatus: Received trial expired error from API')
         

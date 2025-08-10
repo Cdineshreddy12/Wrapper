@@ -208,11 +208,21 @@ async function registerPlugins() {
 
 // Register global middleware
 async function registerMiddleware() {
-  // Auth middleware (will set userContext if authenticated)
+  // Auth middleware (will set userContext if authenticated) - runs on all requests
   fastify.addHook('preHandler', authMiddleware);
 
   // Trial restriction middleware (after auth, before routes)
-  fastify.addHook('preHandler', trialRestrictionMiddleware);
+  // Keep as preHandler but add better error handling
+  fastify.addHook('preHandler', async (request, reply) => {
+    try {
+      // Only run trial restriction if auth has been processed
+      await trialRestrictionMiddleware(request, reply);
+    } catch (error) {
+      console.error('❌ Trial restriction middleware error:', error);
+      // Don't block the request on middleware errors
+      console.log('⚠️ Continuing request despite trial restriction error');
+    }
+  });
 
   // Error handler
   fastify.setErrorHandler(errorHandler);
@@ -230,6 +240,40 @@ async function registerRoutes() {
     };
   });
 
+  // Debug endpoint to test route registration
+  fastify.get('/debug-routes', async (request, reply) => {
+    const routes = [];
+    fastify.routes.forEach(route => {
+      routes.push({
+        method: route.method,
+        url: route.url,
+        prefix: route.prefix
+      });
+    });
+    
+    return {
+      success: true,
+      message: 'Route debugging info',
+      totalRoutes: routes.length,
+      routes: routes.slice(0, 20), // Show first 20 routes
+      timestamp: new Date().toISOString()
+    };
+  });
+
+  // Test endpoint that bypasses all middleware
+  fastify.get('/test-no-middleware', async (request, reply) => {
+    return {
+      success: true,
+      message: 'This endpoint bypasses all middleware',
+      timestamp: new Date().toISOString(),
+      headers: request.headers,
+      url: request.url,
+      method: request.method
+    };
+  });
+
+
+
   // API routes
   await fastify.register(authRoutes, { prefix: '/api/auth' });
   await fastify.register(tenantRoutes, { prefix: '/api/tenants' });
@@ -240,7 +284,7 @@ async function registerRoutes() {
   await fastify.register(analyticsRoutes, { prefix: '/api/analytics' });
   await fastify.register(usageRoutes, { prefix: '/api/usage' });
   await fastify.register(internalRoutes, { prefix: '/api/internal' });
-  await fastify.register(enhancedInternalRoutes); // No prefix to expose /api/metrics/ directly
+  await fastify.register(enhancedInternalRoutes, { prefix: '/api' }); // Add proper prefix for consistency
   await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
   await fastify.register(proxyRoutes, { prefix: '/api/proxy' });
   await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
@@ -501,19 +545,8 @@ async function registerRoutes() {
     return reply.redirect(redirectUrl.toString());
   });
 
-  // Catch-all route for SPA
-  fastify.get('/*', async (request, reply) => {
-    // In production, serve the built frontend
-    if (process.env.NODE_ENV === 'production') {
-      return reply.sendFile('index.html');
-    }
-    
-    return reply.code(404).send({ 
-      error: 'Not Found',
-      message: 'Route not found',
-      statusCode: 404 
-    });
-  });
+  // Note: Static files should be served by nginx/reverse proxy in production
+  // No catch-all route needed here - let nginx handle frontend routes
 }
 
 // Graceful shutdown

@@ -50,7 +50,7 @@ export function PaymentHistory() {
   const makeRequest = async (endpoint: string) => {
     try {
       const token = await getToken()
-      const response = await fetch(`http://localhost:3000${endpoint}`, {
+      const response = await fetch(`https://wrapper.zopkit.com${endpoint}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

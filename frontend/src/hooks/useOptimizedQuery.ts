@@ -16,8 +16,8 @@ interface UseOptimizedQueryOptions<T> {
 
 // Enhanced error handling for trial expiry scenarios
 const handleTrialAwareError = (error: any, onError?: (error: any) => void) => {
-  // Check if this is a trial expiry error
-  if (error?.response?.status === 402) {
+  // Check if this is a trial expiry error (200 status with subscriptionExpired flag)
+  if (error?.response?.status === 200 && (error.response.data as any)?.subscriptionExpired) {
     const responseData = error.response.data
     if (responseData?.code === 'TRIAL_EXPIRED' || responseData?.code === 'SUBSCRIPTION_EXPIRED') {
       console.log('🚫 Trial expired error handled gracefully in query')

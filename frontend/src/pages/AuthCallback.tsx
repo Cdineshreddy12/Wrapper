@@ -36,7 +36,7 @@ export function AuthCallback() {
               
                              if (token) {
                  // Validate token and get user context using backend
-                 const backendUrl = 'http://localhost:3000'
+                 const backendUrl = 'https://wrapper.zopkit.com'
                  const response = await fetch(`${backendUrl}/api/auth/validate`, {
                    method: 'POST',
                    headers: {

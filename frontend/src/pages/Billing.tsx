@@ -688,7 +688,7 @@ export function Billing() {
     try {
       console.log('🧪 Testing with manual token:', manualToken.substring(0, 20) + '...');
       
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/subscriptions/current`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://wrapper.zopkit.com/api'}/subscriptions/current`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${manualToken}`,

@@ -33,7 +33,7 @@ const SuiteDashboard: React.FC = () => {
     const token = await getToken();
     
     try {
-      const response = await fetch(`http://localhost:3000${endpoint}`, {
+      const response = await fetch(`https://wrapper.zopkit.com${endpoint}`, {
         ...options,
         headers: {
           'Authorization': `Bearer ${token}`,

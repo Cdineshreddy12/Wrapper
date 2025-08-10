@@ -112,7 +112,7 @@ export function ModernUserDashboard() {
       }
     } catch (error: any) {
       // Don't show error toasts for trial expiry
-      if (error?.response?.status === 402) {
+      if (error?.response?.status === 200 && (error.response.data as any)?.subscriptionExpired) {
         console.log('🚫 Trial expired error in ModernUserDashboard - handled gracefully');
         return;
       }

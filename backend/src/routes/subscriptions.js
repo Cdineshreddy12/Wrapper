@@ -6,6 +6,7 @@ import { getPlanLimits } from '../middleware/planRestrictions.js';
 import { db } from '../db/index.js';
 import { tenants, payments, subscriptionActions, subscriptions } from '../db/schema/index.js';
 import { eq, and, desc, inArray } from 'drizzle-orm';
+import ErrorResponses from '../utils/error-responses.js';
 
 export default async function subscriptionRoutes(fastify, options) {
   // Temporary debug endpoint to test authentication
@@ -52,19 +53,13 @@ export default async function subscriptionRoutes(fastify, options) {
       const tenantId = request.userContext.tenantId;
 
       if (!tenantId) {
-        return reply.code(404).send({ 
-          error: 'No subscription found',
-          message: 'User is not associated with any organization'
-        });
+        return ErrorResponses.notFound(reply, 'Subscription', 'User is not associated with any organization');
       }
 
       const subscription = await SubscriptionService.getCurrentSubscription(tenantId);
       
       if (!subscription) {
-        return reply.code(404).send({ 
-          error: 'No subscription found',
-          message: 'No active subscription for this organization'
-        });
+        return ErrorResponses.notFound(reply, 'Subscription', 'No active subscription for this organization');
       }
       
       return {
@@ -214,9 +209,7 @@ export default async function subscriptionRoutes(fastify, options) {
       
       if (!tenant) {
         console.log('❌ Checkout - Tenant not found in database:', tenantId);
-        return reply.code(404).send({ 
-          error: 'Organization not found',
-          message: 'Organization data not found. Please complete onboarding first.',
+        return ErrorResponses.notFound(reply, 'Organization', 'Organization data not found. Please complete onboarding first.', {
           action: 'redirect_to_onboarding',
           redirectUrl: '/onboarding'
         });
@@ -278,10 +271,7 @@ export default async function subscriptionRoutes(fastify, options) {
       const tenantId = request.userContext.tenantId;
 
       if (!tenantId) {
-        return reply.code(404).send({ 
-          error: 'No organization found',
-          message: 'User is not associated with any organization'
-        });
+        return ErrorResponses.notFound(reply, 'Organization', 'User is not associated with any organization');
       }
 
       const usage = await SubscriptionService.getUsageMetrics(tenantId);
@@ -304,10 +294,7 @@ export default async function subscriptionRoutes(fastify, options) {
       const tenantId = request.userContext.tenantId;
 
       if (!tenantId) {
-        return reply.code(404).send({ 
-          error: 'No organization found',
-          message: 'User is not associated with any organization'
-        });
+        return ErrorResponses.notFound(reply, 'Organization', 'User is not associated with any organization');
       }
 
       const billingHistory = await SubscriptionService.getBillingHistory(tenantId);
@@ -773,10 +760,7 @@ export default async function subscriptionRoutes(fastify, options) {
         .limit(1);
 
       if (!payment) {
-        return reply.code(404).send({
-          error: 'Payment not found',
-          message: 'Payment not found or does not belong to your organization'
-        });
+        return ErrorResponses.notFound(reply, 'Payment', 'Payment not found or does not belong to your organization');
       }
 
       // Format payment for frontend
@@ -1022,10 +1006,7 @@ export default async function subscriptionRoutes(fastify, options) {
         .returning();
 
       if (!updatedSubscription) {
-        return reply.code(404).send({
-          success: false,
-          error: 'Subscription not found'
-        });
+        return ErrorResponses.notFound(reply, 'Subscription', 'Subscription not found');
       }
       
       console.log(`✅ Trial restrictions ${disable ? 'disabled' : 'enabled'} for tenant: ${tenantId}`);

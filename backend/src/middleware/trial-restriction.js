@@ -5,6 +5,13 @@ import Logger from '../utils/logger.js';
 export async function trialRestrictionMiddleware(request, reply) {
   // Skip check for non-authenticated requests
   if (!request.userContext?.tenantId) {
+    console.log('🔓 Trial restriction: No tenantId, skipping check');
+    return;
+  }
+
+  // Skip check for auth-related operations during registration
+  if (request.url.includes('/auth') || request.url.includes('/onboarding')) {
+    console.log('🔓 Trial restriction: Auth/onboarding operation, skipping check');
     return;
   }
 
@@ -18,7 +25,9 @@ export async function trialRestrictionMiddleware(request, reply) {
     '/api/admin/auth-status',
     '/api/admin/trials', // For admin trial management
     '/health',
-    '/docs'
+    '/docs',
+    '/debug-routes',
+    '/test-no-middleware'
   ];
 
   // Check if current path is allowed for expired trials
@@ -31,6 +40,18 @@ export async function trialRestrictionMiddleware(request, reply) {
     return; // Allow these operations
   }
 
+  // Additional check for critical endpoints that should always work
+  const criticalEndpoints = [
+    '/api/subscriptions/current',
+    '/api/admin/auth-status',
+    '/api/tenants/current'
+  ];
+  
+  if (criticalEndpoints.some(endpoint => request.url === endpoint)) {
+    console.log(`🔓 Trial restriction: Critical endpoint ${request.url}, allowing access`);
+    return;
+  }
+
   const requestId = Logger.generateRequestId('trial-restriction');
   const tenantId = request.userContext.tenantId;
 
@@ -38,6 +59,14 @@ export async function trialRestrictionMiddleware(request, reply) {
     console.log(`🔒 [${requestId}] Checking trial expiry for tenant: ${tenantId}`);
     console.log(`🌐 [${requestId}] Request URL: ${request.url}`);
     console.log(`📝 [${requestId}] Method: ${request.method}`);
+
+    // Add more detailed logging for debugging
+    console.log(`🔍 [${requestId}] User context:`, {
+      userId: request.userContext?.userId,
+      email: request.userContext?.email,
+      tenantId: request.userContext?.tenantId,
+      isAuthenticated: request.userContext?.isAuthenticated
+    });
 
     const expiryCheck = await trialManager.isTrialExpired(tenantId);
     
@@ -105,8 +134,8 @@ export async function trialRestrictionMiddleware(request, reply) {
 
       console.log(`📊 [${requestId}] Blocking ${operationType} - ${isTrialExpired ? 'Trial' : 'Plan'} expired ${expiredDuration}`);
 
-      // Show immediate banner in response
-      return reply.code(402).send({
+      // Show immediate banner in response - return 200 to avoid HTTP errors
+      return reply.code(200).send({
         success: false,
         error: isTrialExpired ? 'Trial Expired' : 'Subscription Expired',
         message: specificMessage,
@@ -137,7 +166,9 @@ export async function trialRestrictionMiddleware(request, reply) {
         isSubscriptionExpired: isPaidPlanExpired,
         showUpgradePrompt: true,
         blockAppLoading: true, // Block all app loading until resolved
-        immediate: true // Show banner immediately
+        immediate: true, // Show banner immediately
+        // Add this to indicate the response is for subscription expiry
+        subscriptionExpired: true
       });
     }
 
@@ -151,8 +182,26 @@ export async function trialRestrictionMiddleware(request, reply) {
 
   } catch (error) {
     console.error(`❌ [${requestId}] Error checking trial expiry:`, error);
+    console.error(`❌ [${requestId}] Error details:`, {
+      message: error.message,
+      stack: error.stack,
+      tenantId,
+      url: request.url,
+      method: request.method
+    });
+    
     // Don't block on check failure - log and continue
     console.log(`⚠️ [${requestId}] Continuing request due to check failure`);
+    
+    // If it's a database connection error or critical error, we might want to block
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      console.error(`🚨 [${requestId}] Critical database error - blocking request`);
+      return reply.code(503).send({
+        success: false,
+        error: 'Service temporarily unavailable',
+        message: 'Database connection failed. Please try again later.'
+      });
+    }
   }
 }
 

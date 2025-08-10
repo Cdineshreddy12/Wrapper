@@ -2,7 +2,7 @@ import axios, { AxiosResponse, AxiosError } from 'axios'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import toast from 'react-hot-toast'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://wrapper.zopkit.com/api'
 
 // Store for Kinde token getter function
 let kindeTokenGetter: (() => Promise<string | null>) | null = null;
@@ -249,8 +249,8 @@ api.interceptors.response.use(
       // window.location.href = '/login'
     }
 
-    // Handle trial expiry (402 status code) - Graceful handling without excessive toasts
-    if (error.response?.status === 402) {
+    // Handle trial expiry (200 status with subscriptionExpired flag) - Graceful handling without excessive toasts
+    if (error.response?.status === 200 && (error.response?.data as any)?.subscriptionExpired) {
       const responseData = error.response.data as any
       
       if (responseData?.code === 'TRIAL_EXPIRED' || responseData?.code === 'SUBSCRIPTION_EXPIRED') {
@@ -299,7 +299,7 @@ api.interceptors.response.use(
     }
 
     // Handle server errors - but don't spam toasts for trial expiry scenarios
-    if (error.response?.status >= 500) {
+    if (error.response?.status && error.response.status >= 500) {
       console.error('🚨 Server error intercepted:', error.response.status)
       
       // Don't show server error toasts if we're in a trial expiry state
@@ -628,7 +628,7 @@ export const permissionsAPI = {
     reason?: string;
     expiresAt?: string;
   }) => api.post('/custom-roles/assign-user-permissions', data),
-  getUserPermissions: (userId: string) => api.get(`/custom-roles/user-permissions/${userId}`),
+  getCustomUserPermissions: (userId: string) => api.get(`/custom-roles/user-permissions/${userId}`),
   
   // Role Assignments
   getAssignments: (params?: { 

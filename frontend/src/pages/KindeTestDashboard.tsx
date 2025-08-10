@@ -93,7 +93,7 @@ const KindeTestDashboard: React.FC = () => {
     const startTime = Date.now();
     
     try {
-      const response = await fetch(`http://localhost:3000${endpoint}`, {
+      const response = await fetch(`https://wrapper.zopkit.com${endpoint}`, {
         ...options,
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -932,18 +932,18 @@ const KindeTestDashboard: React.FC = () => {
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h4 className="font-medium text-gray-900 mb-2">❌ Wrong Email (Current URL):</h4>
                   <code className="text-sm bg-white p-2 rounded border block break-all">
-                    http://localhost:3001/invite/accept?org=org_aa9d25628de89&email=s211119@rguktsklm.ac.in
+                    https://wrapper.zopkit.com/invite/accept?org=org_aa9d25628de89&email=s211119@rguktsklm.ac.in
                   </code>
                   <p className="text-sm text-red-600 mt-1">This will fail - missing 't' in email</p>
                 </div>
                 <div className="bg-green-50 p-4 rounded-lg">
                   <h4 className="font-medium text-gray-900 mb-2">✅ Correct Email (Fixed URL):</h4>
                   <code className="text-sm bg-white p-2 rounded border block break-all">
-                    http://localhost:3001/invite/accept?org=org_aa9d25628de89&email=s211119@rgukttsklm.ac.in
+                    https://wrapper.zopkit.com/invite/accept?org=org_aa9d25628de89&email=s211119@rgukttsklm.ac.in
                   </code>
                   <p className="text-sm text-green-600 mt-1">This should work - has correct email</p>
                   <button
-                    onClick={() => window.open('http://localhost:3001/invite/accept?org=org_aa9d25628de89&email=s211119@rgukttsklm.ac.in', '_blank')}
+                    onClick={() => window.open('https://wrapper.zopkit.com/invite/accept?org=org_aa9d25628de89&email=s211119@rgukttsklm.ac.in', '_blank')}
                     className="mt-2 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm"
                   >
                     🔗 Test This URL

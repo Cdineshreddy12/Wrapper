@@ -4,6 +4,7 @@ import { trackUsage } from '../middleware/usage.js';
 import { db } from '../db/index.js';
 import { tenantUsers, userRoleAssignments, customRoles } from '../db/schema/index.js';
 import { and, eq, sql, inArray } from 'drizzle-orm';
+import ErrorResponses from '../utils/error-responses.js';
 
 export default async function tenantRoutes(fastify, options) {
   // Get current tenant info
@@ -17,7 +18,7 @@ export default async function tenantRoutes(fastify, options) {
       const tenantId = request.userContext.tenantId;
       
       if (!tenantId) {
-        return reply.code(404).send({ error: 'Tenant not found' });
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       }
       
       const details = await TenantService.getTenantDetails(tenantId);
@@ -56,7 +57,7 @@ export default async function tenantRoutes(fastify, options) {
       const tenantId = request.userContext.tenantId;
       
       if (!tenantId) {
-        return reply.code(404).send({ error: 'Tenant not found' });
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       }
 
       const updatedTenant = await TenantService.updateTenant(
@@ -86,7 +87,7 @@ export default async function tenantRoutes(fastify, options) {
       const tenantId = request.userContext.tenantId;
       
       if (!tenantId) {
-        return reply.code(404).send({ error: 'Tenant not found' });
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       }
 
       const users = await TenantService.getTenantUsers(tenantId);
@@ -123,7 +124,7 @@ export default async function tenantRoutes(fastify, options) {
       const tenantId = request.userContext.tenantId;
       
       if (!tenantId) {
-        return reply.code(404).send({ error: 'Tenant not found' });
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       }
 
       const { email, roleId, message } = request.body;
@@ -203,7 +204,7 @@ export default async function tenantRoutes(fastify, options) {
       const tenantId = request.userContext.tenantId;
       
       if (!tenantId) {
-        return reply.code(404).send({ error: 'Tenant not found' });
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       }
 
       const invitations = await TenantService.getPendingInvitations(tenantId);
@@ -238,7 +239,7 @@ export default async function tenantRoutes(fastify, options) {
       const tenantId = request.userContext.tenantId;
       
       if (!tenantId) {
-        return reply.code(404).send({ error: 'Tenant not found' });
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       }
 
       await TenantService.cancelInvitation(request.params.id, tenantId);
@@ -390,7 +391,7 @@ export default async function tenantRoutes(fastify, options) {
         .returning();
 
       if (!updatedUser) {
-        return reply.code(404).send({ error: 'User not found' });
+        return ErrorResponses.notFound(reply, 'User', 'User not found');
       }
 
       return {
@@ -438,7 +439,7 @@ export default async function tenantRoutes(fastify, options) {
         .returning();
 
       if (!updatedUser) {
-        return reply.code(404).send({ error: 'User not found' });
+        return ErrorResponses.notFound(reply, 'User', 'User not found');
       }
 
       return {
@@ -481,7 +482,7 @@ export default async function tenantRoutes(fastify, options) {
         .returning();
 
       if (!updatedUser) {
-        return reply.code(404).send({ error: 'User not found' });
+        return ErrorResponses.notFound(reply, 'User', 'User not found');
       }
 
       return {
@@ -541,7 +542,7 @@ export default async function tenantRoutes(fastify, options) {
         .returning();
 
       if (!updatedUser) {
-        return reply.code(404).send({ error: 'User not found' });
+        return ErrorResponses.notFound(reply, 'User', 'User not found');
       }
 
       return {
@@ -586,7 +587,7 @@ export default async function tenantRoutes(fastify, options) {
         .limit(1);
 
       if (!existingUser) {
-        return reply.code(404).send({ error: 'User not found' });
+        return ErrorResponses.notFound(reply, 'User', 'User not found');
       }
 
       // Delete user from tenant
@@ -628,7 +629,7 @@ export default async function tenantRoutes(fastify, options) {
         .limit(1);
 
       if (!user) {
-        return reply.code(404).send({ error: 'User not found' });
+        return ErrorResponses.notFound(reply, 'User', 'User not found');
       }
 
       // TODO: Implement actual email sending logic here
@@ -704,7 +705,7 @@ export default async function tenantRoutes(fastify, options) {
         .limit(1);
 
       if (!user) {
-        return reply.code(404).send({ error: 'User not found' });
+        return ErrorResponses.notFound(reply, 'User', 'User not found');
       }
 
       // Verify all roles exist and belong to this tenant

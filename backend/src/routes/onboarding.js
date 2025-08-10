@@ -8,6 +8,7 @@ import { tenants, tenantUsers, customRoles, userRoleAssignments, subscriptions, 
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { CRM_PERMISSION_MATRIX, CRM_SPECIAL_PERMISSIONS } from '../data/comprehensive-crm-permissions.js';
+import ErrorResponses from '../utils/error-responses.js';
 
 export default async function onboardingRoutes(fastify, options) {
   
@@ -1132,7 +1133,7 @@ export default async function onboardingRoutes(fastify, options) {
         .limit(1);
 
       if (!user) {
-        return reply.code(404).send({ error: 'User not found' });
+        return ErrorResponses.notFound(reply, 'User', 'User not found');
       }
 
       const [tenant] = await db
@@ -1142,7 +1143,7 @@ export default async function onboardingRoutes(fastify, options) {
         .limit(1);
 
       if (!tenant) {
-        return reply.code(404).send({ error: 'Organization not found' });
+        return ErrorResponses.notFound(reply, 'Organization', 'Organization not found');
       }
 
       return {
@@ -1196,7 +1197,7 @@ export default async function onboardingRoutes(fastify, options) {
         .limit(1);
 
       if (!user) {
-        return reply.code(404).send({ error: 'User not found' });
+        return ErrorResponses.notFound(reply, 'User', 'User not found');
       }
 
       if (user.tenantId !== organizationId) {
@@ -1287,7 +1288,7 @@ export default async function onboardingRoutes(fastify, options) {
         .limit(1);
 
       if (!currentUser) {
-        return reply.code(404).send({ error: 'User not found' });
+        return ErrorResponses.notFound(reply, 'User', 'User not found');
       }
 
       // Prepare onboarding data to store
@@ -1372,7 +1373,7 @@ export default async function onboardingRoutes(fastify, options) {
         .limit(1);
 
       if (!currentUser) {
-        return reply.code(404).send({ error: 'Current user not found' });
+        return ErrorResponses.notFound(reply, 'User', 'Current user not found');
       }
 
       // If resetting another user, check admin permission
@@ -2093,10 +2094,7 @@ export default async function onboardingRoutes(fastify, options) {
         .limit(1);
 
       if (!targetTenant) {
-        return reply.code(404).send({
-          error: 'Organization not found',
-          message: 'The specified organization does not exist'
-        });
+        return ErrorResponses.notFound(reply, 'Organization', 'The specified organization does not exist');
       }
 
       const finalKindeUserId = currentAuthenticatedUser.kindeUserId || currentAuthenticatedUser.userId;
