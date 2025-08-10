@@ -75,8 +75,8 @@ export function PaymentHistory() {
 
       // Load payment history and stats in parallel
       const [historyData, statsData] = await Promise.all([
-        makeRequest('/api/payments/history'),
-        makeRequest('/api/payments/stats')
+        makeRequest('/payments/history'),
+        makeRequest('/payments/stats')
       ])
 
       setPayments(historyData.data || [])

@@ -477,7 +477,7 @@ export function RoleManagementDashboard() {
       const isApplicationModuleBuilder = roleData.selectedApps && roleData.selectedModules && roleData.selectedPermissions;
 
       if (isAdvancedRoleBuilder) {
-        // Data from AdvancedRoleBuilder - transform to proper format for /api/roles endpoint
+        // Data from AdvancedRoleBuilder - transform to proper format for /roles endpoint
         payload = {
           name: roleData.name,
           description: roleData.description,

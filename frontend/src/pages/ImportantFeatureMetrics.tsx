@@ -99,7 +99,7 @@ const ImportantFeatureMetrics: React.FC = () => {
   // Fetch important feature metrics
   const fetchMetrics = async () => {
     try {
-      const response = await fetch('/api/metrics/important-features');
+      const response = await fetch('/metrics/important-features');
       const data = await response.json();
       
       if (data.success) {
@@ -116,7 +116,7 @@ const ImportantFeatureMetrics: React.FC = () => {
   // Start simulation
   const startSimulation = async () => {
     try {
-      const response = await fetch('/api/metrics/important-features/simulate', {
+      const response = await fetch('/metrics/important-features/simulate', {
         method: 'POST'
       });
       
@@ -132,7 +132,7 @@ const ImportantFeatureMetrics: React.FC = () => {
   // Reset metrics
   const resetMetrics = async () => {
     try {
-      const response = await fetch('/api/metrics/important-features/reset', {
+      const response = await fetch('/metrics/important-features/reset', {
         method: 'POST'
       });
       

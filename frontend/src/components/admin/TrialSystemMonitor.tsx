@@ -54,7 +54,7 @@ export function TrialSystemMonitor() {
   const fetchStatus = async () => {
     try {
       setLoading(true)
-      const response = await api.get('/api/admin/trials/system-status')
+      const response = await api.get('/admin/trials/system-status')
       if (response.data.success) {
         setStatus(response.data.data)
         setLastRefresh(new Date())
@@ -72,7 +72,7 @@ export function TrialSystemMonitor() {
   const restartMonitoring = async () => {
     try {
       setRestarting(true)
-      const response = await api.post('/api/admin/trials/restart-monitoring')
+      const response = await api.post('/admin/trials/restart-monitoring')
       if (response.data.success) {
         toast.success('Trial monitoring system restarted successfully')
         await fetchStatus() // Refresh status after restart

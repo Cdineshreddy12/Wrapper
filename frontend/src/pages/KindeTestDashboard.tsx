@@ -80,7 +80,7 @@ const KindeTestDashboard: React.FC = () => {
     priority: 100
   });
   const [testEmail, setTestEmail] = useState('');
-  const [apiTestUrl, setApiTestUrl] = useState('/api/admin/auth-status');
+  const [apiTestUrl, setApiTestUrl] = useState('/admin/auth-status');
   const [apiTestMethod, setApiTestMethod] = useState('GET');
   const [apiTestBody, setApiTestBody] = useState('{}');
   const [removalMessage, setRemovalMessage] = useState('');
@@ -139,7 +139,7 @@ const KindeTestDashboard: React.FC = () => {
   // Load functions
   const loadAuthStatus = async () => {
     try {
-      const data = await makeRequest('/api/admin/auth-status');
+      const data = await makeRequest('/admin/auth-status');
       setAuthStatus(data.authStatus);
     } catch (err: any) {
       setError(`Failed to load auth status: ${err.message}`);
@@ -148,7 +148,7 @@ const KindeTestDashboard: React.FC = () => {
 
   const loadOrganizations = async () => {
     try {
-      const data = await makeRequest('/api/admin/organizations');
+      const data = await makeRequest('/admin/organizations');
       setOrganizations(data.organizations);
       if (data.organizations.length > 0 && !selectedOrgId) {
         setSelectedOrgId(data.organizations[0].tenantId);
@@ -161,7 +161,7 @@ const KindeTestDashboard: React.FC = () => {
   const loadUsers = async (orgId: string) => {
     if (!orgId) return;
     try {
-      const data = await makeRequest(`/api/admin/organizations/${orgId}/users`);
+      const data = await makeRequest(`/admin/organizations/${orgId}/users`);
       setUsers(data.users);
     } catch (err: any) {
       setError(`Failed to load users: ${err.message}`);
@@ -171,7 +171,7 @@ const KindeTestDashboard: React.FC = () => {
   const loadRoles = async (orgId: string) => {
     if (!orgId) return;
     try {
-      const data = await makeRequest(`/api/admin/organizations/${orgId}/roles`);
+      const data = await makeRequest(`/admin/organizations/${orgId}/roles`);
       setRoles(data.roles);
     } catch (err: any) {
       setError(`Failed to load roles: ${err.message}`);
@@ -182,7 +182,7 @@ const KindeTestDashboard: React.FC = () => {
   const createOrganization = async () => {
     setLoading(true);
     try {
-      await makeRequest('/api/onboarding/onboard', {
+      await makeRequest('/onboarding/onboard', {
         method: 'POST',
         body: JSON.stringify(newOrg)
       });
@@ -204,7 +204,7 @@ const KindeTestDashboard: React.FC = () => {
     
     setLoading(true);
     try {
-      await makeRequest(`/api/admin/organizations/${selectedOrgId}/invite-user`, {
+      await makeRequest(`/admin/organizations/${selectedOrgId}/invite-user`, {
         method: 'POST',
         body: JSON.stringify(newUser)
       });
@@ -226,7 +226,7 @@ const KindeTestDashboard: React.FC = () => {
     
     setLoading(true);
     try {
-      await makeRequest(`/api/admin/organizations/${selectedOrgId}/roles`, {
+      await makeRequest(`/admin/organizations/${selectedOrgId}/roles`, {
         method: 'POST',
         body: JSON.stringify({
           ...newRole,
@@ -252,7 +252,7 @@ const KindeTestDashboard: React.FC = () => {
   const testEmailService = async () => {
     setLoading(true);
     try {
-      await makeRequest('/api/admin/test-email', {
+      await makeRequest('/admin/test-email', {
         method: 'POST',
         body: JSON.stringify({ email: testEmail, name: 'Test User' })
       });
@@ -284,7 +284,7 @@ const KindeTestDashboard: React.FC = () => {
   const assignRole = async (userId: string, roleIds: string[]) => {
     setLoading(true);
     try {
-      await makeRequest(`/api/admin/organizations/${selectedOrgId}/users/${userId}/roles`, {
+      await makeRequest(`/admin/organizations/${selectedOrgId}/users/${userId}/roles`, {
         method: 'POST',
         body: JSON.stringify({ roleIds })
       });
@@ -300,7 +300,7 @@ const KindeTestDashboard: React.FC = () => {
   const addSingleRole = async (userId: string, roleId: string) => {
     setLoading(true);
     try {
-      await makeRequest(`/api/admin/organizations/${selectedOrgId}/users/${userId}/roles/${roleId}`, {
+      await makeRequest(`/admin/organizations/${selectedOrgId}/users/${userId}/roles/${roleId}`, {
         method: 'POST'
       });
       setSuccess('Role added successfully!');
@@ -315,7 +315,7 @@ const KindeTestDashboard: React.FC = () => {
   const removeSingleRole = async (userId: string, roleId: string) => {
     setLoading(true);
     try {
-      await makeRequest(`/api/admin/organizations/${selectedOrgId}/users/${userId}/roles/${roleId}`, {
+      await makeRequest(`/admin/organizations/${selectedOrgId}/users/${userId}/roles/${roleId}`, {
         method: 'DELETE'
       });
       setSuccess('Role removed successfully!');
@@ -330,7 +330,7 @@ const KindeTestDashboard: React.FC = () => {
   const removeUserWithMessage = async (userId: string, customMessage: string, sendEmail: boolean = true) => {
     setLoading(true);
     try {
-      await makeRequest(`/api/admin/organizations/${selectedOrgId}/users/${userId}/remove`, {
+      await makeRequest(`/admin/organizations/${selectedOrgId}/users/${userId}/remove`, {
         method: 'DELETE',
         body: JSON.stringify({ customMessage, sendEmail })
       });
@@ -973,7 +973,7 @@ const KindeTestDashboard: React.FC = () => {
                   </select>
                   <input
                     type="text"
-                    placeholder="API Endpoint (e.g., /api/admin/auth-status)"
+                    placeholder="API Endpoint (e.g., /admin/auth-status)"
                     value={apiTestUrl}
                     onChange={(e) => setApiTestUrl(e.target.value)}
                     className="border border-gray-300 rounded-lg px-3 py-2 md:col-span-2"
@@ -1002,16 +1002,16 @@ const KindeTestDashboard: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-4">📚 Quick API Tests</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[
-                  { name: 'Auth Status', endpoint: '/api/admin/auth-status', method: 'GET' },
-                  { name: 'Organizations', endpoint: '/api/admin/organizations', method: 'GET' },
-                  { name: 'Users (Selected Org)', endpoint: `/api/admin/organizations/${selectedOrgId}/users`, method: 'GET' },
-                  { name: 'Roles (Selected Org)', endpoint: `/api/admin/organizations/${selectedOrgId}/roles`, method: 'GET' },
+                  { name: 'Auth Status', endpoint: '/admin/auth-status', method: 'GET' },
+                  { name: 'Organizations', endpoint: '/admin/organizations', method: 'GET' },
+                  { name: 'Users (Selected Org)', endpoint: `/admin/organizations/${selectedOrgId}/users`, method: 'GET' },
+                  { name: 'Roles (Selected Org)', endpoint: `/admin/organizations/${selectedOrgId}/roles`, method: 'GET' },
                   { name: 'Health Check', endpoint: '/health', method: 'GET' },
-                  { name: 'Test Permission', endpoint: '/api/admin/test-permission', method: 'POST' },
-                  { name: 'Debug All Org Users', endpoint: `/api/admin/debug/organization/${selectedOrgId}/all-users`, method: 'GET' },
-                  { name: 'Debug Invitation (s211119)', endpoint: '/api/invitations/debug/org_aa9d25628de89/s211119@rguktsklm.ac.in', method: 'GET' },
-                  { name: 'Test Invitation Details', endpoint: '/api/invitations/details?org=org_aa9d25628de89&email=s211119@rguktsklm.ac.in', method: 'GET' },
-                  { name: 'Test CORRECT Email (with extra t)', endpoint: '/api/invitations/details?org=org_aa9d25628de89&email=s211119@rgukttsklm.ac.in', method: 'GET' }
+                  { name: 'Test Permission', endpoint: '/admin/test-permission', method: 'POST' },
+                  { name: 'Debug All Org Users', endpoint: `/admin/debug/organization/${selectedOrgId}/all-users`, method: 'GET' },
+                  { name: 'Debug Invitation (s211119)', endpoint: '/invitations/debug/org_aa9d25628de89/s211119@rguktsklm.ac.in', method: 'GET' },
+                  { name: 'Test Invitation Details', endpoint: '/invitations/details?org=org_aa9d25628de89&email=s211119@rguktsklm.ac.in', method: 'GET' },
+                  { name: 'Test CORRECT Email (with extra t)', endpoint: '/invitations/details?org=org_aa9d25628de89&email=s211119@rgukttsklm.ac.in', method: 'GET' }
                 ].map((test) => (
                   <button
                     key={test.name}

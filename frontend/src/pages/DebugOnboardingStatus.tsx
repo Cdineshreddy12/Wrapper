@@ -116,7 +116,7 @@ export default function DebugOnboardingStatus() {
     
     setDebugLoading(true)
     try {
-      const response = await fetch(`/api/onboarding/debug-user/${user.id}`, {
+      const response = await fetch(`/onboarding/debug-user/${user.id}`, {
         credentials: 'include'
       })
       const result = await response.json()

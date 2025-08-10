@@ -58,7 +58,7 @@ const SuiteDashboard: React.FC = () => {
   const loadApplications = async () => {
     try {
       setLoading(true);
-      const data = await makeRequest('/api/suite/applications');
+      const data = await makeRequest('/suite/applications');
       setApplications(data.applications);
     } catch (err: any) {
       setError(`Failed to load applications: ${err.message}`);
@@ -70,7 +70,7 @@ const SuiteDashboard: React.FC = () => {
   // Load user activity
   const loadActivity = async () => {
     try {
-      const data = await makeRequest('/api/suite/activity');
+      const data = await makeRequest('/suite/activity');
       setActivities(data.activities);
     } catch (err: any) {
       console.error('Failed to load activity:', err);
@@ -83,7 +83,7 @@ const SuiteDashboard: React.FC = () => {
       setLoading(true);
       
       // Request SSO token for the application
-      const data = await makeRequest('/api/suite/sso/redirect', {
+      const data = await makeRequest('/suite/sso/redirect', {
         method: 'POST',
         body: JSON.stringify({ 
           appCode,

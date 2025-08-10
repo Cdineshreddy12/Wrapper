@@ -80,8 +80,8 @@ const CacheMetricsDashboard: React.FC = () => {
   const fetchMetrics = async () => {
     try {
       const [metricsRes, healthRes] = await Promise.all([
-        fetch('/api/metrics/cache'),
-        fetch('/api/health/cache')
+        fetch('/metrics/cache'),
+        fetch('/health/cache')
       ]);
       
       const metricsData = await metricsRes.json();
@@ -118,7 +118,7 @@ const CacheMetricsDashboard: React.FC = () => {
   // Reset metrics
   const resetMetrics = async () => {
     try {
-      const response = await fetch('/api/metrics/cache/reset', {
+      const response = await fetch('/metrics/cache/reset', {
         method: 'POST'
       });
       

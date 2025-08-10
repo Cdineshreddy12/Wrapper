@@ -124,7 +124,7 @@ const defaultProviders: SocialProvider[] = [
     id: 'google',
     name: 'Google',
     icon: '🔍',
-    url: '/api/auth/oauth/google',
+    url: '/auth/oauth/google',
     description: 'Sign in with Google',
     primary: true
   },
@@ -132,28 +132,28 @@ const defaultProviders: SocialProvider[] = [
     id: 'github',
     name: 'GitHub',
     icon: '🐙',
-    url: '/api/auth/oauth/github',
+    url: '/auth/oauth/github',
     description: 'Sign in with GitHub'
   },
   {
     id: 'microsoft',
     name: 'Microsoft',
     icon: '🪟',
-    url: '/api/auth/oauth/microsoft',
+    url: '/auth/oauth/microsoft',
     description: 'Sign in with Microsoft'
   },
   {
     id: 'apple',
     name: 'Apple',
     icon: '🍎',
-    url: '/api/auth/oauth/apple',
+    url: '/auth/oauth/apple',
     description: 'Sign in with Apple'
   },
   {
     id: 'linkedin',
     name: 'LinkedIn',
     icon: '💼',
-    url: '/api/auth/oauth/linkedin',
+    url: '/auth/oauth/linkedin',
     description: 'Sign in with LinkedIn'
   }
 ]
@@ -546,7 +546,7 @@ export function Onboarding() {
       // Handle different plan types
       if (formData.selectedPlan === 'trial') {
         // Trial plan - go directly to dashboard with trial info
-        const trialDuration = process.env.NODE_ENV === 'production' ? '14 days' : '5 minutes';
+        const trialDuration = import.meta.env.MODE === 'production' ? '14 days' : '5 minutes';
         toast.success(
           `🎉 Welcome to ${organization?.name || formData.companyName}! Your ${trialDuration} trial has started.`,
           {
@@ -738,7 +738,7 @@ export function Onboarding() {
               )}
               
               {/* Debug info - remove after testing */}
-              {process.env.NODE_ENV === 'development' && (
+              {import.meta.env.MODE === 'development' && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 mt-2 text-xs space-y-2">
                   <div>
                     <strong>Debug:</strong> Company: "{formData.companyName}", Subdomain: "{formData.subdomain}", Industry: "{formData.industry}", DataRestored: {dataWasRestored ? 'true' : 'false'}

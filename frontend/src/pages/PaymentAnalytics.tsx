@@ -106,7 +106,7 @@ export default function PaymentAnalytics() {
         throw new Error('No authentication token available');
       }
 
-      const response = await fetch('/api/analytics/payments', {
+      const response = await fetch('/analytics/payments', {
         headers: {
           'Authorization': `Bearer ${token}`
         }

@@ -797,7 +797,7 @@ function RootRedirect() {
             if (token) {
               // Generate app-specific token using backend
               const backendUrl = 'https://wrapper.zopkit.com';
-              const response = await fetch(`${backendUrl}/api/auth/validate`, {
+              const response = await fetch(`${backendUrl}/auth/validate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token, app_code: stateData.app_code }),
@@ -808,7 +808,7 @@ function RootRedirect() {
                 
                 if (validation.success) {
                   // Generate app-specific token
-                  const appTokenResponse = await fetch(`${backendUrl}/api/auth/generate-app-token`, {
+                  const appTokenResponse = await fetch(`${backendUrl}/auth/generate-app-token`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ token, app_code: stateData.app_code }),

@@ -37,7 +37,7 @@ export function AuthCallback() {
                              if (token) {
                  // Validate token and get user context using backend
                  const backendUrl = 'https://wrapper.zopkit.com'
-                 const response = await fetch(`${backendUrl}/api/auth/validate`, {
+                 const response = await fetch(`${backendUrl}/auth/validate`, {
                    method: 'POST',
                    headers: {
                      'Content-Type': 'application/json',
@@ -53,7 +53,7 @@ export function AuthCallback() {
                    
                    if (validation.success) {
                      // Generate app-specific token
-                     const appTokenResponse = await fetch(`${backendUrl}/api/auth/generate-app-token`, {
+                     const appTokenResponse = await fetch(`${backendUrl}/auth/generate-app-token`, {
                        method: 'POST',
                        headers: {
                          'Content-Type': 'application/json',

@@ -96,7 +96,7 @@ const APIHitMetrics: React.FC = () => {
   // Fetch API hit metrics
   const fetchMetrics = async () => {
     try {
-      const response = await fetch('/api/metrics/api-hits');
+      const response = await fetch('/metrics/api-hits');
       const data = await response.json();
       
       if (data.success) {
@@ -113,7 +113,7 @@ const APIHitMetrics: React.FC = () => {
   // Start simulation
   const startSimulation = async () => {
     try {
-      const response = await fetch('/api/metrics/api-hits/simulate', {
+      const response = await fetch('/metrics/api-hits/simulate', {
         method: 'POST'
       });
       
@@ -129,7 +129,7 @@ const APIHitMetrics: React.FC = () => {
   // Reset metrics
   const resetMetrics = async () => {
     try {
-      const response = await fetch('/api/metrics/api-hits/reset', {
+      const response = await fetch('/metrics/api-hits/reset', {
         method: 'POST'
       });
       
@@ -159,7 +159,7 @@ const APIHitMetrics: React.FC = () => {
   })) : [];
 
   const endpointData = metrics ? Object.entries(metrics.byEndpoint).map(([endpoint, hits]) => ({
-    name: endpoint.replace('/api/internal/', ''),
+    name: endpoint.replace('/internal/', ''),
     hits: hits,
     percentage: ((hits / metrics.summary.totalEndpointHits) * 100).toFixed(1)
   })) : [];

@@ -66,7 +66,7 @@ export function OrganizationUserManagement({
   const promoteUser = async (userId: string, userName: string) => {
     if (confirm(`Promote ${userName} to organization admin?`)) {
       try {
-        await makeRequest(`/api/tenants/current/users/${userId}/promote`, {
+        await makeRequest(`/tenants/current/users/${userId}/promote`, {
           method: 'POST'
         })
         toast.success('User promoted to admin!')
@@ -80,7 +80,7 @@ export function OrganizationUserManagement({
   const deactivateUser = async (userId: string, userName: string) => {
     if (confirm(`Deactivate ${userName}? They will lose access to all applications.`)) {
       try {
-        await makeRequest(`/api/tenants/current/users/${userId}/deactivate`, {
+        await makeRequest(`/tenants/current/users/${userId}/deactivate`, {
           method: 'POST'
         })
         toast.success('User deactivated!')
@@ -93,7 +93,7 @@ export function OrganizationUserManagement({
 
   const resendInvite = async (userId: string, userEmail: string) => {
     try {
-      await makeRequest(`/api/tenants/current/users/${userId}/resend-invite`, {
+      await makeRequest(`/tenants/current/users/${userId}/resend-invite`, {
         method: 'POST'
       })
       toast.success(`Invitation resent to ${userEmail}`)
@@ -111,7 +111,7 @@ export function OrganizationUserManagement({
           <p className="text-gray-600">Manage team members, roles, and access across your organization</p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={() => window.open('/api/tenants/current/users/export', '_blank')}>
+          <Button variant="outline" onClick={() => window.open('/tenants/current/users/export', '_blank')}>
             <Package className="h-4 w-4 mr-2" />
             Export Users
           </Button>
