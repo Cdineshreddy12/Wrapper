@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+ import React, { useState, useCallback } from 'react'
 import { useDashboardData } from '../hooks/useDashboardData'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
@@ -11,98 +11,35 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
-  PieChart,
-  Pie,
-  Cell
+  PieChart
 } from 'recharts'
 import { 
   Users, 
   Activity, 
-  CreditCard, 
   TrendingUp,
-  Calendar,
   Clock,
   AlertTriangle,
   Crown,
-  Zap,
-  ArrowRight,
   Building,
-  Plus,
   ExternalLink,
   Shield,
   Settings,
   Eye,
-  Edit,
-  Trash2,
   DollarSign,
   BarChart3,
   Package,
-  Target,
   CheckCircle,
-  AlertCircle,
   RefreshCw
 } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { PaymentHistory } from '@/components/PaymentHistory'
-import { analyticsAPI, usageAPI, subscriptionAPI } from '@/lib/api'
-import { formatCurrency, formatNumber } from '@/lib/utils'
-import toast from 'react-hot-toast'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { UserManagementDashboard } from '@/components/users/UserManagementDashboard'
-import { OptimizedRoleManagementDashboard } from '@/components/roles/OptimizedRoleManagementDashboard'
-import { UserRoleManager } from '@/components/users/UserRoleManager'
-import PaymentAnalytics from '@/pages/PaymentAnalytics'
 import { ActivityDashboard } from '@/components/activity/ActivityDashboard'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useTrialStatus } from '@/hooks/useTrialStatus'
-
-interface DashboardMetrics {
-  totalUsers: number
-  apiCalls: number
-  revenue: number
-  growth: number
-}
-
-interface Employee {
-  userId: string;
-  email: string;
-  name: string;
-  isActive: boolean;
-  isTenantAdmin: boolean;
-  onboardingCompleted: boolean;
-  department?: string;
-  title?: string;
-}
-
-interface Application {
-  appId: string;
-  appCode: string;
-  appName: string;
-  description: string;
-  icon: string;
-  baseUrl: string;
-  isEnabled: boolean;
-  subscriptionTier: string;
-  enabledModules: string[];
-  maxUsers: number;
-  hostUrl: string;
-}
-
-interface PaymentStats {
-  totalPaid: number;
-  totalRefunded: number;
-  successfulPayments: number;
-  failedPayments: number;
-  monthlySpend: number;
-  averageTransactionValue: number;
-  disputeCount: number;
-  processingFees: number;
-  totalRevenue: number;
-  percentageChange: number;
-}
+import { formatCurrency } from '@/lib/utils'
 
 const mockUsageData = [
   { month: 'Jan', apiCalls: 1200, users: 45 },
@@ -122,15 +59,10 @@ const mockRevenueData = [
   { month: 'Jun', revenue: 9800 }
 ]
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8']
-
 export function Dashboard() {
   const { 
     user, 
-    isAuthenticated, 
-    isLoading: kindeLoading, 
-    getToken,
-    organization 
+    isLoading: kindeLoading
   } = useKindeAuth()
   
   const navigate = useNavigate()
@@ -154,10 +86,6 @@ export function Dashboard() {
   
   const { expiredData } = useTrialStatus()
   
-  // Legacy state for compatibility with existing UI
-  const [selectedView, setSelectedView] = useState('overview')
-  const [activeTimeRange, setActiveTimeRange] = useState('7d')
-  
   // Check if user is admin
   const isAdmin = user?.email && (
     user.email.includes('admin') || 
@@ -169,11 +97,6 @@ export function Dashboard() {
   const handleTabChange = useCallback((tab: string) => {
     navigate(`/dashboard?tab=${tab}`, { replace: true })
   }, [navigate])
-
-  // Handle view changes
-  const handleViewChange = useCallback((view: string) => {
-    setSelectedView(view)
-  }, [])
 
   // Legacy compatibility - convert new data format to old format for existing components
   const dashboardData = {
@@ -392,10 +315,7 @@ export function Dashboard() {
           )}
           
           {selectedTab === 'analytics' && (
-            <AnalyticsTab 
-              data={dashboardData}
-              isLoading={isLoading}
-            />
+            <AnalyticsTab />
           )}
           
           {selectedTab === 'users' && (
@@ -417,7 +337,11 @@ export function Dashboard() {
           {selectedTab === 'roles' && (
             <div className="space-y-6">
               {isAdmin || user?.email ? (
-                <OptimizedRoleManagementDashboard />
+                <div className="p-8 text-center">
+                  <Shield className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Role Management</h3>
+                  <p className="text-gray-600">Role management functionality coming soon.</p>
+                </div>
               ) : (
                 <Card>
                   <CardContent className="p-8 text-center">
@@ -437,11 +361,7 @@ export function Dashboard() {
           )}
           
           {selectedTab === 'admin' && isAdmin && (
-            <AdminTab 
-              data={dashboardData}
-              isLoading={isLoading}
-              onRefresh={refreshDashboard}
-            />
+            <AdminTab />
           )}
         </div>
       </div>
@@ -590,7 +510,7 @@ function OverviewTab({
 }
 
 // Analytics Tab Component  
-function AnalyticsTab({ data, isLoading }: { data: any; isLoading: boolean }) {
+function AnalyticsTab() {
   return (
     <div className="space-y-6">
       <Card>
@@ -611,15 +531,7 @@ function AnalyticsTab({ data, isLoading }: { data: any; isLoading: boolean }) {
 }
 
 // Admin Tab Component
-function AdminTab({ 
-  data, 
-  isLoading, 
-  onRefresh 
-}: { 
-  data: any; 
-  isLoading: boolean;
-  onRefresh: () => void;
-}) {
+function AdminTab() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -673,7 +585,7 @@ function AdminTab({
         </Card>
       </div>
 
-      <PaymentAnalytics />
+      {/* Payment Analytics - Component removed for cleanup */}
     </div>
   )
 }
