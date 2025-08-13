@@ -1,40 +1,107 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { KindeProvider as OriginalKindeProvider, useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import { setKindeTokenGetter } from '@/lib/api';
+import useSilentAuth from '@/hooks/useSilentAuth';
 
 interface KindeProviderProps {
   children: React.ReactNode;
 }
 
-// Component to set up the token getter after Kinde is initialized
+// Component to set up the token getter and silent auth after Kinde is initialized
 function TokenSetupComponent() {
   const { getToken, isAuthenticated, user } = useKindeAuth();
 
   useEffect(() => {
-    // Set the token getter function for API calls
+    // Enhanced token getter with backup storage
     setKindeTokenGetter(async () => {
       try {
-        if (!isAuthenticated) {
-          console.log('🔑 TokenGetter: User not authenticated, returning null');
-          return null;
-        }
+        console.log('🔑 TokenGetter: Called - isAuthenticated:', isAuthenticated, 'user:', !!user);
         
-        console.log('🔑 TokenGetter: Getting token for user:', user?.email);
         const token = await getToken();
         
         if (token) {
-          console.log('✅ TokenGetter: Successfully retrieved token');
+          console.log('✅ TokenGetter: Successfully retrieved token from Kinde');
+          // Always store as backup when we get a valid token
+          localStorage.setItem('kinde_backup_token', token);
           return token;
         } else {
-          console.log('❌ TokenGetter: No token returned from getToken()');
+          console.log('❌ TokenGetter: No token from Kinde, trying backup...');
+          const backupToken = localStorage.getItem('kinde_backup_token');
+          if (backupToken) {
+            console.log('🔄 TokenGetter: Using backup token');
+            return backupToken;
+          }
           return null;
         }
       } catch (error) {
-        console.error('❌ TokenGetter: Error getting token:', error);
+        console.error('❌ TokenGetter: Error getting token, trying backup...', error);
+        const backupToken = localStorage.getItem('kinde_backup_token');
+        if (backupToken) {
+          console.log('🔄 TokenGetter: Using backup token after error');
+          return backupToken;
+        }
         return null;
       }
     });
   }, [getToken, isAuthenticated, user]);
+
+  // Store backup token when user becomes authenticated
+  useEffect(() => {
+    const storeBackupToken = async () => {
+      if (isAuthenticated && user) {
+        try {
+          const token = await getToken();
+          if (token) {
+            localStorage.setItem('kinde_backup_token', token);
+            console.log('💾 Stored backup token for user:', user.email);
+          }
+        } catch (error) {
+          console.log('❌ Failed to store backup token:', error);
+        }
+      }
+    };
+
+    storeBackupToken();
+  }, [isAuthenticated, user, getToken]);
+
+  // Clear backup token when user logs out
+  useEffect(() => {
+    if (!isAuthenticated) {
+      const hadBackupToken = localStorage.getItem('kinde_backup_token');
+      if (hadBackupToken) {
+        localStorage.removeItem('kinde_backup_token');
+        console.log('🗑️ Cleared backup token on logout');
+      }
+    }
+  }, [isAuthenticated]);
+
+  return null; // This component doesn't render anything
+}
+
+// Component to handle silent authentication initialization
+function SilentAuthInitializer() {
+  const { isLoading } = useKindeAuth();
+  const { checkSilentAuth, isChecking, hasChecked } = useSilentAuth();
+  const [initStarted, setInitStarted] = useState(false);
+
+  useEffect(() => {
+    // Only start silent auth check once Kinde is loaded and we haven't started yet
+    if (!isLoading && !initStarted && !hasChecked && !isChecking) {
+      console.log('🔄 SilentAuth: Initializing silent authentication...');
+      setInitStarted(true);
+      
+      // Add a small delay to ensure everything is properly initialized
+      const timer = setTimeout(() => {
+        checkSilentAuth().then((result) => {
+          console.log('✅ SilentAuth: Initial silent auth check completed:', result);
+        }).catch((error) => {
+          console.log('ℹ️ SilentAuth: Initial silent auth check failed (expected):', error);
+        });
+      }, 200);
+
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, checkSilentAuth, initStarted, hasChecked, isChecking]);
 
   return null; // This component doesn't render anything
 }
@@ -42,7 +109,8 @@ function TokenSetupComponent() {
 export const KindeProvider: React.FC<KindeProviderProps> = ({ 
   children
 }) => {
-  const domain = import.meta.env.VITE_KINDE_DOMAIN;
+  // Keep the auth subdomain - Kinde handles domain-wide cookies automatically
+  const domain = import.meta.env.VITE_KINDE_DOMAIN || 'https://auth.zopkit.com';
   const clientId = import.meta.env.VITE_KINDE_CLIENT_ID;
   const redirectUri = import.meta.env.VITE_KINDE_REDIRECT_URI || window.location.origin;
   const logoutUri = import.meta.env.VITE_KINDE_LOGOUT_URI || window.location.origin;
@@ -77,46 +145,7 @@ export const KindeProvider: React.FC<KindeProviderProps> = ({
   // Let Kinde handle organization management automatically
   console.log('🔄 KindeProvider: Using Kinde built-in organization handling');
 
-  // Custom redirect callback to handle CRM authentication flow
-  const handleRedirectCallback = async (user: any, appState: any) => {
-    console.log('🔍 KindeProvider: onRedirectCallback triggered');
-    console.log('🔍 KindeProvider: User:', user);
-    console.log('🔍 KindeProvider: AppState:', appState);
-    
-    // Check URL for state parameter (CRM authentication)
-    const urlParams = new URLSearchParams(window.location.search);
-    const stateParam = urlParams.get('state');
-    
-    console.log('🔍 KindeProvider: Current URL:', window.location.href);
-    console.log('🔍 KindeProvider: State param:', stateParam);
-    
-    if (stateParam) {
-      try {
-        const stateData = JSON.parse(stateParam);
-        console.log('🔍 KindeProvider: Parsed state data:', stateData);
-        
-        // Check if this is a CRM authentication flow
-        if (stateData.app_code && stateData.redirect_url) {
-          console.log('🔄 KindeProvider: Detected CRM authentication flow');
-          
-          // Redirect to our custom AuthCallback page with the state
-          // The AuthCallback component will handle the token processing
-          const callbackUrl = `/auth/callback${window.location.search}`;
-          console.log('🚀 KindeProvider: Redirecting to custom callback:', callbackUrl);
-          
-          // Use window.location to ensure we get to our AuthCallback component
-          window.location.href = callbackUrl;
-          return;
-        }
-      } catch (parseError) {
-        console.error('❌ KindeProvider: Failed to parse state:', parseError);
-      }
-    }
-    
-    // Default behavior for non-CRM flows
-    console.log('🔄 KindeProvider: Default callback flow, redirecting to dashboard');
-    window.location.href = '/dashboard';
-  };
+
 
   return (
     <OriginalKindeProvider
@@ -124,9 +153,14 @@ export const KindeProvider: React.FC<KindeProviderProps> = ({
       domain={domain}
       redirectUri={redirectUri}
       logoutUri={logoutUri}
-      onRedirectCallback={handleRedirectCallback}
+      scope="openid profile email offline"
+      isDangerouslyUseLocalStorage={false} // Use cookies instead of localStorage
+      onRedirectCallback={(user, appState) => {
+        console.log('🔄 Kinde redirect callback:', { user: !!user, appState });
+      }}
     >
       <TokenSetupComponent />
+      <SilentAuthInitializer />
       {children}
     </OriginalKindeProvider>
   );

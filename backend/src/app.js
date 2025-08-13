@@ -93,17 +93,22 @@ async function registerPlugins() {
 
   // CORS
   await fastify.register(cors, {
+    // Allow localhost for dev and *.zopkit.com for production
     origin: [
       process.env.FRONTEND_URL,
-      /localhost:3001$/, // Frontend
-      /localhost:3000$/, // Backend
-      /localhost:5173$/, // CRM application
-      /localhost:5174$/, // CRM alternative port
-      /localhost:3002$/, // CRM alternative port
+      /localhost:3001$/, // Frontend (dev)
+      /localhost:3000$/, // Backend (dev)
+      /localhost:5173$/, // CRM app (dev)
+      /localhost:5174$/, // Alt port (dev)
+      /localhost:3002$/, // Alt port (dev)
+      /^https?:\/\/[a-z0-9-]+\.zopkit\.com$/i, // Any subdomain of zopkit.com (prod)
+      /^https?:\/\/zopkit\.com$/i // Root domain if used
     ],
-    credentials: true,
+    credentials: true, // Required so browser can send cookies
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    // Let the plugin echo the specific Origin back (not *) so cookies are accepted
+    strictPreflight: true
   });
 
   // JWT

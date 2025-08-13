@@ -14,13 +14,22 @@ export const setKindeTokenGetter = (getter: () => Promise<string | null>) => {
 
 // Function to get Kinde token from localStorage/sessionStorage
 const getKindeToken = async () => {
-  // First try to use the Kinde SDK if available
+  // First check for backup token (for refresh scenarios when cookies are cleared)
+  const backupToken = localStorage.getItem('kinde_backup_token');
+  if (backupToken) {
+    console.log('🔄 Found backup token, using it first');
+    return backupToken;
+  }
+
+  // Then try to use the Kinde SDK if available
   if (kindeTokenGetter) {
     try {
       console.log('🔑 Trying Kinde SDK getToken()...');
       const token = await kindeTokenGetter();
       if (token) {
         console.log('✅ Got token from Kinde SDK');
+        // Store as backup for next time
+        localStorage.setItem('kinde_backup_token', token);
         return token;
       }
     } catch (error) {
@@ -204,8 +213,17 @@ api.interceptors.request.use(async (config) => {
   const authToken = await getKindeToken();
   
   if (authToken) {
-    config.headers.Authorization = `Bearer ${authToken}`;
+    // Ensure headers object exists
+    if (!config.headers) {
+      config.headers = {};
+    }
+    
+    // Set the Authorization header
+    config.headers['Authorization'] = `Bearer ${authToken}`;
     console.log('🔑 Added authentication token to request headers');
+    console.log('🔍 Token preview:', authToken.substring(0, 20) + '...');
+  } else {
+    console.log('❌ No authentication token found for request');
   }
 
   console.log('🔍 API Request:', {
@@ -213,9 +231,8 @@ api.interceptors.request.use(async (config) => {
     url: config.url,
     baseURL: config.baseURL,
     withCredentials: config.withCredentials,
-    headers: config.headers,
-    cookies: document.cookie,
-    hasAuthToken: !!authToken
+    hasAuthToken: !!authToken,
+    authHeader: config.headers?.Authorization ? 'SET' : 'NOT SET'
   });
   
   return config

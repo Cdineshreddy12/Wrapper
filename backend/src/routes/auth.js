@@ -5,12 +5,12 @@ export default async function authRoutes(fastify, options) {
   // OAuth login for onboarding (no specific organization yet)
   fastify.get('/oauth/login', async (request, reply) => {
     const { state, redirect_uri, provider, prompt, login_hint } = request.query;
-    
+
     console.log('🔍 OAuth login request:', { state, redirect_uri, provider, prompt, login_hint });
-    
+
     try {
       let authUrl;
-      
+
       // Generate provider-specific auth URL if provider is specified
       if (provider) {
         authUrl = kindeService.getSocialAuthUrl(provider, {
@@ -50,9 +50,9 @@ export default async function authRoutes(fastify, options) {
   // Specific Google OAuth login
   fastify.get('/oauth/google', async (request, reply) => {
     const { state, redirect_uri, prompt = 'select_account' } = request.query;
-    
+
     console.log('🔍 Google OAuth login request:', { state, redirect_uri, prompt });
-    
+
     try {
       const authUrl = kindeService.generateGoogleLoginUrl({
         redirectUri: redirect_uri || `${process.env.FRONTEND_URL}/onboarding`,
@@ -78,9 +78,9 @@ export default async function authRoutes(fastify, options) {
   // Specific GitHub OAuth login
   fastify.get('/oauth/github', async (request, reply) => {
     const { state, redirect_uri } = request.query;
-    
+
     console.log('🔍 GitHub OAuth login request:', { state, redirect_uri });
-    
+
     try {
       const authUrl = kindeService.generateGithubLoginUrl({
         redirectUri: redirect_uri || `${process.env.FRONTEND_URL}/onboarding`,
@@ -101,9 +101,9 @@ export default async function authRoutes(fastify, options) {
   // Specific Microsoft OAuth login
   fastify.get('/oauth/microsoft', async (request, reply) => {
     const { state, redirect_uri, prompt = 'select_account' } = request.query;
-    
+
     console.log('🔍 Microsoft OAuth login request:', { state, redirect_uri, prompt });
-    
+
     try {
       const authUrl = kindeService.generateMicrosoftLoginUrl({
         redirectUri: redirect_uri || `${process.env.FRONTEND_URL}/onboarding`,
@@ -125,9 +125,9 @@ export default async function authRoutes(fastify, options) {
   // Specific Apple OAuth login
   fastify.get('/oauth/apple', async (request, reply) => {
     const { state, redirect_uri } = request.query;
-    
+
     console.log('🔍 Apple OAuth login request:', { state, redirect_uri });
-    
+
     try {
       const authUrl = kindeService.generateAppleLoginUrl({
         redirectUri: redirect_uri || `${process.env.FRONTEND_URL}/onboarding`,
@@ -148,9 +148,9 @@ export default async function authRoutes(fastify, options) {
   // Specific LinkedIn OAuth login
   fastify.get('/oauth/linkedin', async (request, reply) => {
     const { state, redirect_uri } = request.query;
-    
+
     console.log('🔍 LinkedIn OAuth login request:', { state, redirect_uri });
-    
+
     try {
       const authUrl = kindeService.generateLinkedInLoginUrl({
         redirectUri: redirect_uri || `${process.env.FRONTEND_URL}/onboarding`,
@@ -172,9 +172,9 @@ export default async function authRoutes(fastify, options) {
   fastify.get('/login/:subdomain', async (request, reply) => {
     const { subdomain } = request.params;
     const { provider, prompt } = request.query;
-    
+
     console.log('🔍 Organization login request:', { subdomain, provider, prompt });
-    
+
     if (!subdomain) {
       return reply.code(400).send({
         error: 'Bad Request',
@@ -216,17 +216,17 @@ export default async function authRoutes(fastify, options) {
   // Enhanced OAuth callback handler - handles both onboarding and app authentication
   fastify.get('/callback', async (request, reply) => {
     const { code, state, error: authError } = request.query;
-    
-    console.log('🔍 OAuth callback received:', { 
-      hasCode: !!code, 
-      state, 
-      error: authError 
+
+    console.log('🔍 OAuth callback received:', {
+      hasCode: !!code,
+      state,
+      error: authError
     });
 
     // Handle OAuth errors
     if (authError) {
       console.error('❌ OAuth error in callback:', { authError });
-      
+
       // Check if this is an app authentication flow
       let appContext = {};
       try {
@@ -252,7 +252,7 @@ export default async function authRoutes(fastify, options) {
 
     if (!code) {
       console.error('❌ No authorization code received');
-      
+
       // Check if this is an app authentication flow
       let appContext = {};
       try {
@@ -293,12 +293,12 @@ export default async function authRoutes(fastify, options) {
       // Exchange code for tokens
       const redirectUri = `${process.env.BACKEND_URL}/api/auth/callback`;
       const tokens = await kindeService.exchangeCodeForTokens(code, redirectUri);
-      
+
       console.log('✅ Successfully exchanged code for tokens');
 
       // Get enhanced user information
       const userInfo = await kindeService.getEnhancedUserInfo(tokens.access_token);
-      
+
       console.log('✅ Retrieved user info:', {
         id: userInfo.id,
         email: userInfo.email,
@@ -307,21 +307,23 @@ export default async function authRoutes(fastify, options) {
         hasMultipleOrganizations: userInfo.hasMultipleOrganizations
       });
 
-      // Set authentication cookies
+      // Set authentication cookies with proper domain configuration
+      const cookieOptions = {
+        httpOnly: false, // Allow JavaScript access for token management
+        secure: process.env.COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production',
+        sameSite: process.env.COOKIE_SAME_SITE || (process.env.NODE_ENV === 'production' ? 'none' : 'lax'),
+        domain: process.env.COOKIE_DOMAIN || (process.env.NODE_ENV === 'production' ? '.zopkit.com' : undefined),
+        path: '/'
+      };
+
       reply
         .setCookie('kinde_token', tokens.access_token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
-          maxAge: tokens.expires_in || 3600, // 1 hour default
-          path: '/'
+          ...cookieOptions,
+          maxAge: (tokens.expires_in || 3600) * 1000, // Convert to milliseconds
         })
         .setCookie('kinde_refresh_token', tokens.refresh_token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-          maxAge: 30 * 24 * 60 * 60, // 30 days
-          path: '/'
+          ...cookieOptions,
+          maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days in milliseconds
         });
 
       // Handle app authentication flow
@@ -329,10 +331,10 @@ export default async function authRoutes(fastify, options) {
         console.log('🔍 Processing app authentication flow:', parsedState.app_code);
         console.log('🔍 App redirect URL:', parsedState.redirect_url);
         console.log('🔍 User info:', { id: userInfo.id, email: userInfo.email });
-        
+
         try {
           const { UnifiedSSOService } = await import('../services/unified-sso-service.js');
-          
+
           // Generate unified token for the app
           const appToken = await UnifiedSSOService.generateUnifiedToken(
             userInfo.id,
@@ -340,7 +342,7 @@ export default async function authRoutes(fastify, options) {
             parsedState.app_code
           );
 
-          console.log('✅ Generated app token:', { 
+          console.log('✅ Generated app token:', {
             token: appToken.token.substring(0, 20) + '...',
             expiresAt: appToken.expiresAt.toISOString(),
             app_code: parsedState.app_code
@@ -355,7 +357,7 @@ export default async function authRoutes(fastify, options) {
           return reply.redirect(targetUrl.toString());
         } catch (tokenError) {
           console.error('❌ Error generating app token:', tokenError);
-          
+
           // Redirect back to app with error
           const errorUrl = new URL(parsedState.redirect_url);
           errorUrl.searchParams.set('error', 'token_generation_failed');
@@ -376,7 +378,7 @@ export default async function authRoutes(fastify, options) {
         redirectUrl.searchParams.set('email', userInfo.email);
         redirectUrl.searchParams.set('name', `${userInfo.given_name} ${userInfo.family_name}`.trim());
         redirectUrl.searchParams.set('step', '2'); // Skip to company info step
-        
+
         // Add social provider info
         if (userInfo.socialProvider && userInfo.socialProvider !== 'unknown') {
           redirectUrl.searchParams.set('provider', userInfo.socialProvider);
@@ -388,7 +390,7 @@ export default async function authRoutes(fastify, options) {
 
     } catch (error) {
       console.error('❌ OAuth callback error:', error);
-      
+
       // Check if this is an app authentication flow
       let appContext = {};
       try {
@@ -418,11 +420,11 @@ export default async function authRoutes(fastify, options) {
     try {
       // This route requires authentication, so userContext should be set by middleware
       if (!request.userContext || !request.userContext.isAuthenticated) {
-      return reply.code(401).send({
-        error: 'Unauthorized',
-        message: 'Authentication required',
-      });
-    }
+        return reply.code(401).send({
+          error: 'Unauthorized',
+          message: 'Authentication required',
+        });
+      }
 
       return reply.send({
         success: true,
@@ -443,12 +445,17 @@ export default async function authRoutes(fastify, options) {
   // Logout endpoint
   fastify.post('/logout', async (request, reply) => {
     const { redirect_uri } = request.body || {};
-    
+
     try {
-      // Clear authentication cookies
+      // Clear authentication cookies with proper domain configuration
+      const clearCookieOptions = {
+        path: '/',
+        domain: process.env.COOKIE_DOMAIN || (process.env.NODE_ENV === 'production' ? '.zopkit.com' : undefined),
+      };
+
       reply
-        .clearCookie('kinde_token', { path: '/' })
-        .clearCookie('kinde_refresh_token', { path: '/' });
+        .clearCookie('kinde_token', clearCookieOptions)
+        .clearCookie('kinde_refresh_token', clearCookieOptions);
 
       // Generate Kinde logout URL
       const logoutUrl = kindeService.generateLogoutUrl(
@@ -475,7 +482,7 @@ export default async function authRoutes(fastify, options) {
   fastify.post('/refresh', async (request, reply) => {
     try {
       const refreshToken = request.cookies.kinde_refresh_token;
-      
+
       if (!refreshToken) {
         return reply.code(401).send({
           error: 'Unauthorized',
@@ -485,25 +492,27 @@ export default async function authRoutes(fastify, options) {
 
       // Refresh the access token
       const tokens = await kindeService.refreshToken(refreshToken);
-      
+
       // Set new authentication cookies
-      reply
-        .setCookie('kinde_token', tokens.access_token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-          maxAge: tokens.expires_in || 3600,
-          path: '/'
-        });
+      // Set authentication cookies with proper domain configuration
+      const cookieOptions = {
+        httpOnly: false, // Allow JavaScript access for token management
+        secure: process.env.COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production',
+        sameSite: process.env.COOKIE_SAME_SITE || (process.env.NODE_ENV === 'production' ? 'none' : 'lax'),
+        domain: process.env.COOKIE_DOMAIN || (process.env.NODE_ENV === 'production' ? '.zopkit.com' : undefined),
+        path: '/'
+      };
+
+      reply.setCookie('kinde_token', tokens.access_token, {
+        ...cookieOptions,
+        maxAge: (tokens.expires_in || 3600) * 1000, // Convert to milliseconds
+      });
 
       // Update refresh token if a new one was provided
       if (tokens.refresh_token) {
         reply.setCookie('kinde_refresh_token', tokens.refresh_token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
-          maxAge: 30 * 24 * 60 * 60, // 30 days
-          path: '/'
+          ...cookieOptions,
+          maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days in milliseconds
         });
       }
 
@@ -515,12 +524,17 @@ export default async function authRoutes(fastify, options) {
       });
     } catch (error) {
       console.error('❌ Token refresh error:', error);
-      
-      // Clear invalid cookies
+
+      // Clear invalid cookies with proper domain configuration
+      const clearCookieOptions = {
+        path: '/',
+        domain: process.env.COOKIE_DOMAIN || (process.env.NODE_ENV === 'production' ? '.zopkit.com' : undefined),
+      };
+
       reply
-        .clearCookie('kinde_token', { path: '/' })
-        .clearCookie('kinde_refresh_token', { path: '/' });
-      
+        .clearCookie('kinde_token', clearCookieOptions)
+        .clearCookie('kinde_refresh_token', clearCookieOptions);
+
       return reply.code(401).send({
         error: 'Unauthorized',
         message: 'Failed to refresh token',
@@ -584,14 +598,14 @@ export default async function authRoutes(fastify, options) {
   });
 
   // 🔄 **CRM INTEGRATION ENDPOINTS**
-  
+
   // Authentication endpoint for CRM and other applications (accessed via /api/auth/auth)
   fastify.get('/auth', async (request, reply) => {
     try {
       const { app_code, redirect_url } = request.query;
-      
+
       console.log('🔍 App authentication request:', { app_code, redirect_url });
-      
+
       // Validate app_code
       const validAppCodes = ['crm', 'hr', 'affiliate', 'accounting', 'inventory'];
       if (!app_code || !validAppCodes.includes(app_code)) {
@@ -602,16 +616,16 @@ export default async function authRoutes(fastify, options) {
       }
 
       // Check if user is already authenticated
-      const token = request.headers.authorization?.replace('Bearer ', '') || 
-                    request.cookies?.auth_token ||
-                    request.query.token;
+      const token = request.headers.authorization?.replace('Bearer ', '') ||
+        request.cookies?.auth_token ||
+        request.query.token;
 
       if (token) {
         try {
           // Validate existing token
           const { UnifiedSSOService } = await import('../services/unified-sso-service.js');
           const tokenContext = await UnifiedSSOService.validateUnifiedToken(token);
-          
+
           if (tokenContext.isValid) {
             // User is already authenticated, generate app-specific token and redirect
             const appToken = await UnifiedSSOService.generateUnifiedToken(
@@ -640,13 +654,13 @@ export default async function authRoutes(fastify, options) {
         redirect_url: redirect_url || getDefaultRedirectUrl(app_code),
         timestamp: Date.now()
       };
-      
+
       console.log('🔍 Generating Kinde auth URL with:', {
         redirectUri,
         stateData,
         backendUrl: process.env.BACKEND_URL
       });
-      
+
       const kindeAuthUrl = kindeService.generateSocialLoginUrl({
         redirectUri,
         state: JSON.stringify(stateData),
@@ -689,13 +703,13 @@ export default async function authRoutes(fastify, options) {
       // Check if this is a test token
       const jwt = await import('jsonwebtoken');
       let decodedToken;
-      
+
       try {
         decodedToken = jwt.default.verify(token, process.env.JWT_SECRET || 'test-secret-key');
-        console.log('🔍 Decoded token:', { 
-          sub: decodedToken.sub, 
+        console.log('🔍 Decoded token:', {
+          sub: decodedToken.sub,
           aud: decodedToken.aud,
-          testMode: !!decodedToken.test_mode 
+          testMode: !!decodedToken.test_mode
         });
       } catch (jwtError) {
         console.error('❌ JWT verification failed:', jwtError.message);
@@ -709,7 +723,7 @@ export default async function authRoutes(fastify, options) {
       // Handle test tokens (bypass database lookup)
       if (decodedToken.sub === 'test-user-123' || decodedToken.test_mode) {
         console.log('🧪 Processing test token validation');
-        
+
         return {
           success: true,
           data: {
@@ -743,7 +757,7 @@ export default async function authRoutes(fastify, options) {
 
       // If we get here, it's not a test token, so we need to handle it differently
       console.log('🔍 Processing real token validation');
-      
+
       // For now, return a simple validation for non-test tokens
       // This will be replaced with proper database lookup later
       return {
@@ -851,25 +865,25 @@ export default async function authRoutes(fastify, options) {
   fastify.post('/crm-permissions', async (request, reply) => {
     try {
       const { kinde_user_id, kinde_org_code, requesting_app, force_refresh } = request.body;
-      
-      console.log('🔍 CRM permissions request:', { 
-        kinde_user_id, 
-        kinde_org_code, 
-        requesting_app, 
-        force_refresh 
+
+      console.log('🔍 CRM permissions request:', {
+        kinde_user_id,
+        kinde_org_code,
+        requesting_app,
+        force_refresh
       });
-      
+
       if (!kinde_user_id || !kinde_org_code || requesting_app !== 'crm') {
         return reply.code(400).send({
           success: false,
           error: 'Missing required parameters'
         });
       }
-      
+
       // For test tokens, return mock permissions
       if (kinde_user_id === 'test-user-123' || kinde_user_id.includes('test')) {
         console.log('🧪 Returning test permissions for CRM');
-        
+
         return {
           success: true,
           data: {
@@ -921,7 +935,7 @@ export default async function authRoutes(fastify, options) {
           }
         };
       }
-      
+
       // For real users, try to get from database
       try {
         const userPermissions = await getUserPermissionsForApp(
@@ -929,7 +943,7 @@ export default async function authRoutes(fastify, options) {
           kinde_org_code,
           requesting_app
         );
-        
+
         return {
           success: true,
           data: {
@@ -940,7 +954,7 @@ export default async function authRoutes(fastify, options) {
         };
       } catch (dbError) {
         console.error('❌ Database lookup failed:', dbError);
-        
+
         // Fallback to basic permissions
         return {
           success: true,
@@ -983,7 +997,7 @@ export default async function authRoutes(fastify, options) {
           }
         };
       }
-      
+
     } catch (error) {
       console.error('❌ CRM permissions error:', error);
       return reply.code(500).send({
@@ -1057,36 +1071,41 @@ export default async function authRoutes(fastify, options) {
   fastify.get('/logout', async (request, reply) => {
     try {
       const { app_code, redirect_url } = request.query;
-      
+
       console.log('🔍 App logout request:', { app_code, redirect_url });
 
-      // Clear any session cookies
-      reply.clearCookie('auth_token');
-      reply.clearCookie('session_id');
+      // Clear any session cookies with proper domain configuration
+      const clearCookieOptions = {
+        path: '/',
+        domain: process.env.COOKIE_DOMAIN || (process.env.NODE_ENV === 'production' ? '.zopkit.com' : undefined),
+      };
+
+      reply.clearCookie('auth_token', clearCookieOptions);
+      reply.clearCookie('session_id', clearCookieOptions);
 
       // If Kinde logout URL is available, redirect there first
       const kindeLogoutUrl = kindeService.getLogoutUrl();
-      
+
       if (kindeLogoutUrl && redirect_url) {
         // Create a logout URL that will eventually redirect back to the app
         const logoutUrl = new URL(kindeLogoutUrl);
         logoutUrl.searchParams.set('returnTo', redirect_url);
-        
+
         console.log('🚀 Redirecting to Kinde logout');
         return reply.redirect(logoutUrl.toString());
       }
 
       // Direct redirect to app or default location
-      const finalRedirectUrl = redirect_url || 
-                               getDefaultRedirectUrl(app_code) || 
-                               `${process.env.FRONTEND_URL}/login`;
+      const finalRedirectUrl = redirect_url ||
+        getDefaultRedirectUrl(app_code) ||
+        `${process.env.FRONTEND_URL}/login`;
 
       console.log('✅ Logout completed, redirecting to:', finalRedirectUrl);
       return reply.redirect(finalRedirectUrl);
 
     } catch (error) {
       console.error('❌ Logout error:', error);
-      
+
       // Even if logout fails, redirect to a safe location
       const fallbackUrl = `${process.env.FRONTEND_URL}/login`;
       return reply.redirect(fallbackUrl);
@@ -1156,7 +1175,7 @@ export default async function authRoutes(fastify, options) {
 
       // Filter active roles
       const now = new Date();
-      const activeRoles = userRolesResult.filter(role => 
+      const activeRoles = userRolesResult.filter(role =>
         !role.expiresAt || new Date(role.expiresAt) > now
       );
 
@@ -1171,9 +1190,9 @@ export default async function authRoutes(fastify, options) {
 
       for (const role of activeRoles) {
         userRoleNames.push(role.roleName);
-        
-        const rolePermissions = typeof role.permissions === 'string' 
-          ? JSON.parse(role.permissions) 
+
+        const rolePermissions = typeof role.permissions === 'string'
+          ? JSON.parse(role.permissions)
           : role.permissions;
 
         const roleRestrictions = typeof role.restrictions === 'string'
@@ -1181,12 +1200,12 @@ export default async function authRoutes(fastify, options) {
           : (role.restrictions || {});
 
         const appPermissions = rolePermissions[appCode] || {};
-        
+
         Object.keys(appPermissions).forEach(resource => {
           if (!aggregatedPermissions[resource]) {
             aggregatedPermissions[resource] = [];
           }
-          
+
           const resourcePermissions = appPermissions[resource];
           if (Array.isArray(resourcePermissions)) {
             resourcePermissions.forEach(permission => {
@@ -1249,7 +1268,7 @@ export default async function authRoutes(fastify, options) {
       accounting: process.env.ACCOUNTING_APP_URL || 'http://localhost:3005',
       inventory: process.env.INVENTORY_APP_URL || 'http://localhost:3006'
     };
-    
+
     return defaultUrls[appCode] ? `${defaultUrls[appCode]}/auth` : null;
   }
 
