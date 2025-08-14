@@ -108,10 +108,35 @@ async function registerPlugins() {
       /^https?:\/\/zopkit\.com$/i // Root domain if used
     ],
     credentials: true, // Required so browser can send cookies
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: [
+      'Content-Type', 
+      'Authorization', 
+      'X-Requested-With',
+      'X-Kinde-User-ID',      // CRM sends this
+      'X-Organization-ID',    // CRM sends this
+      'Origin',               // Browser sends this
+      'Accept',               // Browser sends this
+      'Accept-Language',      // Browser sends this
+      'Accept-Encoding',      // Browser sends this
+      'Cache-Control',        // Browser sends this
+      'Pragma',               // Browser sends this
+      'Sec-Fetch-Dest',       // Modern browser security
+      'Sec-Fetch-Mode',       // Modern browser security
+      'Sec-Fetch-Site',       // Modern browser security
+      'User-Agent'            // Browser identification
+    ],
+    exposedHeaders: [
+      'X-Total-Count',
+      'X-Page-Count',
+      'X-Current-Page'
+    ],
     // Let the plugin echo the specific Origin back (not *) so cookies are accepted
-    strictPreflight: true
+    strictPreflight: true,
+    // Handle preflight requests properly
+    preflightContinue: false,
+    // Set max age for preflight cache
+    maxAge: 86400 // 24 hours
   });
 
   // JWT
