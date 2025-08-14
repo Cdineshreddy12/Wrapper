@@ -41,6 +41,18 @@ export function Login() {
   const isCrmRequest = source === 'crm' || app === 'crm' || crmRedirect === 'true'
   const shouldAutoRedirect = redirectAfterAuth === 'true'
   
+  // Validate CRM return URL for security
+  const isValidCrmReturnUrl = (url: string): boolean => {
+    try {
+      const parsed = new URL(url);
+      // Only allow CRM domain
+      return parsed.hostname === 'crm.zopkit.com' || 
+             parsed.hostname.endsWith('.crm.zopkit.com');
+    } catch {
+      return false;
+    }
+  };
+  
   console.log('🔐 Login.tsx - CRM Integration Check:', {
     redirectTo,
     app,
@@ -288,18 +300,6 @@ export function Login() {
   const handleAuthError = (error: string) => {
     toast.error(error)
   }
-
-  // Validate CRM return URL for security
-  const isValidCrmReturnUrl = (url: string): boolean => {
-    try {
-      const parsed = new URL(url);
-      // Only allow CRM domain
-      return parsed.hostname === 'crm.zopkit.com' || 
-             parsed.hostname.endsWith('.crm.zopkit.com');
-    } catch {
-      return false;
-    }
-  };
 
   // Handle going back to CRM without login
   const handleBackToCRM = () => {
