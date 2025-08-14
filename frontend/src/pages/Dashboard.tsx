@@ -37,6 +37,7 @@ import { Button } from '@/components/ui/button'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { UserManagementDashboard } from '@/components/users/UserManagementDashboard'
 import { ActivityDashboard } from '@/components/activity/ActivityDashboard'
+import { RoleManagementDashboard } from '@/components/roles/RoleManagementDashboard'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useTrialStatus } from '@/hooks/useTrialStatus'
 import { formatCurrency } from '@/lib/utils'
@@ -337,11 +338,7 @@ export function Dashboard() {
           {selectedTab === 'roles' && (
             <div className="space-y-6">
               {isAdmin || user?.email ? (
-                <div className="p-8 text-center">
-                  <Shield className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Role Management</h3>
-                  <p className="text-gray-600">Role management functionality coming soon.</p>
-                </div>
+                <RoleManagementDashboard />
               ) : (
                 <Card>
                   <CardContent className="p-8 text-center">

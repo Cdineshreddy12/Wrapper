@@ -4,11 +4,9 @@
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { trackUsage } from '../middleware/usage.js';
 import PermissionMatrixService from '../services/permission-matrix-service.js';
-import PermissionSyncService from '../scripts/sync-permissions.js';
 import { 
   BUSINESS_SUITE_MATRIX, 
   PLAN_ACCESS_MATRIX, 
-  ROLE_TEMPLATES,
   PermissionMatrixUtils 
 } from '../data/permission-matrix.js';
 
@@ -27,7 +25,6 @@ export default async function permissionMatrixRoutes(fastify, options) {
           applications: PermissionMatrixUtils.getAllApplications(),
           matrix: BUSINESS_SUITE_MATRIX,
           planAccess: PLAN_ACCESS_MATRIX,
-          roleTemplates: ROLE_TEMPLATES,
           summary: {
             totalApplications: Object.keys(BUSINESS_SUITE_MATRIX).length,
             totalModules: Object.values(BUSINESS_SUITE_MATRIX).reduce((total, app) => 
@@ -279,30 +276,7 @@ export default async function permissionMatrixRoutes(fastify, options) {
     }
   });
 
-  // 🔄 **SYNC PERMISSION MATRIX TO DATABASE** (Admin only)
-  fastify.post('/sync', {
-    preHandler: [authenticateToken, requirePermission('admin:system'), trackUsage]
-  }, async (request, reply) => {
-    try {
-      console.log('🔄 Syncing permission matrix to database...');
-      
-      const syncService = new PermissionSyncService();
-      await syncService.syncAll();
-      
-      return {
-        success: true,
-        data: syncService.stats,
-        message: 'Permission matrix synced successfully'
-      };
-    } catch (error) {
-      console.error('❌ Error syncing permission matrix:', error);
-      return reply.code(500).send({
-        success: false,
-        message: 'Failed to sync permission matrix',
-        error: error.message
-      });
-    }
-  });
+
 
   // 🔍 **VALIDATE PERMISSION MATRIX** (Admin only)
   fastify.get('/validate', {

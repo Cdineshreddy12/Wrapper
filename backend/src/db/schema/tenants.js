@@ -28,6 +28,9 @@ export const tenants = pgTable('tenants', {
   trialEndsAt: timestamp('trial_ends_at'),
   settings: jsonb('settings').default({}), // Dashboard preferences, notifications, etc.
   
+  // Stripe Integration
+  stripeCustomerId: varchar('stripe_customer_id', { length: 255 }), // Stripe customer ID for billing
+  
   // Onboarding & Setup Tracking
   onboardingCompleted: boolean('onboarding_completed').default(false),
   onboardingStep: varchar('onboarding_step', { length: 50 }), // 'account-setup', 'team-setup', 'integration', 'completed'

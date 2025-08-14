@@ -42,9 +42,9 @@ class KindeService {
         const introspectResponse = await axios.post(`${this.baseURL}/oauth2/introspect`, 
           `token=${encodeURIComponent(accessToken)}`, 
           {
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded'
-            }
+          headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
           }
         );
         

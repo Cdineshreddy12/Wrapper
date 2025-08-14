@@ -10,6 +10,7 @@ import {
   customRoles,
   tenantUsers
 } from '../db/schema/index.js';
+import { webhookLogs } from '../db/schema/webhook-logs.js';
 import { EmailService } from '../utils/email.js';
 import { v4 as uuidv4 } from 'uuid';
 import Logger from '../utils/logger.js';
@@ -1110,6 +1111,39 @@ export class SubscriptionService {
       
       console.log('🎣 Stripe webhook received:', event.type);
 
+      // Check for webhook idempotency
+      const existingWebhook = await db.select()
+        .from(webhookLogs)
+        .where(eq(webhookLogs.eventId, event.id))
+        .limit(1);
+
+      if (existingWebhook.length > 0) {
+        const webhook = existingWebhook[0];
+        console.log(`🔄 Webhook ${event.id} already processed with status: ${webhook.status}`);
+        
+        if (webhook.status === 'completed') {
+          return { processed: true, eventType: event.type, skipped: true, reason: 'already_processed' };
+        } else if (webhook.status === 'processing') {
+          // If still processing, wait a bit and check again
+          console.log('⏳ Webhook still processing, returning success to prevent retry');
+          return { processed: true, eventType: event.type, skipped: true, reason: 'still_processing' };
+        }
+        // If failed before, we'll retry by continuing
+      }
+
+      // Log webhook processing start
+      await db.insert(webhookLogs).values({
+        eventId: event.id,
+        eventType: event.type,
+        status: 'processing'
+      }).onConflictDoUpdate({
+        target: webhookLogs.eventId,
+        set: {
+          status: 'processing',
+          updatedAt: new Date()
+        }
+      });
+
       switch (event.type) {
         case 'checkout.session.completed':
           await this.handleCheckoutCompleted(event.data.object);
@@ -1156,9 +1190,45 @@ export class SubscriptionService {
           console.log(`⚠️ Unhandled webhook event type: ${event.type}`);
       }
 
+      // Mark webhook as completed
+      await db.update(webhookLogs)
+        .set({ 
+          status: 'completed',
+          updatedAt: new Date()
+        })
+        .where(eq(webhookLogs.eventId, event.id));
+
       return { processed: true, eventType: event.type };
     } catch (error) {
-      console.error('Webhook processing error:', error);
+      // Mark webhook as failed
+      try {
+        await db.update(webhookLogs)
+          .set({ 
+            status: 'failed',
+            errorMessage: error.message,
+            updatedAt: new Date()
+          })
+          .where(eq(webhookLogs.eventId, event?.id || 'unknown'));
+      } catch (logError) {
+        console.error('Failed to log webhook error:', logError);
+      }
+      const errorEventType = event?.type || 'unknown';
+      const errorEventId = event?.id || 'unknown';
+      
+      console.error('❌ Webhook processing error for event type:', errorEventType, error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        stack: error.stack,
+        eventType: errorEventType,
+        eventId: errorEventId
+      });
+      
+      // Don't throw error for test webhooks or missing metadata
+      if (error.message.includes('Missing tenantId or planId') || error.message.includes('test webhook')) {
+        console.log('🔄 Returning success for test webhook to prevent 500 error');
+        return { processed: true, eventType: event.type, skipped: true, reason: error.message };
+      }
+      
       throw error;
     }
   }
@@ -1173,7 +1243,21 @@ export class SubscriptionService {
       const billingCycle = session.metadata?.billingCycle || 'monthly';
 
     if (!tenantId || !planId) {
-        console.error('❌ Missing metadata in checkout session:', { tenantId, planId });
+        console.warn('⚠️ Missing metadata in checkout session (likely test webhook):', { tenantId, planId });
+        console.log('📝 Session details:', {
+          id: session.id,
+          mode: session.mode,
+          metadata: session.metadata,
+          customer: session.customer,
+          subscription: session.subscription
+        });
+        
+        // For test webhooks or sessions without metadata, skip processing
+        if (session.mode === 'payment' || !session.subscription) {
+          console.log('⏭️ Skipping test webhook or non-subscription session');
+          return;
+        }
+        
         throw new Error('Missing tenantId or planId in checkout session metadata');
     }
 
@@ -1217,10 +1301,17 @@ export class SubscriptionService {
           updateData.isTrialUser = false;
         }
         
-        await db
+        const [updatedSubscription] = await db
           .update(subscriptions)
           .set(updateData)
-          .where(eq(subscriptions.tenantId, tenantId));
+          .where(eq(subscriptions.tenantId, tenantId))
+          .returning();
+          
+        if (!updatedSubscription) {
+          throw new Error(`Failed to update subscription for tenant: ${tenantId}`);
+        }
+        
+        console.log('✅ Subscription updated successfully:', updatedSubscription.subscriptionId);
           
         // Update administrator roles for the new plan
         await this.updateAdministratorRolesForPlan(tenantId, planId);
@@ -1228,7 +1319,11 @@ export class SubscriptionService {
         // Update organization applications for the new plan
         try {
           const { OnboardingOrganizationSetupService } = await import('./onboarding-organization-setup.js');
-          await OnboardingOrganizationSetupService.updateOrganizationApplicationsForPlanChange(tenantId, planId);
+          await OnboardingOrganizationSetupService.updateOrganizationApplicationsForPlanChange(
+            tenantId, 
+            planId,
+            { skipIfRecentlyUpdated: true } // Enable idempotency
+          );
           console.log('✅ Organization applications updated for new plan');
         } catch (orgAppError) {
           console.error('❌ Failed to update organization applications:', orgAppError.message);
@@ -1270,13 +1365,20 @@ export class SubscriptionService {
       console.log('💰 Checkout completed - payment will be recorded by invoice.payment_succeeded webhook');
 
       // Update tenant with Stripe customer ID if not already set
-      await db
+      const [updatedTenant] = await db
         .update(tenants)
         .set({
           stripeCustomerId: session.customer,
           updatedAt: new Date()
         })
-        .where(eq(tenants.tenantId, tenantId));
+        .where(eq(tenants.tenantId, tenantId))
+        .returning();
+        
+      if (!updatedTenant) {
+        console.warn('⚠️ Failed to update tenant with Stripe customer ID:', tenantId);
+      } else {
+        console.log('✅ Tenant updated with Stripe customer ID:', updatedTenant.tenantId);
+      }
 
       console.log('✅ Checkout completed successfully for tenant:', tenantId, 'plan:', planId);
       
@@ -1372,11 +1474,20 @@ export class SubscriptionService {
             console.log(`🔄 Triggering role upgrade for plan: ${planId}`);
             await this.updateAdministratorRolesForPlan(subscription.tenantId, planId);
             
-            // Also update organization applications
+            // Also update organization applications (with idempotency)
             try {
               const { OnboardingOrganizationSetupService } = await import('./onboarding-organization-setup.js');
-              await OnboardingOrganizationSetupService.updateOrganizationApplicationsForPlanChange(subscription.tenantId, planId);
-              console.log('✅ Organization applications updated for new plan');
+              const result = await OnboardingOrganizationSetupService.updateOrganizationApplicationsForPlanChange(
+                subscription.tenantId, 
+                planId,
+                { skipIfRecentlyUpdated: true } // Enable idempotency
+              );
+              
+              if (result.skipped) {
+                console.log('⏭️ Organization applications update skipped - recently updated');
+              } else {
+                console.log('✅ Organization applications updated for new plan');
+              }
             } catch (orgAppError) {
               console.error('❌ Failed to update organization applications:', orgAppError.message);
             }

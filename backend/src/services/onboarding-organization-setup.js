@@ -96,99 +96,148 @@ export class OnboardingOrganizationSetupService {
   }
   
   /**
-   * Update organization applications when plan changes
+   * Update organization applications when plan changes (with idempotency)
    */
-  static async updateOrganizationApplicationsForPlanChange(tenantId, newPlan) {
-    try {
-      console.log(`🔄 Updating organization applications for tenant ${tenantId} to ${newPlan} plan...`);
-      
-      const planAccess = PLAN_ACCESS_MATRIX[newPlan];
-      if (!planAccess) {
-        throw new Error(`Plan ${newPlan} not found in access matrix`);
-      }
-      
-      // Get all applications from database
-      const allApps = await db.select().from(applications);
-      console.log(`📱 Found ${allApps.length} available applications`);
-      
-      // Get applications this plan has access to
-      const planApplications = planAccess.applications || [];
-      const enabledApps = allApps.filter(app => planApplications.includes(app.appCode));
-      
-      console.log(`🎯 Plan ${newPlan} grants access to: ${planApplications.join(', ')}`);
-      
-      // First, update subscription tier for all existing organization applications
-      await db
-        .update(organizationApplications)
-        .set({
-          subscriptionTier: newPlan,
-          maxUsers: planAccess.limitations.users === -1 ? null : planAccess.limitations.users,
-          updatedAt: new Date()
-        })
-        .where(eq(organizationApplications.tenantId, tenantId));
-      
-      console.log(`🏢 Updated existing organization applications to ${newPlan} plan`);
-      
-      // Process each application that should be available in the new plan
-      for (const app of enabledApps) {
-        try {
-          // Determine enabled modules for this app based on plan
-          const enabledModules = planAccess.modules[app.appCode] || [];
-          const moduleList = enabledModules === '*' 
-            ? await this.getAllModulesForApp(app.appId)
-            : enabledModules;
-          
-          console.log(`📦 Processing ${app.appName}: modules [${moduleList.join(', ')}]`);
-          
-          // Check if organization application record already exists
-          const [existingOrgApp] = await db
+  static async updateOrganizationApplicationsForPlanChange(tenantId, newPlan, options = {}) {
+    const { skipIfRecentlyUpdated = true, forceUpdate = false } = options;
+    
+    return await db.transaction(async (tx) => {
+      try {
+        console.log(`🔄 Updating organization applications for tenant ${tenantId} to ${newPlan} plan...`);
+        
+        // Check if this update was recently performed (idempotency check)
+        if (skipIfRecentlyUpdated && !forceUpdate) {
+          const recentUpdate = await tx
             .select()
             .from(organizationApplications)
             .where(and(
               eq(organizationApplications.tenantId, tenantId),
-              eq(organizationApplications.appId, app.appId)
+              eq(organizationApplications.subscriptionTier, newPlan)
             ))
             .limit(1);
-          
-          if (existingOrgApp) {
-            // Update existing record with new modules and settings
-            await db
-              .update(organizationApplications)
-              .set({
-                isEnabled: true,
-                enabledModules: moduleList,
-                subscriptionTier: newPlan,
-                maxUsers: planAccess.limitations.users === -1 ? null : planAccess.limitations.users,
-                updatedAt: new Date()
-              })
-              .where(eq(organizationApplications.id, existingOrgApp.id));
             
-            console.log(`   ✅ Updated existing access to: ${app.appName}`);
-          } else {
-            // Create new organization application record
-            await db
-              .insert(organizationApplications)
-              .values({
-                tenantId,
-                appId: app.appId,
-                isEnabled: true,
-                enabledModules: moduleList,
-                subscriptionTier: newPlan,
-                maxUsers: planAccess.limitations.users === -1 ? null : planAccess.limitations.users,
-                licenseCount: 1
-              });
+          if (recentUpdate.length > 0) {
+            const lastUpdate = new Date(recentUpdate[0].updatedAt);
+            const timeSinceUpdate = Date.now() - lastUpdate.getTime();
             
-            console.log(`   ➕ Granted NEW access to: ${app.appName}`);
+            // If updated within last 5 minutes, skip
+            if (timeSinceUpdate < 5 * 60 * 1000) {
+              console.log(`⏭️ Skipping update - recently updated ${Math.round(timeSinceUpdate/1000)}s ago`);
+              return { skipped: true, reason: 'recently_updated' };
+            }
           }
-          
-        } catch (error) {
-          console.error(`❌ Failed to process ${app.appName} for tenant ${tenantId}:`, error.message);
-          // Continue with other apps even if one fails
         }
+        
+        const planAccess = PLAN_ACCESS_MATRIX[newPlan];
+        if (!planAccess) {
+          throw new Error(`Plan ${newPlan} not found in access matrix`);
+        }
+        
+        // Get all applications from database
+        const allApps = await tx.select().from(applications);
+        console.log(`📱 Found ${allApps.length} available applications`);
+        
+        // Get applications this plan has access to
+        const planApplications = planAccess.applications || [];
+        const enabledApps = allApps.filter(app => planApplications.includes(app.appCode));
+        
+        console.log(`🎯 Plan ${newPlan} grants access to: ${planApplications.join(', ')}`);
+        
+        // First, update subscription tier for all existing organization applications
+        await tx
+          .update(organizationApplications)
+          .set({
+            subscriptionTier: newPlan,
+            maxUsers: planAccess.limitations.users === -1 ? null : planAccess.limitations.users,
+            updatedAt: new Date()
+          })
+          .where(eq(organizationApplications.tenantId, tenantId));
+        
+        console.log(`🏢 Updated existing organization applications to ${newPlan} plan`);
+      
+        // Process each application that should be available in the new plan
+        for (const app of enabledApps) {
+          try {
+            // Determine enabled modules for this app based on plan
+            const enabledModules = planAccess.modules[app.appCode] || [];
+            const moduleList = enabledModules === '*' 
+              ? await this.getAllModulesForApp(app.appId)
+              : enabledModules;
+            
+            console.log(`📦 Processing ${app.appName}: modules [${moduleList.join(', ')}]`);
+            
+            // Check if organization application record already exists
+            const [existingOrgApp] = await tx
+              .select()
+              .from(organizationApplications)
+              .where(and(
+                eq(organizationApplications.tenantId, tenantId),
+                eq(organizationApplications.appId, app.appId)
+              ))
+              .limit(1);
+            
+            if (existingOrgApp) {
+              // Update existing record with new modules and settings
+              await tx
+                .update(organizationApplications)
+                .set({
+                  isEnabled: true,
+                  enabledModules: moduleList,
+                  subscriptionTier: newPlan,
+                  maxUsers: planAccess.limitations.users === -1 ? null : planAccess.limitations.users,
+                  updatedAt: new Date()
+                })
+                .where(eq(organizationApplications.id, existingOrgApp.id));
+              
+              console.log(`   ✅ Updated existing access to: ${app.appName}`);
+            } else {
+              // Use INSERT ... ON CONFLICT to prevent duplicates
+              try {
+                await tx
+                  .insert(organizationApplications)
+                  .values({
+                    tenantId,
+                    appId: app.appId,
+                    isEnabled: true,
+                    enabledModules: moduleList,
+                    subscriptionTier: newPlan,
+                    maxUsers: planAccess.limitations.users === -1 ? null : planAccess.limitations.users,
+                    licenseCount: 1
+                  });
+            
+                            console.log(`   ➕ Granted NEW access to: ${app.appName}`);
+              } catch (insertError) {
+                // If insert fails due to duplicate, try to update instead
+                if (insertError.message.includes('duplicate') || insertError.message.includes('unique')) {
+                  console.log(`   🔄 Duplicate detected, updating instead for: ${app.appName}`);
+                  await tx
+                    .update(organizationApplications)
+                    .set({
+                      isEnabled: true,
+                      enabledModules: moduleList,
+                      subscriptionTier: newPlan,
+                      maxUsers: planAccess.limitations.users === -1 ? null : planAccess.limitations.users,
+                      updatedAt: new Date()
+                    })
+                    .where(and(
+                      eq(organizationApplications.tenantId, tenantId),
+                      eq(organizationApplications.appId, app.appId)
+                    ));
+                  console.log(`   ✅ Updated duplicate to: ${app.appName}`);
+                } else {
+                  throw insertError;
+                }
+              }
+            }
+            
+          } catch (error) {
+            console.error(`❌ Failed to process ${app.appName} for tenant ${tenantId}:`, error.message);
+            // Continue with other apps even if one fails
+          }
       }
       
-      // Disable applications that are not included in the new plan (for downgrades)
-      const currentOrgApps = await db
+        // Disable applications that are not included in the new plan (for downgrades)
+        const currentOrgApps = await tx
         .select({
           id: organizationApplications.id,
           appCode: applications.appCode,
@@ -201,7 +250,7 @@ export class OnboardingOrganizationSetupService {
       for (const orgApp of currentOrgApps) {
         if (!planApplications.includes(orgApp.appCode)) {
           // This app is not included in the new plan - disable it
-          await db
+          await tx
             .update(organizationApplications)
             .set({
               isEnabled: false,
@@ -214,13 +263,14 @@ export class OnboardingOrganizationSetupService {
         }
       }
       
-      console.log(`✅ Organization applications updated for ${newPlan} plan`);
-      return { success: true };
-      
-    } catch (error) {
-      console.error(`❌ Failed to update organization applications for tenant ${tenantId}:`, error);
-      throw error;
-    }
+        console.log(`✅ Organization applications updated for ${newPlan} plan`);
+        return { success: true, plan: newPlan, updated: true };
+        
+      } catch (error) {
+        console.error(`❌ Failed to update organization applications for tenant ${tenantId}:`, error);
+        throw error;
+      }
+    });
   }
   
   /**

@@ -3,6 +3,12 @@ import Logger from '../utils/logger.js';
 
 // Middleware to check if trial is expired and restrict operations
 export async function trialRestrictionMiddleware(request, reply) {
+  // TEMPORARY: Skip all trial restrictions in local development
+  if (process.env.NODE_ENV === 'development' || process.env.BYPASS_TRIAL_RESTRICTIONS === 'true') {
+    console.log('🔓 Trial restriction: BYPASSED for local development');
+    return;
+  }
+
   // Skip check for non-authenticated requests
   if (!request.userContext?.tenantId) {
     console.log('🔓 Trial restriction: No tenantId, skipping check');
