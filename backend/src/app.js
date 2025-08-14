@@ -33,6 +33,7 @@ import customRolesRoutes from './routes/custom-roles.js';
 import adminPromotionRoutes from './routes/admin-promotion.js';
 import permissionMatrixRoutes from './routes/permission-matrix.js';
 import enhancedCrmIntegrationRoutes from './routes/enhanced-crm-integration.js';
+import healthRoutes from './routes/health.js';
 
 
 // Import middleware
@@ -303,7 +304,8 @@ async function registerRoutes() {
   await fastify.register(customRolesRoutes, { prefix: '/api/custom-roles' });
   await fastify.register(adminPromotionRoutes, { prefix: '/api/admin-promotion' });
   await fastify.register(permissionMatrixRoutes, { prefix: '/api/permission-matrix' });
-  await fastify.register(enhancedCrmIntegrationRoutes, { prefix: '/api/enhanced-crm-integration' });
+await fastify.register(enhancedCrmIntegrationRoutes, { prefix: '/api/enhanced-crm-integration' });
+await fastify.register(healthRoutes, { prefix: '/api' });
   
   // Applications endpoint (proxy to suite applications)
   fastify.get('/api/applications', async (request, reply) => {
