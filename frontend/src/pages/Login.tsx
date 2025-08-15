@@ -7,6 +7,7 @@ import { Users, BarChart3, CreditCard, Building2, ArrowLeft, ExternalLink } from
 
 import toast from 'react-hot-toast'
 import api from '@/lib/api'
+import { crmAuthService } from '../services/crmAuthService'
 
 export function Login() {
   const navigate = useNavigate()
@@ -45,198 +46,17 @@ export function Login() {
   useEffect(() => {
     if (isCrmRequest && returnTo) {
       console.log('🔍 CRM request detected, storing intended path');
-      storeUserIntendedPath(returnTo);
+      // Store the intended path for debugging
+      try {
+        const returnUrl = new URL(returnTo);
+        const intendedPath = returnUrl.pathname === '/' ? '/' : returnUrl.pathname;
+        sessionStorage.setItem('crm_intended_path', intendedPath);
+        console.log('💾 Stored intended path:', intendedPath);
+      } catch (error) {
+        console.error('❌ Error storing intended path:', error);
+      }
     }
   }, [isCrmRequest, returnTo]);
-  
-  // Validate CRM return URL for security
-  const isValidCrmReturnUrl = (url: string): boolean => {
-    try {
-      const parsed = new URL(url);
-      // Only allow CRM domain
-      return parsed.hostname === 'crm.zopkit.com' || 
-             parsed.hostname.endsWith('.crm.zopkit.com');
-    } catch {
-      return false;
-    }
-  };
-
-  // Create secure CRM callback URL
-  const createCrmCallbackUrl = (returnTo: string): string => {
-    try {
-      const crmUrl = new URL(returnTo);
-      
-      // Security: Only allow trusted domains
-      const allowedDomains = [
-        'crm.zopkit.com',
-        'dev-crm.zopkit.com',
-        'staging-crm.zopkit.com'
-      ];
-      
-      if (allowedDomains.includes(crmUrl.hostname)) {
-        return `${crmUrl.origin}/callback`;
-      }
-      
-      console.warn('⚠️ Untrusted CRM domain:', crmUrl.hostname);
-      return 'https://crm.zopkit.com/callback'; // Safe fallback
-    } catch (error) {
-      console.error('❌ Invalid returnTo URL:', returnTo, error);
-      return 'https://crm.zopkit.com/callback'; // Safe fallback
-    }
-  };
-
-  // ✅ NEW: Get user's intended destination (not callback)
-  const getUserIntendedPath = (returnTo: string): string => {
-    try {
-      const crmUrl = new URL(returnTo);
-      
-      // Extract the path from the returnTo URL
-      let intendedPath = crmUrl.pathname;
-      
-      // If path is empty or just '/', use root
-      if (!intendedPath || intendedPath === '/') {
-        intendedPath = '/';
-      }
-      
-      // ✅ CRITICAL: Never allow callback paths
-      if (intendedPath.includes('/callback')) {
-        console.warn('⚠️ Blocked redirect to callback, using fallback');
-        intendedPath = '/';
-      }
-      
-      // ✅ CRITICAL: Never allow login paths
-      if (intendedPath.includes('/login')) {
-        console.warn('⚠️ Blocked redirect to login, using fallback');
-        intendedPath = '/';
-      }
-      
-      console.log('🎯 User intended path:', intendedPath);
-      return intendedPath;
-      
-    } catch (error) {
-      console.error('❌ Error getting intended path:', error);
-      return '/'; // Safe fallback
-    }
-  };
-
-  // ✅ NEW: Store user's intended destination
-  const storeUserIntendedPath = (returnTo: string) => {
-    try {
-      const intendedPath = getUserIntendedPath(returnTo);
-      sessionStorage.setItem('crm_intended_path', intendedPath);
-      console.log('💾 Stored intended path:', intendedPath);
-    } catch (error) {
-      console.error('❌ Error storing intended path:', error);
-    }
-  };
-
-  // ✅ CRITICAL: Prevent CRM redirect loops
-  const preventCRMLoop = (returnTo: string, source: string): boolean => {
-    if (source !== 'crm') return false;
-    
-    const crmRedirectCount = parseInt(localStorage.getItem('crm_redirect_count') || '0');
-    const lastRedirectTime = localStorage.getItem('crm_last_redirect');
-    const currentTime = Date.now();
-    
-    // Check if too many redirects in short time
-    if (lastRedirectTime && (currentTime - parseInt(lastRedirectTime)) < 10000) {
-      if (crmRedirectCount > 3) {
-        console.error('🚨 CRM INFINITE LOOP DETECTED - Too many redirects in short time');
-        
-        // Clear loop detection and force fresh auth
-        localStorage.removeItem('crm_redirect_count');
-        localStorage.removeItem('crm_last_redirect');
-        localStorage.removeItem('crm_intended_path');
-        
-        // Redirect to CRM root without callback to break loop
-        window.location.href = 'https://crm.zopkit.com/';
-        return true; // Loop prevented
-      }
-      
-      // Increment redirect count
-      localStorage.setItem('crm_redirect_count', (crmRedirectCount + 1).toString());
-    } else {
-      // Reset redirect count for new sequence
-      localStorage.setItem('crm_redirect_count', '1');
-    }
-    
-    localStorage.setItem('crm_last_redirect', currentTime.toString());
-    return false; // No loop detected
-  };
-
-  // ✅ CRITICAL: Sanitize CRM returnTo URLs to prevent infinite loops
-  const sanitizeCRMReturnUrl = (returnTo: string): string => {
-    try {
-      const returnUrl = decodeURIComponent(returnTo);
-      
-      // ❌ BLOCK: If returnTo points to wrapper domain
-      if (returnUrl.includes('wrapper.zopkit.com')) {
-        console.warn('⚠️ Blocked wrapper domain in returnTo, redirecting to CRM root');
-        return 'https://crm.zopkit.com/';
-      }
-      
-      // ❌ BLOCK: If returnTo points to CRM callback
-      if (returnUrl.includes('/callback')) {
-        console.warn('⚠️ Blocked callback URL in returnTo, redirecting to CRM root');
-        return 'https://crm.zopkit.com/';
-      }
-      
-      // ❌ BLOCK: If returnTo points to CRM login
-      if (returnUrl.includes('/login')) {
-        console.warn('⚠️ Blocked login URL in returnTo, redirecting to CRM root');
-        return 'https://crm.zopkit.com/';
-      }
-      
-      // ❌ BLOCK: If returnTo is malformed
-      if (!returnUrl.startsWith('http')) {
-        console.warn('⚠️ Malformed returnTo URL, redirecting to CRM root');
-        return 'https://crm.zopkit.com/';
-      }
-      
-      // ✅ ALLOW: Valid CRM URLs
-      if (returnUrl.includes('crm.zopkit.com')) {
-        return returnUrl;
-      }
-      
-      // ✅ FALLBACK: Safe default
-      return 'https://crm.zopkit.com/';
-      
-    } catch (error) {
-      console.error('❌ Error sanitizing returnTo URL:', error);
-      return 'https://crm.zopkit.com/';
-    }
-  };
-
-  // ✅ CRITICAL: Generate JWT token for CRM authentication
-  const generateJWTForCRM = async (user: any): Promise<string> => {
-    try {
-      // Create a secure token payload for CRM
-      const payload = {
-        sub: user.id || user.email,
-        email: user.email,
-        name: user.givenName || user.email,
-        org_code: user.organization?.code || 'default',
-        iss: 'https://wrapper.zopkit.com',
-        aud: ['crm'],
-        exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour
-        iat: Math.floor(Date.now() / 1000)
-      };
-      
-      // For now, generate a secure placeholder token
-      // In production, this should call your backend JWT service
-      const token = `crm_${Date.now()}_${user.email}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      console.log('🔑 Generated JWT payload for CRM:', payload);
-      console.log('🔑 Generated CRM token:', token);
-      
-      return token;
-      
-    } catch (error) {
-      console.error('❌ Error generating CRM JWT token:', error);
-      // Fallback to simple token
-      return `crm_fallback_${Date.now()}_${user.email}`;
-    }
-  };
   
   console.log('🔐 Login.tsx - CRM Integration Check:', {
     redirectTo,
@@ -284,16 +104,20 @@ export function Login() {
       }
 
       // ✅ CRITICAL: Check for infinite redirect loops before proceeding
-      if (preventCRMLoop(returnTo, source || 'crm')) {
-        console.log('🛡️ CRM redirect loop prevented, user redirected to CRM root');
+      const crmRedirectCount = parseInt(localStorage.getItem('crm_redirect_count') || '0');
+      if (crmRedirectCount > 3) {
+        console.error('🚨 CRM INFINITE LOOP DETECTED - Too many redirects');
+        localStorage.removeItem('crm_redirect_count');
+        window.location.href = 'https://crm.zopkit.com/';
         return;
       }
+      localStorage.setItem('crm_redirect_count', (crmRedirectCount + 1).toString());
 
       console.log('🔄 Login.tsx - Processing CRM redirect to:', returnTo);
       
       try {
-        // Validate return URL (only allow CRM domain)
-        if (!isValidCrmReturnUrl(returnTo)) {
+        // Validate return URL using CRM auth service
+        if (!crmAuthService.validateReturnToUrl(returnTo)) {
           console.error('❌ Invalid CRM return URL:', returnTo);
           toast.error('Invalid return URL. Please contact support.');
           return;
@@ -318,38 +142,23 @@ export function Login() {
         currentUrl.searchParams.delete('crmRedirect');
         window.history.replaceState({}, '', currentUrl.toString());
         
-        // ✅ CRITICAL: Sanitize the returnTo URL first to prevent infinite loops
-        const sanitizedReturnTo = sanitizeCRMReturnUrl(returnTo);
-        console.log('🛡️ Sanitized returnTo URL:', { original: returnTo, sanitized: sanitizedReturnTo });
-        
+        // ✅ NEW: Use JWT-based CRM authentication service
         try {
-          // ✅ CRITICAL: Generate JWT token specifically for CRM
-          const jwtToken = await generateJWTForCRM(user);
+          // Validate returnTo URL using the service
+          if (!crmAuthService.validateReturnToUrl(returnTo)) {
+            console.error('❌ Invalid CRM returnTo URL:', returnTo);
+            toast.error('Invalid return URL. Please contact support.');
+            return;
+          }
           
-          // ✅ CRITICAL: Build safe CRM callback URL
-          const callbackUrl = `${sanitizedReturnTo}/callback`;
-          const redirectUrl = new URL(callbackUrl);
-          
-          // ✅ CRITICAL: Add proper authentication parameters (NEVER send original returnTo)
-          redirectUrl.searchParams.set('code', jwtToken);
-          redirectUrl.searchParams.set('state', 'authenticated');
-          redirectUrl.searchParams.set('user_id', user.id || user.email || 'unknown');
-          redirectUrl.searchParams.set('timestamp', Date.now().toString());
-          
-          // ✅ CRITICAL: Send the intended path, not the original returnTo
-          const intendedPath = getUserIntendedPath(returnTo);
-          const finalPath = intendedPath && !intendedPath.includes('/callback') && !intendedPath.includes('/login') 
-            ? intendedPath 
-            : '/';
-          
-          redirectUrl.searchParams.set('returnTo', finalPath);
+          // Generate CRM callback URL with JWT authentication
+          const callbackUrl = crmAuthService.generateCRMCallback(user, returnTo);
           
           console.log('🎯 CRM Authentication Success:', {
             user: user.email,
-            sanitizedReturnTo,
-            intendedPath: finalPath,
-            callbackUrl: redirectUrl.toString(),
-            hasJWTToken: !!jwtToken
+            originalReturnTo: returnTo,
+            callbackUrl: callbackUrl,
+            hasJWTToken: callbackUrl.includes('code=')
           });
           
           // ✅ CRITICAL: Clear any stored paths to prevent future issues
@@ -358,20 +167,19 @@ export function Login() {
           localStorage.removeItem('crm_last_redirect');
           
           // ✅ CRITICAL: Store authentication data for debugging
-          localStorage.setItem('crm_auth_token', jwtToken);
+          localStorage.setItem('crm_callback_url', callbackUrl);
           localStorage.setItem('crm_user_id', user.id || user.email || 'unknown');
-          localStorage.setItem('crm_intended_path', finalPath);
           localStorage.setItem('crm_callback_timestamp', Date.now().toString());
           
-          // ✅ CRITICAL: Redirect to CRM callback endpoint with proper parameters
-          window.location.href = redirectUrl.toString();
+          // ✅ CRITICAL: Redirect to CRM callback endpoint with JWT authentication
+          window.location.href = callbackUrl;
           
-        } catch (jwtError) {
-          console.error('❌ Failed to generate CRM JWT token:', jwtError);
+        } catch (authError) {
+          console.error('❌ Failed to generate CRM authentication:', authError);
           
           // ✅ SAFE FALLBACK: Redirect to CRM root without callback to prevent loops
-          console.log('🔄 Fallback: Redirecting to CRM root due to JWT generation failure');
-          window.location.href = 'https://crm.zopkit.com/';
+          console.log('🔄 Fallback: Redirecting to CRM root due to authentication failure');
+          window.location.href = crmAuthService.generateFallbackUrl();
         }
         
       } catch (error) {
@@ -546,7 +354,7 @@ export function Login() {
 
   // Handle going back to CRM without login
   const handleBackToCRM = () => {
-    if (returnTo && isValidCrmReturnUrl(returnTo)) {
+            if (returnTo && crmAuthService.validateReturnToUrl(returnTo)) {
       window.location.href = returnTo;
     } else {
       toast.error('Invalid return URL');
