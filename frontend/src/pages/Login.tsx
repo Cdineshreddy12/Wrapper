@@ -41,6 +41,14 @@ export function Login() {
   const isCrmRequest = source === 'crm' || app === 'crm' || crmRedirect === 'true'
   const shouldAutoRedirect = redirectAfterAuth === 'true'
   
+  // ✅ NEW: Store user's intended path when CRM request is detected
+  useEffect(() => {
+    if (isCrmRequest && returnTo) {
+      console.log('🔍 CRM request detected, storing intended path');
+      storeUserIntendedPath(returnTo);
+    }
+  }, [isCrmRequest, returnTo]);
+  
   // Validate CRM return URL for security
   const isValidCrmReturnUrl = (url: string): boolean => {
     try {
@@ -74,6 +82,51 @@ export function Login() {
     } catch (error) {
       console.error('❌ Invalid returnTo URL:', returnTo, error);
       return 'https://crm.zopkit.com/callback'; // Safe fallback
+    }
+  };
+
+  // ✅ NEW: Get user's intended destination (not callback)
+  const getUserIntendedPath = (returnTo: string): string => {
+    try {
+      const crmUrl = new URL(returnTo);
+      
+      // Extract the path from the returnTo URL
+      let intendedPath = crmUrl.pathname;
+      
+      // If path is empty or just '/', use root
+      if (!intendedPath || intendedPath === '/') {
+        intendedPath = '/';
+      }
+      
+      // ✅ CRITICAL: Never allow callback paths
+      if (intendedPath.includes('/callback')) {
+        console.warn('⚠️ Blocked redirect to callback, using fallback');
+        intendedPath = '/';
+      }
+      
+      // ✅ CRITICAL: Never allow login paths
+      if (intendedPath.includes('/login')) {
+        console.warn('⚠️ Blocked redirect to login, using fallback');
+        intendedPath = '/';
+      }
+      
+      console.log('🎯 User intended path:', intendedPath);
+      return intendedPath;
+      
+    } catch (error) {
+      console.error('❌ Error getting intended path:', error);
+      return '/'; // Safe fallback
+    }
+  };
+
+  // ✅ NEW: Store user's intended destination
+  const storeUserIntendedPath = (returnTo: string) => {
+    try {
+      const intendedPath = getUserIntendedPath(returnTo);
+      sessionStorage.setItem('crm_intended_path', intendedPath);
+      console.log('💾 Stored intended path:', intendedPath);
+    } catch (error) {
+      console.error('❌ Error storing intended path:', error);
     }
   };
   
@@ -154,6 +207,18 @@ export function Login() {
         // ✅ FIX: Always redirect to CRM callback endpoint, not the original URL
         const callbackUrl = createCrmCallbackUrl(returnTo);
         
+        // ✅ CRITICAL: Get user's intended destination (not callback URL)
+        let intendedPath = getUserIntendedPath(returnTo);
+        
+        // ✅ FALLBACK: If no intended path found, try to get from session storage
+        if (!intendedPath || intendedPath === '/') {
+          const storedPath = sessionStorage.getItem('crm_intended_path');
+          if (storedPath && storedPath !== '/') {
+            console.log('🔄 Using stored intended path:', storedPath);
+            intendedPath = storedPath;
+          }
+        }
+        
         // Add authentication parameters
         const redirectUrl = new URL(callbackUrl);
         if (token) {
@@ -162,12 +227,22 @@ export function Login() {
         redirectUrl.searchParams.set('state', 'authenticated');
         redirectUrl.searchParams.set('user_id', user.id || user.email || 'unknown');
         redirectUrl.searchParams.set('timestamp', Date.now().toString());
-        redirectUrl.searchParams.set('original_return_to', returnTo);
+        
+        // ✅ FIXED: Send intended path, not callback URL
+        // Final validation to ensure we never send invalid paths
+        const finalPath = intendedPath && !intendedPath.includes('/callback') && !intendedPath.includes('/login') 
+          ? intendedPath 
+          : '/';
+        
+        redirectUrl.searchParams.set('returnTo', finalPath);
+        
+        console.log('🎯 Final returnTo path:', finalPath);
         
         console.log('🚀 CRM Authentication Success - Redirecting to callback:', redirectUrl.toString());
         console.log('📋 Authentication details:', {
           user: user.email,
           callbackUrl: redirectUrl.toString(),
+          intendedPath: intendedPath,
           originalReturnTo: returnTo,
           hasToken: !!token
         });
@@ -175,8 +250,11 @@ export function Login() {
         // Store CRM session data for debugging
         localStorage.setItem('crm_auth_token', token || 'no-token');
         localStorage.setItem('crm_user_id', user.id || user.email || 'unknown');
-        localStorage.setItem('crm_return_url', returnTo);
+        localStorage.setItem('crm_intended_path', intendedPath);
         localStorage.setItem('crm_callback_timestamp', Date.now().toString());
+        
+        // ✅ Clear stored path to prevent future issues
+        sessionStorage.removeItem('crm_intended_path');
         
         // Redirect to CRM callback endpoint (NOT the original URL)
         window.location.href = redirectUrl.toString();
