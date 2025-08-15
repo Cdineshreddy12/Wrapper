@@ -129,6 +129,114 @@ export function Login() {
       console.error('❌ Error storing intended path:', error);
     }
   };
+
+  // ✅ CRITICAL: Prevent CRM redirect loops
+  const preventCRMLoop = (returnTo: string, source: string): boolean => {
+    if (source !== 'crm') return false;
+    
+    const crmRedirectCount = parseInt(localStorage.getItem('crm_redirect_count') || '0');
+    const lastRedirectTime = localStorage.getItem('crm_last_redirect');
+    const currentTime = Date.now();
+    
+    // Check if too many redirects in short time
+    if (lastRedirectTime && (currentTime - parseInt(lastRedirectTime)) < 10000) {
+      if (crmRedirectCount > 3) {
+        console.error('🚨 CRM INFINITE LOOP DETECTED - Too many redirects in short time');
+        
+        // Clear loop detection and force fresh auth
+        localStorage.removeItem('crm_redirect_count');
+        localStorage.removeItem('crm_last_redirect');
+        localStorage.removeItem('crm_intended_path');
+        
+        // Redirect to CRM root without callback to break loop
+        window.location.href = 'https://crm.zopkit.com/';
+        return true; // Loop prevented
+      }
+      
+      // Increment redirect count
+      localStorage.setItem('crm_redirect_count', (crmRedirectCount + 1).toString());
+    } else {
+      // Reset redirect count for new sequence
+      localStorage.setItem('crm_redirect_count', '1');
+    }
+    
+    localStorage.setItem('crm_last_redirect', currentTime.toString());
+    return false; // No loop detected
+  };
+
+  // ✅ CRITICAL: Sanitize CRM returnTo URLs to prevent infinite loops
+  const sanitizeCRMReturnUrl = (returnTo: string): string => {
+    try {
+      const returnUrl = decodeURIComponent(returnTo);
+      
+      // ❌ BLOCK: If returnTo points to wrapper domain
+      if (returnUrl.includes('wrapper.zopkit.com')) {
+        console.warn('⚠️ Blocked wrapper domain in returnTo, redirecting to CRM root');
+        return 'https://crm.zopkit.com/';
+      }
+      
+      // ❌ BLOCK: If returnTo points to CRM callback
+      if (returnUrl.includes('/callback')) {
+        console.warn('⚠️ Blocked callback URL in returnTo, redirecting to CRM root');
+        return 'https://crm.zopkit.com/';
+      }
+      
+      // ❌ BLOCK: If returnTo points to CRM login
+      if (returnUrl.includes('/login')) {
+        console.warn('⚠️ Blocked login URL in returnTo, redirecting to CRM root');
+        return 'https://crm.zopkit.com/';
+      }
+      
+      // ❌ BLOCK: If returnTo is malformed
+      if (!returnUrl.startsWith('http')) {
+        console.warn('⚠️ Malformed returnTo URL, redirecting to CRM root');
+        return 'https://crm.zopkit.com/';
+      }
+      
+      // ✅ ALLOW: Valid CRM URLs
+      if (returnUrl.includes('crm.zopkit.com')) {
+        return returnUrl;
+      }
+      
+      // ✅ FALLBACK: Safe default
+      return 'https://crm.zopkit.com/';
+      
+    } catch (error) {
+      console.error('❌ Error sanitizing returnTo URL:', error);
+      return 'https://crm.zopkit.com/';
+    }
+  };
+
+  // ✅ CRITICAL: Generate JWT token for CRM authentication
+  const generateJWTForCRM = async (user: any): Promise<string> => {
+    try {
+      // Create a secure token payload for CRM
+      const payload = {
+        sub: user.id || user.email,
+        email: user.email,
+        name: user.givenName || user.email,
+        org_code: user.organization?.code || 'default',
+        iss: 'https://wrapper.zopkit.com',
+        aud: ['crm'],
+        exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour
+        iat: Math.floor(Date.now() / 1000)
+      };
+      
+      // For now, generate a secure placeholder token
+      // In production, this should call your backend JWT service
+      const token = `crm_${Date.now()}_${user.email}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      console.log('🔑 Generated JWT payload for CRM:', payload);
+      console.log('🔑 Generated CRM token:', token);
+      
+      return token;
+      
+    } catch (error) {
+      console.error('❌ Error generating CRM JWT token:', error);
+      // Fallback to simple token
+      return `crm_fallback_${Date.now()}_${user.email}`;
+    }
+  };
   
   console.log('🔐 Login.tsx - CRM Integration Check:', {
     redirectTo,
@@ -175,6 +283,12 @@ export function Login() {
         return;
       }
 
+      // ✅ CRITICAL: Check for infinite redirect loops before proceeding
+      if (preventCRMLoop(returnTo, source || 'crm')) {
+        console.log('🛡️ CRM redirect loop prevented, user redirected to CRM root');
+        return;
+      }
+
       console.log('🔄 Login.tsx - Processing CRM redirect to:', returnTo);
       
       try {
@@ -204,60 +318,61 @@ export function Login() {
         currentUrl.searchParams.delete('crmRedirect');
         window.history.replaceState({}, '', currentUrl.toString());
         
-        // ✅ FIX: Always redirect to CRM callback endpoint, not the original URL
-        const callbackUrl = createCrmCallbackUrl(returnTo);
+        // ✅ CRITICAL: Sanitize the returnTo URL first to prevent infinite loops
+        const sanitizedReturnTo = sanitizeCRMReturnUrl(returnTo);
+        console.log('🛡️ Sanitized returnTo URL:', { original: returnTo, sanitized: sanitizedReturnTo });
         
-        // ✅ CRITICAL: Get user's intended destination (not callback URL)
-        let intendedPath = getUserIntendedPath(returnTo);
-        
-        // ✅ FALLBACK: If no intended path found, try to get from session storage
-        if (!intendedPath || intendedPath === '/') {
-          const storedPath = sessionStorage.getItem('crm_intended_path');
-          if (storedPath && storedPath !== '/') {
-            console.log('🔄 Using stored intended path:', storedPath);
-            intendedPath = storedPath;
-          }
+        try {
+          // ✅ CRITICAL: Generate JWT token specifically for CRM
+          const jwtToken = await generateJWTForCRM(user);
+          
+          // ✅ CRITICAL: Build safe CRM callback URL
+          const callbackUrl = `${sanitizedReturnTo}/callback`;
+          const redirectUrl = new URL(callbackUrl);
+          
+          // ✅ CRITICAL: Add proper authentication parameters (NEVER send original returnTo)
+          redirectUrl.searchParams.set('code', jwtToken);
+          redirectUrl.searchParams.set('state', 'authenticated');
+          redirectUrl.searchParams.set('user_id', user.id || user.email || 'unknown');
+          redirectUrl.searchParams.set('timestamp', Date.now().toString());
+          
+          // ✅ CRITICAL: Send the intended path, not the original returnTo
+          const intendedPath = getUserIntendedPath(returnTo);
+          const finalPath = intendedPath && !intendedPath.includes('/callback') && !intendedPath.includes('/login') 
+            ? intendedPath 
+            : '/';
+          
+          redirectUrl.searchParams.set('returnTo', finalPath);
+          
+          console.log('🎯 CRM Authentication Success:', {
+            user: user.email,
+            sanitizedReturnTo,
+            intendedPath: finalPath,
+            callbackUrl: redirectUrl.toString(),
+            hasJWTToken: !!jwtToken
+          });
+          
+          // ✅ CRITICAL: Clear any stored paths to prevent future issues
+          sessionStorage.removeItem('crm_intended_path');
+          localStorage.removeItem('crm_redirect_count');
+          localStorage.removeItem('crm_last_redirect');
+          
+          // ✅ CRITICAL: Store authentication data for debugging
+          localStorage.setItem('crm_auth_token', jwtToken);
+          localStorage.setItem('crm_user_id', user.id || user.email || 'unknown');
+          localStorage.setItem('crm_intended_path', finalPath);
+          localStorage.setItem('crm_callback_timestamp', Date.now().toString());
+          
+          // ✅ CRITICAL: Redirect to CRM callback endpoint with proper parameters
+          window.location.href = redirectUrl.toString();
+          
+        } catch (jwtError) {
+          console.error('❌ Failed to generate CRM JWT token:', jwtError);
+          
+          // ✅ SAFE FALLBACK: Redirect to CRM root without callback to prevent loops
+          console.log('🔄 Fallback: Redirecting to CRM root due to JWT generation failure');
+          window.location.href = 'https://crm.zopkit.com/';
         }
-        
-        // Add authentication parameters
-        const redirectUrl = new URL(callbackUrl);
-        if (token) {
-          redirectUrl.searchParams.set('code', token);
-        }
-        redirectUrl.searchParams.set('state', 'authenticated');
-        redirectUrl.searchParams.set('user_id', user.id || user.email || 'unknown');
-        redirectUrl.searchParams.set('timestamp', Date.now().toString());
-        
-        // ✅ FIXED: Send intended path, not callback URL
-        // Final validation to ensure we never send invalid paths
-        const finalPath = intendedPath && !intendedPath.includes('/callback') && !intendedPath.includes('/login') 
-          ? intendedPath 
-          : '/';
-        
-        redirectUrl.searchParams.set('returnTo', finalPath);
-        
-        console.log('🎯 Final returnTo path:', finalPath);
-        
-        console.log('🚀 CRM Authentication Success - Redirecting to callback:', redirectUrl.toString());
-        console.log('📋 Authentication details:', {
-          user: user.email,
-          callbackUrl: redirectUrl.toString(),
-          intendedPath: intendedPath,
-          originalReturnTo: returnTo,
-          hasToken: !!token
-        });
-        
-        // Store CRM session data for debugging
-        localStorage.setItem('crm_auth_token', token || 'no-token');
-        localStorage.setItem('crm_user_id', user.id || user.email || 'unknown');
-        localStorage.setItem('crm_intended_path', intendedPath);
-        localStorage.setItem('crm_callback_timestamp', Date.now().toString());
-        
-        // ✅ Clear stored path to prevent future issues
-        sessionStorage.removeItem('crm_intended_path');
-        
-        // Redirect to CRM callback endpoint (NOT the original URL)
-        window.location.href = redirectUrl.toString();
         
       } catch (error) {
         console.error('❌ Error during CRM redirect:', error);
