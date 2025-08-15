@@ -52,6 +52,30 @@ export function Login() {
       return false;
     }
   };
+
+  // Create secure CRM callback URL
+  const createCrmCallbackUrl = (returnTo: string): string => {
+    try {
+      const crmUrl = new URL(returnTo);
+      
+      // Security: Only allow trusted domains
+      const allowedDomains = [
+        'crm.zopkit.com',
+        'dev-crm.zopkit.com',
+        'staging-crm.zopkit.com'
+      ];
+      
+      if (allowedDomains.includes(crmUrl.hostname)) {
+        return `${crmUrl.origin}/callback`;
+      }
+      
+      console.warn('⚠️ Untrusted CRM domain:', crmUrl.hostname);
+      return 'https://crm.zopkit.com/callback'; // Safe fallback
+    } catch (error) {
+      console.error('❌ Invalid returnTo URL:', returnTo, error);
+      return 'https://crm.zopkit.com/callback'; // Safe fallback
+    }
+  };
   
   console.log('🔐 Login.tsx - CRM Integration Check:', {
     redirectTo,
@@ -90,6 +114,7 @@ export function Login() {
   }, [isAuthenticated, user, isLoading, getOrganization, getUserOrganizations]);
 
   // Handle CRM redirect after authentication
+  // ✅ NEW FLOW: Always redirect to /callback endpoint to prevent infinite loops
   useEffect(() => {
     const handleCrmRedirect = async () => {
       // Only proceed if authenticated with CRM redirect
@@ -126,10 +151,35 @@ export function Login() {
         currentUrl.searchParams.delete('crmRedirect');
         window.history.replaceState({}, '', currentUrl.toString());
         
-        console.log('🚀 Redirecting to CRM:', returnTo);
+        // ✅ FIX: Always redirect to CRM callback endpoint, not the original URL
+        const callbackUrl = createCrmCallbackUrl(returnTo);
         
-        // Redirect to CRM - Kinde domain cookies will be automatically available
-        window.location.href = returnTo;
+        // Add authentication parameters
+        const redirectUrl = new URL(callbackUrl);
+        if (token) {
+          redirectUrl.searchParams.set('code', token);
+        }
+        redirectUrl.searchParams.set('state', 'authenticated');
+        redirectUrl.searchParams.set('user_id', user.id || user.email || 'unknown');
+        redirectUrl.searchParams.set('timestamp', Date.now().toString());
+        redirectUrl.searchParams.set('original_return_to', returnTo);
+        
+        console.log('🚀 CRM Authentication Success - Redirecting to callback:', redirectUrl.toString());
+        console.log('📋 Authentication details:', {
+          user: user.email,
+          callbackUrl: redirectUrl.toString(),
+          originalReturnTo: returnTo,
+          hasToken: !!token
+        });
+        
+        // Store CRM session data for debugging
+        localStorage.setItem('crm_auth_token', token || 'no-token');
+        localStorage.setItem('crm_user_id', user.id || user.email || 'unknown');
+        localStorage.setItem('crm_return_url', returnTo);
+        localStorage.setItem('crm_callback_timestamp', Date.now().toString());
+        
+        // Redirect to CRM callback endpoint (NOT the original URL)
+        window.location.href = redirectUrl.toString();
         
       } catch (error) {
         console.error('❌ Error during CRM redirect:', error);
