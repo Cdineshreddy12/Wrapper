@@ -41,7 +41,8 @@
     "sync-permissions:validate": "node src/scripts/sync-permissions.js validate",
     "sync-permissions:app": "node src/scripts/sync-permissions.js app",
     "sync-permissions:summary": "node src/scripts/sync-permissions.js summary",
-    "permission-matrix:check": "node -e \"import('./src/data/permission-matrix.js').then(m => console.log('✅ Permission matrix loaded successfully'))\""
+    "permission-matrix:check": "node -e \"import('./src/data/permission-matrix.js').then(m => console.log('✅ Permission matrix loaded successfully'))\"",
+    "test:db-connection": "node test-db-connection.js"
   },
   "dependencies": {
     "@fastify/cookie": "^9.2.0",

@@ -254,6 +254,45 @@ export default async function tenantRoutes(fastify, options) {
     }
   });
 
+  // Resend invitation email
+  fastify.post('/current/invitations/:id/resend', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    if (!request.userContext?.isAuthenticated) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+
+    try {
+      const tenantId = request.userContext.tenantId;
+      
+      if (!tenantId) {
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+      }
+
+      const result = await TenantService.resendInvitationEmail(request.params.id, tenantId);
+      
+      return {
+        success: true,
+        data: result,
+        message: 'Invitation email resent successfully'
+      };
+    } catch (error) {
+      request.log.error('Error resending invitation:', error);
+      if (error.message.includes('not found') || error.message.includes('expired')) {
+        return reply.code(400).send({ error: error.message });
+      }
+      return reply.code(500).send({ error: 'Failed to resend invitation' });
+    }
+  });
+
   // Update user role/permissions
   fastify.put('/users/:userId/role', {
     preHandler: [authenticateToken, requirePermission('users:manage'), trackUsage],

@@ -1,4 +1,5 @@
 import { jwtService } from './jwtService';
+import { CRM_DOMAIN, CRM_CALLBACK_PATH } from '../lib/config';
 
 // Define user interface for type safety - compatible with Kinde UserProfile
 interface User {
@@ -30,9 +31,9 @@ class CRMAuthService {
   private readonly CRM_CALLBACK_PATH: string;
 
   constructor() {
-    // Get environment variables or use defaults
-    this.CRM_DOMAIN = process.env.CRM_DOMAIN || 'https://crm.zopkit.com';
-    this.CRM_CALLBACK_PATH = process.env.CRM_CALLBACK_PATH || '/callback';
+    // Get environment variables from config or use defaults
+    this.CRM_DOMAIN = CRM_DOMAIN || 'https://crm.zopkit.com';
+    this.CRM_CALLBACK_PATH = CRM_CALLBACK_PATH || '/callback';
   }
 
   /**

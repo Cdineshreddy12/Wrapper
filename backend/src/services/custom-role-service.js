@@ -2,6 +2,7 @@ import { db } from '../db/index.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import { applications, applicationModules, organizationApplications, userApplicationPermissions } from '../db/schema/suite-schema.js';
 import { customRoles } from '../db/schema/index.js';
+import { PERMISSION_TIERS, getAccessibleModules, isModuleAccessible } from '../config/permission-tiers.js';
 
 /**
  * 🏗️ **CUSTOM ROLE SERVICE**
@@ -282,23 +283,22 @@ export class CustomRoleService {
   }
   
   /**
-   * 2️⃣ **GET ROLE CREATION OPTIONS**
-   * Shows why organization_applications table is needed - different orgs have different access
+   * 2️⃣ **GET ROLE CREATION OPTIONS (DYNAMIC)**
+   * Now uses automatic subscription-tier based access control
    */
   static async getRoleCreationOptions(tenantId) {
     console.log(`🔍 Getting role creation options for tenant: ${tenantId}`);
     
-    // Get organization's available applications (WHY WE NEED ORGANIZATION_APPLICATIONS)
-    // Different organizations may have access to different apps/modules even on same plan
+    // Get organization's available applications with subscription info
     const orgApps = await db
       .select({
         appId: applications.appId,
         appCode: applications.appCode,
         appName: applications.appName,
         description: applications.description,
-        enabledModules: organizationApplications.enabledModules,
         subscriptionTier: organizationApplications.subscriptionTier,
-        isEnabled: organizationApplications.isEnabled
+        isEnabled: organizationApplications.isEnabled,
+        enabledModules: organizationApplications.enabledModules
       })
       .from(applications)
       .innerJoin(organizationApplications, and(
@@ -309,7 +309,7 @@ export class CustomRoleService {
     
     console.log(`🏢 Organization has access to ${orgApps.length} applications`);
     
-    // Get modules and permissions for each app
+    // Get ALL modules for each app with dynamic access control
     const appsWithModules = await Promise.all(
       orgApps.map(async (app) => {
         const allModules = await db
@@ -317,13 +317,15 @@ export class CustomRoleService {
           .from(applicationModules)
           .where(eq(applicationModules.appId, app.appId));
         
-        // Filter modules based on what organization has enabled
-        const enabledModuleCodes = app.enabledModules || [];
-        const availableModules = allModules.filter(module => 
-          enabledModuleCodes.includes(module.moduleCode)
+        // Use dynamic access control based on subscription tier
+        const accessibleModules = await this.getAccessibleModulesForApp(
+          app.appCode, 
+          app.subscriptionTier, 
+          allModules,
+          app.enabledModules // Fallback to explicit config
         );
         
-        console.log(`  📦 ${app.appCode}: ${availableModules.length}/${allModules.length} modules available`);
+        console.log(`  📦 ${app.appCode}: ${accessibleModules.length}/${allModules.length} modules accessible (${app.subscriptionTier})`);
         
         return {
           appId: app.appId,
@@ -331,7 +333,7 @@ export class CustomRoleService {
           appName: app.appName,
           description: app.description,
           subscriptionTier: app.subscriptionTier,
-          modules: availableModules.map(module => ({
+          modules: accessibleModules.map(module => ({
             moduleId: module.moduleId,
             moduleCode: module.moduleCode,
             moduleName: module.moduleName,
@@ -344,6 +346,140 @@ export class CustomRoleService {
     );
     
     return appsWithModules;
+  }
+
+  /**
+   * 🎯 **DYNAMIC MODULE ACCESS CONTROL**
+   * Determines which modules are accessible based on subscription tier
+   */
+  static async getAccessibleModulesForApp(appCode, subscriptionTier, allModules, fallbackEnabledModules = null) {
+    console.log(`🔍 Determining accessible modules for ${appCode} on ${subscriptionTier} tier`);
+    
+    // Get tier-based accessible modules
+    const tierModules = getAccessibleModules(appCode, subscriptionTier);
+    
+    if (tierModules === 'all') {
+      // Enterprise tier gets all modules
+      console.log(`  🌟 Enterprise tier: All ${allModules.length} modules accessible`);
+      return allModules;
+    }
+    
+    if (Array.isArray(tierModules) && tierModules.length > 0) {
+      // Filter modules based on tier configuration
+      const accessibleModules = allModules.filter(module => 
+        tierModules.includes(module.moduleCode)
+      );
+      console.log(`  📋 Tier-based access: ${accessibleModules.length} modules`);
+      return accessibleModules;
+    }
+    
+    // Fallback to organization-specific enabled modules
+    if (fallbackEnabledModules && Array.isArray(fallbackEnabledModules)) {
+      const fallbackModules = allModules.filter(module => 
+        fallbackEnabledModules.includes(module.moduleCode)
+      );
+      console.log(`  🔄 Fallback to org-specific: ${fallbackModules.length} modules`);
+      return fallbackModules;
+    }
+    
+    // No access or invalid configuration
+    console.log(`  ❌ No access configured for ${appCode} on ${subscriptionTier}`);
+    return [];
+  }
+
+  /**
+   * 🚀 **AUTO-UPDATE ORGANIZATION ACCESS**
+   * Automatically updates organization_applications based on subscription changes
+   */
+  static async updateOrganizationAccess(tenantId, subscriptionTier) {
+    console.log(`🔄 Auto-updating organization access for tenant ${tenantId} to ${subscriptionTier}`);
+    
+    // Get all applications
+    const allApps = await db.select().from(applications);
+    
+    for (const app of allApps) {
+      // Get accessible modules for this app and tier
+      const accessibleModuleCodes = getAccessibleModules(app.appCode, subscriptionTier);
+      
+      if (accessibleModuleCodes === 'all') {
+        // Enterprise: Get all actual modules for this app
+        const allModules = await db
+          .select()
+          .from(applicationModules)
+          .where(eq(applicationModules.appId, app.appId));
+        
+        const allModuleCodes = allModules.map(m => m.moduleCode);
+        
+        await this.upsertOrganizationApplication(tenantId, app.appId, {
+          subscriptionTier,
+          enabledModules: allModuleCodes,
+          isEnabled: true
+        });
+        
+        console.log(`  ✅ ${app.appCode}: All ${allModuleCodes.length} modules enabled`);
+        
+      } else if (Array.isArray(accessibleModuleCodes) && accessibleModuleCodes.length > 0) {
+        // Specific modules
+        await this.upsertOrganizationApplication(tenantId, app.appId, {
+          subscriptionTier,
+          enabledModules: accessibleModuleCodes,
+          isEnabled: true
+        });
+        
+        console.log(`  ✅ ${app.appCode}: ${accessibleModuleCodes.length} modules enabled`);
+        
+      } else {
+        // No access - disable the app
+        await this.upsertOrganizationApplication(tenantId, app.appId, {
+          subscriptionTier,
+          enabledModules: [],
+          isEnabled: false
+        });
+        
+        console.log(`  ❌ ${app.appCode}: Access disabled`);
+      }
+    }
+    
+    console.log(`🎉 Organization access updated successfully for ${subscriptionTier} tier`);
+  }
+
+  /**
+   * Helper method to upsert organization application record
+   */
+  static async upsertOrganizationApplication(tenantId, appId, config) {
+    const existing = await db
+      .select()
+      .from(organizationApplications)
+      .where(and(
+        eq(organizationApplications.tenantId, tenantId),
+        eq(organizationApplications.appId, appId)
+      ))
+      .limit(1);
+    
+    if (existing.length > 0) {
+      // Update existing
+      await db
+        .update(organizationApplications)
+        .set({
+          subscriptionTier: config.subscriptionTier,
+          enabledModules: config.enabledModules,
+          isEnabled: config.isEnabled,
+          updatedAt: new Date()
+        })
+        .where(and(
+          eq(organizationApplications.tenantId, tenantId),
+          eq(organizationApplications.appId, appId)
+        ));
+    } else {
+      // Insert new
+      await db.insert(organizationApplications).values({
+        tenantId,
+        appId,
+        subscriptionTier: config.subscriptionTier,
+        enabledModules: config.enabledModules,
+        isEnabled: config.isEnabled
+      });
+    }
   }
   
   /**

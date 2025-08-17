@@ -1,6 +1,8 @@
 // Browser-compatible JWT service for CRM authentication
 // This replaces the custom code generation that was causing infinite redirects
 
+import { JWT_SECRET, WRAPPER_DOMAIN } from '../lib/config';
+
 // Define user interface for type safety - compatible with Kinde UserProfile
 interface User {
   id: string;
@@ -31,9 +33,9 @@ class JWTService {
   private readonly WRAPPER_DOMAIN: string;
 
   constructor() {
-    // Get environment variables or use defaults
-    this.JWT_SECRET = process.env.JWT_SECRET || this.generateFallbackSecret();
-    this.WRAPPER_DOMAIN = process.env.WRAPPER_DOMAIN || 'https://wrapper.zopkit.com';
+    // Get environment variables from config or use defaults
+    this.JWT_SECRET = JWT_SECRET || this.generateFallbackSecret();
+    this.WRAPPER_DOMAIN = WRAPPER_DOMAIN || 'https://wrapper.zopkit.com';
   }
 
   /**

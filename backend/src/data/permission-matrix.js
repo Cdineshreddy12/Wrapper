@@ -9,8 +9,8 @@ export const BUSINESS_SUITE_MATRIX = {
       appCode: 'crm',
       appName: 'Customer Relationship Management',
       description: 'Complete CRM solution for managing customers, deals, and sales pipeline',
-      icon: '💼',
-      baseUrl: 'http://localhost:3002',
+      icon: '🎫',
+      baseUrl: 'https://crm.zopkit.com',
       version: '2.0.0',
       isCore: true,
       sortOrder: 1
@@ -30,7 +30,8 @@ export const BUSINESS_SUITE_MATRIX = {
           { code: 'delete', name: 'Delete Leads', description: 'Remove leads from the system' },
           { code: 'export', name: 'Export Leads', description: 'Export lead data to various formats' },
           { code: 'import', name: 'Import Leads', description: 'Import leads from external files' },
-          { code: 'assign', name: 'Assign Leads', description: 'Assign leads to other users' }
+          { code: 'assign', name: 'Assign Leads', description: 'Assign leads to other users' },
+          { code: 'convert', name: 'Convert Leads', description: 'Convert leads to opportunities' }
         ]
       },
       
@@ -48,7 +49,8 @@ export const BUSINESS_SUITE_MATRIX = {
           { code: 'delete', name: 'Delete Accounts', description: 'Remove accounts from the system' },
           { code: 'view_contacts', name: 'View Account Contacts', description: 'View contacts associated with accounts' },
           { code: 'export', name: 'Export Accounts', description: 'Export account data' },
-          { code: 'import', name: 'Import Accounts', description: 'Import accounts from files' }
+          { code: 'import', name: 'Import Accounts', description: 'Import accounts from files' },
+          { code: 'assign', name: 'Assign Accounts', description: 'Assign accounts to other users' }
         ]
       },
       
@@ -83,7 +85,8 @@ export const BUSINESS_SUITE_MATRIX = {
           { code: 'delete', name: 'Delete Opportunities', description: 'Remove opportunities' },
           { code: 'export', name: 'Export Opportunities', description: 'Export opportunity data' },
           { code: 'import', name: 'Import Opportunities', description: 'Import opportunities from files' },
-          { code: 'close', name: 'Close Opportunities', description: 'Mark opportunities as won/lost' }
+          { code: 'close', name: 'Close Opportunities', description: 'Mark opportunities as won/lost' },
+          { code: 'assign', name: 'Assign Opportunities', description: 'Assign opportunities to other users' }
         ]
       },
       
@@ -101,7 +104,140 @@ export const BUSINESS_SUITE_MATRIX = {
           { code: 'delete', name: 'Delete Quotations', description: 'Remove quotations' },
           { code: 'generate_pdf', name: 'Generate PDF', description: 'Generate PDF versions of quotations' },
           { code: 'send', name: 'Send Quotations', description: 'Send quotations to customers' },
-          { code: 'approve', name: 'Approve Quotations', description: 'Approve quotations for sending' }
+          { code: 'approve', name: 'Approve Quotations', description: 'Approve quotations for sending' },
+          { code: 'assign', name: 'Assign Quotations', description: 'Assign quotations to other users' }
+        ]
+      },
+
+      // 🧾 INVOICES MODULE - NEW
+      invoices: {
+        moduleCode: 'invoices',
+        moduleName: 'Invoice Management',
+        description: 'Create and manage customer invoices',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Invoices', description: 'View invoice information' },
+          { code: 'read_all', name: 'View All Invoices', description: 'View all invoices in organization' },
+          { code: 'create', name: 'Create Invoices', description: 'Create new invoices' },
+          { code: 'update', name: 'Edit Invoices', description: 'Modify invoice information' },
+          { code: 'delete', name: 'Delete Invoices', description: 'Remove invoices' },
+          { code: 'send', name: 'Send Invoices', description: 'Send invoices to customers' },
+          { code: 'mark_paid', name: 'Mark as Paid', description: 'Mark invoices as paid' },
+          { code: 'generate_pdf', name: 'Generate PDF', description: 'Generate PDF versions' },
+          { code: 'export', name: 'Export Invoices', description: 'Export invoice data' },
+          { code: 'import', name: 'Import Invoices', description: 'Import invoices from files' }
+        ]
+      },
+
+      // 📦 INVENTORY MODULE - NEW
+      inventory: {
+        moduleCode: 'inventory',
+        moduleName: 'Inventory Management',
+        description: 'Manage product inventory and stock levels',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Inventory', description: 'View inventory information' },
+          { code: 'read_all', name: 'View All Inventory', description: 'View all inventory items' },
+          { code: 'create', name: 'Create Inventory Items', description: 'Add new inventory items' },
+          { code: 'update', name: 'Edit Inventory', description: 'Modify inventory information' },
+          { code: 'delete', name: 'Delete Inventory', description: 'Remove inventory items' },
+          { code: 'adjust', name: 'Adjust Stock Levels', description: 'Adjust inventory quantities' },
+          { code: 'movement', name: 'Track Movements', description: 'Track inventory movements' },
+          { code: 'export', name: 'Export Inventory', description: 'Export inventory data' },
+          { code: 'import', name: 'Import Inventory', description: 'Import inventory from files' },
+          { code: 'low_stock_alerts', name: 'Low Stock Alerts', description: 'Set up low stock notifications' }
+        ]
+      },
+
+      // 🛒 PRODUCT ORDERS MODULE - NEW
+      product_orders: {
+        moduleCode: 'product_orders',
+        moduleName: 'Product Order Management',
+        description: 'Manage product orders and fulfillment',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Product Orders', description: 'View product order information' },
+          { code: 'read_all', name: 'View All Product Orders', description: 'View all product orders' },
+          { code: 'create', name: 'Create Product Orders', description: 'Create new product orders' },
+          { code: 'update', name: 'Edit Product Orders', description: 'Modify order information' },
+          { code: 'delete', name: 'Delete Product Orders', description: 'Remove product orders' },
+          { code: 'process', name: 'Process Orders', description: 'Process and fulfill orders' },
+          { code: 'export', name: 'Export Orders', description: 'Export order data' },
+          { code: 'import', name: 'Import Orders', description: 'Import orders from files' }
+        ]
+      },
+
+      // 🎫 TICKETS MODULE - NEW
+      tickets: {
+        moduleCode: 'tickets',
+        moduleName: 'Support Ticket Management',
+        description: 'Manage customer support tickets and issues',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Tickets', description: 'View ticket information' },
+          { code: 'read_all', name: 'View All Tickets', description: 'View all tickets in organization' },
+          { code: 'create', name: 'Create Tickets', description: 'Create new support tickets' },
+          { code: 'update', name: 'Edit Tickets', description: 'Modify ticket information' },
+          { code: 'delete', name: 'Delete Tickets', description: 'Remove tickets' },
+          { code: 'assign', name: 'Assign Tickets', description: 'Assign tickets to agents' },
+          { code: 'resolve', name: 'Resolve Tickets', description: 'Mark tickets as resolved' },
+          { code: 'escalate', name: 'Escalate Tickets', description: 'Escalate urgent tickets' },
+          { code: 'export', name: 'Export Tickets', description: 'Export ticket data' },
+          { code: 'import', name: 'Import Tickets', description: 'Import tickets from files' }
+        ]
+      },
+
+      // 📞 COMMUNICATIONS MODULE - NEW
+      communications: {
+        moduleCode: 'communications',
+        moduleName: 'Communication Management',
+        description: 'Manage customer communications and interactions',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Communications', description: 'View communication history' },
+          { code: 'read_all', name: 'View All Communications', description: 'View all communications' },
+          { code: 'create', name: 'Create Communications', description: 'Create new communications' },
+          { code: 'update', name: 'Edit Communications', description: 'Modify communication content' },
+          { code: 'delete', name: 'Delete Communications', description: 'Remove communications' },
+          { code: 'send', name: 'Send Communications', description: 'Send communications to customers' },
+          { code: 'schedule', name: 'Schedule Communications', description: 'Schedule future communications' },
+          { code: 'export', name: 'Export Communications', description: 'Export communication data' },
+          { code: 'import', name: 'Import Communications', description: 'Import communications from files' }
+        ]
+      },
+
+      // 📅 CALENDAR MODULE - NEW
+      calendar: {
+        moduleCode: 'calendar',
+        moduleName: 'Calendar Management',
+        description: 'Manage appointments, meetings, and schedules',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Calendar', description: 'View calendar events' },
+          { code: 'read_all', name: 'View All Events', description: 'View all calendar events' },
+          { code: 'create', name: 'Create Events', description: 'Create new calendar events' },
+          { code: 'update', name: 'Edit Events', description: 'Modify event information' },
+          { code: 'delete', name: 'Delete Events', description: 'Remove calendar events' },
+          { code: 'share', name: 'Share Events', description: 'Share events with others' },
+          { code: 'export', name: 'Export Calendar', description: 'Export calendar data' },
+          { code: 'import', name: 'Import Events', description: 'Import events from files' }
+        ]
+      },
+
+      // 🤖 AI INSIGHTS MODULE - NEW
+      ai_insights: {
+        moduleCode: 'ai_insights',
+        moduleName: 'AI Insights & Analytics',
+        description: 'AI-powered insights and predictive analytics',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View AI Insights', description: 'View AI-generated insights' },
+          { code: 'read_all', name: 'View All Insights', description: 'View all AI insights' },
+          { code: 'create', name: 'Generate Insights', description: 'Generate new AI insights' },
+          { code: 'update', name: 'Update Insights', description: 'Modify AI insights' },
+          { code: 'delete', name: 'Delete Insights', description: 'Remove AI insights' },
+          { code: 'export', name: 'Export Insights', description: 'Export insight data' },
+          { code: 'schedule', name: 'Schedule Insights', description: 'Schedule automated insights' }
         ]
       },
       
@@ -170,7 +306,42 @@ export const BUSINESS_SUITE_MATRIX = {
           // Maintenance Permissions
           { code: 'maintenance_read', name: 'View Maintenance', description: 'View maintenance schedules and status' },
           { code: 'maintenance_perform', name: 'Perform Maintenance', description: 'Execute maintenance operations' },
-          { code: 'maintenance_schedule', name: 'Schedule Maintenance', description: 'Schedule maintenance operations' }
+          { code: 'maintenance_schedule', name: 'Schedule Maintenance', description: 'Schedule maintenance operations' },
+
+          // User Management Permissions - NEW
+          { code: 'users_read', name: 'View Users', description: 'View user information' },
+          { code: 'users_read_all', name: 'View All Users', description: 'View all users in organization' },
+          { code: 'users_create', name: 'Create Users', description: 'Create new user accounts' },
+          { code: 'users_update', name: 'Edit Users', description: 'Modify user information' },
+          { code: 'users_delete', name: 'Delete Users', description: 'Remove user accounts' },
+          { code: 'users_activate', name: 'Activate Users', description: 'Activate/deactivate users' },
+          { code: 'users_reset_password', name: 'Reset Passwords', description: 'Reset user passwords' },
+          { code: 'users_export', name: 'Export Users', description: 'Export user data' },
+          { code: 'users_import', name: 'Import Users', description: 'Import users from files' },
+
+          // Role Management Permissions - NEW
+          { code: 'roles_read', name: 'View Roles', description: 'View role information' },
+          { code: 'roles_read_all', name: 'View All Roles', description: 'View all roles in organization' },
+          { code: 'roles_create', name: 'Create Roles', description: 'Create new roles' },
+          { code: 'roles_update', name: 'Edit Roles', description: 'Modify role information' },
+          { code: 'roles_delete', name: 'Delete Roles', description: 'Remove roles' },
+          { code: 'roles_assign', name: 'Assign Roles', description: 'Assign roles to users' },
+          { code: 'roles_export', name: 'Export Roles', description: 'Export role data' },
+
+          // Activity Logs Permissions - NEW
+          { code: 'activity_logs_read', name: 'View Activity Logs', description: 'View activity log information' },
+          { code: 'activity_logs_read_all', name: 'View All Logs', description: 'View all activity logs' },
+          { code: 'activity_logs_export', name: 'Export Logs', description: 'Export activity log data' },
+          { code: 'activity_logs_purge', name: 'Purge Logs', description: 'Purge old activity logs' },
+
+          // Reports Permissions - NEW
+          { code: 'reports_read', name: 'View Reports', description: 'View report information' },
+          { code: 'reports_read_all', name: 'View All Reports', description: 'View all reports' },
+          { code: 'reports_create', name: 'Create Reports', description: 'Create new reports' },
+          { code: 'reports_update', name: 'Edit Reports', description: 'Modify existing reports' },
+          { code: 'reports_delete', name: 'Delete Reports', description: 'Remove reports' },
+          { code: 'reports_export', name: 'Export Reports', description: 'Export report data' },
+          { code: 'reports_schedule', name: 'Schedule Reports', description: 'Schedule automated reports' }
         ]
       },
       
@@ -333,7 +504,7 @@ export const PLAN_ACCESS_MATRIX = {
   professional: {
     applications: ['crm', 'hr', 'affiliate'],
     modules: {
-      crm: ['leads', 'contacts', 'accounts', 'opportunities', 'quotations', 'dashboard', 'system'],
+      crm: ['leads', 'contacts', 'accounts', 'opportunities', 'quotations', 'invoices', 'inventory', 'product_orders', 'tickets', 'communications', 'calendar', 'dashboard', 'system'],
       hr: ['employees', 'payroll', 'leave', 'dashboard'],
       affiliate: ['partners', 'commissions']
     },

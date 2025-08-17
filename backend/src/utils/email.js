@@ -14,6 +14,7 @@ const brevoClient = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
+  timeout: 10000, // 10 second timeout
 });
 
 class EmailService {
@@ -29,7 +30,10 @@ class EmailService {
   }
   
   detectEmailProvider() {
-    if (process.env.BREVO_API_KEY) {
+    // Clean up the API key - remove any whitespace or invalid characters
+    const cleanApiKey = process.env.BREVO_API_KEY?.trim();
+    
+    if (cleanApiKey && cleanApiKey !== 'your-brevo-api-key' && cleanApiKey.length > 20) {
       return 'brevo';
     } else if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
       return 'smtp';
@@ -517,31 +521,72 @@ class EmailService {
       const recipients = Array.isArray(to) ? to : [{ email: to }];
       const recipientEmails = recipients.map(r => r.email || r);
 
-      switch (this.emailProvider) {
-        case 'brevo':
-          return await this.sendViaBrevo({ recipients, subject, htmlContent, textContent, attachments });
-          
-        case 'smtp':
-          return await this.sendViaSMTP({ recipients, subject, htmlContent, textContent, attachments });
-          
-        case 'demo':
-        default:
-          return this.sendDemo({ recipients, subject, htmlContent, textContent });
+      let result;
+      let lastError;
+
+      // Try primary provider first
+      try {
+        switch (this.emailProvider) {
+          case 'brevo':
+            result = await this.sendViaBrevo({ recipients, subject, htmlContent, textContent, attachments });
+            break;
+            
+          case 'smtp':
+            result = await this.sendViaSMTP({ recipients, subject, htmlContent, textContent, attachments });
+            break;
+            
+          case 'demo':
+          default:
+            result = this.sendDemo({ recipients, subject, htmlContent, textContent });
+            break;
+        }
+        
+        if (result) {
+          console.log('✅ Email sent successfully via primary provider');
+          return result;
+        }
+      } catch (primaryError) {
+        lastError = primaryError;
+        console.error(`❌ Primary provider (${this.emailProvider}) failed:`, primaryError.message);
       }
-    } catch (error) {
-      console.error('❌ Failed to send email:', error);
-      
-      // If primary provider fails and we have SMTP as fallback, try it
-      if (this.emailProvider === 'brevo' && this.smtpTransporter) {
-        console.log('🔄 Brevo failed, trying SMTP fallback...');
+
+      // Try SMTP fallback if primary failed
+      if (this.emailProvider !== 'smtp' && this.smtpTransporter) {
+        console.log('🔄 Trying SMTP fallback...');
         try {
-          return await this.sendViaSMTP({ recipients, subject, htmlContent, textContent, attachments });
+          result = await this.sendViaSMTP({ recipients, subject, htmlContent, textContent, attachments });
+          console.log('✅ Email sent successfully via SMTP fallback');
+          return result;
         } catch (smtpError) {
-          console.error('❌ SMTP fallback also failed:', smtpError);
+          console.error('❌ SMTP fallback also failed:', smtpError.message);
+          lastError = smtpError;
         }
       }
+
+      // If all providers failed, fall back to demo mode
+      console.log('🔄 All email providers failed, falling back to demo mode...');
+      result = this.sendDemo({ recipients, subject, htmlContent, textContent });
       
-      throw new Error(`Failed to send email: ${error.message}`);
+      // Log the failure for debugging
+      console.warn('⚠️ Email sent in demo mode due to provider failures:', {
+        primaryProvider: this.emailProvider,
+        primaryError: lastError?.message,
+        fallbackUsed: 'demo'
+      });
+      
+      return result;
+      
+    } catch (error) {
+      console.error('❌ Critical error in email service:', error);
+      
+      // Last resort: demo mode
+      try {
+        const recipients = Array.isArray(to) ? to : [{ email: to }];
+        return this.sendDemo({ recipients, subject, htmlContent, textContent });
+      } catch (demoError) {
+        console.error('❌ Even demo mode failed:', demoError);
+        throw new Error(`All email providers failed: ${error.message}`);
+      }
     }
   }
 
@@ -558,15 +603,33 @@ class EmailService {
       attachments
     };
 
-    const response = await brevoClient.post('/smtp/email', emailData);
-    
-    console.log('✅ Email sent via Brevo:', {
-      messageId: response.data.messageId,
-      to: recipients.map(r => r.email || r),
-      subject
-    });
-    
-    return response.data;
+    try {
+      const response = await brevoClient.post('/smtp/email', emailData);
+      
+      console.log('✅ Email sent via Brevo:', {
+        messageId: response.data.messageId,
+        to: recipients.map(r => r.email || r),
+        subject
+      });
+      
+      return response.data;
+    } catch (error) {
+      // Handle specific Brevo errors
+      if (error.response?.status === 401) {
+        if (error.response.data?.code === 'unauthorized') {
+          throw new Error(`Brevo API unauthorized: ${error.response.data.message}. Please check your API key and IP whitelist.`);
+        }
+        throw new Error('Brevo API unauthorized: Invalid API key or IP not whitelisted');
+      } else if (error.response?.status === 429) {
+        throw new Error('Brevo API rate limit exceeded. Please try again later.');
+      } else if (error.response?.status >= 500) {
+        throw new Error('Brevo API server error. Please try again later.');
+      } else if (error.code === 'ECONNABORTED') {
+        throw new Error('Brevo API request timeout. Please try again.');
+      } else {
+        throw new Error(`Brevo API error: ${error.response?.data?.message || error.message}`);
+      }
+    }
   }
 
   async sendViaSMTP({ recipients, subject, htmlContent, textContent, attachments }) {

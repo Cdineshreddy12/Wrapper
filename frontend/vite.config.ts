@@ -10,6 +10,12 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  define: {
+    // Make process.env available in the browser
+    'process.env': process.env,
+    // Provide fallback for process.env.NODE_ENV
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+  },
   server: {
     port: 3001,
     proxy: {

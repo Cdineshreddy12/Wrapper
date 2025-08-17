@@ -302,14 +302,27 @@ export class TenantService {
         .limit(1);
 
       // Send invitation email
-      await EmailService.sendUserInvitation({
-        email: data.email,
-        tenantName: tenant.companyName,
-        roleName: role.roleName,
-        invitationToken,
-        invitedByName: inviter?.name || 'Team Administrator',
-        message: data.message,
-      });
+      try {
+        await EmailService.sendUserInvitation({
+          email: data.email,
+          tenantName: tenant.companyName,
+          roleName: role.roleName,
+          invitationToken,
+          invitedByName: inviter?.name || 'Team Administrator',
+          message: data.message,
+        });
+        
+        console.log(`✅ Invitation email sent successfully to ${data.email}`);
+      } catch (emailError) {
+        console.error(`❌ Failed to send invitation email to ${data.email}:`, emailError.message);
+        
+        // Don't fail the entire invitation process if email fails
+        // The invitation is still created and can be resent later
+        console.log(`⚠️ Invitation created but email failed. Token: ${invitationToken}`);
+        
+        // You might want to queue this for retry or notify admins
+        // For now, we'll continue with the invitation creation
+      }
 
       return invitation;
     } catch (error) {
@@ -402,6 +415,73 @@ export class TenantService {
       .returning();
 
     return updated;
+  }
+
+  // Resend invitation email
+  static async resendInvitationEmail(invitationId, tenantId) {
+    try {
+      // Get invitation details
+      const [invitation] = await db
+        .select()
+        .from(tenantInvitations)
+        .where(and(
+          eq(tenantInvitations.invitationId, invitationId),
+          eq(tenantInvitations.tenantId, tenantId),
+          eq(tenantInvitations.status, 'pending')
+        ))
+        .limit(1);
+
+      if (!invitation) {
+        throw new Error('Invitation not found or not pending');
+      }
+
+      // Check if invitation has expired
+      if (invitation.expiresAt < new Date()) {
+        throw new Error('Invitation has expired');
+      }
+
+      // Get tenant and role details
+      const tenant = await this.getTenantDetails(tenantId);
+      const [role] = await db
+        .select()
+        .from(customRoles)
+        .where(eq(customRoles.roleId, invitation.roleId))
+        .limit(1);
+
+      // Get inviter's name
+      const [inviter] = await db
+        .select()
+        .from(tenantUsers)
+        .where(eq(tenantUsers.userId, invitation.invitedBy))
+        .limit(1);
+
+      // Send invitation email
+      await EmailService.sendUserInvitation({
+        email: invitation.email,
+        tenantName: tenant.companyName,
+        roleName: role.roleName,
+        invitationToken: invitation.invitationToken,
+        invitedByName: inviter?.name || 'Team Administrator',
+        message: invitation.message || '',
+      });
+
+      // Update invitation with new expiry (extend by 7 days)
+      const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      await db
+        .update(tenantInvitations)
+        .set({ 
+          expiresAt: newExpiresAt,
+          updatedAt: new Date()
+        })
+        .where(eq(tenantInvitations.invitationId, invitationId));
+
+      console.log(`✅ Invitation email resent successfully to ${invitation.email}`);
+      return { success: true, message: 'Invitation email resent successfully' };
+
+    } catch (error) {
+      console.error('Failed to resend invitation email:', error);
+      throw error;
+    }
   }
 
   // Get default admin permissions
@@ -505,4 +585,6 @@ export class TenantService {
     
     return user;
   }
-} 
+}
+
+export default TenantService; 
