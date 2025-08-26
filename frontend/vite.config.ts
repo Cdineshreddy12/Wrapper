@@ -20,9 +20,9 @@ export default defineConfig({
     port: 3001,
     proxy: {
       '/api': {
-        target: 'https://wrapper.zopkit.com',
+        target: 'http://localhost:3000',
         changeOrigin: true,
-        secure: true,
+        secure: false,
       },
     },
   },

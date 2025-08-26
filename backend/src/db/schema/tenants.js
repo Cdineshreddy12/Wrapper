@@ -1,4 +1,5 @@
 import { pgTable, uuid, varchar, timestamp, jsonb, boolean, text, integer } from 'drizzle-orm/pg-core';
+import { tenantUsers } from './users.js';
 
 // Main tenants table
 export const tenants = pgTable('tenants', {
@@ -66,9 +67,13 @@ export const tenantInvitations = pgTable('tenant_invitations', {
   email: varchar('email', { length: 255 }).notNull(),
   roleId: uuid('role_id'), // Reference to role they'll get
   invitedBy: uuid('invited_by').notNull(),
-  invitationToken: varchar('invitation_token', { length: 255 }).notNull(),
-  status: varchar('status', { length: 20 }).default('pending'), // 'pending', 'accepted', 'expired'
+  invitationToken: varchar('invitation_token', { length: 255 }).notNull().unique(),
+  invitationUrl: varchar('invitation_url', { length: 1000 }), // Full invitation URL for easy access
+  status: varchar('status', { length: 20 }).default('pending'), // 'pending', 'accepted', 'expired', 'cancelled'
   expiresAt: timestamp('expires_at').notNull(),
   acceptedAt: timestamp('accepted_at'),
+  cancelledAt: timestamp('cancelled_at'),
+  cancelledBy: uuid('cancelled_by'), // Who cancelled the invitation
   createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }); 

@@ -26,16 +26,23 @@ import { OnboardingGuard } from '@/components/auth/OnboardingGuard'
 // Pages
 import Landing from '@/pages/Landing'
 import { SimpleOnboarding } from '@/pages/SimpleOnboarding'
+import KindeOrganizationOnboarding from '@/pages/KindeOrganizationOnboarding'
 import { Login } from '@/pages/Login'
 import { AuthCallback } from '@/pages/AuthCallback'
 import { InviteAccept } from '@/pages/InviteAccept'
 import { Dashboard } from '@/pages/Dashboard'
 import { Analytics } from '@/pages/Analytics'
-import { Users } from '@/pages/Users'
+import { UserManagementDashboard } from '@/components/users/UserManagementDashboard'
 import { Billing } from '@/pages/Billing'
 import { Usage } from '@/pages/Usage'
 import { Permissions } from '@/pages/Permissions'
+import UserApplicationAccessPage from '@/pages/UserApplicationAccess'
+import UserApplicationManagement from '@/pages/UserApplicationManagement'
+import TestUserSyncAPIs from '@/pages/TestUserSyncAPIs'
 import SuiteDashboard from '@/pages/SuiteDashboard'
+import AdminDashboard from '@/pages/AdminDashboard'
+import TestInvitationManager from '@/pages/TestInvitationManager'
+import SimpleTest from '@/pages/SimpleTest'
 
 // Create an optimized query client with better caching strategy
 const queryClient = new QueryClient({
@@ -142,7 +149,7 @@ function App() {
 
 // Main App content component
 function AppContent() {
-  const { isAuthenticated, isLoading, getToken } = useKindeAuth()
+  const { isAuthenticated, isLoading } = useKindeAuth()
 
   // Memoize auth state to prevent unnecessary re-renders
   const authState = useMemo(() => ({
@@ -197,6 +204,11 @@ function AppContent() {
           />
           
           <Route 
+            path="/onboarding/kinde-org" 
+            element={<KindeOrganizationOnboarding />}
+          />
+          
+          <Route 
             path="/login" 
             element={<Login />} 
           />
@@ -204,6 +216,16 @@ function AppContent() {
           <Route 
             path="/auth/callback" 
             element={<AuthCallback />} 
+          />
+
+          {/* Test Routes */}
+          <Route 
+            path="/test-invitation-manager" 
+            element={<TestInvitationManager />} 
+          />
+          <Route 
+            path="/simple-test" 
+            element={<SimpleTest />} 
           />
 
           {/* Invitation Accept Route - Public (handles auth internally) */}
@@ -256,10 +278,15 @@ function AppContent() {
           }
         >
           <Route index element={<Dashboard />} />
+          <Route path="users" element={<UserManagementDashboard />} />
+          <Route path="user-apps" element={<UserApplicationAccessPage />} />
+          <Route path="user-application-management" element={<UserApplicationManagement />} />
+          <Route path="test-apis" element={<TestUserSyncAPIs />} />
           <Route path="billing" element={<Billing />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="usage" element={<Usage />} />
           <Route path="permissions" element={<Permissions />} />
+          <Route path="admin" element={<AdminDashboard />} />
         </Route>
 
           {/* Organization-specific routes with onboarding guard */}
@@ -275,11 +302,14 @@ function AppContent() {
           >
             <Route index element={<Dashboard />} />
             <Route path="analytics" element={<Analytics />} />
-            <Route path="users" element={<Users />} />
+            <Route path="users" element={<UserManagementDashboard />} />
+            {/* <Route path="user-apps" element={<UserApplicationAccessPage />} /> */}
+            <Route path="user-application-management" element={<UserApplicationManagement />} />
+            {/* <Route path="test-apis" element={<TestUserSyncAPIs />} /> */}
             <Route path="billing" element={<Billing />} />
             <Route path="usage" element={<Usage />} />
             <Route path="permissions" element={<Permissions />} />
-
+            <Route path="admin" element={<AdminDashboard />} />
           </Route>
 
           {/* Catch all - redirect to landing if not authenticated */}
@@ -420,11 +450,33 @@ function RootRedirect() {
   }
 
   // Check if user needs onboarding based on the actual backend response structure
+  // INVITED USERS: Always skip onboarding (they should have onboardingCompleted=true)
   const needsOnboarding = onboardingStatus.authStatus?.needsOnboarding ?? !onboardingStatus.authStatus?.onboardingCompleted
   
-  if (needsOnboarding) {
+  // Check if this is an invited user (they should never need onboarding)
+  const isInvitedUser = onboardingStatus.authStatus?.userType === 'INVITED_USER' || 
+                        onboardingStatus.authStatus?.isInvitedUser === true ||
+                        onboardingStatus.authStatus?.onboardingCompleted === true
+  
+  // Check if there's a pending invitation (user should complete invitation flow first)
+  const hasPendingInvitation = localStorage.getItem('pendingInvitationToken')
+  
+  if (needsOnboarding && !isInvitedUser && !hasPendingInvitation) {
     console.log('🔄 RootRedirect: User needs onboarding, redirecting to /onboarding')
     return <Navigate to="/onboarding" replace />
+  }
+  
+  // INVITED USERS: Always go to dashboard (they skip onboarding)
+  if (isInvitedUser) {
+    console.log('🔄 RootRedirect: Invited user detected, redirecting to dashboard (skipping onboarding)')
+    return <Navigate to="/dashboard" replace />
+  }
+  
+  // If there's a pending invitation, redirect to invitation acceptance
+  if (hasPendingInvitation) {
+    console.log('🔄 RootRedirect: Pending invitation detected, redirecting to invitation acceptance')
+    const token = localStorage.getItem('pendingInvitationToken')
+    return <Navigate to={`/invite/accept?token=${token}`} replace />
   }
 
   // User is authenticated and onboarded - go to dashboard

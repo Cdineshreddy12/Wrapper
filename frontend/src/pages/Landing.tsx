@@ -58,16 +58,34 @@ const Landing: React.FC = () => {
 
   const handleCreateNewOrg = async () => {
     if (isAuthenticated) {
-      // User is already authenticated, go directly to onboarding
-      navigate('/onboarding')
+      // Check if user is an invited user (they should skip onboarding)
+      try {
+        const response = await api.get('/admin/auth-status')
+        const isInvitedUser = response.data.authStatus?.onboardingCompleted === true || 
+                              response.data.authStatus?.userType === 'INVITED_USER' ||
+                              response.data.authStatus?.isInvitedUser === true
+        
+        if (isInvitedUser) {
+          // INVITED USERS: Always go to dashboard (they skip onboarding)
+          console.log('✅ Invited user detected, redirecting to dashboard (skipping onboarding)')
+          navigate('/dashboard', { replace: true })
+          return
+        }
+      } catch (error) {
+        console.log('ℹ️ Could not check auth status, proceeding with onboarding')
+      }
+      
+      // User is already authenticated, go directly to Kinde organization onboarding
+      navigate('/onboarding/kinde-org')
       return
     }
     
     setIsLoading(true)
     try {
-      // Sign in without organization context - we'll handle org creation after auth
-      // This will trigger onboarding flow
-      await login()
+      // Use Kinde's built-in organization creation
+      await login({
+        isCreateOrg: true
+      })
     } catch (error) {
       toast.error('Failed to start sign in process')
       setIsLoading(false)

@@ -56,6 +56,16 @@ interface User {
   lastLoginAt?: string;
   roles?: Role[];
   avatar?: string;
+  invitationStatus?: string;
+  userType?: string;
+  originalData?: {
+    invitationToken?: string;
+    user?: {
+      invitationToken?: string;
+      invitationId?: string;
+    };
+  };
+  invitationId?: string;
 }
 
 interface Role {
@@ -112,9 +122,15 @@ export function UserManagementDashboard() {
 
   // Load users and roles
   useEffect(() => {
-    loadUsers();
     loadRoles();
   }, []);
+
+  // Load users after roles are loaded
+  useEffect(() => {
+    if (roles.length > 0) {
+      loadUsers();
+    }
+  }, [roles]);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -124,30 +140,85 @@ export function UserManagementDashboard() {
         const userData = response.data.data || [];
         console.log('📊 Raw user data from API:', userData);
         
-        // Transform the data structure: {user: {...}, role: {...}} => flat user object
+        // Transform the data structure to include invitation information
         const transformedUsers = userData.map((item: any) => {
           const user = item.user || item; // Handle both structures
-          const role = item.role;
+          const roleString = item.role; // This is the role string from the API
           
+          // Determine invitation status and type based on actual user state
+          let invitationStatus = 'active';
+          let userType = 'active_user';
+          
+          // Check if user is actually active and completed onboarding
+          if (user.isActive && user.onboardingCompleted) {
+            invitationStatus = 'active';
+            userType = 'active_user';
+          } else if (!user.isActive && !user.onboardingCompleted) {
+            invitationStatus = 'pending';
+            userType = 'invited';
+          } else if (!user.onboardingCompleted) {
+            invitationStatus = 'setup_required';
+            userType = 'setup_required';
+          }
+          
+          // Find the matching role object from the roles array
+          let matchedRole = null;
+          if (roleString && roles.length > 0) {
+            matchedRole = roles.find(role => 
+              role.roleName === roleString || 
+              role.roleId === roleString ||
+              role.description?.toLowerCase().includes(roleString.toLowerCase())
+            );
+            
+            // Debug role matching
+            console.log(`🔍 Role matching for user ${user.email}:`, {
+              roleString,
+              availableRoles: roles.map(r => r.roleName),
+              matchedRole: matchedRole ? matchedRole.roleName : 'No match found'
+            });
+          }
+          
+          // Use the actual user data structure
           return {
-            userId: user.userId,
+            userId: user.id || user.userId, // Use 'id' from the API response
             email: user.email,
-            name: user.name,
+            name: user.firstName && user.lastName ? `${user.firstName} ${user.lastName}`.trim() : user.firstName || user.lastName || 'Unnamed User',
             isActive: user.isActive !== false, // Default to true if undefined
-            isTenantAdmin: user.isTenantAdmin || false,
+            isTenantAdmin: roleString === 'Super Administrator' || user.isTenantAdmin || false,
             onboardingCompleted: user.onboardingCompleted !== false, // Default to true if undefined
             department: user.department,
             title: user.title,
             invitedBy: user.invitedBy,
             invitedAt: user.invitedAt,
             invitationAcceptedAt: user.invitationAcceptedAt,
-            lastLoginAt: user.lastLoginAt,
+            lastLoginAt: user.lastActiveAt || user.lastLoginAt,
             avatar: user.avatar,
-            roles: role ? [role] : [] // Convert single role to array format
+            roles: matchedRole ? [{ 
+              roleId: matchedRole.roleId,
+              roleName: matchedRole.roleName,
+              description: matchedRole.description || '',
+              color: matchedRole.color || '#6b7280',
+              icon: matchedRole.icon || '👤',
+              permissions: matchedRole.permissions || {}
+            }] : roleString ? [{ 
+              // Only create a fallback role if we have a valid roleString and it's not empty
+              roleId: roleString.trim() !== '' ? roleString : null,
+              roleName: roleString,
+              description: 'Role details not available',
+              color: '#6b7280',
+              icon: '👤',
+              permissions: {}
+            }].filter(role => role.roleId !== null) : [], // Filter out roles with null roleId
+            invitationStatus,
+            userType,
+            // Store original data for invitation token extraction
+            originalData: item,
+            // Extract invitation token if available
+            invitationId: item.invitationToken || item.invitationId || null
           };
         });
         
-        console.log('🔄 Transformed user data:', transformedUsers);
+        console.log('🔄 Transformed user data with invitation status:', transformedUsers);
         
         // Validate transformed user data
         const validUsers = transformedUsers.filter(user => 
@@ -158,6 +229,20 @@ export function UserManagementDashboard() {
         );
         
         console.log('✅ Valid users after filtering:', validUsers);
+        
+        // Debug: Log the final transformed users to see their structure
+        console.log('🔍 Final transformed users structure:', transformedUsers.map(user => ({
+          userId: user.userId,
+          email: user.email,
+          name: user.name,
+          isActive: user.isActive,
+          onboardingCompleted: user.onboardingCompleted,
+          invitationStatus: user.invitationStatus,
+          userType: user.userType,
+          isTenantAdmin: user.isTenantAdmin,
+          roles: user.roles
+        })));
+        
         setUsers(validUsers);
       } else {
         console.log('❌ API response not successful:', response.data);
@@ -174,12 +259,23 @@ export function UserManagementDashboard() {
 
   const loadRoles = async () => {
     try {
-      const response = await api.get('/roles');
+      console.log('🔄 Loading roles...');
+      const response = await api.get('/permissions/roles');
+      console.log('📊 Roles API response:', response.data);
+      
       if (response.data.success) {
-        setRoles(response.data.data.roles || []);
+        // The backend returns: {success: true, data: {data: roleResults, total: ..., page: ..., limit: ...}}
+        // So we need to access response.data.data.data (not response.data.data.roles)
+        const rolesData = response.data.data?.data || [];
+        console.log('✅ Roles loaded successfully:', rolesData);
+        setRoles(rolesData);
+      } else {
+        console.error('❌ Roles API not successful:', response.data);
+        setRoles([]);
       }
     } catch (error) {
-      console.error('Failed to load roles:', error);
+      console.error('❌ Failed to load roles:', error);
+      setRoles([]);
     }
   };
 
@@ -298,18 +394,59 @@ export function UserManagementDashboard() {
     }
   };
 
-  const handleAssignRoles = (user: User) => {
+  const handleAssignRoles = async (user: User) => {
+    console.log('🔧 Opening role assignment modal for user:', user.email);
+    console.log('🔧 Current roles state:', roles);
+    
+    // Ensure roles are loaded before opening the modal
+    if (roles.length === 0) {
+      console.log('🔄 No roles loaded, fetching roles first...');
+      await loadRoles();
+    }
+    
     setAssigningUser(user);
-    setSelectedRoles(user.roles?.map(r => r.roleId) || []);
+    
+    // Filter out invalid role IDs (like 'unknown') and only include valid roles
+    const validRoleIds = user.roles
+      ?.filter(role => role.roleId && role.roleId !== 'unknown' && typeof role.roleId === 'string')
+      ?.map(r => r.roleId) || [];
+    
+    console.log('🔧 Setting selected roles:', {
+      userRoles: user.roles,
+      validRoleIds,
+      allRoles: roles.map(r => ({ roleId: r.roleId, roleName: r.roleName }))
+    });
+    
+    setSelectedRoles(validRoleIds);
     setShowRoleAssignModal(true);
   };
 
   const handleSaveRoleAssignment = async () => {
     if (!assigningUser) return;
 
+    // Filter out any invalid role IDs before sending to backend
+    const validRoleIds = selectedRoles.filter(roleId => 
+      roleId && 
+      roleId !== 'unknown' && 
+      typeof roleId === 'string' && 
+      roleId.trim() !== ''
+    );
+
+    console.log('🔧 Saving role assignment:', {
+      userId: assigningUser.userId,
+      selectedRoles,
+      validRoleIds,
+      roles: roles.map(r => ({ roleId: r.roleId, roleName: r.roleName }))
+    });
+
+    if (validRoleIds.length === 0) {
+      toast.error('No valid roles selected');
+      return;
+    }
+
     try {
       const response = await api.post(`/tenants/current/users/${assigningUser.userId}/assign-roles`, {
-        roleIds: selectedRoles
+        roleIds: validRoleIds
       });
 
       if (response.data.success) {
@@ -364,9 +501,9 @@ export function UserManagementDashboard() {
 
         // Status filter
         if (statusFilter !== 'all') {
-          if (statusFilter === 'active' && !user.isActive) return false;
-          if (statusFilter === 'pending' && (user.isActive || user.onboardingCompleted)) return false;
-          if (statusFilter === 'inactive' && user.isActive) return false;
+          if (statusFilter === 'active' && user.invitationStatus !== 'active') return false;
+          if (statusFilter === 'pending' && user.invitationStatus !== 'pending') return false;
+          if (statusFilter === 'inactive' && user.invitationStatus !== 'setup_required') return false;
         }
 
         // Role filter
@@ -422,6 +559,75 @@ export function UserManagementDashboard() {
       case 'Pending': return 'bg-yellow-100 text-yellow-800';
       case 'Setup Required': return 'bg-orange-100 text-orange-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Generate invitation URL for a user
+  const generateInvitationUrl = (user: User) => {
+    if (user.invitationStatus === 'pending' || user.userType === 'invited') {
+      let invitationToken = null;
+      let tokenSource = 'unknown';
+      
+      // Priority order for finding invitation token:
+      // 1. Check invitationId field (extracted during transformation)
+      if (user.invitationId && user.invitationId.length > 20) {
+        invitationToken = user.invitationId;
+        tokenSource = 'user.invitationId';
+      }
+      // 2. Check originalData.invitationToken (direct case - this is the actual token from database)
+      else if (user.originalData?.invitationToken) {
+        invitationToken = user.originalData.invitationToken;
+        tokenSource = 'originalData.invitationToken';
+      }
+      // 3. Check originalData.user.invitationToken (nested case)
+      else if (user.originalData?.user?.invitationToken) {
+        invitationToken = user.originalData.user.invitationToken;
+        tokenSource = 'originalData.user.invitationToken';
+      }
+      // 4. Check if this is a direct invitation (has invitationId starting with 'inv_')
+      else if (user.userId && user.userId.startsWith('inv_')) {
+        invitationToken = user.userId.replace('inv_', '');
+        tokenSource = 'user.userId (inv_ prefix)';
+      }
+      // 5. Check if originalData.user has an invitationId field
+      else if (user.originalData?.user?.invitationId) {
+        invitationToken = user.originalData.user.invitationId;
+        tokenSource = 'originalData.user.invitationId';
+      }
+      
+      if (invitationToken) {
+        const baseUrl = window.location.origin;
+        const invitationUrl = `${baseUrl}/invite/accept?token=${invitationToken}`;
+        console.log(`🔗 Generated invitation URL for ${user.email}:`, {
+          invitationUrl,
+          tokenSource,
+          invitationToken
+        });
+        return invitationUrl;
+      } else {
+        console.warn(`⚠️ Could not find invitation token for user ${user.email}:`, {
+          user,
+          tokenSource
+        });
+        return null;
+      }
+    }
+    return null;
+  };
+
+  // Copy invitation URL to clipboard
+  const copyInvitationUrl = async (user: User) => {
+    const invitationUrl = generateInvitationUrl(user);
+    if (invitationUrl) {
+      try {
+        await navigator.clipboard.writeText(invitationUrl);
+        toast.success('Invitation URL copied to clipboard!');
+      } catch (error) {
+        console.error('Failed to copy invitation URL:', error);
+        toast.error('Failed to copy invitation URL');
+      }
+    } else {
+      toast.error('No invitation URL available for this user');
     }
   };
 
@@ -510,6 +716,41 @@ export function UserManagementDashboard() {
           </div>
         </div>
       )
+    },
+    {
+      key: 'invitationUrl',
+      label: 'Invitation URL',
+      width: '200px',
+      render: (user) => {
+        if (user.invitationStatus === 'pending') {
+          const invitationUrl = generateInvitationUrl(user);
+          return (
+            <div className="space-y-2">
+              <div className="text-xs text-gray-600">Pending Invitation</div>
+              {invitationUrl ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={invitationUrl}
+                    readOnly
+                    className="text-xs px-2 py-1 border border-gray-300 rounded bg-gray-50 flex-1"
+                  />
+                  <button
+                    onClick={() => copyInvitationUrl(user)}
+                    className="p-1 text-blue-600 hover:text-blue-800"
+                    title="Copy invitation URL"
+                  >
+                    <Mail className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="text-xs text-red-600">No URL available</div>
+              )}
+            </div>
+          );
+        }
+        return <div className="text-xs text-gray-400">-</div>;
+      }
     }
   ];
 
@@ -571,10 +812,17 @@ export function UserManagementDashboard() {
     },
     {
       key: 'resendInvite',
-      label: 'Resend Invitation',
+      label: 'Resend Invite',
       icon: Mail,
       onClick: (user) => handleResendInvite(user.userId, user.email),
       disabled: (user) => user.isActive && user.onboardingCompleted
+    },
+    {
+      key: 'copyInvitationUrl',
+      label: 'Copy Invitation URL',
+      icon: Mail,
+      onClick: (user) => copyInvitationUrl(user),
+      disabled: (user) => user.invitationStatus !== 'pending'
     }
   ];
 
@@ -798,6 +1046,8 @@ export function UserManagementDashboard() {
           setShowUserModal(false);
           setViewingUser(null);
         }}
+        generateInvitationUrl={generateInvitationUrl}
+        copyInvitationUrl={copyInvitationUrl}
       />
 
       {/* Role Assignment Modal */}
@@ -813,35 +1063,54 @@ export function UserManagementDashboard() {
           <div className="space-y-4">
             <div className="space-y-3">
               <Label className="text-sm font-medium">Available Roles</Label>
-              {roles.map((role) => (
-                <div key={role.roleId} className="flex items-center space-x-3">
-                  <Checkbox
-                    id={role.roleId}
-                    checked={selectedRoles.includes(role.roleId)}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        setSelectedRoles([...selectedRoles, role.roleId]);
-                      } else {
-                        setSelectedRoles(selectedRoles.filter(id => id !== role.roleId));
-                      }
-                    }}
-                  />
-                  <label htmlFor={role.roleId} className="flex items-center gap-2 cursor-pointer">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-8 h-8 rounded-lg flex items-center justify-center"
-                        style={{ backgroundColor: `${role.color}20`, color: role.color }}
-                      >
-                        {role.icon || '👤'}
-                      </div>
-                      <div>
-                        <div className="font-medium text-sm">{role.roleName}</div>
-                        <div className="text-xs text-gray-500">{role.description}</div>
-                      </div>
-                    </div>
-                  </label>
+              
+              {/* Debug info */}
+              <div className="text-xs text-gray-500 p-2 bg-gray-100 rounded">
+                Debug: {roles.length} roles loaded
+                {roles.length > 0 && (
+                  <div className="mt-1">
+                    {roles.map(role => `${role.roleName} (${role.roleId})`).join(', ')}
+                  </div>
+                )}
+              </div>
+              
+              {roles.length === 0 ? (
+                <div className="text-center py-4 text-gray-500">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                  <p>Loading roles...</p>
+                  <p className="text-xs">Please wait while we fetch available roles</p>
                 </div>
-              ))}
+              ) : (
+                roles.map((role) => (
+                  <div key={role.roleId} className="flex items-center space-x-3">
+                    <Checkbox
+                      id={role.roleId}
+                      checked={selectedRoles.includes(role.roleId)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedRoles([...selectedRoles, role.roleId]);
+                        } else {
+                          setSelectedRoles(selectedRoles.filter(id => id !== role.roleId));
+                        }
+                      }}
+                    />
+                    <label htmlFor={role.roleId} className="flex items-center gap-2 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center"
+                          style={{ backgroundColor: `${role.color}20`, color: role.color }}
+                        >
+                          {role.icon || '👤'}
+                        </div>
+                        <div>
+                          <div className="font-medium text-sm">{role.roleName}</div>
+                          <div className="text-xs text-gray-500">{role.description}</div>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                ))
+              )}
             </div>
 
             <div className="flex gap-3 pt-4">
@@ -1253,11 +1522,15 @@ const InviteUserModal = ({
 const UserDetailsModal = ({ 
   user, 
   isOpen, 
-  onClose 
+  onClose, 
+  generateInvitationUrl,
+  copyInvitationUrl
 }: {
   user: User | null;
   isOpen: boolean;
   onClose: () => void;
+  generateInvitationUrl: (user: User) => string | null;
+  copyInvitationUrl: (user: User) => Promise<void>;
 }) => {
   if (!isOpen || !user) return null;
 
@@ -1296,17 +1569,20 @@ const UserDetailsModal = ({
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Status:</span>
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    user.isActive ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                    user.invitationStatus === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                    user.isActive ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
                   }`}>
-                    {user.isActive ? 'Active' : 'Pending'}
+                    {user.invitationStatus === 'pending' ? 'Pending Invitation' :
+                     user.isActive ? 'Active' : 'Setup Required'}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Role:</span>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    user.isTenantAdmin ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    {user.isTenantAdmin ? 'Organization Admin' : 'Standard User'}
+                  <span className="text-gray-900">
+                    {user.roles && user.roles.length > 0 
+                      ? user.roles.map(role => role.roleName).join(', ')
+                      : 'No roles assigned'
+                    }
                   </span>
                 </div>
               </div>
@@ -1332,6 +1608,39 @@ const UserDetailsModal = ({
               </div>
             </div>
           </div>
+
+          {/* Invitation URL Section - Show prominently for pending invitations */}
+          {user.invitationStatus === 'pending' && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h3 className="font-medium text-blue-900 mb-3 flex items-center gap-2">
+                <Mail className="w-4 h-4" />
+                Invitation URL
+              </h3>
+              <div className="space-y-3">
+                <p className="text-sm text-blue-800">
+                  Share this URL with {user.name || user.email} to complete their invitation:
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={generateInvitationUrl(user) || 'No invitation URL available'}
+                    readOnly
+                    className="flex-1 px-3 py-2 border border-blue-300 rounded bg-white text-sm font-mono"
+                  />
+                  <button
+                    onClick={() => copyInvitationUrl(user)}
+                    className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm flex items-center gap-2"
+                  >
+                    <Mail className="w-4 h-4" />
+                    Copy
+                  </button>
+                </div>
+                <p className="text-xs text-blue-600">
+                  The user can click this link to accept the invitation and join your organization.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Assigned Roles */}
           <div className="bg-gray-50 p-4 rounded-lg">

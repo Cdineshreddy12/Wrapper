@@ -6,24 +6,24 @@
  */
 
 import 'dotenv/config';
-import { db } from './src/db/index.js';
+import { sql } from './src/db/index.js';
 
 async function testConnection() {
   console.log('🧪 Testing database connection...');
   
   try {
     // Test basic connection using raw SQL
-    const result = await db.execute('SELECT NOW() as current_time');
+    const result = await sql`SELECT NOW() as current_time`;
     console.log('✅ Database connection successful!');
     console.log(`   Current time: ${result[0].current_time}`);
     
     // Test if tables exist
-    const tables = await db.execute(`
+    const tables = await sql`
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = 'public' 
       ORDER BY table_name
-    `);
+    `;
     
     console.log('\n📊 Available tables:');
     tables.forEach(table => {

@@ -18,6 +18,7 @@ interface AuthButtonProps {
   variant?: 'default' | 'outline' | 'ghost';
   showDropdown?: boolean;
   redirectUri?: string;
+  isCreateOrg?: boolean; // Add this prop for organization creation
 }
 
 const providerConfig = {
@@ -54,7 +55,8 @@ export const AuthButton: React.FC<AuthButtonProps> = ({
   size = 'sm',
   variant = 'default',
   showDropdown = true,
-  redirectUri
+  redirectUri,
+  isCreateOrg = false // Add default value
 }) => {
   const { login, logout, isAuthenticated, isLoading, user } = useKindeAuth();
 
@@ -67,6 +69,12 @@ export const AuthButton: React.FC<AuthButtonProps> = ({
     const loginOptions: any = {
       connection_id: provider
     };
+
+    // Add organization creation flag if specified
+    if (isCreateOrg) {
+      loginOptions.isCreateOrg = true;
+      console.log('🏢 AuthButton: Enabling organization creation during login');
+    }
 
     // Add organization context if available
     if (finalOrgCode) {

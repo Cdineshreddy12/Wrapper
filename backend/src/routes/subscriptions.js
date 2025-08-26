@@ -400,6 +400,70 @@ export default async function subscriptionRoutes(fastify, options) {
     }
   });
 
+  // Debug Stripe configuration (for troubleshooting webhook issues)
+  fastify.get('/debug-stripe-config', async (request, reply) => {
+    try {
+      console.log('🔍 Debugging Stripe configuration...');
+      
+      const configStatus = SubscriptionService.getStripeConfigStatus();
+      
+      console.log('📊 Stripe configuration status:', configStatus);
+      
+      return reply.code(200).send({
+        success: true,
+        message: 'Stripe configuration status',
+        config: configStatus,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('❌ Error checking Stripe config:', error);
+      return reply.code(500).send({ 
+        error: 'Failed to check Stripe configuration',
+        message: error.message 
+      });
+    }
+  });
+
+  // Test webhook processing (for debugging)
+  fastify.post('/test-webhook', async (request, reply) => {
+    try {
+      console.log('🧪 Testing webhook processing...');
+      
+      // Create a test webhook payload
+      const testPayload = {
+        id: 'evt_test_' + Date.now(),
+        type: 'checkout.session.completed',
+        data: {
+          object: {
+            id: 'cs_test_' + Date.now(),
+            mode: 'subscription',
+            metadata: {
+              tenantId: 'test-tenant',
+              planId: 'test-plan'
+            },
+            customer: 'cus_test',
+            subscription: 'sub_test'
+          }
+        }
+      };
+      
+      console.log('📝 Test webhook payload:', JSON.stringify(testPayload, null, 2));
+      
+      return reply.code(200).send({
+        success: true,
+        message: 'Test webhook endpoint working',
+        testPayload,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('❌ Test webhook error:', error);
+      return reply.code(500).send({ 
+        error: 'Test webhook failed',
+        message: error.message 
+      });
+    }
+  });
+
   // Stripe webhook handler for subscription events
   fastify.post('/webhook', {
     // Skip authentication for webhook - no preHandler
@@ -435,9 +499,17 @@ export default async function subscriptionRoutes(fastify, options) {
       console.log('📝 Raw body length:', rawBody.length);
       console.log('🔑 Has signature:', !!sig);
       console.log('🔐 Has secret:', !!endpointSecret);
+      console.log('🔍 Debug info:', {
+        rawBodyType: typeof rawBody,
+        rawBodyIsBuffer: Buffer.isBuffer(rawBody),
+        signatureType: typeof sig,
+        signatureValue: sig ? sig.substring(0, 20) + '...' : 'none',
+        secretType: typeof endpointSecret,
+        secretValue: endpointSecret ? endpointSecret.substring(0, 10) + '...' : 'none'
+      });
 
       // Verify webhook signature and process event
-      const result = await SubscriptionService.handleWebhook(rawBody, sig);
+      const result = await SubscriptionService.handleWebhook(rawBody, sig, endpointSecret);
       
       console.log('✅ Webhook processed successfully:', result.eventType);
       
@@ -452,13 +524,27 @@ export default async function subscriptionRoutes(fastify, options) {
       
       // Return 200 to prevent Stripe from retrying if it's a non-retryable error
       if (error.message.includes('signature') || error.message.includes('timestamp')) {
+        console.log('🔄 Non-retryable error, returning 400');
         return reply.code(400).send({ 
           error: 'Webhook signature verification failed',
           message: error.message
         });
       }
       
+      // Check if it's a test webhook or missing metadata (should not retry)
+      if (error.message.includes('Missing tenantId or planId') || 
+          error.message.includes('test webhook') ||
+          error.message.includes('already_processed')) {
+        console.log('🔄 Non-critical error, returning 200 to prevent retry');
+        return reply.code(200).send({ 
+          success: true,
+          message: 'Webhook processed (non-critical issue)',
+          details: error.message
+        });
+      }
+      
       // Return 500 for retryable errors
+      console.log('🔄 Retryable error, returning 500');
       return reply.code(500).send({ 
         error: 'Webhook processing failed',
         message: error.message

@@ -5,6 +5,7 @@ export * from './subscriptions.js';
 export * from './permissions.js';
 export * from './usage.js';
 export * from './suite-schema.js';
+export * from './webhook-logs.js';
 
 // Define relationships
 import { relations } from 'drizzle-orm';
@@ -15,6 +16,7 @@ import {
   payments,
   customRoles, 
   userRoleAssignments,
+  tenantInvitations,
   usageMetricsDaily
 } from './index.js';
 
@@ -58,11 +60,8 @@ export const customRolesRelations = relations(customRoles, ({ one, many }) => ({
     fields: [customRoles.tenantId],
     references: [tenants.tenantId],
   }),
-  createdByUser: one(tenantUsers, {
-    fields: [customRoles.createdBy],
-    references: [tenantUsers.userId],
-  }),
   userAssignments: many(userRoleAssignments),
+  invitations: many(tenantInvitations),
 }));
 
 export const userRoleAssignmentsRelations = relations(userRoleAssignments, ({ one }) => ({
@@ -76,6 +75,21 @@ export const userRoleAssignmentsRelations = relations(userRoleAssignments, ({ on
   }),
   assignedByUser: one(tenantUsers, {
     fields: [userRoleAssignments.assignedBy],
+    references: [tenantUsers.userId],
+  }),
+}));
+
+export const tenantInvitationsRelations = relations(tenantInvitations, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [tenantInvitations.tenantId],
+    references: [tenants.tenantId],
+  }),
+  role: one(customRoles, {
+    fields: [tenantInvitations.roleId],
+    references: [customRoles.roleId],
+  }),
+  invitedByUser: one(tenantUsers, {
+    fields: [tenantInvitations.invitedBy],
     references: [tenantUsers.userId],
   }),
 })); 

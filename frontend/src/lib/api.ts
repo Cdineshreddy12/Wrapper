@@ -1,8 +1,7 @@
-import axios, { AxiosResponse, AxiosError } from 'axios'
-import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
+import axios, { AxiosError } from 'axios'
 import toast from 'react-hot-toast'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://wrapper.zopkit.com/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
 // Store for Kinde token getter function
 let kindeTokenGetter: (() => Promise<string | null>) | null = null;
@@ -215,7 +214,7 @@ api.interceptors.request.use(async (config) => {
   if (authToken) {
     // Ensure headers object exists
     if (!config.headers) {
-      config.headers = {};
+      config.headers = {} as any;
     }
     
     // Set the Authorization header
@@ -343,6 +342,31 @@ export interface User {
   tenantId: string
   lastActiveAt: string
   createdAt: string
+}
+
+// Unified user interface that matches the backend response
+export interface UnifiedUser {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+  role: string
+  isActive: boolean
+  invitationStatus: 'active' | 'pending' | 'inactive'
+  invitedAt: string
+  expiresAt: string | null
+  lastActiveAt: string | null
+  invitationId: string | null
+  status: string
+  userType: 'active' | 'invited'
+  originalData?: any
+}
+
+// API response wrapper
+export interface ApiResponse<T> {
+  success: boolean
+  data: T
+  message?: string
 }
 
 export interface Tenant {
@@ -507,16 +531,30 @@ export const authAPI = {
 
 // Tenant API
 export const tenantAPI = {
-  getCurrent: () => api.get<Tenant>('/tenants/current'),
-  updateSettings: (settings: Record<string, any>) => 
-    api.put('/tenants/current/settings', { settings }),
-  getUsers: () => api.get<User[]>('/tenants/current/users'),
-  inviteUser: (data: { email: string; role: string }) => 
-    api.post('/tenants/current/users/invite', data),
-  removeUser: (userId: string) => 
-    api.delete(`/tenants/current/users/${userId}`),
-  updateUserRole: (userId: string, role: string) => 
-    api.put(`/tenants/current/users/${userId}/role`, { role }),
+  // Get current tenant details
+  getCurrentTenant: () => api.get<Tenant>('/tenants/current'),
+  
+  // Get tenant users
+  getUsers: () => api.get<ApiResponse<UnifiedUser[]>>('/tenants/current/users'),
+  
+  // Invite user to tenant
+  inviteUser: (data: { email: string; roleId: string; message?: string }) =>
+    api.post<ApiResponse<any>>('/tenants/current/users/invite', data),
+  
+  // Remove user from tenant
+  removeUser: (userId: string) =>
+    api.delete<ApiResponse<any>>(`/tenants/current/users/${userId}`),
+  
+  // Update user role
+  updateUserRole: (userId: string, roleId: string) =>
+    api.put<ApiResponse<any>>(`/tenants/current/users/${userId}/role`, { roleId }),
+  
+  // Get tenant usage
+  getUsage: (params?: { period?: string; startDate?: string; endDate?: string }) =>
+    api.get<ApiResponse<any>>('/tenants/current/usage', { params }),
+  
+  // Export users
+  exportUsers: () => api.get('/tenants/current/users/export'),
 }
 
 // Subscription API
@@ -739,6 +777,117 @@ export const onboardingAPI = {
   // Reset onboarding status (for testing/admin purposes)
   reset: (targetUserId?: string) => 
     api.post('/onboarding/reset', targetUserId ? { targetUserId } : {}),
+}
+
+// User Sync and Classification API
+export const userSyncAPI = {
+  // Get all users classified by application access
+  getUserClassification: () => 
+    api.get('/user-sync/classification'),
+
+  // Get users for specific application
+  getUsersForApplication: (appCode: string) => 
+    api.get(`/user-sync/classification/${appCode}`),
+
+  // Get specific user's application access
+  getUserApplicationAccess: (userId: string) => 
+    api.get(`/user-sync/user/${userId}/access`),
+
+  // Sync all users to their applications
+  syncAllUsers: (options: { syncType?: 'full' | 'incremental', dryRun?: boolean } = {}) => 
+    api.post('/user-sync/sync/all', options),
+
+  // Sync users for specific application
+  syncUsersForApplication: (appCode: string, options: { syncType?: 'full' | 'incremental' } = {}) => 
+    api.post(`/user-sync/sync/application/${appCode}`, options),
+
+  // Sync individual user
+  syncUser: (userId: string, options: { syncType?: 'full' | 'update' } = {}) => 
+    api.post(`/user-sync/sync/user/${userId}`, options),
+
+  // Refresh user classification after role changes
+  refreshUserClassification: (userId: string, options: { 
+    autoSync?: boolean, 
+    previousApps?: string[] 
+  } = {}) => 
+    api.post(`/user-sync/refresh/${userId}`, options),
+
+  // Get sync status for tenant
+  getSyncStatus: () => 
+    api.get('/user-sync/status'),
+
+  // Test connectivity to applications
+  testConnectivity: (appCode?: string) => 
+    api.post('/user-sync/test-connectivity', { appCode })
+}
+
+// User Application Management API (enhanced functionality)
+export const userApplicationAPI = {
+  // Get all users with their application access
+  getUsersWithApplicationAccess: (params?: {
+    includeInactive?: boolean;
+    appCode?: string;
+    includePermissionDetails?: boolean;
+  }) => api.get('/user-sync/classification', { params }),
+
+  // Get specific user's application access
+  getUserApplicationAccess: (userId: string, params?: {
+    appCode?: string;
+    includePermissionDetails?: boolean;
+  }) => api.get(`/user-sync/user/${userId}/access`, { params }),
+
+  // Get application access summary
+  getApplicationAccessSummary: () => 
+    api.get('/user-sync/classification'),
+
+  // Sync users to specific application
+  syncUsersToApplication: (appCode: string, options?: {
+    dryRun?: boolean;
+    userIds?: string[];
+    forceSync?: boolean;
+  }) => api.post(`/user-sync/sync/application/${appCode}`, options),
+
+  // Bulk sync all users to all applications
+  bulkSyncAllUsers: (options?: {
+    dryRun?: boolean;
+  }) => api.post('/user-sync/sync/all', options),
+
+  // Sync specific user to their applications
+  syncUserToApplications: (userId: string, options?: {
+    dryRun?: boolean;
+    appCodes?: string[];
+  }) => api.post(`/user-sync/sync/user/${userId}`, options)
+}
+
+// Invitation Management API
+export const invitationAPI = {
+  // Get all invitations for an organization (admin)
+  getAdminInvitations: (orgCode: string) => 
+    api.get(`/invitations/admin/${orgCode}`),
+
+  // Create invitation for current tenant
+  createInvitation: (data: { email: string; roleName: string }) => 
+    api.post('/invitations/create', data),
+
+  // Create test invitation
+  createTestInvitation: (data: { orgCode: string; email: string; roleName: string }) => 
+    api.post('/invitations/create-test-invitation', data),
+
+  // Resend invitation email
+  resendInvitation: (orgCode: string, invitationId: string) => 
+    api.post(`/invitations/admin/${orgCode}/${invitationId}/resend`),
+
+  // Cancel invitation
+  cancelInvitation: (orgCode: string, invitationId: string) => 
+    api.delete(`/invitations/admin/${orgCode}/${invitationId}`),
+
+  // Get invitation details (public)
+  getInvitationDetails: (org: string, email: string) => 
+    api.get('/invitations/details', { params: { org, email } }),
+
+  // Accept invitation (public)
+  acceptInvitation: (data: { org: string; email: string; kindeUserId: string }) => 
+    api.post('/invitations/accept', data)
 }
 
 export default api 

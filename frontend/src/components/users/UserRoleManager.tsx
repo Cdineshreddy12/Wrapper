@@ -93,8 +93,8 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
 
   const loadRoles = async () => {
     try {
-      console.log('📥 Loading roles from /roles...');
-      const response = await api.get('/roles');
+      console.log('📥 Loading roles from /permissions/roles...');
+      const response = await api.get('/permissions/roles');
       console.log('🎭 Roles API Response:', response.data);
       
       if (response.data.success) {

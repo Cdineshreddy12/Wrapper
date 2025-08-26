@@ -84,6 +84,7 @@ export function SimpleOnboarding() {
         teamEmails: formData.teamEmails.filter(email => email.trim() !== '')
       }
 
+      // Create organization and onboard user
       const response = await api.post('/onboarding/create-organization', requestData)
 
       if (response.data.success) {

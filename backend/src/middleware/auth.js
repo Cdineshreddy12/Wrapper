@@ -12,6 +12,8 @@ const PUBLIC_ROUTES = [
   '/api/auth',
   '/api/webhooks',
   '/api/subscriptions/webhook', // Stripe webhook endpoint
+  '/api/subscriptions/test-webhook', // Test webhook endpoint (for debugging)
+  '/api/subscriptions/debug-stripe-config', // Stripe config debug endpoint
   '/api/payments/webhook', // Payment webhook endpoint
   '/api/onboarding',
   '/api/invitations',
@@ -135,7 +137,8 @@ export async function authMiddleware(request, reply) {
               email: tenantUsers.email,
               name: tenantUsers.name,
               isActive: tenantUsers.isActive,
-              isTenantAdmin: tenantUsers.isTenantAdmin
+              isTenantAdmin: tenantUsers.isTenantAdmin,
+              invitedBy: tenantUsers.invitedBy
             })
             .from(tenantUsers)
             .where(and(
@@ -152,7 +155,8 @@ export async function authMiddleware(request, reply) {
               email: user.email,
               onboardingCompleted: user.onboardingCompleted,
               isActive: user.isActive,
-              isTenantAdmin: user.isTenantAdmin
+              isTenantAdmin: user.isTenantAdmin,
+              invitedBy: user.invitedBy
             });
           } else {
             console.log('⚠️ Auth Middleware - Tenant exists but user record not found. User may need to complete onboarding.');
@@ -178,7 +182,8 @@ export async function authMiddleware(request, reply) {
             name: tenantUsers.name,
             onboardingCompleted: tenantUsers.onboardingCompleted,
             isActive: tenantUsers.isActive,
-            isTenantAdmin: tenantUsers.isTenantAdmin
+            isTenantAdmin: tenantUsers.isTenantAdmin,
+            invitedBy: tenantUsers.invitedBy
           })
           .from(tenantUsers)
           .where(and(
@@ -205,7 +210,8 @@ export async function authMiddleware(request, reply) {
               tenantId: activeUser.tenantId,
               email: activeUser.email,
               onboardingCompleted: activeUser.onboardingCompleted,
-              isTenantAdmin: activeUser.isTenantAdmin
+              isTenantAdmin: activeUser.isTenantAdmin,
+              invitedBy: activeUser.invitedBy
             });
           }
         } else {
@@ -231,7 +237,8 @@ export async function authMiddleware(request, reply) {
             name: tenantUsers.name,
             onboardingCompleted: tenantUsers.onboardingCompleted,
             isActive: tenantUsers.isActive,
-            isTenantAdmin: tenantUsers.isTenantAdmin
+            isTenantAdmin: tenantUsers.isTenantAdmin,
+            invitedBy: tenantUsers.invitedBy
           })
           .from(tenantUsers)
           .where(and(
@@ -265,6 +272,7 @@ export async function authMiddleware(request, reply) {
               email: userRecord.email,
               onboardingCompleted: userRecord.onboardingCompleted,
               isTenantAdmin: userRecord.isTenantAdmin,
+              invitedBy: userRecord.invitedBy,
               foundByKindeUserId: true
             });
           }
@@ -281,7 +289,8 @@ export async function authMiddleware(request, reply) {
     // 3. New Users: Need onboarding if no tenant exists or no user record
     
     const isTenantAdmin = userRecord?.isTenantAdmin || false;
-    const isInvitedUser = userRecord && !isTenantAdmin;
+    // Better logic for detecting invited users: they have a user record, are not admin, and were invited by someone
+    const isInvitedUser = userRecord && !isTenantAdmin && userRecord.invitedBy && userRecord.onboardingCompleted;
     
     let needsOnboarding = false;
     let onboardingReason = 'none';
@@ -294,17 +303,21 @@ export async function authMiddleware(request, reply) {
       // Tenant admin who hasn't completed onboarding
       needsOnboarding = true;
       onboardingReason = 'tenant_admin_incomplete_onboarding';
-    } else if (isInvitedUser && !onboardingCompleted) {
-      // This should NOT happen - invited users get onboardingCompleted=true on acceptance
-      // But if it does happen, we should fix it rather than send them to onboarding
-      console.warn('⚠️ Auth Middleware - Invited user has onboardingCompleted=false, this should not happen!', {
+    } else if (isInvitedUser) {
+      // Invited users should NEVER need onboarding
+      needsOnboarding = false;
+      onboardingReason = 'invited_user_skip_onboarding';
+    } else if (userRecord && !isTenantAdmin && !onboardingCompleted) {
+      // Non-admin user without onboarding completed - this might be a legacy user or error case
+      console.warn('⚠️ Auth Middleware - Non-admin user has onboardingCompleted=false, treating as needs onboarding', {
         userId: userRecord.userId,
         email: userRecord.email,
         isTenantAdmin,
-        onboardingCompleted
+        onboardingCompleted,
+        invitedBy: userRecord.invitedBy
       });
-      needsOnboarding = false; // Don't send invited users to onboarding
-      onboardingReason = 'invited_user_skip_onboarding';
+      needsOnboarding = true;
+      onboardingReason = 'non_admin_incomplete_onboarding';
     } else {
       // User has tenant, user record, and proper onboarding status
       needsOnboarding = false;
@@ -500,7 +513,8 @@ export async function authMiddleware(request, reply) {
                   email: tenantUsers.email,
                   name: tenantUsers.name,
                   isActive: tenantUsers.isActive,
-                  isTenantAdmin: tenantUsers.isTenantAdmin
+                  isTenantAdmin: tenantUsers.isTenantAdmin,
+                  invitedBy: tenantUsers.invitedBy
                 })
                 .from(tenantUsers)
                 .where(and(
@@ -517,7 +531,8 @@ export async function authMiddleware(request, reply) {
                   email: user.email,
                   onboardingCompleted: user.onboardingCompleted,
                   isActive: user.isActive,
-                  isTenantAdmin: user.isTenantAdmin
+                  isTenantAdmin: user.isTenantAdmin,
+                  invitedBy: user.invitedBy
                 });
               } else {
                 console.log('⚠️ Auth Middleware (Refresh) - Tenant exists but user record not found. User may need to complete onboarding.');
@@ -542,7 +557,8 @@ export async function authMiddleware(request, reply) {
                 name: tenantUsers.name,
                 onboardingCompleted: tenantUsers.onboardingCompleted,
                 isActive: tenantUsers.isActive,
-                isTenantAdmin: tenantUsers.isTenantAdmin
+                isTenantAdmin: tenantUsers.isTenantAdmin,
+                invitedBy: tenantUsers.invitedBy
               })
               .from(tenantUsers)
               .where(and(
@@ -567,7 +583,8 @@ export async function authMiddleware(request, reply) {
                   tenantId: activeUser.tenantId,
                   email: activeUser.email,
                   onboardingCompleted: activeUser.onboardingCompleted,
-                  isTenantAdmin: activeUser.isTenantAdmin
+                  isTenantAdmin: activeUser.isTenantAdmin,
+                  invitedBy: activeUser.invitedBy
                 });
               }
             } else {
@@ -580,7 +597,8 @@ export async function authMiddleware(request, reply) {
         
         // Determine onboarding status with clear logic (same as main auth logic)
         const isTenantAdmin = userRecord?.isTenantAdmin || false;
-        const isInvitedUser = userRecord && !isTenantAdmin;
+        // Better logic for detecting invited users: they have a user record, are not admin, and were invited by someone
+        const isInvitedUser = userRecord && !isTenantAdmin && userRecord.invitedBy && userRecord.onboardingCompleted;
         
         let needsOnboarding = false;
         let onboardingReason = 'none';
@@ -591,7 +609,7 @@ export async function authMiddleware(request, reply) {
         } else if (isTenantAdmin && !onboardingCompleted) {
           needsOnboarding = true;
           onboardingReason = 'tenant_admin_incomplete_onboarding';
-        } else if (isInvitedUser && !onboardingCompleted) {
+        } else if (isInvitedUser) {
           console.warn('⚠️ Auth Middleware (Refresh) - Invited user has onboardingCompleted=false, this should not happen!', {
             userId: userRecord.userId,
             email: userRecord.email,

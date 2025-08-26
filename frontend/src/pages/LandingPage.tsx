@@ -28,6 +28,12 @@ export function LandingPage() {
             // User is fully onboarded - redirect to dashboard silently
             console.log('✅ Authenticated user already onboarded, redirecting to dashboard')
             navigate('/dashboard', { replace: true })
+          } else if (status.authStatus?.onboardingCompleted === true || 
+                     status.authStatus?.userType === 'INVITED_USER' ||
+                     status.authStatus?.isInvitedUser === true) {
+            // INVITED USERS: Always go to dashboard (they skip onboarding)
+            console.log('✅ Invited user detected, redirecting to dashboard (skipping onboarding)')
+            navigate('/dashboard', { replace: true })
           }
           // If not onboarded, let them stay on landing page to choose their path
         } catch (error) {

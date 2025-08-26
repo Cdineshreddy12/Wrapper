@@ -47,6 +47,18 @@ export function OnboardingGuard({ children, redirectTo = '/login' }: OnboardingG
           hasTenant: !!response.data.authStatus?.tenantId
         }
 
+        // Check if this is an invited user (they should never need onboarding)
+        const isInvitedUser = response.data.authStatus?.userType === 'INVITED_USER' || 
+                              response.data.authStatus?.isInvitedUser === true ||
+                              response.data.authStatus?.onboardingCompleted === true
+
+        // INVITED USERS: Always skip onboarding
+        if (isInvitedUser) {
+          console.log('✅ OnboardingGuard - Invited user detected, skipping onboarding')
+          status.needsOnboarding = false
+          status.onboardingCompleted = true
+        }
+
         // If we just completed onboarding, override status to allow access
         if (justCompletedOnboarding) {
           console.log('✅ OnboardingGuard - Just completed onboarding, allowing access')

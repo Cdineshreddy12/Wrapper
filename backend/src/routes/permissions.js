@@ -13,7 +13,17 @@ import { eq, and, inArray } from 'drizzle-orm';
 import CacheInvalidationService from '../middleware/cache-invalidation.js';
 
 export default async function permissionRoutes(fastify, options) {
-  // Get all available permissions
+  
+  // Helper function to get tenant ID from request
+  const getTenantId = (request) => {
+    const tenantId = request.userContext?.tenantId || request.user?.tenantId;
+    if (!tenantId) {
+      throw new Error('Tenant context required - User must be associated with a tenant');
+    }
+    return tenantId;
+  };
+
+  // Get available permissions with categories and operations
   fastify.get('/available', {
     preHandler: [authenticateToken, requirePermission('permissions:read'), trackUsage]
   }, async ( request , reply ) => {
@@ -48,7 +58,7 @@ export default async function permissionRoutes(fastify, options) {
     preHandler: [authenticateToken, trackUsage]
   }, async (request, reply) => {
     try {
-      const tenantId = request.userContext.tenantId;
+      const tenantId = getTenantId(request);
       
       // Get organization's enabled applications
       const orgApps = await db
@@ -109,7 +119,7 @@ export default async function permissionRoutes(fastify, options) {
     preHandler: [authenticateToken, requirePermission('users:read'), trackUsage]
   }, async (request, reply) => {
     try {
-      const tenantId = request.userContext.tenantId;
+      const tenantId = getTenantId(request);
       
       const users = await db
         .select({
@@ -139,7 +149,7 @@ export default async function permissionRoutes(fastify, options) {
   }, async (request, reply) => {
     try {
       const { userId } = request.params;
-      const tenantId = request.userContext.tenantId;
+      const tenantId = getTenantId(request);
       
       const userPermissions = await db
         .select({
@@ -197,7 +207,7 @@ export default async function permissionRoutes(fastify, options) {
   }, async (request, reply) => {
     try {
       const { assignments } = request.body;
-      const tenantId = request.userContext.tenantId;
+      const tenantId = getTenantId(request);
       const grantedBy = request.userContext.internalUserId;
 
       // Process each assignment
@@ -291,7 +301,7 @@ export default async function permissionRoutes(fastify, options) {
     try {
       const { userId } = request.params;
       const { templateId, clearExisting } = request.body;
-      const tenantId = request.userContext.tenantId;
+      const tenantId = getTenantId(request);
       const grantedBy = request.userContext.internalUserId;
 
       // Get template permissions (this would need to be implemented based on your template system)
@@ -444,7 +454,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Get tenant roles
   fastify.get('/roles', {
-    preHandler: [authenticateToken, requirePermission('roles:read'), trackUsage],
+    preHandler: [authenticateToken, trackUsage],
     schema: {
       querystring: {
         type: 'object',
@@ -459,11 +469,29 @@ export default async function permissionRoutes(fastify, options) {
   }, async (request, reply) => {
     try {
       const { page, limit, search, type } = request.query;
-      const roles = await permissionService.getTenantRoles(request.user.tenantId, {
+      
+      // Get tenant ID from user context
+      const tenantId = getTenantId(request);
+      
+      console.log('🔍 GET /api/permissions/roles - Debug info:', {
+        tenantId,
+        userContext: request.userContext,
+        user: request.user,
+        query: { page, limit, search, type }
+      });
+      
+      const roles = await permissionService.getTenantRoles(tenantId, {
         page,
         limit,
         search,
         type
+      });
+      
+      console.log('📊 Roles fetched from service:', {
+        rolesCount: roles.data?.length || 0,
+        total: roles.total,
+        page: roles.page,
+        limit: roles.limit
       });
       
       return {
@@ -525,11 +553,11 @@ export default async function permissionRoutes(fastify, options) {
       const { roleId } = request.params;
       const updateData = {
         ...request.body,
-        updatedBy: request.user.id
+        updatedBy: request.userContext?.kindeUserId || request.user?.id
       };
       
       const role = await permissionService.updateRole(
-        request.user.tenantId,
+        getTenantId(request),
         roleId,
         updateData
       );
@@ -564,7 +592,7 @@ export default async function permissionRoutes(fastify, options) {
     try {
       const { roleId } = request.params;
       
-      await permissionService.deleteRole(request.user.tenantId, roleId);
+      await permissionService.deleteRole(getTenantId(request), roleId);
       
       return {
         success: true,
@@ -601,8 +629,12 @@ export default async function permissionRoutes(fastify, options) {
   }, async (request, reply) => {
     try {
       const { userId, roleId, page, limit } = request.query;
+      
+      // Get tenant ID from user context
+      const tenantId = getTenantId(request);
+      
       const assignments = await permissionService.getRoleAssignments(
-        request.user.tenantId,
+        tenantId,
         { userId, roleId, page, limit }
       );
       
@@ -641,14 +673,17 @@ export default async function permissionRoutes(fastify, options) {
     try {
       const { userId, roleId, expiresAt, conditions } = request.body;
       
+      // Get tenant ID from user context
+      const tenantId = getTenantId(request);
+      
       const assignment = await permissionService.assignRole(
-        request.user.tenantId,
+        tenantId,
         userId,
         roleId,
         {
           expiresAt,
           conditions,
-          assignedBy: request.user.id
+          assignedBy: request.userContext?.kindeUserId || request.user?.id
         }
       );
       
@@ -683,9 +718,9 @@ export default async function permissionRoutes(fastify, options) {
       const { assignmentId } = request.params;
       
       await permissionService.removeRoleAssignment(
-        request.user.tenantId,
+        getTenantId(request),
         assignmentId,
-        request.user.id
+        request.userContext?.kindeUserId || request.user?.id
       );
       
       return {
@@ -719,7 +754,7 @@ export default async function permissionRoutes(fastify, options) {
     try {
       const filters = request.query;
       const auditLog = await permissionService.getAuditLog(
-        request.user.tenantId,
+        getTenantId(request),
         filters
       );
       
@@ -751,10 +786,10 @@ export default async function permissionRoutes(fastify, options) {
   }, async (request, reply) => {
     try {
       const { permissions, userId, resource, context } = request.body;
-      const targetUserId = userId || request.user.id;
+      const targetUserId = userId || request.userContext?.kindeUserId || request.user?.id;
       
       const results = await permissionService.checkPermissions(
-        request.user.tenantId,
+        getTenantId(request),
         targetUserId,
         permissions,
         { resource, context }
@@ -787,7 +822,7 @@ export default async function permissionRoutes(fastify, options) {
       const { userId } = request.params;
       
       const permissions = await permissionService.getUserEffectivePermissions(
-        request.user.tenantId,
+        getTenantId(request),
         userId
       );
       
@@ -829,9 +864,9 @@ export default async function permissionRoutes(fastify, options) {
       const { assignments } = request.body;
       
       const results = await permissionService.bulkAssignRoles(
-        request.user.tenantId,
+        getTenantId(request),
         assignments,
-        request.user.id
+        request.userContext?.kindeUserId || request.user?.id
       );
       
       return {
@@ -852,7 +887,7 @@ export default async function permissionRoutes(fastify, options) {
     try {
       const permissionData = await permissionService.getAvailablePermissions();
       
-      res.json({
+      return {
         success: true,
         data: {
           totalApplications: permissionData.summary.applicationCount,
@@ -865,10 +900,10 @@ export default async function permissionRoutes(fastify, options) {
             operationCount: app.operationCount
           }))
         }
-      });
+      };
     } catch (error) {
-      console.error('Error fetching permission summary:', error);
-      res.status(500).json({
+      fastify.log.error('Error fetching permission summary:', error);
+      return reply.code(500).send({
         success: false,
         message: 'Failed to fetch permission summary',
         error: error.message

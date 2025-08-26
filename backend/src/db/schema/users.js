@@ -19,12 +19,10 @@ export const tenantUsers = pgTable('tenant_users', {
   isVerified: boolean('is_verified').default(false),
   isTenantAdmin: boolean('is_tenant_admin').default(false),
   
-  // Invitation Management
+  // User Management (removed duplicate invitation fields)
   invitedBy: uuid('invited_by').references(() => tenantUsers.userId),
   invitedAt: timestamp('invited_at'),
-  invitationToken: varchar('invitation_token', { length: 255 }),
-  invitationExpiresAt: timestamp('invitation_expires_at'),
-  invitationAcceptedAt: timestamp('invitation_accepted_at'),
+  // Note: invitationToken, invitationExpiresAt, invitationAcceptedAt moved to tenant_invitations table
   
   // Activity
   lastActiveAt: timestamp('last_active_at'),

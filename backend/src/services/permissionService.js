@@ -150,6 +150,8 @@ class PermissionService {
   async getTenantRoles(tenantId, options = {}) {
     const { page = 1, limit = 20, search, type } = options;
     
+    console.log('🔍 getTenantRoles called with:', { tenantId, options });
+    
     let query = db
       .select({
         roleId: customRoles.roleId,
@@ -161,7 +163,7 @@ class PermissionService {
         isSystemRole: customRoles.isSystemRole,
         isDefault: customRoles.isDefault,
         priority: customRoles.priority,
-        createdBy: customRoles.createdBy,
+        // createdBy: customRoles.createdBy, // Temporarily removed
         createdAt: customRoles.createdAt,
         updatedAt: customRoles.updatedAt,
         userCount: count(userRoleAssignments.id)
@@ -171,6 +173,8 @@ class PermissionService {
       .where(eq(customRoles.tenantId, tenantId))
       .groupBy(customRoles.roleId);
 
+    console.log('🔍 Query built, checking for roles with tenantId:', tenantId);
+    
     // Apply filters
     if (search) {
       query = query.where(
@@ -206,6 +210,8 @@ class PermissionService {
       .from(customRoles)
       .where(eq(customRoles.tenantId, tenantId));
 
+    console.log('🔍 Executing queries...');
+    
     const [roleResults, countResult] = await Promise.all([
       query
         .orderBy(desc(customRoles.priority), desc(customRoles.createdAt))
@@ -213,6 +219,12 @@ class PermissionService {
         .offset((page - 1) * limit),
       countQuery
     ]);
+
+    console.log('🔍 Query results:', {
+      roleResultsCount: roleResults.length,
+      countResult: countResult[0]?.count,
+      firstRole: roleResults[0] || 'No roles found'
+    });
 
     return {
       data: roleResults,
@@ -225,7 +237,7 @@ class PermissionService {
 
   // Create a new role
   async createRole(roleData) {
-    const { tenantId, name, description, permissions, restrictions, createdBy } = roleData;
+    const { tenantId, name, description, permissions, restrictions } = roleData; // removed createdBy
     
     // Check if role name already exists
     const existingRole = await db
@@ -261,7 +273,7 @@ class PermissionService {
         isSystemRole: false,
         isDefault: false,
         priority: 0,
-        createdBy,
+        // createdBy, // Temporarily removed
         createdAt: now,
         updatedAt: now
       })
@@ -270,7 +282,7 @@ class PermissionService {
     // Log the creation
     await this.logAuditEvent({
       tenantId,
-      userId: createdBy,
+      userId: 'system', // Use 'system' as fallback since createdBy is not available
       action: 'role_created',
       resourceType: 'role',
       resourceId: roleId,
@@ -613,7 +625,7 @@ class PermissionService {
       restrictions = {}, 
       inheritance = {},
       metadata = {},
-      createdBy 
+      // createdBy removed
     } = roleData;
     
     // Check if role name already exists
@@ -672,7 +684,7 @@ class PermissionService {
         isSystemRole: false,
         isDefault: metadata.isDefault || false,
         priority: inheritance.priority || 0,
-        createdBy,
+        // createdBy, // Temporarily removed
         createdAt: now,
         updatedAt: now
       })
@@ -681,7 +693,7 @@ class PermissionService {
     // Log the creation
     await this.logAuditEvent({
       tenantId,
-      userId: createdBy,
+      userId: 'system', // Use 'system' as fallback since createdBy is not available
       action: 'advanced_role_created',
       resourceType: 'role',
       resourceId: roleId,
@@ -1216,8 +1228,8 @@ class PermissionService {
       description, 
       color,
       customizations = {},
-      tenantId,
-      createdBy 
+      tenantId
+      // createdBy removed
     } = templateData;
 
     // Get template
@@ -1263,8 +1275,8 @@ class PermissionService {
         category: templateData_.category,
         createdFromTemplate: templateId,
         templateName: templateData_.templateName
-      },
-      createdBy
+      }
+      // createdBy removed
     });
   }
 
@@ -1406,7 +1418,7 @@ class PermissionService {
 
   // Clone role with modifications
   async cloneRole(sourceRoleId, cloneData) {
-    const { name, description, modifications = {}, tenantId, createdBy } = cloneData;
+    const { name, description, modifications = {}, tenantId } = cloneData; // createdBy removed
 
     // Get source role
     const sourceRole = await db
@@ -1450,8 +1462,7 @@ class PermissionService {
         clonedFrom: sourceRoleId,
         clonedFromName: source.roleName,
         category: permissions.metadata?.category
-      },
-      createdBy
+      }
     });
   }
 

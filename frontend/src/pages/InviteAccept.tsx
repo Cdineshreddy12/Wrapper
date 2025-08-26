@@ -102,17 +102,79 @@ export function InviteAccept() {
   // Handle post-authentication invite acceptance
   useEffect(() => {
     if (isAuthenticated && user && invitation && !accepting) {
+      console.log('✅ User authenticated with invitation, proceeding to accept...')
       // Add a small delay to ensure auth state is fully settled
       const timer = setTimeout(() => {
         handleAcceptInvitation()
-      }, 500)
+      }, 1000) // Increased delay to ensure auth state is fully settled
       
       return () => clearTimeout(timer)
     }
   }, [isAuthenticated, user, invitation, accepting])
 
+  // Additional effect to handle authentication state changes
+  useEffect(() => {
+    if (isAuthenticated && user && !invitation && token) {
+      console.log('🔄 User authenticated but invitation not loaded, refetching...')
+      // User just authenticated, refetch invitation details
+      const fetchInvitationDetails = async () => {
+        try {
+          const response = await api.get('/invitations/details-by-token', {
+            params: { token }
+          })
+
+          if (response.data.success) {
+            setInvitation(response.data.invitation)
+          } else {
+            setError(response.data.message || 'Failed to load invitation')
+          }
+        } catch (err: any) {
+          console.error('Error refetching invitation after auth:', err)
+          setError('Failed to load invitation details after authentication')
+        }
+      }
+      
+      fetchInvitationDetails()
+    }
+  }, [isAuthenticated, user, token])
+
+  // Store invitation context in localStorage to preserve it during authentication
+  useEffect(() => {
+    if (token) {
+      localStorage.setItem('pendingInvitationToken', token)
+      console.log('💾 Stored invitation token in localStorage:', token)
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      if (token) {
+        localStorage.removeItem('pendingInvitationToken')
+        console.log('🧹 Cleaned up invitation token from localStorage')
+      }
+    }
+  }, [token])
+
+  // Check for pending invitation on mount
+  useEffect(() => {
+    const pendingToken = localStorage.getItem('pendingInvitationToken')
+    if (pendingToken && !token) {
+      console.log('🔄 Found pending invitation token in localStorage:', pendingToken)
+      // Redirect back to invitation acceptance with the stored token
+      navigate(`/invite/accept?token=${pendingToken}`, { replace: true })
+    }
+  }, [token, navigate])
+
   const handleAcceptInvitation = async () => {
-    if (!invitation || !user) return
+    if (!invitation || !user) {
+      console.log('❌ Cannot accept invitation:', { hasInvitation: !!invitation, hasUser: !!user })
+      return
+    }
+
+    console.log('🚀 Starting invitation acceptance process...', {
+      invitation: invitation,
+      user: user,
+      token: token
+    })
 
     setAccepting(true)
     try {
@@ -128,11 +190,14 @@ export function InviteAccept() {
           kindeUserId: user.id
         })
 
+        console.log('✅ Invitation acceptance response:', response.data)
+
         if (response.data.success) {
           toast.success(`Welcome to ${invitation.organizationName}!`)
           
           // INVITED USERS: Always redirect to dashboard (they skip onboarding)
           // The backend ensures onboardingCompleted=true for invited users
+          console.log('🎉 Invitation accepted successfully, redirecting to dashboard...')
           setTimeout(() => {
             navigate('/dashboard?welcome=true&invited=true')
           }, 1500)
@@ -153,11 +218,14 @@ export function InviteAccept() {
           kindeUserId: user.id
         })
 
+        console.log('✅ Invitation acceptance response:', response.data)
+
         if (response.data.success) {
           toast.success(`Welcome to ${invitation.organizationName}!`)
           
           // INVITED USERS: Always redirect to dashboard (they skip onboarding)
           // The backend ensures onboardingCompleted=true for invited users
+          console.log('🎉 Invitation accepted successfully, redirecting to dashboard...')
           setTimeout(() => {
             navigate('/dashboard?welcome=true&invited=true')
           }, 1500)
@@ -166,7 +234,7 @@ export function InviteAccept() {
         }
       }
     } catch (err: any) {
-      console.error('Error accepting invitation:', err)
+      console.error('❌ Error accepting invitation:', err)
       if (err.response?.status === 409) {
         toast.error('This invitation has already been accepted')
         setTimeout(() => {

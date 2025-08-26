@@ -147,6 +147,12 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
           // User is fully set up, redirect to dashboard
           console.log('✅ SilentAuthGuard: User fully onboarded, redirecting to dashboard');
           navigate('/dashboard', { replace: true });
+        } else if (status.authStatus?.onboardingCompleted === true || 
+                   status.authStatus?.userType === 'INVITED_USER' ||
+                   status.authStatus?.isInvitedUser === true) {
+          // INVITED USERS: Always go to dashboard (they skip onboarding)
+          console.log('✅ SilentAuthGuard: Invited user detected, redirecting to dashboard (skipping onboarding)');
+          navigate('/dashboard', { replace: true });
         } else {
           // User needs onboarding
           console.log('ℹ️ SilentAuthGuard: User needs onboarding');

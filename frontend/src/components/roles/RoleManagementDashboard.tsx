@@ -264,7 +264,7 @@ export function RoleManagementDashboard() {
     
     try {
       console.log('🌐 Loading roles from API');
-      const response = await api.get('/roles', {
+      const response = await api.get('/permissions/roles', {
         params: {
           search: searchQuery,
           type: typeFilter !== 'all' ? typeFilter : undefined,
@@ -353,7 +353,7 @@ export function RoleManagementDashboard() {
     if (!deletingRole) return;
     
     try {
-      const response = await api.delete(`/roles/${deletingRole.id}`);
+      const response = await api.delete(`/permissions/roles/${deletingRole.id}`);
       
       if (response.data.success) {
         toast.success(`Role "${deletingRole.name}" deleted successfully`);
@@ -400,7 +400,7 @@ export function RoleManagementDashboard() {
         case 'delete':
           // For now, delete one by one (could be optimized with bulk delete endpoint)
           for (const roleId of selectedIds) {
-            await api.delete(`/roles/${roleId}`);
+            await api.delete(`/permissions/roles/${roleId}`);
           }
           toast.success(`${selectedIds.length} roles deleted successfully`);
           break;
@@ -493,11 +493,11 @@ export function RoleManagementDashboard() {
           const roleId = payload.roleId || editingRole?.roleId;
           console.log('🔄 Updating existing advanced role:', roleId);
           delete payload.roleId; // Remove roleId from payload as it's in the URL
-          response = await api.put(`/roles/${roleId}`, payload);
+          response = await api.put(`/permissions/roles/${roleId}`, payload);
         } else {
           console.log('➕ Creating new advanced role');
           delete payload.roleId;
-          response = await api.post('/roles', payload);
+          response = await api.post('/permissions/roles', payload);
         }
         
       } else if (isApplicationModuleBuilder) {
@@ -523,11 +523,11 @@ export function RoleManagementDashboard() {
           const roleId = payload.roleId || editingRole?.roleId;
           console.log('🔄 Updating existing role (general):', roleId);
           delete payload.roleId;
-          response = await api.put(`/roles/${roleId}`, payload);
+          response = await api.put(`/permissions/roles/${roleId}`, payload);
         } else {
           console.log('➕ Creating new role (general)');
           delete payload.roleId;
-          response = await api.post('/roles', payload);
+          response = await api.post('/permissions/roles', payload);
         }
       }
       

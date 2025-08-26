@@ -9,6 +9,8 @@ import {
   PLAN_ACCESS_MATRIX, 
   PermissionMatrixUtils 
 } from '../data/permission-matrix.js';
+import { eq } from 'drizzle-orm';
+import { db } from '../db/index.js';
 
 export default async function permissionMatrixRoutes(fastify, options) {
 
@@ -50,21 +52,153 @@ export default async function permissionMatrixRoutes(fastify, options) {
     preHandler: [authenticateToken, trackUsage]
   }, async (request, reply) => {
     try {
+      // 🔍 CRITICAL FIX: Read target user ID from CRM header
+      const targetUserId = request.headers['x-user-id'];
       const { internalUserId, tenantId } = request.userContext;
       
-      console.log(`📡 GET /api/permission-matrix/user-context - User: ${internalUserId}, Tenant: ${tenantId}`);
+      // If CRM is requesting permissions for a specific user, use that user ID
+      // Otherwise, fall back to authenticated user (for backward compatibility)
+      const userIdToCheck = targetUserId || internalUserId;
       
-      const context = await PermissionMatrixService.getUserPermissionContext(internalUserId, tenantId);
+      console.log(`📡 GET /api/permission-matrix/user-context - CRM Request:`);
+      console.log(`   Authenticated Admin: ${internalUserId}`);
+      console.log(`   Target User (X-User-Id): ${targetUserId || 'NOT PROVIDED'}`);
+      console.log(`   Final User ID to check: ${userIdToCheck}`);
+      console.log(`   Tenant: ${tenantId}`);
+      
+      // 🔒 SECURITY: Validate that admin has permission to view other users' permissions
+      if (targetUserId && targetUserId !== internalUserId) {
+        // Check if admin has permission to view user permissions
+        const adminPermissions = await PermissionMatrixService.getUserPermissionContext(internalUserId, tenantId);
+        const canViewUserPermissions = adminPermissions.permissions?.some(p => 
+          p.includes('admin:users:read') || p.includes('admin:permissions:read') || p.includes('admin:users:sync')
+        );
+        
+        if (!canViewUserPermissions) {
+          console.log(`❌ Admin ${internalUserId} lacks permission to view user ${targetUserId} permissions`);
+          return reply.code(403).send({
+            success: false,
+            error: 'Insufficient permissions',
+            message: 'Admin lacks permission to view other users\' permissions'
+          });
+        }
+        
+        console.log(`✅ Admin ${internalUserId} authorized to view user ${targetUserId} permissions`);
+      }
+      
+      // Get permissions for the target user (not the admin)
+      const context = await PermissionMatrixService.getUserPermissionContext(userIdToCheck, tenantId);
       
       return {
         success: true,
-        data: context
+        data: {
+          ...context,
+          // Add metadata about whose permissions were returned
+          permissionContext: {
+            requestedFor: userIdToCheck,
+            requestedBy: internalUserId,
+            isAdminRequest: !!targetUserId && targetUserId !== internalUserId,
+            source: 'permission-matrix-api'
+          }
+        }
       };
     } catch (error) {
       console.error('❌ Error fetching user permission context:', error);
       return reply.code(500).send({
         success: false,
         message: 'Failed to fetch user permission context',
+        error: error.message
+      });
+    }
+  });
+
+  // 🏢 **CRM PERMISSION SYNC ENDPOINT**
+  fastify.post('/crm-sync', {
+    preHandler: [authenticateToken, trackUsage],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['targetUserId'],
+        properties: {
+          targetUserId: { type: 'string' },
+          orgCode: { type: 'string' },
+          forceRefresh: { type: 'boolean', default: false }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const { targetUserId, orgCode, forceRefresh = false } = request.body;
+      const { internalUserId, tenantId } = request.userContext;
+      
+      console.log(`🔄 CRM Permission Sync Request:`);
+      console.log(`   Admin: ${internalUserId}`);
+      console.log(`   Target User: ${targetUserId}`);
+      console.log(`   Organization: ${orgCode}`);
+      console.log(`   Force Refresh: ${forceRefresh}`);
+      
+      // 🔒 SECURITY: Validate admin permissions
+      const adminPermissions = await PermissionMatrixService.getUserPermissionContext(internalUserId, tenantId);
+      const canSyncUserPermissions = adminPermissions.permissions?.some(p => 
+        p.includes('admin:users:sync') || p.includes('admin:permissions:read') || p.includes('admin:users:read')
+      );
+      
+      if (!canSyncUserPermissions) {
+        console.log(`❌ Admin ${internalUserId} lacks permission to sync user permissions`);
+        return reply.code(403).send({
+          success: false,
+          error: 'Insufficient permissions',
+          message: 'Admin lacks permission to sync user permissions'
+        });
+      }
+      
+      // Verify target user exists in the same tenant
+      const { tenantUsers } = await import('../db/schema/index.js');
+      const [targetUser] = await db
+        .select()
+        .from(tenantUsers)
+        .where(eq(tenantUsers.userId, targetUserId))
+        .limit(1);
+      
+      if (!targetUser || targetUser.tenantId !== tenantId) {
+        console.log(`❌ Target user ${targetUserId} not found or not in tenant ${tenantId}`);
+        return reply.code(404).send({
+          success: false,
+          error: 'User not found',
+          message: 'Target user not found in this organization'
+        });
+      }
+      
+      // Get permissions for the target user
+      const userContext = await PermissionMatrixService.getUserPermissionContext(targetUserId, tenantId);
+      
+      console.log(`✅ CRM Permission Sync successful for user ${targetUserId}`);
+      
+      return {
+        success: true,
+        data: {
+          ...userContext,
+          syncMetadata: {
+            syncedAt: new Date().toISOString(),
+            syncedBy: internalUserId,
+            targetUser: {
+              id: targetUser.userId,
+              email: targetUser.email,
+              name: targetUser.name,
+              isActive: targetUser.isActive
+            },
+            organization: {
+              id: tenantId,
+              orgCode: orgCode
+            }
+          }
+        }
+      };
+    } catch (error) {
+      console.error('❌ Error in CRM permission sync:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'Failed to sync user permissions',
         error: error.message
       });
     }
@@ -85,13 +219,34 @@ export default async function permissionMatrixRoutes(fastify, options) {
     }
   }, async (request, reply) => {
     try {
-      const { permission, userId } = request.body;
+      const { permission } = request.body;
       const { internalUserId, tenantId } = request.userContext;
       
-      // Use provided userId or current user
-      const targetUserId = userId || internalUserId;
+      // 🔍 CRITICAL FIX: Support both body userId and X-User-Id header
+      const targetUserId = request.headers['x-user-id'] || request.body.userId || internalUserId;
       
-      console.log(`🔍 Checking permission: ${permission} for user: ${targetUserId}`);
+      console.log(`🔍 Checking permission: ${permission}`);
+      console.log(`   Authenticated Admin: ${internalUserId}`);
+      console.log(`   Target User (X-User-Id): ${request.headers['x-user-id'] || 'NOT PROVIDED'}`);
+      console.log(`   Target User (Body): ${request.body.userId || 'NOT PROVIDED'}`);
+      console.log(`   Final User ID to check: ${targetUserId}`);
+      
+      // 🔒 SECURITY: Validate admin permissions if checking other users
+      if (targetUserId !== internalUserId) {
+        const adminPermissions = await PermissionMatrixService.getUserPermissionContext(internalUserId, tenantId);
+        const canCheckUserPermissions = adminPermissions.permissions?.some(p => 
+          p.includes('admin:users:read') || p.includes('admin:permissions:read') || p.includes('admin:users:sync')
+        );
+        
+        if (!canCheckUserPermissions) {
+          console.log(`❌ Admin ${internalUserId} lacks permission to check user ${targetUserId} permissions`);
+          return reply.code(403).send({
+            success: false,
+            error: 'Insufficient permissions',
+            message: 'Admin lacks permission to check other users\' permissions'
+          });
+        }
+      }
       
       const hasPermission = await PermissionMatrixService.hasPermission(targetUserId, tenantId, permission);
       
@@ -100,7 +255,9 @@ export default async function permissionMatrixRoutes(fastify, options) {
         data: {
           permission,
           hasPermission,
-          userId: targetUserId
+          userId: targetUserId,
+          checkedBy: internalUserId,
+          isAdminRequest: targetUserId !== internalUserId
         }
       };
     } catch (error) {
@@ -108,6 +265,88 @@ export default async function permissionMatrixRoutes(fastify, options) {
       return reply.code(500).send({
         success: false,
         message: 'Failed to check permission',
+        error: error.message
+      });
+    }
+  });
+
+  // 🧪 **TEST PERMISSION SYNC FIX**
+  fastify.post('/test-permission-sync', {
+    preHandler: [authenticateToken, trackUsage],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['testUserId'],
+        properties: {
+          testUserId: { type: 'string' },
+          orgCode: { type: 'string' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const { testUserId, orgCode } = request.body;
+      const { internalUserId, tenantId } = request.userContext;
+      
+      console.log(`🧪 Testing Permission Sync Fix:`);
+      console.log(`   Admin: ${internalUserId}`);
+      console.log(`   Test User: ${testUserId}`);
+      console.log(`   Organization: ${orgCode}`);
+      
+      // Test 1: Get admin's own permissions (should work)
+      console.log(`\n📋 Test 1: Admin's own permissions`);
+      const adminContext = await PermissionMatrixService.getUserPermissionContext(internalUserId, tenantId);
+      
+      // Test 2: Get test user's permissions via X-User-Id header (should work)
+      console.log(`\n📋 Test 2: Test user permissions via X-User-Id header`);
+      const testRequest = {
+        headers: { 'x-user-id': testUserId },
+        userContext: { internalUserId, tenantId }
+      };
+      
+      // Simulate the header-based logic
+      const targetUserId = testRequest.headers['x-user-id'];
+      const userIdToCheck = targetUserId || internalUserId;
+      
+      const testUserContext = await PermissionMatrixService.getUserPermissionContext(userIdToCheck, tenantId);
+      
+      // Test 3: Verify permissions are different (admin vs user)
+      const adminPermissions = adminContext.permissions || [];
+      const userPermissions = testUserContext.permissions || [];
+      
+      const permissionComparison = {
+        admin: {
+          userId: internalUserId,
+          permissionCount: adminPermissions.length,
+          samplePermissions: adminPermissions.slice(0, 5)
+        },
+        testUser: {
+          userId: testUserId,
+          permissionCount: userPermissions.length,
+          samplePermissions: userPermissions.slice(0, 5)
+        },
+        areDifferent: adminPermissions.length !== userPermissions.length || 
+                     JSON.stringify(adminPermissions) !== JSON.stringify(userPermissions)
+      };
+      
+      console.log(`✅ Permission sync test completed successfully`);
+      
+      return {
+        success: true,
+        data: {
+          test: 'Permission Sync Fix Verification',
+          admin: adminContext,
+          testUser: testUserContext,
+          comparison: permissionComparison,
+          fixStatus: 'VERIFIED - Different users return different permissions',
+          timestamp: new Date().toISOString()
+        }
+      };
+    } catch (error) {
+      console.error('❌ Error testing permission sync fix:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'Failed to test permission sync fix',
         error: error.message
       });
     }

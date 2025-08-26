@@ -12,6 +12,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { KindeService } from './kinde-service.js';
 import { EmailService } from '../utils/email.js';
 import { SubscriptionService } from './subscription-service.js';
+import { sql } from 'drizzle-orm';
+import { inArray } from 'drizzle-orm';
 
 export class TenantService {
   // Create a new tenant
@@ -552,18 +554,426 @@ export class TenantService {
     return updated;
   }
 
-  // Get tenant users with roles
+  // Get tenant users with consolidated invitation data
   static async getTenantUsers(tenantId) {
-    return await db
-      .select({
-        user: tenantUsers,
-        role: customRoles,
-      })
-      .from(tenantUsers)
-      .leftJoin(userRoleAssignments, eq(tenantUsers.userId, userRoleAssignments.userId))
-      .leftJoin(customRoles, eq(userRoleAssignments.roleId, customRoles.roleId))
-      .where(eq(tenantUsers.tenantId, tenantId))
-      .orderBy(tenantUsers.createdAt);
+    try {
+      console.log('🔍 Getting users for tenant:', tenantId);
+      
+      // Get active users
+      const activeUsers = await db
+        .select({
+          userId: tenantUsers.userId,
+          tenantId: tenantUsers.tenantId,
+          kindeUserId: tenantUsers.kindeUserId,
+          email: tenantUsers.email,
+          name: tenantUsers.name,
+          avatar: tenantUsers.avatar,
+          title: tenantUsers.title,
+          department: tenantUsers.department,
+          isActive: tenantUsers.isActive,
+          isVerified: tenantUsers.isVerified,
+          isTenantAdmin: tenantUsers.isTenantAdmin,
+          invitedBy: tenantUsers.invitedBy,
+          invitedAt: tenantUsers.invitedAt,
+          lastActiveAt: tenantUsers.lastActiveAt,
+          lastLoginAt: tenantUsers.lastLoginAt,
+          loginCount: tenantUsers.loginCount,
+          preferences: tenantUsers.preferences,
+          onboardingCompleted: tenantUsers.onboardingCompleted,
+          onboardingStep: tenantUsers.onboardingStep,
+          createdAt: tenantUsers.createdAt,
+          updatedAt: tenantUsers.updatedAt
+        })
+        .from(tenantUsers)
+        .where(eq(tenantUsers.tenantId, tenantId))
+        .orderBy(desc(tenantUsers.createdAt));
+
+      // Get pending invitations
+      const pendingInvitations = await db
+        .select({
+          invitationId: tenantInvitations.invitationId,
+          tenantId: tenantInvitations.tenantId,
+          email: tenantInvitations.email,
+          roleId: tenantInvitations.roleId,
+          invitedBy: tenantInvitations.invitedBy,
+          invitationToken: tenantInvitations.invitationToken,
+          invitationUrl: tenantInvitations.invitationUrl,
+          status: tenantInvitations.status,
+          expiresAt: tenantInvitations.expiresAt,
+          acceptedAt: tenantInvitations.acceptedAt,
+          cancelledAt: tenantInvitations.cancelledAt,
+          cancelledBy: tenantInvitations.cancelledBy,
+          createdAt: tenantInvitations.createdAt,
+          updatedAt: tenantInvitations.updatedAt
+        })
+        .from(tenantInvitations)
+        .where(and(
+          eq(tenantInvitations.tenantId, tenantId),
+          eq(tenantInvitations.status, 'pending')
+        ))
+        .orderBy(desc(tenantInvitations.createdAt));
+
+      // Get user role assignments
+      const userIds = activeUsers.map(u => u.userId);
+      const userRoleData = userIds.length > 0 ? await db
+        .select({
+          userId: userRoleAssignments.userId,
+          roleId: userRoleAssignments.roleId,
+          assignedAt: userRoleAssignments.assignedAt
+        })
+        .from(userRoleAssignments)
+        .where(and(
+          inArray(userRoleAssignments.userId, userIds),
+          eq(userRoleAssignments.isActive, true)
+        )) : [];
+
+      // Get roles for users and invitations
+      const roleIds = [
+        ...userRoleData.map(ur => ur.roleId),
+        ...pendingInvitations.map(i => i.roleId).filter(Boolean)
+      ];
+
+      const roles = roleIds.length > 0 ? await db
+        .select({
+          roleId: customRoles.roleId,
+          roleName: customRoles.roleName,
+          description: customRoles.description,
+          color: customRoles.color
+        })
+        .from(customRoles)
+        .where(inArray(customRoles.roleId, roleIds)) : [];
+
+      const roleMap = new Map(roles.map(r => [r.roleId, r]));
+      const userRoleMap = new Map(userRoleData.map(ur => [ur.userId, ur.roleId]));
+
+      // Format active users
+      const formattedUsers = activeUsers.map(user => {
+        const userRoleId = userRoleMap.get(user.userId);
+        const role = userRoleId ? roleMap.get(userRoleId) : null;
+        return {
+          id: user.userId,
+          email: user.email,
+          firstName: user.name.split(' ')[0] || user.email.split('@')[0],
+          lastName: user.name.split(' ').slice(1).join(' ') || '',
+          role: role?.roleName || 'No role assigned',
+          isActive: user.isActive,
+          invitationStatus: 'active',
+          invitedAt: user.invitedAt || user.createdAt,
+          expiresAt: null,
+          lastActiveAt: user.lastActiveAt,
+          invitationId: null,
+          status: 'active',
+          userType: 'active',
+          originalData: {
+            user: {
+              userId: user.userId,
+              tenantId: user.tenantId,
+              kindeUserId: user.kindeUserId,
+              email: user.email,
+              name: user.name,
+              avatar: user.avatar,
+              title: user.title,
+              department: user.department,
+              isActive: user.isActive,
+              isVerified: user.isVerified,
+              isTenantAdmin: user.isTenantAdmin,
+              invitedBy: user.invitedBy,
+              invitedAt: user.invitedAt,
+              lastActiveAt: user.lastActiveAt,
+              lastLoginAt: user.lastLoginAt,
+              loginCount: user.loginCount,
+              preferences: user.preferences,
+              onboardingCompleted: user.onboardingCompleted,
+              onboardingStep: user.onboardingStep,
+              createdAt: user.createdAt,
+              updatedAt: user.updatedAt
+            },
+            role: role
+          }
+        };
+      });
+
+      // Format pending invitations
+      const formattedInvitations = pendingInvitations.map(invitation => {
+        const role = invitation.roleId ? roleMap.get(invitation.roleId) : null;
+        return {
+          id: `inv_${invitation.invitationId}`,
+          email: invitation.email,
+          firstName: invitation.email.split('@')[0],
+          lastName: '',
+          role: role?.roleName || 'No role assigned',
+          isActive: false,
+          invitationStatus: 'pending',
+          invitedAt: invitation.createdAt,
+          expiresAt: invitation.expiresAt,
+          lastActiveAt: null,
+          invitationId: invitation.invitationId,
+          status: 'pending',
+          userType: 'invited',
+          originalData: {
+            user: {
+              invitationId: invitation.invitationId,
+              tenantId: invitation.tenantId,
+              email: invitation.email,
+              roleId: invitation.roleId,
+              invitedBy: invitation.invitedBy,
+              invitationToken: invitation.invitationToken,
+              invitationUrl: invitation.invitationUrl,
+              status: invitation.status,
+              expiresAt: invitation.expiresAt,
+              acceptedAt: invitation.acceptedAt,
+              cancelledAt: invitation.cancelledAt,
+              cancelledBy: invitation.cancelledBy,
+              createdAt: invitation.createdAt,
+              updatedAt: invitation.updatedAt
+            },
+            role: role
+          }
+        };
+      });
+
+      // Combine and return
+      const allUsers = [...formattedUsers, ...formattedInvitations];
+      
+      console.log(`✅ Found ${formattedUsers.length} active users and ${formattedInvitations.length} pending invitations`);
+      
+      return allUsers;
+    } catch (error) {
+      console.error('❌ Error getting tenant users:', error);
+      throw error;
+    }
+  }
+
+  // Unified user operations
+  static async deleteUser(userId, tenantId) {
+    // Check if this is an invited user (starts with 'inv_')
+    if (userId.startsWith('inv_')) {
+      const invitationId = userId.replace('inv_', '');
+      return await this.cancelInvitation(tenantId, invitationId);
+    } else {
+      return await this.removeActiveUser(userId, tenantId);
+    }
+  }
+
+  // Remove user from tenant (including invitation cancellation)
+  static async removeUser(tenantId, userId, removedBy) {
+    try {
+      console.log('🗑️ Removing user from tenant:', { tenantId, userId, removedBy });
+      
+      // Check if this is an invitation ID (prefixed with 'inv_')
+      if (typeof userId === 'string' && userId.startsWith('inv_')) {
+        // This is an invitation ID, cancel the invitation instead
+        const invitationId = userId.substring(4); // Remove 'inv_' prefix
+        console.log('📧 Detected invitation ID, cancelling invitation:', invitationId);
+        
+        return await this.cancelInvitation(tenantId, invitationId, removedBy);
+      }
+      
+      // Check if user exists in tenant
+      const [user] = await db
+        .select()
+        .from(tenantUsers)
+        .where(and(
+          eq(tenantUsers.userId, userId),
+          eq(tenantUsers.tenantId, tenantId)
+        ))
+        .limit(1);
+
+      if (!user) {
+        throw new Error('User not found in this tenant');
+      }
+
+      // Check if user is the last admin
+      if (user.isTenantAdmin) {
+        const adminCount = await db
+          .select({ count: count() })
+          .from(tenantUsers)
+          .where(and(
+            eq(tenantUsers.tenantId, tenantId),
+            eq(tenantUsers.isTenantAdmin, true),
+            eq(tenantUsers.isActive, true)
+          ));
+        
+        if (adminCount[0].count <= 1) {
+          throw new Error('Cannot remove the last admin user from the tenant');
+        }
+      }
+
+      // Start transaction
+      const result = await db.transaction(async (tx) => {
+        // 1. Remove user role assignments
+        await tx
+          .delete(userRoleAssignments)
+          .where(and(
+            eq(userRoleAssignments.userId, userId),
+            eq(userRoleAssignments.roleId, sql`(
+              SELECT role_id FROM custom_roles 
+              WHERE tenant_id = ${tenantId}
+            )`)
+          ));
+
+        // 2. Cancel any pending invitations for this user
+        await tx
+          .update(tenantInvitations)
+          .set({
+            status: 'cancelled',
+            cancelledAt: new Date(),
+            cancelledBy: removedBy
+          })
+          .where(and(
+            eq(tenantInvitations.tenantId, tenantId),
+            eq(tenantInvitations.email, user.email),
+            eq(tenantInvitations.status, 'pending')
+          ));
+
+        // 3. Remove the user from tenant_users
+        await tx
+          .delete(tenantUsers)
+          .where(and(
+            eq(tenantUsers.userId, userId),
+            eq(tenantUsers.tenantId, tenantId)
+          ));
+
+        return { success: true, message: 'User removed successfully' };
+      });
+
+      console.log('✅ User removed successfully:', { userId, tenantId });
+      return result;
+    } catch (error) {
+      console.error('❌ Error removing user:', error);
+      throw error;
+    }
+  }
+
+  // Cancel invitation
+  static async cancelInvitation(tenantId, invitationId, cancelledBy) {
+    try {
+      console.log('❌ Cancelling invitation:', { tenantId, invitationId, cancelledBy });
+      
+      // Check if invitation exists and belongs to tenant
+      const [invitation] = await db
+        .select()
+        .from(tenantInvitations)
+        .where(and(
+          eq(tenantInvitations.invitationId, invitationId),
+          eq(tenantInvitations.tenantId, tenantId)
+        ))
+        .limit(1);
+
+      if (!invitation) {
+        throw new Error('Invitation not found');
+      }
+
+      if (invitation.status !== 'pending') {
+        throw new Error('Can only cancel pending invitations');
+      }
+
+      // Cancel the invitation
+      await db
+        .update(tenantInvitations)
+        .set({
+          status: 'cancelled',
+          cancelledAt: new Date(),
+          cancelledBy: cancelledBy
+        })
+        .where(eq(tenantInvitations.invitationId, invitationId));
+
+      console.log('✅ Invitation cancelled successfully:', { invitationId, tenantId });
+      return { success: true, message: 'Invitation cancelled successfully' };
+    } catch (error) {
+      console.error('❌ Error cancelling invitation:', error);
+      throw error;
+    }
+  }
+
+  // Remove active user
+  static async removeActiveUser(userId, tenantId) {
+    try {
+      const [updatedUser] = await db
+        .update(tenantUsers)
+        .set({ 
+          isActive: false,
+          updatedAt: new Date()
+        })
+        .where(and(
+          eq(tenantUsers.userId, userId),
+          eq(tenantUsers.tenantId, tenantId)
+        ))
+        .returning();
+
+      if (!updatedUser) {
+        throw new Error('User not found');
+      }
+
+      return {
+        success: true,
+        message: 'User removed successfully',
+        data: updatedUser
+      };
+    } catch (error) {
+      console.error('Error removing user:', error);
+      throw error;
+    }
+  }
+
+  // Update user role (works for both user types)
+  static async updateUserRole(userId, roleId, tenantId) {
+    try {
+      if (userId.startsWith('inv_')) {
+        // Update invitation role
+        const invitationId = userId.replace('inv_', '');
+        const [updatedInvitation] = await db
+          .update(tenantInvitations)
+          .set({ 
+            roleId: roleId,
+            updatedAt: new Date()
+          })
+          .where(and(
+            eq(tenantInvitations.invitationId, invitationId),
+            eq(tenantInvitations.tenantId, tenantId)
+          ))
+          .returning();
+
+        if (!updatedInvitation) {
+          throw new Error('Invitation not found');
+        }
+
+        return {
+          success: true,
+          message: 'Invitation role updated successfully',
+          data: updatedInvitation
+        };
+      } else {
+        // Update active user role
+        // First remove existing role assignments
+        await db
+          .delete(userRoleAssignments)
+          .where(and(
+            eq(userRoleAssignments.userId, userId),
+            eq(userRoleAssignments.tenantId, tenantId)
+          ));
+
+        // Add new role assignment
+        const [newRoleAssignment] = await db
+          .insert(userRoleAssignments)
+          .values({
+            userId: userId,
+            roleId: roleId,
+            tenantId: tenantId,
+            assignedAt: new Date()
+          })
+          .returning();
+
+        return {
+          success: true,
+          message: 'User role updated successfully',
+          data: newRoleAssignment
+        };
+      }
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      throw error;
+    }
   }
 
   // Check subdomain availability

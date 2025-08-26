@@ -1,6 +1,6 @@
- import React, { useState, useCallback } from 'react'
+ import React, { useState, useCallback, useEffect } from 'react'
 import { useDashboardData } from '../hooks/useDashboardData'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { 
   BarChart, 
   Bar, 
@@ -29,15 +29,19 @@ import {
   BarChart3,
   Package,
   CheckCircle,
-  RefreshCw
+  RefreshCw,
+  Database
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { UserManagementDashboard } from '@/components/users/UserManagementDashboard'
-import { ActivityDashboard } from '@/components/activity/ActivityDashboard'
 import { RoleManagementDashboard } from '@/components/roles/RoleManagementDashboard'
+import { UserApplicationAccess } from '@/components/users/UserApplicationAccess'
+import { ActivityDashboard } from '@/components/activity/ActivityDashboard'
+import { UserManagementDashboard } from '@/components/users/UserManagementDashboard'
+import TestUserSyncAPIs from '@/pages/TestUserSyncAPIs'
+import AdminDashboard from '@/pages/AdminDashboard'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useTrialStatus } from '@/hooks/useTrialStatus'
 import { formatCurrency } from '@/lib/utils'
@@ -68,7 +72,26 @@ export function Dashboard() {
   
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const selectedTab = searchParams.get('tab') || 'overview'
+  const location = useLocation()
+  
+  // Extract tab from both query params and path
+  let selectedTab = searchParams.get('tab') || 'overview'
+  
+  // If no tab in query params, try to extract from path
+  if (!searchParams.get('tab')) {
+    const pathSegments = location.pathname.split('/')
+    if (pathSegments.includes('user-apps')) {
+      selectedTab = 'user-apps'
+    } else if (pathSegments.includes('test-apis')) {
+      selectedTab = 'test-apis'
+    } else if (pathSegments.includes('users')) {
+      selectedTab = 'users'
+    } else if (pathSegments.includes('roles')) {
+      selectedTab = 'roles'
+    } else if (pathSegments.includes('analytics')) {
+      selectedTab = 'analytics'
+    }
+  }
   
   // Use optimized dashboard data management
   const {
@@ -96,8 +119,15 @@ export function Dashboard() {
 
   // Handle tab navigation
   const handleTabChange = useCallback((tab: string) => {
+    console.log('Tab changed to:', tab)
     navigate(`/dashboard?tab=${tab}`, { replace: true })
   }, [navigate])
+
+  // Debug logging for tab selection
+  console.log('Dashboard render:', {
+    selectedTab,
+    pathname: location.pathname
+  })
 
   // Legacy compatibility - convert new data format to old format for existing components
   const dashboardData = {
@@ -351,6 +381,38 @@ export function Dashboard() {
             </div>
           )}
           
+          {selectedTab === 'user-apps' && (
+            <div className="space-y-6">
+              {isAdmin || user?.email ? (
+                <UserApplicationAccess />
+              ) : (
+                <Card>
+                  <CardContent className="p-8 text-center">
+                    <Shield className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Access Restricted</h3>
+                    <p className="text-gray-600">You need admin permissions to view user application access.</p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+          
+          {selectedTab === 'test-apis' && (
+            <div className="space-y-6">
+              {isAdmin || user?.email ? (
+                <TestUserSyncAPIs />
+              ) : (
+                <Card>
+                  <CardContent className="p-8 text-center">
+                    <Shield className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Access Restricted</h3>
+                    <p className="text-gray-600">You need admin permissions to test APIs.</p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+          
           {selectedTab === 'activity' && (
             <div className="space-y-6">
               <ActivityDashboard />
@@ -358,7 +420,7 @@ export function Dashboard() {
           )}
           
           {selectedTab === 'admin' && isAdmin && (
-            <AdminTab />
+            <AdminDashboard />
           )}
         </div>
       </div>
@@ -377,6 +439,7 @@ function OverviewTab({
   onRefresh: () => void;
 }) {
   const { metrics, applications, employees } = data
+  const navigate = useNavigate()
 
   return (
     <div className="space-y-8">
@@ -461,6 +524,42 @@ function OverviewTab({
           </CardContent>
         </Card>
       </div>
+
+      {/* Quick Access */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Access</CardTitle>
+          <CardDescription>Access key features and management tools</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Button 
+              variant="outline" 
+              className="h-20 flex flex-col items-center justify-center space-y-2"
+              onClick={() => navigate('/dashboard?tab=user-apps')}
+            >
+              <Database className="h-6 w-6" />
+              <span>User Application Access</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="h-20 flex flex-col items-center justify-center space-y-2"
+              onClick={() => navigate('/dashboard?tab=test-apis')}
+            >
+              <Settings className="h-6 w-6" />
+              <span>Test APIs</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="h-20 flex flex-col items-center justify-center space-y-2"
+              onClick={() => navigate('/dashboard?tab=users')}
+            >
+              <Users className="h-6 w-6" />
+              <span>User Management</span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Recent Applications */}
       <Card>

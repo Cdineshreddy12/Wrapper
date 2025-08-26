@@ -85,7 +85,14 @@ export const SocialLogin: React.FC<SocialLoginProps> = ({
       const redirectTo = urlParams.get('redirect_to');
       const app = urlParams.get('app');
       
-      if (redirectTo) {
+      // For invitation flows, use popup to prevent redirect issues
+      const isInvitationFlow = window.location.pathname.includes('/invite/accept');
+      
+      if (isInvitationFlow) {
+        console.log('🎯 SocialLogin: Invitation flow detected, using popup authentication');
+        loginOptions.popup = true;
+        // Don't set redirect options for popup auth
+      } else if (redirectTo) {
         console.log('🔄 SocialLogin: External redirect detected:', redirectTo);
         loginOptions.app_state = {
           redirectTo,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Outlet, useNavigate, useLocation, Link, useSearchParams } from 'react-router-dom'
+import { Outlet, useNavigate, useLocation, Link, useSearchParams, useParams } from 'react-router-dom'
 import { 
   BarChart3, 
   Settings, 
@@ -18,7 +18,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Building2,
-  Crown
+  Crown,
+  Database
 } from 'lucide-react'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { Button } from '@/components/ui/button'
@@ -36,7 +37,7 @@ interface TrialInfo {
   checkoutUrl?: string
 }
 
-const navigation = [
+const getDashboardNavigation = () => [
   { 
     name: 'Dashboard', 
     href: '/dashboard', 
@@ -46,11 +47,26 @@ const navigation = [
       { name: 'Applications', href: '/dashboard?tab=applications', icon: Building2 },
       { name: 'Team', href: '/dashboard?tab=users', icon: Users },
       { name: 'Roles', href: '/dashboard?tab=roles', icon: Crown },
+     
+      { name: 'App Management', href: '/dashboard/user-application-management', icon: Shield },
+
       { name: 'Analytics', href: '/dashboard?tab=analytics', icon: Activity },
     ]
   },
   { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { name: 'Usage', href: '/dashboard/usage', icon: Activity },
+  { name: 'Admin', href: '/dashboard/admin', icon: Crown },
+]
+
+const getOrganizationNavigation = (orgCode: string) => [
+  { name: 'Dashboard', href: `/org/${orgCode}`, icon: Home },
+  { name: 'Analytics', href: `/org/${orgCode}/analytics`, icon: BarChart3 },
+  { name: 'Users', href: `/org/${orgCode}/users`, icon: Users },
+  { name: 'App Management', href: `/org/${orgCode}/user-application-management`, icon: Shield },
+  { name: 'Billing', href: `/org/${orgCode}/billing`, icon: CreditCard },
+  { name: 'Usage', href: `/org/${orgCode}/usage`, icon: Activity },
+  { name: 'Permissions', href: `/org/${orgCode}/permissions`, icon: Shield },
+  { name: 'Admin', href: `/org/${orgCode}/admin`, icon: Crown },
 ]
 
 export function DashboardLayout() {
@@ -62,7 +78,15 @@ export function DashboardLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
+  const params = useParams()
   const { user, logout } = useKindeAuth()
+
+  // Determine which navigation to use based on current route
+  const isOrganizationRoute = location.pathname.startsWith('/org/')
+  const orgCode = params.orgCode
+  const navigation = isOrganizationRoute && orgCode 
+    ? getOrganizationNavigation(orgCode) 
+    : getDashboardNavigation()
 
   // Check for trial information from URL params or localStorage
   useEffect(() => {

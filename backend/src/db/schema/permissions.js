@@ -28,7 +28,6 @@ export const customRoles = pgTable('custom_roles', {
   priority: integer('priority').default(0), // For role hierarchy
   
   // Audit
-  createdBy: uuid('created_by').references(() => tenantUsers.userId).notNull(),
   lastModifiedBy: uuid('last_modified_by').references(() => tenantUsers.userId),
   
   createdAt: timestamp('created_at').defaultNow(),

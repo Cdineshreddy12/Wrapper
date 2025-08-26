@@ -128,7 +128,18 @@ class CRMAuthService {
     try {
       const returnUrl = new URL(returnTo);
       
-      // Only allow CRM domain
+      // Check if we're in development mode
+      const isDevelopment = import.meta.env.MODE === 'development' || 
+                           import.meta.env.DEV === true ||
+                           window.location.hostname === 'localhost';
+      
+      // Allow localhost URLs in development mode
+      if (isDevelopment && returnUrl.hostname === 'localhost') {
+        console.log('✅ Development mode: Allowing localhost URL:', returnUrl.hostname);
+        return true;
+      }
+      
+      // Only allow CRM domain in production
       if (!returnUrl.hostname.includes('crm.zopkit.com')) {
         console.warn('⚠️ Invalid CRM domain:', returnUrl.hostname);
         return false;

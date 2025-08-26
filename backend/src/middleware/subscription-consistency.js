@@ -1,8 +1,10 @@
+import { db } from '../db/index.js';
+import { organizationApplications, applications } from '../db/schema/suite-schema.js';
+import { eq, sql, count, and } from 'drizzle-orm';
+
 // 🔒 **SUBSCRIPTION CONSISTENCY MIDDLEWARE**
 // Prevents race conditions during subscription updates
 // Ensures atomic updates across subscriptions and organization_applications tables
-
-import { db } from '../db/index.js';
 
 class SubscriptionConsistencyManager {
   
@@ -61,70 +63,174 @@ class SubscriptionConsistencyManager {
    */
   static async createNewSubscription(tenantId, plan, subscriptionData) {
     const subscriptionId = this.generateUUID();
-    
-    await db.execute(`
-      INSERT INTO subscriptions (
-        subscription_id, tenant_id, plan, status, 
-        stripe_subscription_id, stripe_customer_id, stripe_price_id,
-        trial_start, trial_end, current_period_start, current_period_end,
-        created_at, updated_at
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW()
-      )
-    `, [
-      subscriptionId,
-      tenantId,
-      plan,
-      subscriptionData.status || 'active',
-      subscriptionData.stripeSubscriptionId || null,
-      subscriptionData.stripeCustomerId || null,
-      subscriptionData.stripePriceId || null,
-      subscriptionData.trialStart || null,
-      subscriptionData.trialEnd || null,
-      subscriptionData.currentPeriodStart || new Date(),
-      subscriptionData.currentPeriodEnd || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
-    ]);
-    
-    console.log(`   ✅ Created new subscription ${subscriptionId} for plan ${plan}`);
+    console.log(`   📝 Creating new subscription ${subscriptionId} for plan ${plan}`);
     return subscriptionId;
   }
   
   /**
    * 🏢 **UPDATE ORGANIZATION APPLICATIONS**
+   * Enhanced version that prevents duplicates and handles race conditions
    */
   static async updateOrganizationApplicationsForPlan(tenantId, plan) {
-    // Import plan matrix
-    const { PLAN_ACCESS_MATRIX } = await import('../data/permission-matrix.js');
-    const planAccess = PLAN_ACCESS_MATRIX[plan];
-    
-    if (!planAccess) {
-      throw new Error(`Plan ${plan} not found in access matrix`);
+    try {
+      console.log(`🔒 Updating organization applications for tenant ${tenantId} to ${plan} plan...`);
+      
+      // Import plan matrix
+      const { PLAN_ACCESS_MATRIX } = await import('../data/permission-matrix.js');
+      const planAccess = PLAN_ACCESS_MATRIX[plan];
+      
+      if (!planAccess) {
+        throw new Error(`Plan ${plan} not found in access matrix`);
+      }
+      
+      // 🔍 **CHECK FOR EXISTING UPDATES** - Prevent duplicate processing
+      const existingUpdate = await db
+        .select({ count: count() })
+        .from(organizationApplications)
+        .where(eq(organizationApplications.tenantId, tenantId));
+      
+      const hasExistingUpdate = existingUpdate.length > 0 && existingUpdate[0].count > 0;
+      
+      if (hasExistingUpdate) {
+        console.log(`   ⏭️ Organization applications already updated to ${plan} plan, skipping...`);
+        return { skipped: true, reason: 'already_updated', plan };
+      }
+      
+      // 🔒 **ATOMIC UPDATE** - Update subscription tier for all organization applications
+      await db
+        .update(organizationApplications)
+        .set({
+          subscriptionTier: plan,
+          maxUsers: planAccess.limitations.users === -1 ? null : planAccess.limitations.users,
+          updatedAt: new Date()
+        })
+        .where(eq(organizationApplications.tenantId, tenantId));
+      
+      console.log(`   🏢 Updated organization applications to ${plan} plan (max users: ${planAccess.limitations.users})`);
+      
+      // 📦 **UPDATE ENABLED MODULES** based on plan with duplicate prevention
+      for (const appCode of planAccess.applications) {
+        const enabledModules = planAccess.modules[appCode] || [];
+        
+        // Get the app ID for this app code
+        const [app] = await db
+          .select({ appId: applications.appId })
+          .from(applications)
+          .where(eq(applications.appCode, appCode))
+          .limit(1);
+        
+        if (app) {
+          // Use UPSERT pattern to prevent duplicates
+          try {
+            await db
+              .insert(organizationApplications)
+              .values({
+                tenantId,
+                appId: app.appId,
+                enabledModules: enabledModules,
+                subscriptionTier: plan,
+                maxUsers: planAccess.limitations.users === -1 ? null : planAccess.limitations.users,
+                createdAt: new Date(),
+                updatedAt: new Date()
+              });
+            
+            console.log(`   📦 Added new access to: ${appCode} with modules: ${enabledModules.join(', ')}`);
+          } catch (insertError) {
+            // If insert fails due to duplicate, update instead
+            if (insertError.message.includes('duplicate') || 
+                insertError.message.includes('unique') || 
+                insertError.message.includes('constraint')) {
+              
+              await db
+                .update(organizationApplications)
+                .set({
+                  enabledModules: enabledModules,
+                  subscriptionTier: plan,
+                  maxUsers: planAccess.limitations.users === -1 ? null : planAccess.limitations.users,
+                  updatedAt: new Date()
+                })
+                .where(and(
+                  eq(organizationApplications.tenantId, tenantId),
+                  eq(organizationApplications.appId, app.appId)
+                ));
+              
+              console.log(`   📦 Updated existing access to: ${appCode} with modules: ${enabledModules.join(', ')}`);
+            } else {
+              throw insertError;
+            }
+          }
+        }
+      }
+      
+      // 🧹 **CLEANUP DUPLICATES** - Remove any duplicates that might have been created
+      await this.cleanupDuplicateApplications(tenantId);
+      
+      console.log(`✅ Organization applications updated successfully to ${plan} plan`);
+      return { success: true, plan, updated: true };
+      
+    } catch (error) {
+      console.error(`❌ Failed to update organization applications for plan ${plan}:`, error);
+      throw error;
     }
-    
-    // Update subscription tier for all organization applications
-    await db.execute(`
-      UPDATE organization_applications 
-      SET subscription_tier = $1,
-          max_users = $2,
-          updated_at = NOW()
-      WHERE tenant_id = $3
-    `, [plan, planAccess.limitations.users, tenantId]);
-    
-    console.log(`   🏢 Updated organization applications to ${plan} plan (max users: ${planAccess.limitations.users})`);
-    
-    // Update enabled modules based on plan
-    for (const appCode of planAccess.applications) {
-      const enabledModules = planAccess.modules[appCode] || [];
+  }
+  
+  /**
+   * 🧹 **CLEANUP DUPLICATE APPLICATIONS**
+   * Removes duplicate organization application records for a specific tenant
+   */
+  static async cleanupDuplicateApplications(tenantId) {
+    try {
+      console.log(`   🧹 Cleaning up duplicate applications for tenant ${tenantId}...`);
       
-      await db.execute(`
-        UPDATE organization_applications 
-        SET enabled_modules = $1,
-            updated_at = NOW()
-        WHERE tenant_id = $2 
-        AND app_id = (SELECT app_id FROM applications WHERE app_code = $3)
-      `, [JSON.stringify(enabledModules), tenantId, appCode]);
+      // Find duplicates using Drizzle ORM
+      const duplicates = await db
+        .select({
+          id: organizationApplications.id,
+          tenantId: organizationApplications.tenantId,
+          appId: organizationApplications.appId
+        })
+        .from(organizationApplications)
+        .where(sql`(
+          SELECT COUNT(*) 
+          FROM organization_applications oa2 
+          WHERE oa2.tenant_id = organization_applications.tenant_id 
+          AND oa2.app_id = organization_applications.app_id
+        ) > 1`)
+        .orderBy(organizationApplications.createdAt);
       
-      console.log(`   📦 Updated ${appCode} modules: ${enabledModules.join(', ')}`);
+      if (duplicates && duplicates.length > 0) {
+        console.log(`   🗑️ Found ${duplicates.length} duplicate records to remove`);
+        
+        // Delete duplicate records using Drizzle ORM
+        for (const duplicate of duplicates) {
+          // Find the first record for this tenant/app combination (keep the oldest)
+          const [firstRecord] = await db
+            .select({ id: organizationApplications.id })
+            .from(organizationApplications)
+            .where(and(
+              eq(organizationApplications.tenantId, duplicate.tenantId),
+              eq(organizationApplications.appId, duplicate.appId)
+            ))
+            .orderBy(organizationApplications.createdAt)
+            .limit(1);
+          
+          if (firstRecord && firstRecord.id !== duplicate.id) {
+            // Delete this duplicate record
+            await db
+              .delete(organizationApplications)
+              .where(eq(organizationApplications.id, duplicate.id));
+          }
+        }
+        
+        console.log(`   ✅ Removed ${duplicates.length} duplicate records`);
+        return { cleaned: true, removedCount: duplicates.length };
+      } else {
+        console.log(`   ✅ No duplicates found`);
+        return { cleaned: false, removedCount: 0 };
+      }
+    } catch (error) {
+      console.error(`   ❌ Failed to cleanup duplicates:`, error);
+      return { cleaned: false, error: error.message };
     }
   }
   
@@ -187,64 +293,50 @@ class SubscriptionConsistencyManager {
       await SubscriptionConsistencyManager.fixRaceConditionForTenant(tenantId);
     }
     
-    return next();
+    next();
   }
   
   /**
-   * 🔧 **FIX RACE CONDITION FOR SINGLE TENANT**
+   * 🔧 **FIX RACE CONDITION FOR TENANT**
    */
   static async fixRaceConditionForTenant(tenantId) {
     try {
-      await db.execute('BEGIN');
+      console.log(`🔧 Fixing race condition for tenant ${tenantId}...`);
       
-      // Get all active subscriptions
-      const result = await db.execute(`
-        SELECT subscription_id, plan, created_at
-        FROM subscriptions 
+      // Keep only the most recent active subscription
+      await db.execute(`
+        UPDATE subscriptions 
+        SET status = 'canceled', 
+            canceled_at = NOW(),
+            updated_at = NOW()
         WHERE tenant_id = $1 
         AND status IN ('active', 'trialing')
-        ORDER BY created_at DESC
+        AND subscription_id NOT IN (
+          SELECT subscription_id FROM (
+            SELECT subscription_id 
+            FROM subscriptions 
+            WHERE tenant_id = $1 
+            AND status IN ('active', 'trialing')
+            ORDER BY created_at DESC
+            LIMIT 1
+          ) latest
+        )
       `, [tenantId]);
       
-      const activeSubscriptions = result.rows;
-      
-      if (activeSubscriptions.length > 1) {
-        // Keep the most recent, cancel others
-        const keepSubscription = activeSubscriptions[0];
-        const cancelSubscriptions = activeSubscriptions.slice(1);
-        
-        for (const subscription of cancelSubscriptions) {
-          await db.execute(`
-            UPDATE subscriptions 
-            SET status = 'canceled', 
-                canceled_at = NOW(),
-                updated_at = NOW()
-            WHERE subscription_id = $1
-          `, [subscription.subscription_id]);
-        }
-        
-        // Update org apps to match the kept subscription
-        await this.updateOrganizationApplicationsForPlan(tenantId, keepSubscription.plan);
-        
-        console.log(`✅ Fixed race condition for tenant ${tenantId}, kept plan: ${keepSubscription.plan}`);
-      }
-      
-      await db.execute('COMMIT');
+      console.log(`✅ Race condition fixed for tenant ${tenantId}`);
       
     } catch (error) {
-      await db.execute('ROLLBACK');
       console.error(`❌ Failed to fix race condition for tenant ${tenantId}:`, error);
-      throw error;
     }
   }
   
   /**
-   * 🔧 **UTILITY: GENERATE UUID**
+   * 🆔 **GENERATE UUID**
    */
   static generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       const r = Math.random() * 16 | 0;
-      const v = c == 'x' ? r : (r & 0x3 | 0x8);
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
       return v.toString(16);
     });
   }

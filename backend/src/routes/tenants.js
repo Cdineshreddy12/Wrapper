@@ -2,9 +2,10 @@ import { TenantService } from '../services/tenant-service.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { trackUsage } from '../middleware/usage.js';
 import { db } from '../db/index.js';
-import { tenantUsers, userRoleAssignments, customRoles } from '../db/schema/index.js';
+import { tenantUsers, userRoleAssignments, customRoles, tenantInvitations } from '../db/schema/index.js';
 import { and, eq, sql, inArray } from 'drizzle-orm';
 import ErrorResponses from '../utils/error-responses.js';
+import { randomUUID } from 'crypto';
 
 export default async function tenantRoutes(fastify, options) {
   // Get current tenant info
@@ -220,36 +221,54 @@ export default async function tenantRoutes(fastify, options) {
   });
 
   // Cancel invitation
-  fastify.delete('/current/invitations/:id', {
-    schema: {
-      params: {
-        type: 'object',
-        required: ['id'],
-        properties: {
-          id: { type: 'string' }
-        }
-      }
-    }
-  }, async (request, reply) => {
+  fastify.delete('/current/invitations/:invitationId', async (request, reply) => {
     if (!request.userContext?.isAuthenticated) {
       return reply.code(401).send({ error: 'Unauthorized' });
     }
 
     try {
       const tenantId = request.userContext.tenantId;
+      const { invitationId } = request.params;
       
       if (!tenantId) {
         return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       }
 
-      await TenantService.cancelInvitation(request.params.id, tenantId);
+      // Check if user has permission to cancel invitations
+      if (!request.userContext.isTenantAdmin) {
+        return reply.code(403).send({ 
+          error: 'Forbidden',
+          message: 'Only tenant administrators can cancel invitations'
+        });
+      }
+
+      const result = await TenantService.cancelInvitation(
+        tenantId, 
+        invitationId, 
+        request.userContext.internalUserId
+      );
       
       return {
         success: true,
-        message: 'Invitation cancelled successfully'
+        message: result.message
       };
     } catch (error) {
       request.log.error('Error cancelling invitation:', error);
+      
+      if (error.message.includes('not found')) {
+        return reply.code(404).send({ 
+          error: 'Invitation not found',
+          message: error.message
+        });
+      }
+      
+      if (error.message.includes('pending')) {
+        return reply.code(400).send({ 
+          error: 'Invalid invitation status',
+          message: error.message
+        });
+      }
+      
       return reply.code(500).send({ error: 'Failed to cancel invitation' });
     }
   });
@@ -294,77 +313,103 @@ export default async function tenantRoutes(fastify, options) {
   });
 
   // Update user role/permissions
-  fastify.put('/users/:userId/role', {
-    preHandler: [authenticateToken, requirePermission('users:manage'), trackUsage],
-    schema: {
-      params: {
-        type: 'object',
-        required: ['userId'],
-        properties: {
-          userId: { type: 'string' }
-        }
-      },
-      body: {
-        type: 'object',
-        required: ['role'],
-        properties: {
-          role: { type: 'string' },
-          permissions: { type: 'array', items: { type: 'string' } }
-        }
-      }
+  fastify.put('/current/users/:userId/role', async (request, reply) => {
+    if (!request.userContext?.isAuthenticated) {
+      return reply.code(401).send({ error: 'Unauthorized' });
     }
-  }, async (request, reply) => {
+
     try {
+      const tenantId = request.userContext.tenantId;
       const { userId } = request.params;
-      const { role, permissions } = request.body;
+      const { role } = request.body;
       
-      const updatedUser = await TenantService.updateUserRole(
-        request.user.tenantId,
-        userId,
-        role,
-        permissions
-      );
+      if (!tenantId) {
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+      }
+
+      if (!role) {
+        return reply.code(400).send({ error: 'Role is required' });
+      }
+
+      // Get role ID from role name
+      const [roleRecord] = await db
+        .select()
+        .from(customRoles)
+        .where(and(
+          eq(customRoles.roleName, role),
+          eq(customRoles.tenantId, tenantId)
+        ))
+        .limit(1);
+
+      if (!roleRecord) {
+        return reply.code(404).send({ error: 'Role not found' });
+      }
+
+      const result = await TenantService.updateUserRole(userId, roleRecord.roleId, tenantId);
       
       return {
         success: true,
-        data: updatedUser,
-        message: 'User role updated successfully'
+        message: result.message,
+        data: result.data
       };
     } catch (error) {
-      fastify.log.error('Error updating user role:', error);
+      request.log.error('Error updating user role:', error);
+      if (error.message.includes('not found')) {
+        return reply.code(404).send({ error: error.message });
+      }
       return reply.code(500).send({ error: 'Failed to update user role' });
     }
   });
 
   // Remove user from tenant
-  fastify.delete('/users/:userId', {
-    preHandler: [authenticateToken, requirePermission('users:manage'), trackUsage],
-    schema: {
-      params: {
-        type: 'object',
-        required: ['userId'],
-        properties: {
-          userId: { type: 'string' }
-        }
-      }
+  fastify.delete('/current/users/:userId', async (request, reply) => {
+    if (!request.userContext?.isAuthenticated) {
+      return reply.code(401).send({ error: 'Unauthorized' });
     }
-  }, async (request, reply) => {
+
     try {
+      const tenantId = request.userContext.tenantId;
       const { userId } = request.params;
       
-      // Prevent self-removal
-      if (userId === request.user.id) {
-        return reply.code(400).send({ error: 'Cannot remove yourself from tenant' });
+      if (!tenantId) {
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       }
-      
-      await TenantService.removeUser(request.user.tenantId, userId);
+
+      // Check if user has permission to remove users
+      if (!request.userContext.isTenantAdmin) {
+        return reply.code(403).send({ 
+          error: 'Forbidden',
+          message: 'Only tenant administrators can remove users'
+        });
+      }
+
+      const result = await TenantService.removeUser(
+        tenantId, 
+        userId, 
+        request.userContext.internalUserId
+      );
       
       return {
         success: true,
-        message: 'User removed from tenant successfully'
+        message: result.message
       };
     } catch (error) {
-      fastify.log.error('Error removing user:', error);
+      request.log.error('Error removing user:', error);
+      
+      if (error.message.includes('last admin')) {
+        return reply.code(400).send({ 
+          error: 'Cannot remove last admin',
+          message: error.message
+        });
+      }
+      
+      if (error.message.includes('not found')) {
+        return reply.code(404).send({ 
+          error: 'User not found',
+          message: error.message
+        });
+      }
+      
       return reply.code(500).send({ error: 'Failed to remove user' });
     }
   });
@@ -595,57 +640,7 @@ export default async function tenantRoutes(fastify, options) {
     }
   });
 
-  // Delete user (permanent removal)
-  fastify.delete('/current/users/:userId', async (request, reply) => {
-    if (!request.userContext?.isAuthenticated) {
-      return reply.code(401).send({ error: 'Unauthorized' });
-    }
-
-    // Only admins can delete users
-    if (!request.userContext?.isAdmin && !request.userContext?.isTenantAdmin) {
-      return reply.code(403).send({ error: 'Insufficient permissions' });
-    }
-
-    try {
-      const { userId } = request.params;
-      const tenantId = request.userContext.tenantId;
-
-      // Prevent self-deletion
-      if (userId === request.userContext.internalUserId) {
-        return reply.code(400).send({ error: 'Cannot delete yourself' });
-      }
-
-      // Check if user exists
-      const [existingUser] = await db
-        .select()
-        .from(tenantUsers)
-        .where(and(
-          eq(tenantUsers.userId, userId),
-          eq(tenantUsers.tenantId, tenantId)
-        ))
-        .limit(1);
-
-      if (!existingUser) {
-        return ErrorResponses.notFound(reply, 'User', 'User not found');
-      }
-
-      // Delete user from tenant
-      await db
-        .delete(tenantUsers)
-        .where(and(
-          eq(tenantUsers.userId, userId),
-          eq(tenantUsers.tenantId, tenantId)
-        ));
-
-      return {
-        success: true,
-        message: 'User deleted successfully'
-      };
-    } catch (error) {
-      request.log.error('Error deleting user:', error);
-      return reply.code(500).send({ error: 'Failed to delete user' });
-    }
-  });
+  // Note: User deletion is now handled by the unified TenantService.deleteUser() method above
 
   // Resend invitation
   fastify.post('/current/users/:userId/resend-invite', async (request, reply) => {
@@ -671,14 +666,109 @@ export default async function tenantRoutes(fastify, options) {
         return ErrorResponses.notFound(reply, 'User', 'User not found');
       }
 
-      // TODO: Implement actual email sending logic here
-      // For now, just return success
+      // Check if user has already completed onboarding
+      if (user.onboardingCompleted) {
+        return reply.code(400).send({ 
+          error: 'User has already completed onboarding',
+          message: 'Cannot resend invitation to users who have already joined'
+        });
+      }
+
+      // Import EmailService
+      const { default: EmailService } = await import('../utils/email.js');
       
-      return {
-        success: true,
-        message: `Invitation resent to ${user.email}`,
-        data: { email: user.email }
-      };
+      // Get tenant details for email
+      const tenantDetails = await TenantService.getTenantDetails(tenantId);
+      
+      // Check for existing pending invitation
+      const [existingInvitation] = await db
+        .select()
+        .from(tenantInvitations)
+        .where(and(
+          eq(tenantInvitations.tenantId, tenantId),
+          eq(tenantInvitations.email, user.email),
+          eq(tenantInvitations.status, 'pending')
+        ))
+        .limit(1);
+
+      let invitationToken;
+      let invitationId;
+
+      if (existingInvitation) {
+        // Use existing invitation
+        invitationToken = existingInvitation.invitationToken;
+        invitationId = existingInvitation.invitationId;
+        
+        // Update expiry to 7 days from now
+        await db
+          .update(tenantInvitations)
+          .set({ 
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+          })
+          .where(eq(tenantInvitations.invitationId, invitationId));
+          
+        console.log(`🔄 Resending existing invitation ${invitationId} to ${user.email}`);
+      } else {
+        // Create new invitation
+        invitationToken = randomUUID();
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+        
+        const [newInvitation] = await db
+          .insert(tenantInvitations)
+          .values({
+            tenantId,
+            email: user.email,
+            invitedBy: request.userContext.internalUserId,
+            invitationToken,
+            expiresAt,
+            status: 'pending'
+          })
+          .returning();
+          
+        invitationId = newInvitation.invitationId;
+        console.log(`📧 Created new invitation ${invitationId} for ${user.email}`);
+      }
+
+      // Get inviter's name
+      const inviterName = request.userContext.name || request.userContext.email || 'Team Administrator';
+      
+      // Send invitation email
+      try {
+        const emailResult = await EmailService.sendUserInvitation({
+          email: user.email,
+          tenantName: tenantDetails.companyName,
+          roleName: 'Team Member', // Default role for invited users
+          invitationToken,
+          invitedByName: inviterName,
+          message: `You're invited to join ${tenantDetails.companyName} on Wrapper. Please accept this invitation to get started.`
+        });
+
+        if (emailResult.success) {
+          console.log(`✅ Invitation email sent successfully to ${user.email}`);
+          
+          return {
+            success: true,
+            message: `Invitation resent to ${user.email}`,
+            data: { 
+              email: user.email,
+              invitationId,
+              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+            }
+          };
+        } else {
+          console.error(`❌ Failed to send invitation email to ${user.email}:`, emailResult.error);
+          return reply.code(500).send({ 
+            error: 'Failed to send invitation email',
+            message: 'Email service error occurred'
+          });
+        }
+      } catch (emailError) {
+        console.error(`❌ Error sending invitation email to ${user.email}:`, emailError);
+        return reply.code(500).send({ 
+          error: 'Failed to send invitation email',
+          message: 'Email service error occurred'
+        });
+      }
     } catch (error) {
       request.log.error('Error resending invitation:', error);
       return reply.code(500).send({ error: 'Failed to resend invitation' });
