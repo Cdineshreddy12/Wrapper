@@ -18,6 +18,30 @@ import { eq, and, inArray } from 'drizzle-orm';
 
 class PermissionMatrixService {
   
+  // 🔧 **HELPER: Parse Role Permissions**
+  static parseRolePermissions(rolePermissions) {
+    if (!rolePermissions) return [];
+    
+    try {
+      if (typeof rolePermissions === 'string') {
+        // Handle JSON string format
+        return JSON.parse(rolePermissions);
+      } else if (Array.isArray(rolePermissions)) {
+        // Handle array format
+        return rolePermissions;
+      } else if (typeof rolePermissions === 'object') {
+        // Handle object format (extract permissions)
+        return Object.values(rolePermissions).flat();
+      }
+    } catch (error) {
+      console.error('❌ Failed to parse role permissions:', error);
+      console.error('   Raw permissions:', rolePermissions);
+      return [];
+    }
+    
+    return [];
+  }
+
   // 🔧 **HELPER: Map Kinde ID to Internal UUID**
   static async mapKindeIdToInternalId(kindeUserId, tenantId) {
     try {
@@ -225,40 +249,91 @@ class PermissionMatrixService {
       .map(p => p.replace(prefix, ''));
   }
 
+  // 🔒 **VALIDATE USER PERMISSIONS (Security Check)**
+  static validateUserPermissions(userPermissions, userRoles) {
+    const validPermissions = new Set();
+    
+    if (!userRoles || userRoles.length === 0) {
+      console.log('⚠️ No user roles found, returning empty permissions for security');
+      return [];
+    }
+    
+    // Get all valid permissions from user's roles
+    userRoles.forEach(role => {
+      const rolePermissions = this.parseRolePermissions(role.permissions);
+      rolePermissions.forEach(permission => {
+        if (permission && typeof permission === 'string') {
+          validPermissions.add(permission);
+        }
+      });
+    });
+    
+    // Filter user permissions to only include valid role permissions
+    const filteredPermissions = userPermissions.filter(permission => 
+      validPermissions.has(permission)
+    );
+    
+    console.log(`🔒 Permission validation:`, {
+      totalUserPermissions: userPermissions.length,
+      validRolePermissions: validPermissions.size,
+      filteredPermissions: filteredPermissions.length,
+      removedPermissions: userPermissions.length - filteredPermissions.length
+    });
+    
+    return filteredPermissions;
+  }
+
   // 🔧 **COMPILE USER PERMISSIONS FROM ALL SOURCES**
   static compileUserPermissions({ plan, planAccess, orgApps, userPermissions, userRoles }) {
     const allPermissions = new Set();
     
-    // 1. Add plan-based permissions
-    if (planAccess) {
-      const planPermissions = PermissionMatrixUtils.getPlanPermissions(plan);
-      planPermissions.forEach(permission => {
-        allPermissions.add(permission.fullCode);
+    // 🚨 CRITICAL FIX: Only add permissions that the user's role actually has
+    // Instead of adding ALL plan permissions, we filter by user's role permissions
+    
+    // 1. Parse and add ONLY the user's role permissions
+    if (userRoles && userRoles.length > 0) {
+      userRoles.forEach(role => {
+        if (role.permissions) {
+          // Use the helper method for consistent parsing
+          const rolePermissions = this.parseRolePermissions(role.permissions);
+          
+          // Add only the permissions from the user's role
+          rolePermissions.forEach(permission => {
+            if (permission && typeof permission === 'string') {
+              allPermissions.add(permission);
+            }
+          });
+          
+          console.log(`✅ Added ${rolePermissions.length} permissions from role: ${role.roleName}`);
+        }
       });
     }
     
-    // 2. Add role-based permissions
-    userRoles.forEach(role => {
-      if (role.permissions && Array.isArray(role.permissions)) {
-        role.permissions.forEach(permission => {
-          allPermissions.add(permission);
-        });
-      }
-    });
+    // 2. Add user-specific permissions (if any) - WITH SECURITY VALIDATION
+    if (userPermissions && userPermissions.length > 0) {
+      const userSpecificPermissions = [];
+      
+      userPermissions.forEach(userPerm => {
+        if (userPerm.permissions && Array.isArray(userPerm.permissions)) {
+          userPerm.permissions.forEach(permission => {
+            const fullCode = userPerm.moduleCode 
+              ? `${userPerm.appCode}.${userPerm.moduleCode}.${permission}`
+              : `${userPerm.appCode}.${permission}`;
+            userSpecificPermissions.push(fullCode);
+          });
+        }
+      });
+      
+      // Validate user-specific permissions against role permissions
+      const validatedUserPermissions = this.validateUserPermissions(userSpecificPermissions, userRoles);
+      validatedUserPermissions.forEach(permission => {
+        allPermissions.add(permission);
+      });
+      
+      console.log(`✅ Added ${validatedUserPermissions.length} validated user-specific permissions`);
+    }
     
-    // 3. Add user-specific permissions
-    userPermissions.forEach(userPerm => {
-      if (userPerm.permissions && Array.isArray(userPerm.permissions)) {
-        userPerm.permissions.forEach(permission => {
-          const fullCode = userPerm.moduleCode 
-            ? `${userPerm.appCode}.${userPerm.moduleCode}.${permission}`
-            : `${userPerm.appCode}.${permission}`;
-          allPermissions.add(fullCode);
-        });
-      }
-    });
-    
-    // 4. Apply restrictions from roles
+    // 3. Apply restrictions from roles
     userRoles.forEach(role => {
       if (role.restrictions) {
         Object.keys(role.restrictions).forEach(restrictedPermission => {
@@ -269,7 +344,17 @@ class PermissionMatrixService {
       }
     });
     
-    return Array.from(allPermissions);
+    const finalPermissions = Array.from(allPermissions);
+    
+    // Log the permission compilation for debugging
+    console.log(`🔐 Permission compilation summary:`, {
+      totalPermissions: finalPermissions.length,
+      rolePermissions: finalPermissions.filter(p => p.startsWith('crm.')),
+      userSpecificPermissions: finalPermissions.filter(p => !p.startsWith('crm.')),
+      userRoles: userRoles.map(r => r.roleName)
+    });
+    
+    return finalPermissions;
   }
 
   // 📊 **GENERATE ACCESS MATRIX FOR QUICK LOOKUPS**
