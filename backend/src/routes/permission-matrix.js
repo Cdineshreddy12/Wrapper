@@ -14,6 +14,25 @@ import { db } from '../db/index.js';
 
 export default async function permissionMatrixRoutes(fastify, options) {
 
+  // 🔧 Helper function to check if user is a tenant admin
+  const isUserTenantAdmin = (permissions, userRoles) => {
+    // Check permissions for admin indicators
+    const hasAdminPermissions = permissions?.some(p => 
+      p.includes('admin') || 
+      p.includes('tenant_admin') ||
+      p.includes('super_admin')
+    );
+    
+    // Check roles for admin indicators
+    const hasAdminRole = userRoles?.some(role => 
+      role.roleName?.toLowerCase().includes('admin') ||
+      role.roleName?.toLowerCase().includes('administrator') ||
+      role.roleName?.toLowerCase().includes('super')
+    );
+    
+    return hasAdminPermissions || hasAdminRole;
+  };
+
   // 🔍 **GET COMPLETE PERMISSION MATRIX**
   fastify.get('/matrix', {
     preHandler: [authenticateToken, requirePermission('permissions:read'), trackUsage]
@@ -70,20 +89,81 @@ export default async function permissionMatrixRoutes(fastify, options) {
       if (targetUserId && targetUserId !== internalUserId) {
         // Check if admin has permission to view user permissions
         const adminPermissions = await PermissionMatrixService.getUserPermissionContext(internalUserId, tenantId);
-        const canViewUserPermissions = adminPermissions.permissions?.some(p => 
-          p.includes('admin:users:read') || p.includes('admin:permissions:read') || p.includes('admin:users:sync')
+        
+        // Allow access if:
+        // 1. Admin has specific admin permissions, OR
+        // 2. Admin is a tenant admin (can view users in their own tenant)
+        const hasSpecificPermissions = adminPermissions.permissions?.some(p => 
+          p.includes('admin:users:read') || 
+          p.includes('admin:permissions:read') || 
+          p.includes('admin:users:sync') ||
+          p.includes('admin') ||
+          p.includes('users:read') ||
+          p.includes('permissions:read') ||
+          p.includes('crm.users.read') ||
+          p.includes('crm.users.read_all') ||
+          p.includes('system.users.read') ||
+          p.includes('system.users.read_all')
         );
+        
+        // Check if admin is a tenant admin
+        const isTenantAdmin = isUserTenantAdmin(adminPermissions.permissions, adminPermissions.userRoles);
+        
+        // Additional check: verify target user belongs to the same tenant
+        let targetUserInSameTenant = false;
+        try {
+          const { tenantUsers } = await import('../db/schema/index.js');
+          const [targetUser] = await db
+            .select({ tenantId: tenantUsers.tenantId })
+            .from(tenantUsers)
+            .where(eq(tenantUsers.kindeUserId, targetUserId))
+            .limit(1);
+          
+          targetUserInSameTenant = targetUser && targetUser.tenantId === tenantId;
+          
+          console.log(`🔍 Target user tenant check:`, {
+            targetUserId,
+            targetUserTenantId: targetUser?.tenantId,
+            adminTenantId: tenantId,
+            sameTenant: targetUserInSameTenant
+          });
+        } catch (error) {
+          console.log(`⚠️ Could not verify target user tenant:`, error.message);
+          // Continue with permission check
+        }
+        
+        const canViewUserPermissions = hasSpecificPermissions || (isTenantAdmin && targetUserInSameTenant);
         
         if (!canViewUserPermissions) {
           console.log(`❌ Admin ${internalUserId} lacks permission to view user ${targetUserId} permissions`);
+          console.log(`   Admin permissions:`, adminPermissions.permissions);
+          console.log(`   Admin roles:`, adminPermissions.userRoles);
+          console.log(`   Is tenant admin:`, isTenantAdmin);
+          console.log(`   Target user in same tenant:`, targetUserInSameTenant);
+          
           return reply.code(403).send({
             success: false,
             error: 'Insufficient permissions',
-            message: 'Admin lacks permission to view other users\' permissions'
+            message: 'Admin lacks permission to view other users\' permissions',
+            details: {
+              adminPermissions: adminPermissions.permissions,
+              adminRoles: adminPermissions.userRoles?.map(r => r.roleName),
+              isTenantAdmin,
+              targetUserInSameTenant
+            }
           });
         }
         
         console.log(`✅ Admin ${internalUserId} authorized to view user ${targetUserId} permissions`);
+        console.log(`   Permission check details:`, {
+          hasSpecificPermissions,
+          isTenantAdmin,
+          targetUserInSameTenant,
+          adminPermissions: {
+            permissions: adminPermissions.permissions,
+            roles: adminPermissions.userRoles?.map(r => r.roleName)
+          }
+        });
       }
       
       // Get permissions for the target user (not the admin)
@@ -139,16 +219,45 @@ export default async function permissionMatrixRoutes(fastify, options) {
       
       // 🔒 SECURITY: Validate admin permissions
       const adminPermissions = await PermissionMatrixService.getUserPermissionContext(internalUserId, tenantId);
-      const canSyncUserPermissions = adminPermissions.permissions?.some(p => 
-        p.includes('admin:users:sync') || p.includes('admin:permissions:read') || p.includes('admin:users:read')
+      
+      // Allow access if:
+      // 1. Admin has specific admin permissions, OR
+      // 2. Admin is a tenant admin (can sync users in their own tenant)
+      const hasSpecificPermissions = adminPermissions.permissions?.some(p => 
+        p.includes('admin:users:sync') || 
+        p.includes('admin:permissions:read') || 
+        p.includes('admin:users:read') ||
+        p.includes('admin') ||
+        p.includes('users:sync') ||
+        p.includes('permissions:read') ||
+        p.includes('crm.users.read') ||
+        p.includes('crm.users.read_all') ||
+        p.includes('crm.users.sync') ||
+        p.includes('system.users.read') ||
+        p.includes('system.users.read_all') ||
+        p.includes('system.users.sync')
       );
+      
+      // Check if admin is a tenant admin
+      const isTenantAdmin = isUserTenantAdmin(adminPermissions.permissions, adminPermissions.userRoles);
+      
+      const canSyncUserPermissions = hasSpecificPermissions || isTenantAdmin;
       
       if (!canSyncUserPermissions) {
         console.log(`❌ Admin ${internalUserId} lacks permission to sync user permissions`);
+        console.log(`   Admin permissions:`, adminPermissions.permissions);
+        console.log(`   Admin roles:`, adminPermissions.userRoles);
+        console.log(`   Is tenant admin:`, isTenantAdmin);
+        
         return reply.code(403).send({
           success: false,
           error: 'Insufficient permissions',
-          message: 'Admin lacks permission to sync user permissions'
+          message: 'Admin lacks permission to sync user permissions',
+          details: {
+            adminPermissions: adminPermissions.permissions,
+            adminRoles: adminPermissions.userRoles?.map(r => r.roleName),
+            isTenantAdmin
+          }
         });
       }
       
@@ -173,6 +282,14 @@ export default async function permissionMatrixRoutes(fastify, options) {
       const userContext = await PermissionMatrixService.getUserPermissionContext(targetUserId, tenantId);
       
       console.log(`✅ CRM Permission Sync successful for user ${targetUserId}`);
+      console.log(`   Permission check details:`, {
+        hasSpecificPermissions,
+        isTenantAdmin,
+        adminPermissions: {
+          permissions: adminPermissions.permissions,
+          roles: adminPermissions.userRoles?.map(r => r.roleName)
+        }
+      });
       
       return {
         success: true,
