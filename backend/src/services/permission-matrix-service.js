@@ -18,10 +18,45 @@ import { eq, and, inArray } from 'drizzle-orm';
 
 class PermissionMatrixService {
   
+  // 🔧 **HELPER: Map Kinde ID to Internal UUID**
+  static async mapKindeIdToInternalId(kindeUserId, tenantId) {
+    try {
+      const { tenantUsers } = await import('../db/schema/index.js');
+      
+      const [user] = await db
+        .select({ userId: tenantUsers.userId })
+        .from(tenantUsers)
+        .where(and(
+          eq(tenantUsers.kindeUserId, kindeUserId),
+          eq(tenantUsers.tenantId, tenantId),
+          eq(tenantUsers.isActive, true)
+        ))
+        .limit(1);
+      
+      if (!user) {
+        throw new Error(`User not found: ${kindeUserId} in tenant ${tenantId}`);
+      }
+      
+      console.log(`✅ Mapped Kinde ID ${kindeUserId} to internal UUID ${user.userId}`);
+      return user.userId;
+      
+    } catch (error) {
+      console.error(`❌ Error mapping Kinde ID to internal ID:`, error);
+      throw error;
+    }
+  }
+
   // 🔍 **GET USER'S COMPLETE PERMISSION CONTEXT**
   static async getUserPermissionContext(userId, tenantId) {
     try {
       console.log(`🔍 Getting permission context for user: ${userId}, tenant: ${tenantId}`);
+      
+      // 🔧 UUID MAPPING: Convert Kinde ID to internal UUID if needed
+      let internalUserId = userId;
+      if (userId.startsWith('kp_')) {
+        console.log(`🔄 Detected Kinde ID, mapping to internal UUID...`);
+        internalUserId = await this.mapKindeIdToInternalId(userId, tenantId);
+      }
       
       // 1. Get user's subscription plan
       const { subscriptions } = await import('../db/schema/subscriptions.js');
@@ -54,7 +89,7 @@ class PermissionMatrixService {
           )
         );
 
-      // 3. Get user's specific permissions
+      // 3. Get user's specific permissions (now using internal UUID)
       const userPermissions = await db
         .select({
           appId: userApplicationPermissions.appId,
@@ -67,11 +102,11 @@ class PermissionMatrixService {
         .innerJoin(applications, eq(userApplicationPermissions.appId, applications.appId))
         .leftJoin(applicationModules, eq(userApplicationPermissions.moduleId, applicationModules.moduleId))
         .where(and(
-          eq(userApplicationPermissions.userId, userId),
+          eq(userApplicationPermissions.userId, internalUserId), // Use internal UUID
           eq(userApplicationPermissions.isActive, true)
         ));
 
-      // 4. Get user's roles and their permissions
+      // 4. Get user's roles and their permissions (now using internal UUID)
       const userRoles = await db
         .select({
           roleId: customRoles.roleId,
@@ -81,7 +116,7 @@ class PermissionMatrixService {
         })
         .from(userRoleAssignments)
         .innerJoin(customRoles, eq(userRoleAssignments.roleId, customRoles.roleId))
-        .where(eq(userRoleAssignments.userId, userId));
+        .where(eq(userRoleAssignments.userId, internalUserId)); // Use internal UUID
 
       // 5. Compile complete permission set
       const completePermissions = this.compileUserPermissions({
@@ -93,7 +128,8 @@ class PermissionMatrixService {
       });
 
       return {
-        userId,
+        userId: internalUserId, // Return internal UUID for consistency
+        kindeUserId: userId.startsWith('kp_') ? userId : null, // Include original Kinde ID if it was one
         tenantId,
         plan,
         planLimitations: planAccess?.limitations || {},

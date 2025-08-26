@@ -184,10 +184,38 @@ export default async function permissionMatrixRoutes(fastify, options) {
       };
     } catch (error) {
       console.error('❌ Error fetching user permission context:', error);
+      
+      // Provide specific error messages for common UUID mapping issues
+      let errorMessage = 'Failed to fetch user permission context';
+      let errorDetails = {};
+      
+      if (error.message.includes('User not found')) {
+        errorMessage = 'Target user not found in tenant';
+        errorDetails = {
+          targetUserId: targetUserId || 'Not provided',
+          tenantId,
+          error: 'User does not exist or is not active in this organization'
+        };
+      } else if (error.message.includes('invalid input syntax for type uuid')) {
+        errorMessage = 'Invalid user ID format';
+        errorDetails = {
+          targetUserId: targetUserId || 'Not provided',
+          error: 'User ID format is invalid or corrupted'
+        };
+      } else if (error.message.includes('relation') && error.message.includes('does not exist')) {
+        errorMessage = 'Database schema issue';
+        errorDetails = {
+          error: 'Required database tables are missing',
+          suggestion: 'Run database migrations to create missing tables'
+        };
+      }
+      
       return reply.code(500).send({
         success: false,
-        message: 'Failed to fetch user permission context',
-        error: error.message
+        message: errorMessage,
+        error: error.message,
+        details: errorDetails,
+        timestamp: new Date().toISOString()
       });
     }
   });
@@ -313,10 +341,38 @@ export default async function permissionMatrixRoutes(fastify, options) {
       };
     } catch (error) {
       console.error('❌ Error in CRM permission sync:', error);
+      
+      // Provide specific error messages for common UUID mapping issues
+      let errorMessage = 'Failed to sync user permissions';
+      let errorDetails = {};
+      
+      if (error.message.includes('User not found')) {
+        errorMessage = 'Target user not found in tenant';
+        errorDetails = {
+          targetUserId,
+          tenantId,
+          error: 'User does not exist or is not active in this organization'
+        };
+      } else if (error.message.includes('invalid input syntax for type uuid')) {
+        errorMessage = 'Invalid user ID format';
+        errorDetails = {
+          targetUserId,
+          error: 'User ID format is invalid or corrupted'
+        };
+      } else if (error.message.includes('relation') && error.message.includes('does not exist')) {
+        errorMessage = 'Database schema issue';
+        errorDetails = {
+          error: 'Required database tables are missing',
+          suggestion: 'Run database migrations to create missing tables'
+        };
+      }
+      
       return reply.code(500).send({
         success: false,
-        message: 'Failed to sync user permissions',
-        error: error.message
+        message: errorMessage,
+        error: error.message,
+        details: errorDetails,
+        timestamp: new Date().toISOString()
       });
     }
   });
