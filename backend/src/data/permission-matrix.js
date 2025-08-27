@@ -329,10 +329,6 @@ export const BUSINESS_SUITE_MATRIX = {
           { code: 'roles_export', name: 'Export Roles', description: 'Export role data' },
 
           // Activity Logs Permissions - NEW
-          { code: 'activity_logs_read', name: 'View Activity Logs', description: 'View activity log information' },
-          { code: 'activity_logs_read_all', name: 'View All Logs', description: 'View all activity logs' },
-          { code: 'activity_logs_export', name: 'Export Logs', description: 'Export activity log data' },
-          { code: 'activity_logs_purge', name: 'Purge Logs', description: 'Purge old activity logs' },
 
           // Reports Permissions - NEW
           { code: 'reports_read', name: 'View Reports', description: 'View report information' },
@@ -341,7 +337,65 @@ export const BUSINESS_SUITE_MATRIX = {
           { code: 'reports_update', name: 'Edit Reports', description: 'Modify existing reports' },
           { code: 'reports_delete', name: 'Delete Reports', description: 'Remove reports' },
           { code: 'reports_export', name: 'Export Reports', description: 'Export report data' },
-          { code: 'reports_schedule', name: 'Schedule Reports', description: 'Schedule automated reports' }
+          { code: 'reports_schedule', name: 'Schedule Reports', description: 'Schedule automated reports' },
+
+          // 🔍 COMPREHENSIVE AUDIT PERMISSIONS - NEW
+          { code: 'audit_read', name: 'View Audit Logs', description: 'View basic audit log information' },
+          { code: 'audit_read_all', name: 'View All Audit Logs', description: 'View all audit logs in organization' },
+          { code: 'audit_export', name: 'Export Audit Logs', description: 'Export audit log data to various formats' },
+          { code: 'audit_view_details', name: 'View Audit Details', description: 'View detailed audit log information' },
+          { code: 'audit_filter_by_user', name: 'Filter by User', description: 'Filter audit logs by specific user' },
+          { code: 'audit_filter_by_action', name: 'Filter by Action', description: 'Filter audit logs by specific action' },
+          { code: 'audit_filter_by_date_range', name: 'Filter by Date Range', description: 'Filter audit logs by date range' },
+          { code: 'audit_filter_by_module', name: 'Filter by Module', description: 'Filter audit logs by specific module' },
+          { code: 'audit_filter_by_status', name: 'Filter by Status', description: 'Filter audit logs by status' },
+          { code: 'audit_generate_reports', name: 'Generate Reports', description: 'Generate audit reports' },
+          { code: 'audit_archive_logs', name: 'Archive Logs', description: 'Archive old audit logs' },
+          { code: 'audit_purge_old_logs', name: 'Purge Old Logs', description: 'Purge old audit logs' },
+          { code: 'audit_trail_export', name: 'Export Audit Trail', description: 'Export complete audit trail' },
+
+          // 📊 ACTIVITY LOGS PERMISSIONS - NEW
+          { code: 'activity_logs_read', name: 'View Activity Logs', description: 'View activity log information' },
+          { code: 'activity_logs_read_all', name: 'View All Activity Logs', description: 'View all activity logs in organization' },
+          { code: 'activity_logs_export', name: 'Export Activity Logs', description: 'Export activity log data' },
+          { code: 'activity_logs_view_details', name: 'View Activity Details', description: 'View detailed activity information' },
+          { code: 'activity_logs_filter_by_user', name: 'Filter by User', description: 'Filter activity logs by specific user' },
+          { code: 'activity_logs_filter_by_action', name: 'Filter by Action', description: 'Filter activity logs by specific action' },
+          { code: 'activity_logs_filter_by_date_range', name: 'Filter by Date Range', description: 'Filter activity logs by date range' },
+          { code: 'activity_logs_filter_by_module', name: 'Filter by Module', description: 'Filter activity logs by specific module' },
+          { code: 'activity_logs_filter_by_status', name: 'Filter by Status', description: 'Filter activity logs by status' },
+          { code: 'activity_logs_generate_reports', name: 'Generate Reports', description: 'Generate activity log reports' },
+          { code: 'activity_logs_archive_logs', name: 'Archive Logs', description: 'Archive old activity logs' },
+          { code: 'activity_logs_purge_old_logs', name: 'Purge Old Logs', description: 'Purge old activity logs' },
+          { code: 'activity_logs_audit_trail_export', name: 'Export Audit Trail', description: 'Export complete activity audit trail' },
+
+          // 👤 USER ACTIVITY TRACKING PERMISSIONS - NEW
+          { code: 'user_activity_read', name: 'View User Activity', description: 'View user activity information' },
+          { code: 'user_activity_read_all', name: 'View All User Activity', description: 'View all user activity in organization' },
+          { code: 'user_activity_export', name: 'Export User Activity', description: 'Export user activity data' },
+          { code: 'user_activity_view_details', name: 'View Activity Details', description: 'View detailed user activity information' },
+          { code: 'user_activity_track_login_logout', name: 'Track Login/Logout', description: 'Track user login and logout events' },
+          { code: 'user_activity_track_page_views', name: 'Track Page Views', description: 'Track user page view events' },
+          { code: 'user_activity_track_actions', name: 'Track Actions', description: 'Track user action events' },
+          { code: 'user_activity_track_data_changes', name: 'Track Data Changes', description: 'Track user data change events' },
+          { code: 'user_activity_generate_user_reports', name: 'Generate User Reports', description: 'Generate user activity reports' },
+          { code: 'user_activity_filter_by_user', name: 'Filter by User', description: 'Filter user activity by specific user' },
+          { code: 'user_activity_filter_by_date_range', name: 'Filter by Date Range', description: 'Filter user activity by date range' },
+
+          // 🔄 DATA CHANGE TRACKING PERMISSIONS - NEW
+          { code: 'data_changes_read', name: 'View Data Changes', description: 'View data change information' },
+          { code: 'data_changes_read_all', name: 'View All Data Changes', description: 'View all data changes in organization' },
+          { code: 'data_changes_export', name: 'Export Data Changes', description: 'Export data change information' },
+          { code: 'data_changes_view_details', name: 'View Change Details', description: 'View detailed data change information' },
+          { code: 'data_changes_track_creates', name: 'Track Creates', description: 'Track data creation events' },
+          { code: 'data_changes_track_updates', name: 'Track Updates', description: 'Track data update events' },
+          { code: 'data_changes_track_deletes', name: 'Track Deletes', description: 'Track data deletion events' },
+          { code: 'data_changes_track_field_changes', name: 'Track Field Changes', description: 'Track individual field change events' },
+          { code: 'data_changes_track_relationship_changes', name: 'Track Relationship Changes', description: 'Track relationship change events' },
+          { code: 'data_changes_generate_change_reports', name: 'Generate Change Reports', description: 'Generate data change reports' },
+          { code: 'data_changes_filter_by_table', name: 'Filter by Table', description: 'Filter data changes by specific table' },
+          { code: 'data_changes_filter_by_user', name: 'Filter by User', description: 'Filter data changes by specific user' },
+          { code: 'data_changes_filter_by_date_range', name: 'Filter by Date Range', description: 'Filter data changes by date range' }
         ]
       },
       
