@@ -615,4 +615,284 @@ export default async function onboardingRoutes(fastify, options) {
       });
     }
   });
+
+  // Company onboarding setup endpoint
+  fastify.post('/company-setup', async (request, reply) => {
+    try {
+      const {
+        // Company Profile
+        companyName,
+        legalCompanyName,
+        companyId,
+        dunsNumber,
+        industry,
+        companyType,
+        ownership,
+        annualRevenue,
+        numberOfEmployees,
+        tickerSymbol,
+        website,
+        description,
+        foundedDate,
+        
+        // Contact & Address
+        billingStreet,
+        billingCity,
+        billingState,
+        billingZip,
+        billingCountry,
+        shippingStreet,
+        shippingCity,
+        shippingState,
+        shippingZip,
+        shippingCountry,
+        phone,
+        fax,
+        
+        // Localization
+        defaultLanguage,
+        defaultLocale,
+        defaultCurrency,
+        multiCurrencyEnabled,
+        advancedCurrencyManagement,
+        defaultTimeZone,
+        firstDayOfWeek,
+        
+        // Administrator Setup
+        adminFirstName,
+        adminLastName,
+        adminEmail,
+        adminUsername,
+        adminAlias,
+        adminPhone,
+        adminMobile,
+        adminTitle,
+        adminDepartment,
+        adminManager,
+        adminRole,
+        adminProfile
+      } = request.body;
+
+      // Validate required fields
+      const requiredFields = [
+        'companyName', 'industry', 'companyType', 'defaultLanguage',
+        'defaultCurrency', 'defaultTimeZone', 'adminFirstName', 'adminLastName',
+        'adminEmail', 'adminUsername', 'adminRole', 'adminProfile'
+      ];
+
+      const missingFields = requiredFields.filter(field => !request.body[field]);
+      
+      if (missingFields.length > 0) {
+        return reply.code(400).send({
+          success: false,
+          error: `Missing required fields: ${missingFields.join(', ')}`
+        });
+      }
+
+      // Generate organization code from company name
+      const orgCode = companyName
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+        .substring(0, 8);
+
+      // Create tenant record
+      const tenantId = uuidv4();
+      const newTenant = await db.insert(tenants).values({
+        tenantId: tenantId,
+        companyName: companyName,
+        subdomain: orgCode,
+        kindeOrgId: orgCode,
+        adminEmail: adminEmail,
+        industry: industry,
+        onboardingCompleted: true,
+        onboardingStep: 'completed',
+        trialStartedAt: new Date(),
+        trialStatus: 'active',
+        subscriptionStatus: 'trial',
+        
+        // Additional company fields
+        legalCompanyName: legalCompanyName || companyName,
+        companyId: companyId,
+        dunsNumber: dunsNumber,
+        companyType: companyType,
+        ownership: ownership,
+        annualRevenue: annualRevenue ? parseFloat(annualRevenue) : null,
+        numberOfEmployees: numberOfEmployees ? parseInt(numberOfEmployees) : null,
+        tickerSymbol: tickerSymbol,
+        website: website,
+        description: description,
+        foundedDate: foundedDate ? new Date(foundedDate) : null,
+        
+        // Address fields
+        billingStreet: billingStreet,
+        billingCity: billingCity,
+        billingState: billingState,
+        billingZip: billingZip,
+        billingCountry: billingCountry,
+        shippingStreet: shippingStreet,
+        shippingCity: shippingCity,
+        shippingState: shippingState,
+        shippingZip: shippingZip,
+        shippingCountry: shippingCountry,
+        phone: phone,
+        fax: fax,
+        
+        // Localization settings
+        defaultLanguage: defaultLanguage,
+        defaultLocale: defaultLocale,
+        defaultCurrency: defaultCurrency,
+        multiCurrencyEnabled: multiCurrencyEnabled || false,
+        advancedCurrencyManagement: advancedCurrencyManagement || false,
+        defaultTimeZone: defaultTimeZone,
+        firstDayOfWeek: firstDayOfWeek
+      }).returning();
+
+      // Create admin user record
+      const userId = uuidv4();
+      const newUser = await db.insert(tenantUsers).values({
+        userId: userId,
+        tenantId: tenantId,
+        kindeUserId: adminEmail, // Using email as Kinde user ID for now
+        email: adminEmail,
+        name: `${adminFirstName} ${adminLastName}`,
+        firstName: adminFirstName,
+        lastName: adminLastName,
+        username: adminUsername,
+        alias: adminAlias,
+        phone: adminPhone,
+        mobile: adminMobile,
+        title: adminTitle,
+        department: adminDepartment,
+        isActive: true,
+        isVerified: true,
+        isTenantAdmin: true,
+        onboardingCompleted: true
+      }).returning();
+
+      // Create Super Administrator role
+      const roleId = uuidv4();
+      const newRole = await db.insert(customRoles).values({
+        roleId: roleId,
+        tenantId: tenantId,
+        roleName: adminRole,
+        description: `${adminRole} for ${companyName}`,
+        permissions: JSON.stringify({ crm: true, users: true, roles: true }),
+        isSystemRole: true,
+        isDefault: true,
+        priority: 1000,
+        createdBy: userId
+      }).returning();
+
+      // Assign role to user
+      await db.insert(userRoleAssignments).values({
+        userId: userId,
+        roleId: roleId,
+        assignedBy: userId,
+        assignedAt: new Date(),
+        isActive: true
+      });
+
+      // Create subscription
+      const subscriptionId = uuidv4();
+      const trialEnd = new Date(Date.now() + (30 * 24 * 60 * 60 * 1000)); // 30 days
+        
+      await db.insert(subscriptions).values({
+        subscriptionId: subscriptionId,
+        tenantId: tenantId,
+        plan: 'trial',
+        status: 'trialing',
+        trialStart: new Date(),
+        trialEnd: trialEnd,
+        subscribedTools: JSON.stringify(['crm']),
+        usageLimits: JSON.stringify({
+          users: 10,
+          projects: 5
+        }),
+        billingCycle: 'monthly',
+        monthlyPrice: '0'
+      });
+
+      // Set up organization applications
+      await OnboardingOrganizationSetupService.setupOrganizationApplicationsForNewTenant(tenantId, 'trial');
+
+      console.log(`Company onboarding completed for ${companyName}`, {
+        tenantId: tenantId,
+        userId: userId,
+        roleId: roleId
+      });
+
+      return reply.send({
+        success: true,
+        message: 'Company setup completed successfully',
+        data: {
+          tenant: {
+            id: tenantId,
+            orgCode: orgCode,
+            name: companyName
+          },
+          user: {
+            id: userId,
+            email: adminEmail,
+            name: `${adminFirstName} ${adminLastName}`
+          },
+          role: {
+            id: roleId,
+            name: adminRole
+          }
+        }
+      });
+
+    } catch (error) {
+      console.error('Error in company onboarding setup:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to complete company setup',
+        details: error.message
+      });
+    }
+  });
+
+  // Get onboarding progress
+  fastify.get('/progress/:userId', async (request, reply) => {
+    try {
+      const { userId } = request.params;
+      
+      // Check if user has completed onboarding
+      const user = await db.query.tenantUsers.findFirst({
+        where: eq(tenantUsers.userId, userId),
+        with: {
+          tenant: true
+        }
+      });
+
+      if (!user) {
+        return reply.code(404).send({
+          success: false,
+          error: 'User not found'
+        });
+      }
+
+      const isOnboardingComplete = user.tenant && user.tenant.onboardingCompleted;
+
+      return reply.send({
+        success: true,
+        data: {
+          isComplete: isOnboardingComplete,
+          tenant: user.tenant ? {
+            id: user.tenant.tenantId,
+            name: user.tenant.companyName,
+            orgCode: user.tenant.subdomain,
+            status: user.tenant.subscriptionStatus
+          } : null
+        }
+      });
+
+    } catch (error) {
+      console.error('Error getting onboarding progress:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to get onboarding progress'
+      });
+    }
+  });
 }

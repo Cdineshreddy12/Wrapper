@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import  api  from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -68,6 +69,7 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = ({
   children, 
   refreshInterval = 30000 
 }) => {
+  const { isAuthenticated } = useKindeAuth();
   const [user, setUser] = useState<UserContextData | null>(null);
   const [tenant, setTenant] = useState<TenantData | null>(null);
   const [permissions, setPermissions] = useState<UserPermission[]>([]);
@@ -111,7 +113,7 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = ({
         setLastRefreshTime(null);
         console.log('ℹ️ User not authenticated');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Failed to fetch user context:', error);
       
       if (error.response?.status === 401) {
@@ -166,8 +168,14 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = ({
 
   // Initial load
   useEffect(() => {
-    fetchUserContext(false);
-  }, [fetchUserContext]);
+    // Only fetch user context if user is authenticated
+    // This prevents unnecessary API calls on public pages like invitation acceptance
+    if (isAuthenticated) {
+      fetchUserContext(false);
+    } else {
+      setLoading(false);
+    }
+  }, [fetchUserContext, isAuthenticated]);
 
   // Auto-refresh effect
   useEffect(() => {

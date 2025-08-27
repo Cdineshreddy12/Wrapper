@@ -25,8 +25,7 @@ import { OnboardingGuard } from '@/components/auth/OnboardingGuard'
 
 // Pages
 import Landing from '@/pages/Landing'
-import { SimpleOnboarding } from '@/pages/SimpleOnboarding'
-import KindeOrganizationOnboarding from '@/pages/KindeOrganizationOnboarding'
+import CompanyOnboarding from '@/pages/CompanyOnboarding'
 import { Login } from '@/pages/Login'
 import { AuthCallback } from '@/pages/AuthCallback'
 import { InviteAccept } from '@/pages/InviteAccept'
@@ -200,12 +199,7 @@ function AppContent() {
           
           <Route 
             path="/onboarding" 
-            element={<SimpleOnboarding />}
-          />
-          
-          <Route 
-            path="/onboarding/kinde-org" 
-            element={<KindeOrganizationOnboarding />}
+            element={<CompanyOnboarding />}
           />
           
           <Route 
@@ -289,28 +283,28 @@ function AppContent() {
           <Route path="admin" element={<AdminDashboard />} />
         </Route>
 
-          {/* Organization-specific routes with onboarding guard */}
-          <Route 
-            path="/org/:orgCode" 
-            element={
+        {/* Organization-specific routes with onboarding guard */}
+        <Route 
+          path="/org/:orgCode" 
+          element={
             <ProtectedRoute>
               <OnboardingGuard>
                 <DashboardLayout />
               </OnboardingGuard>
             </ProtectedRoute>
-            }
-          >
-            <Route index element={<Dashboard />} />
-            <Route path="analytics" element={<Analytics />} />
-            <Route path="users" element={<UserManagementDashboard />} />
-            {/* <Route path="user-apps" element={<UserApplicationAccessPage />} /> */}
-            <Route path="user-application-management" element={<UserApplicationManagement />} />
-            {/* <Route path="test-apis" element={<TestUserSyncAPIs />} /> */}
-            <Route path="billing" element={<Billing />} />
-            <Route path="usage" element={<Usage />} />
-            <Route path="permissions" element={<Permissions />} />
-            <Route path="admin" element={<AdminDashboard />} />
-          </Route>
+          }
+        >
+          <Route index element={<Dashboard />} />
+          <Route path="analytics" element={<Analytics />} />
+          <Route path="users" element={<UserManagementDashboard />} />
+          <Route path="user-apps" element={<UserApplicationAccessPage />} />
+          <Route path="user-application-management" element={<UserApplicationManagement />} />
+          <Route path="test-apis" element={<TestUserSyncAPIs />} />
+          <Route path="billing" element={<Billing />} />
+          <Route path="usage" element={<Usage />} />
+          <Route path="permissions" element={<Permissions />} />
+          <Route path="admin" element={<AdminDashboard />} />
+        </Route>
 
           {/* Catch all - redirect to landing if not authenticated */}
           <Route 
@@ -413,7 +407,7 @@ function RootRedirect() {
         const response = await api.get('/admin/auth-status')
         console.log('✅ RootRedirect: Auth status received:', response.data)
         setOnboardingStatus(response.data)
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ RootRedirect: Error checking auth status:', error)
         // If error checking status, redirect to landing
         setOnboardingStatus({ hasUser: false, hasTenant: false })
