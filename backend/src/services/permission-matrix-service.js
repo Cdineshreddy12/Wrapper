@@ -25,13 +25,18 @@ class PermissionMatrixService {
     try {
       if (typeof rolePermissions === 'string') {
         // Handle JSON string format
-        return JSON.parse(rolePermissions);
+        const parsed = JSON.parse(rolePermissions);
+        // If it's a nested object, flatten it
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return this.flattenNestedPermissions(parsed);
+        }
+        return parsed;
       } else if (Array.isArray(rolePermissions)) {
         // Handle array format
         return rolePermissions;
       } else if (typeof rolePermissions === 'object') {
-        // Handle object format (extract permissions)
-        return Object.values(rolePermissions).flat();
+        // Handle nested object format - flatten permissions
+        return this.flattenNestedPermissions(rolePermissions);
       }
     } catch (error) {
       console.error('❌ Failed to parse role permissions:', error);
@@ -40,6 +45,40 @@ class PermissionMatrixService {
     }
     
     return [];
+  }
+
+  // 🔧 **HELPER: Flatten Nested Permissions Structure**
+  static flattenNestedPermissions(nestedPermissions) {
+    if (!nestedPermissions || typeof nestedPermissions !== 'object') {
+      return [];
+    }
+    
+    const flattenedPermissions = [];
+    
+    // Handle nested structure like: { crm: { leads: ["read", "create"] } }
+    Object.keys(nestedPermissions).forEach(appCode => {
+      const appPermissions = nestedPermissions[appCode];
+      if (appPermissions && typeof appPermissions === 'object') {
+        Object.keys(appPermissions).forEach(moduleCode => {
+          const actions = appPermissions[moduleCode];
+          if (Array.isArray(actions)) {
+            actions.forEach(action => {
+              flattenedPermissions.push(`${appCode}.${moduleCode}.${action}`);
+            });
+          } else if (typeof actions === 'string') {
+            // Handle single action case
+            flattenedPermissions.push(`${appCode}.${moduleCode}.${actions}`);
+          }
+        });
+      }
+    });
+    
+    console.log(`🔧 Flattened ${flattenedPermissions.length} nested permissions:`, {
+      original: nestedPermissions,
+      flattened: flattenedPermissions.slice(0, 5) // Show first 5 for debugging
+    });
+    
+    return flattenedPermissions;
   }
 
   // 🔧 **HELPER: Map Kinde ID to Internal UUID**
@@ -351,7 +390,10 @@ class PermissionMatrixService {
       totalPermissions: finalPermissions.length,
       rolePermissions: finalPermissions.filter(p => p.startsWith('crm.')),
       userSpecificPermissions: finalPermissions.filter(p => !p.startsWith('crm.')),
-      userRoles: userRoles.map(r => r.roleName)
+      userRoles: userRoles.map(r => r.roleName),
+      // Add detailed debugging for Super Administrator role
+      superAdminPermissions: finalPermissions.filter(p => p.startsWith('crm.')).slice(0, 20), // Show first 20 CRM permissions
+      permissionFormat: 'flat-array'
     });
     
     return finalPermissions;

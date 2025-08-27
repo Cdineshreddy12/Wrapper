@@ -169,16 +169,31 @@ export default async function permissionMatrixRoutes(fastify, options) {
       // Get permissions for the target user (not the admin)
       const context = await PermissionMatrixService.getUserPermissionContext(userIdToCheck, tenantId);
       
+      // 🔧 CRITICAL FIX: Ensure permissions are in the format the frontend expects
+      // The frontend expects a flat array of permission strings like ["crm.leads.read", "crm.accounts.create"]
+      const flattenedPermissions = context.permissions || [];
+      
+      console.log(`🔧 Permission flattening result:`, {
+        originalPermissionsCount: context.permissions?.length || 0,
+        flattenedPermissionsCount: flattenedPermissions.length,
+        samplePermissions: flattenedPermissions.slice(0, 10), // Show first 10 for debugging
+        userRoles: context.userRoles?.map(r => r.roleName) || []
+      });
+      
       return {
         success: true,
         data: {
           ...context,
+          // Ensure permissions are in the expected flat format
+          permissions: flattenedPermissions,
           // Add metadata about whose permissions were returned
           permissionContext: {
             requestedFor: userIdToCheck,
             requestedBy: internalUserId,
             isAdminRequest: !!targetUserId && targetUserId !== internalUserId,
-            source: 'permission-matrix-api'
+            source: 'permission-matrix-api',
+            permissionFormat: 'flat-array',
+            totalPermissions: flattenedPermissions.length
           }
         }
       };
@@ -216,6 +231,53 @@ export default async function permissionMatrixRoutes(fastify, options) {
         error: error.message,
         details: errorDetails,
         timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // 🧪 **TEST PERMISSION FLATTENING ENDPOINT (for debugging)**
+  fastify.get('/test-flattening', {
+    preHandler: [authenticateToken, trackUsage]
+  }, async (request, reply) => {
+    try {
+      const { internalUserId, tenantId } = request.userContext;
+      
+      console.log(`🧪 Testing permission flattening for user: ${internalUserId}`);
+      
+      // Get user's permission context
+      const context = await PermissionMatrixService.getUserPermissionContext(internalUserId, tenantId);
+      
+      // Test the flattening function directly
+      const testPermissions = {
+        crm: {
+          leads: ["read", "create", "update", "delete"],
+          accounts: ["read", "create", "update"],
+          dashboard: ["view", "customize"]
+        }
+      };
+      
+      const flattenedTest = PermissionMatrixService.flattenNestedPermissions(testPermissions);
+      
+      return {
+        success: true,
+        data: {
+          testPermissions,
+          flattenedTest,
+          userPermissions: context.permissions,
+          userRoles: context.userRoles?.map(r => ({
+            roleName: r.roleName,
+            permissions: r.permissions,
+            permissionsType: typeof r.permissions,
+            isObject: typeof r.permissions === 'object' && !Array.isArray(r.permissions)
+          }))
+        }
+      };
+    } catch (error) {
+      console.error('❌ Error testing permission flattening:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'Failed to test permission flattening',
+        error: error.message
       });
     }
   });
