@@ -43,7 +43,40 @@ export function generateSuperAdminPermissions(planId) {
   permissions.system = {
     users: ['read', 'read_all', 'create', 'update', 'delete', 'invite', 'change_role', 'change_status'],
     roles: ['read', 'read_all', 'create', 'update', 'delete', 'assign'],
-    audit: ['read', 'read_all', 'export'],
+    
+    // 🔍 COMPREHENSIVE AUDIT PERMISSIONS
+    audit: [
+      'read', 'read_all', 'export', 'view_details', 
+      'filter_by_user', 'filter_by_action', 'filter_by_date_range',
+      'filter_by_module', 'filter_by_status', 'generate_reports',
+      'archive_logs', 'purge_old_logs', 'audit_trail_export'
+    ],
+    
+    // 📊 ACTIVITY LOGS PERMISSIONS
+    activity_logs: [
+      'read', 'read_all', 'export', 'view_details',
+      'filter_by_user', 'filter_by_action', 'filter_by_date_range', 
+      'filter_by_module', 'filter_by_status', 'generate_reports',
+      'archive_logs', 'purge_old_logs', 'audit_trail_export'
+    ],
+    
+    // 👤 USER ACTIVITY TRACKING
+    user_activity: [
+      'read', 'read_all', 'export', 'view_details',
+      'track_login_logout', 'track_page_views', 'track_actions',
+      'track_data_changes', 'generate_user_reports',
+      'filter_by_user', 'filter_by_date_range'
+    ],
+    
+    // 🔄 DATA CHANGE TRACKING
+    data_changes: [
+      'read', 'read_all', 'export', 'view_details',
+      'track_creates', 'track_updates', 'track_deletes',
+      'track_field_changes', 'track_relationship_changes',
+      'generate_change_reports', 'filter_by_table',
+      'filter_by_user', 'filter_by_date_range'
+    ],
+    
     dashboard: ['view', 'customize', 'export'],
     settings: ['read', 'update', 'manage'],
     billing: ['read', 'update', 'manage_subscription', 'view_invoices'],
