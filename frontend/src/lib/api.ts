@@ -1,198 +1,242 @@
 import axios, { AxiosError } from 'axios'
 import toast from 'react-hot-toast'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+// Use empty baseURL since Vite proxy handles /api routing
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 // Store for Kinde token getter function
 let kindeTokenGetter: (() => Promise<string | null>) | null = null;
+
+// Debug utility to inspect all stored tokens
+export const debugStoredTokens = () => {
+  console.log('🔍 === TOKEN DEBUG INFORMATION ===');
+
+  console.log('📁 localStorage keys:', Object.keys(localStorage));
+  console.log('📁 sessionStorage keys:', Object.keys(sessionStorage));
+  console.log('🍪 cookies:', document.cookie.split(';').map(c => c.trim().split('=')[0]));
+
+  // Check for potential token locations
+  const potentialTokenLocations = [
+    'kinde_backup_token',
+    'kinde_session',
+    'kinde_auth',
+    'kinde_token',
+    'access_token',
+    'id_token',
+    'refresh_token'
+  ];
+
+  console.log('🔑 Checking potential token locations:');
+  potentialTokenLocations.forEach(key => {
+    const localValue = localStorage.getItem(key);
+    const sessionValue = sessionStorage.getItem(key);
+
+    if (localValue) {
+      console.log(`📦 localStorage.${key}: ${localValue.substring(0, 50)}... (${localValue.length} chars)`);
+      if (isValidJWT(localValue)) {
+        console.log(`✅ ${key} in localStorage is a valid JWT`);
+      }
+    }
+
+    if (sessionValue) {
+      console.log(`📦 sessionStorage.${key}: ${sessionValue.substring(0, 50)}... (${sessionValue.length} chars)`);
+      if (isValidJWT(sessionValue)) {
+        console.log(`✅ ${key} in sessionStorage is a valid JWT`);
+      }
+    }
+  });
+
+  // Check cookies
+  const cookies = document.cookie.split(';');
+  cookies.forEach(cookie => {
+    const [name, value] = cookie.trim().split('=');
+    if (name && value && (name.includes('token') || name.includes('kinde') || name.includes('auth'))) {
+      const decodedValue = decodeURIComponent(value);
+      console.log(`🍪 Cookie ${name}: ${decodedValue.substring(0, 50)}... (${decodedValue.length} chars)`);
+      if (isValidJWT(decodedValue)) {
+        console.log(`✅ ${name} cookie is a valid JWT`);
+      }
+    }
+  });
+
+  console.log('🔍 === END TOKEN DEBUG ===');
+};
 
 // Function to set the Kinde token getter (called from components that have access to useKindeAuth)
 export const setKindeTokenGetter = (getter: () => Promise<string | null>) => {
   kindeTokenGetter = getter;
 };
 
+// Enhanced JWT token validation
+const isValidJWT = (token: string): boolean => {
+  if (!token || typeof token !== 'string') return false;
+  if (token.length < 20) return false;
+
+  // JWT format: header.payload.signature
+  const parts = token.split('.');
+  if (parts.length !== 3) return false;
+
+  try {
+    // Try to decode header to ensure it's a valid JWT
+    const header = JSON.parse(atob(parts[0].replace(/-/g, '+').replace(/_/g, '/')));
+    return header && typeof header === 'object' && header.alg;
+  } catch (e) {
+    return false;
+  }
+};
+
 // Function to get Kinde token from localStorage/sessionStorage
 const getKindeToken = async () => {
-  // First check for backup token (for refresh scenarios when cookies are cleared)
+  console.log('🔍 Starting enhanced token search...');
+
+  // Method 0: Check for backup token first
   const backupToken = localStorage.getItem('kinde_backup_token');
-  if (backupToken) {
-    console.log('🔄 Found backup token, using it first');
+  if (backupToken && isValidJWT(backupToken)) {
+    console.log('🔄 Found valid backup token, using it');
     return backupToken;
   }
 
-  // Then try to use the Kinde SDK if available
+  // Method 1: Try Kinde SDK if available
   if (kindeTokenGetter) {
     try {
       console.log('🔑 Trying Kinde SDK getToken()...');
       const token = await kindeTokenGetter();
-      if (token) {
-        console.log('✅ Got token from Kinde SDK');
-        // Store as backup for next time
+      if (token && isValidJWT(token)) {
+        console.log('✅ Got valid token from Kinde SDK');
         localStorage.setItem('kinde_backup_token', token);
         return token;
+      } else if (token) {
+        console.log('⚠️ Kinde SDK returned invalid token format');
       }
     } catch (error) {
       console.log('❌ Kinde SDK getToken() failed:', error);
     }
   }
 
-  // Fallback to manual token search
+  // Method 2: Enhanced manual search
   try {
-    console.log('🔍 Searching for authentication token manually...');
-    
-    // Method 1: Check localStorage for kinde_session
-    const kindeAuth = localStorage.getItem('kinde_session');
-    if (kindeAuth) {
-      console.log('📱 Found kinde_session in localStorage');
-      try {
-        const session = JSON.parse(kindeAuth);
-        if (session.access_token) {
-          console.log('✅ Found access_token in kinde_session');
-          return session.access_token;
-        }
-      } catch (e) {
-        console.log('❌ Failed to parse kinde_session JSON');
-      }
-    }
+    console.log('🔍 Performing enhanced manual token search...');
 
-    // Method 2: Check sessionStorage
-    const sessionAuth = sessionStorage.getItem('kinde_session');
-    if (sessionAuth) {
-      console.log('📱 Found kinde_session in sessionStorage');
-      try {
-        const session = JSON.parse(sessionAuth);
-        if (session.access_token) {
-          console.log('✅ Found access_token in sessionStorage');
-          return session.access_token;
-        }
-      } catch (e) {
-        console.log('❌ Failed to parse sessionStorage kinde_session JSON');
-      }
-    }
+    // Search all storage locations for JWT-like tokens
+    const searchLocations = [
+      { storage: localStorage, name: 'localStorage' },
+      { storage: sessionStorage, name: 'sessionStorage' }
+    ];
 
-    // Method 3: Check all localStorage keys for ANY auth patterns
-    console.log('🔍 Checking all localStorage keys for auth patterns...');
-    const localStorageKeys = Object.keys(localStorage);
-    console.log('📁 LocalStorage keys:', localStorageKeys);
-    
-    for (const key of localStorageKeys) {
-      const value = localStorage.getItem(key);
-      console.log(`🔑 Checking key: ${key}`);
-      console.log(`📄 Value preview: ${value?.substring(0, 100)}...`);
-      
+    for (const { storage, name } of searchLocations) {
+      console.log(`🔍 Searching in ${name}...`);
+
       // Check for Kinde-specific patterns
-      if (key.toLowerCase().includes('kinde')) {
-        console.log(`🎯 Found Kinde-related key: ${key}`);
-        
-        // Check if it's a JSON object with tokens
-        try {
-          const parsed = JSON.parse(value || '{}');
-          if (parsed.access_token) {
-            console.log('✅ Found access_token in', key);
-            return parsed.access_token;
-          }
-          if (parsed.accessToken) {
-            console.log('✅ Found accessToken in', key);
-            return parsed.accessToken;
-          }
-        } catch (e) {
-          // Not JSON, check if it looks like a raw token
-          if (value && value.length > 50 && !value.includes(' ') && !value.includes('{')) {
-            console.log('✅ Found potential raw token in', key);
-            return value;
+      const kindeKeys = ['kinde_session', 'kinde_auth', 'kinde_token', 'kinde.access_token'];
+      for (const key of kindeKeys) {
+        const value = storage.getItem(key);
+        if (value) {
+          console.log(`📱 Found ${key} in ${name}`);
+          try {
+            const parsed = JSON.parse(value);
+            if (parsed.access_token && isValidJWT(parsed.access_token)) {
+              console.log('✅ Found valid access_token in', key);
+              return parsed.access_token;
+            }
+            if (parsed.id_token && isValidJWT(parsed.id_token)) {
+              console.log('✅ Found valid id_token in', key);
+              return parsed.id_token;
+            }
+            if (parsed.token && isValidJWT(parsed.token)) {
+              console.log('✅ Found valid token in', key);
+              return parsed.token;
+            }
+          } catch (e) {
+            // If it's not JSON, check if the value itself is a JWT
+            if (isValidJWT(value)) {
+              console.log('✅ Found JWT token directly in', key);
+              return value;
+            }
           }
         }
       }
-      
-      // Check for general auth patterns (like refreshToken0)
-      if (key.toLowerCase().includes('token') || key.toLowerCase().includes('auth')) {
-        console.log(`🔍 Found general auth key: ${key}`);
-        try {
-          const parsed = JSON.parse(value || '{}');
-          if (parsed.access_token) {
-            console.log('✅ Found access_token in general auth key', key);
-            return parsed.access_token;
-          }
-          if (parsed.accessToken) {
-            console.log('✅ Found accessToken in general auth key', key);
-            return parsed.accessToken;
-          }
-          if (parsed.token) {
-            console.log('✅ Found token in general auth key', key);
-            return parsed.token;
-          }
-        } catch (e) {
-          // Not JSON, might be a raw token
-          if (value && value.length > 20 && !value.includes(' ')) {
-            console.log('✅ Found potential raw token in general auth key', key);
+
+      // Check for general auth patterns
+      const allKeys = Object.keys(storage);
+      for (const key of allKeys) {
+        if (key.toLowerCase().includes('token') ||
+            key.toLowerCase().includes('auth') ||
+            key.toLowerCase().includes('kinde')) {
+          const value = storage.getItem(key);
+          if (value && isValidJWT(value)) {
+            console.log(`✅ Found JWT token in ${name} key: ${key}`);
             return value;
           }
         }
       }
     }
 
-    // Method 4: Check sessionStorage keys
-    console.log('🔍 Checking all sessionStorage keys for auth patterns...');
-    const sessionStorageKeys = Object.keys(sessionStorage);
-    console.log('📁 SessionStorage keys:', sessionStorageKeys);
-    
-    for (const key of sessionStorageKeys) {
-      const value = sessionStorage.getItem(key);
-      console.log(`🔑 Checking sessionStorage key: ${key}`);
-      console.log(`📄 Value preview: ${value?.substring(0, 100)}...`);
-      
-      if (key.toLowerCase().includes('kinde') || key.toLowerCase().includes('token') || key.toLowerCase().includes('auth')) {
-        console.log(`🎯 Found auth-related key in sessionStorage: ${key}`);
-        
-        try {
-          const parsed = JSON.parse(value || '{}');
-          if (parsed.access_token) {
-            console.log('✅ Found access_token in sessionStorage', key);
-            return parsed.access_token;
-          }
-          if (parsed.accessToken) {
-            console.log('✅ Found accessToken in sessionStorage', key);
-            return parsed.accessToken;
-          }
-          if (parsed.token) {
-            console.log('✅ Found token in sessionStorage', key);
-            return parsed.token;
-          }
-        } catch (e) {
-          // Not JSON, check if it looks like a raw token
-          if (value && value.length > 20 && !value.includes(' ')) {
-            console.log('✅ Found potential raw token in sessionStorage', key);
-            return value;
-          }
+    // Method 3: Enhanced search for any JWT tokens in storage
+    console.log('🔍 Performing comprehensive JWT search...');
+
+    // Check all storage for any JWT-like tokens
+    for (const { storage, name } of searchLocations) {
+      const allKeys = Object.keys(storage);
+      for (const key of allKeys) {
+        const value = storage.getItem(key);
+        if (value && isValidJWT(value)) {
+          console.log(`✅ Found JWT token in ${name} key: ${key}`);
+          return value;
         }
       }
     }
 
-    // Method 5: Check cookies as backup
-    console.log('🔍 Checking cookies for auth tokens...');
+    // Method 4: Check cookies as final fallback
+    console.log('🔍 Checking cookies for JWT tokens...');
     const cookies = document.cookie.split(';');
     console.log('🍪 Available cookies:', cookies.map(c => c.trim().split('=')[0]));
-    
+
     for (const cookie of cookies) {
       const [name, value] = cookie.trim().split('=');
-      if (name && value && (
-        name.includes('kinde') || 
-        name.includes('token') || 
-        name.includes('auth') ||
-        name === 'access_token' ||
-        name === 'accessToken'
-      )) {
-        console.log('✅ Found auth token in cookies:', name);
-        return decodeURIComponent(value);
+      if (name && value) {
+        const decodedValue = decodeURIComponent(value);
+        if (isValidJWT(decodedValue)) {
+          console.log('✅ Found JWT token in cookies:', name);
+          return decodedValue;
+        }
+      }
+    }
+
+    // Method 5: Last resort - check for any long strings that might be tokens
+    console.log('🔍 Last resort: checking for any long strings that might be tokens...');
+    for (const { storage, name } of searchLocations) {
+      const allKeys = Object.keys(storage);
+      for (const key of allKeys) {
+        const value = storage.getItem(key);
+        if (value && value.length > 100 && !value.includes(' ') && !value.includes('{') && !value.includes('"')) {
+          // Check if it looks like a JWT (has dots and reasonable length)
+          if (value.split('.').length === 3 && value.length > 200) {
+            console.log(`🎯 Found potential JWT in ${name} key: ${key} (length: ${value.length})`);
+            try {
+              // Quick validation
+              const parts = value.split('.');
+              JSON.parse(atob(parts[0].replace(/-/g, '+').replace(/_/g, '/')));
+              console.log('✅ Validated as JWT token');
+              return value;
+            } catch (e) {
+              console.log('❌ Failed JWT validation for potential token');
+            }
+          }
+        }
       }
     }
 
     console.log('❌ No authentication token found in any storage location');
     console.log('💡 This might mean the user is not authenticated or tokens are stored differently');
-    
+    console.log('🔍 Available storage keys for debugging:');
+    console.log('📁 localStorage keys:', Object.keys(localStorage));
+    console.log('📁 sessionStorage keys:', Object.keys(sessionStorage));
+    console.log('🍪 cookies:', document.cookie.split(';').map(c => c.trim().split('=')[0]));
+
     return null;
   } catch (error) {
     console.error('🚨 Error getting authentication token:', error);
+    console.error('🚨 Error details:', error);
     return null;
   }
 };
@@ -211,18 +255,31 @@ api.interceptors.request.use(async (config) => {
   // Try to get the authentication token and add it to headers
   const authToken = await getKindeToken();
   
-  if (authToken) {
+  if (authToken && authToken.trim() !== '' && authToken.length > 10) {
     // Ensure headers object exists
     if (!config.headers) {
       config.headers = {} as any;
     }
-    
+
     // Set the Authorization header
     config.headers['Authorization'] = `Bearer ${authToken}`;
     console.log('🔑 Added authentication token to request headers');
     console.log('🔍 Token preview:', authToken.substring(0, 20) + '...');
   } else {
-    console.log('❌ No authentication token found for request');
+    console.log('❌ No valid authentication token found for request');
+    console.log('🔍 authToken details:', {
+      exists: !!authToken,
+      length: authToken?.length || 0,
+      trimmedLength: authToken?.trim()?.length || 0,
+      isEmpty: !authToken || authToken.trim() === '',
+      value: authToken || 'null/undefined'
+    });
+
+    // Ensure we NEVER send incomplete Bearer headers
+    if (config.headers?.Authorization === 'Bearer' || config.headers?.Authorization === '') {
+      console.log('🚨 Removing incomplete Authorization header');
+      delete config.headers.Authorization;
+    }
   }
 
   console.log('🔍 API Request:', {
@@ -231,7 +288,10 @@ api.interceptors.request.use(async (config) => {
     baseURL: config.baseURL,
     withCredentials: config.withCredentials,
     hasAuthToken: !!authToken,
-    authHeader: config.headers?.Authorization ? 'SET' : 'NOT SET'
+    authTokenLength: authToken?.length || 0,
+    authTokenType: typeof authToken,
+    authHeader: config.headers?.Authorization || 'NOT SET',
+    isAuthHeaderEmpty: config.headers?.Authorization === 'Bearer' || config.headers?.Authorization === ''
   });
   
   return config
@@ -572,6 +632,7 @@ export const subscriptionAPI = {
     successUrl: string;
     cancelUrl: string;
   }) => api.post('/subscriptions/checkout', data),
+  checkProfileStatus: () => api.get('/payment-upgrade/profile-status'),
   changePlan: (data: {
     planId: string;
     billingCycle?: 'monthly' | 'yearly';

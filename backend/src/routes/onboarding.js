@@ -81,23 +81,17 @@ export default async function onboardingRoutes(fastify, options) {
     schema: {
       body: {
         type: 'object',
-        required: ['companyName', 'subdomain', 'adminEmail', 'adminName', 'selectedPlan'],
+        required: ['companyName', 'subdomain', 'adminEmail', 'adminName'],
         properties: {
           companyName: { type: 'string', minLength: 1, maxLength: 100 },
           subdomain: { type: 'string', minLength: 2, maxLength: 20 },
-          industry: { type: 'string' },
           adminEmail: { type: 'string', format: 'email' },
           adminName: { type: 'string', minLength: 1, maxLength: 100 },
-          selectedPlan: { type: 'string' },
-          planName: { type: 'string' },
-          planPrice: { type: 'number' },
-          maxUsers: { type: 'number' },
-          maxProjects: { type: 'number' },
-          teamEmails: { 
-            type: 'array',
-            items: { type: 'string', format: 'email' }
-          }
-        }
+          // Optional fields moved to payment upgrade
+          industry: { type: 'string' },
+          gstin: { type: 'string', description: 'GSTIN (collected during payment upgrade)' }
+        },
+        additionalProperties: true // Allow additional properties for flexibility
       }
     }
   }, async (request, reply) => {
@@ -107,23 +101,28 @@ export default async function onboardingRoutes(fastify, options) {
       const {
         companyName,
         subdomain,
-        industry,
         adminEmail,
         adminName,
-        selectedPlan,
-        planName,
-        planPrice,
-        maxUsers,
-        maxProjects,
-        teamEmails
+        industry,
+        gstin
       } = request.body;
 
-      console.log('📝 Onboarding data received:', {
+      // Set defaults for fields moved to payment upgrade
+      const selectedPlan = 'trial'; // Default to trial plan
+      const planName = 'Trial Plan';
+      const planPrice = 0;
+      const maxUsers = 2; // Trial limited to 2 users
+      const maxProjects = 5; // Trial limited to 5 projects
+      const teamEmails = []; // No team invites during basic onboarding
+
+      console.log('📝 Simplified onboarding data received:', {
         companyName,
         subdomain,
         adminEmail,
         adminName,
-        selectedPlan
+        selectedPlan: 'trial (default)',
+        maxUsers: 2,
+        maxProjects: 5
       });
 
       // Check if the user making this request is authenticated

@@ -1,157 +1,16 @@
-import { pgTable, foreignKey, pgEnum, uuid, varchar, jsonb, text, timestamp, integer, numeric, boolean, unique, index } from "drizzle-orm/pg-core"
+import { pgTable, index, unique, pgEnum, uuid, varchar, jsonb, boolean, timestamp, integer, numeric, text, date, foreignKey, inet } from "drizzle-orm/pg-core"
   import { sql } from "drizzle-orm"
 
-export const factorType = pgEnum("factor_type", ['totp', 'webauthn', 'phone'])
-export const factorStatus = pgEnum("factor_status", ['unverified', 'verified'])
-export const aalLevel = pgEnum("aal_level", ['aal1', 'aal2', 'aal3'])
-export const codeChallengeMethod = pgEnum("code_challenge_method", ['s256', 'plain'])
-export const oneTimeTokenType = pgEnum("one_time_token_type", ['confirmation_token', 'reauthentication_token', 'recovery_token', 'email_change_token_new', 'email_change_token_current', 'phone_change_token'])
-export const equalityOp = pgEnum("equality_op", ['eq', 'neq', 'lt', 'lte', 'gt', 'gte', 'in'])
-export const action = pgEnum("action", ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'ERROR'])
-export const enumUserOrganizationsStatus = pgEnum("enum_user_organizations_status", ['invited', 'active', 'inactive'])
+export const aalLevel = pgEnum("aal_level", ['aal3', 'aal2', 'aal1'])
+export const codeChallengeMethod = pgEnum("code_challenge_method", ['plain', 's256'])
+export const factorStatus = pgEnum("factor_status", ['verified', 'unverified'])
+export const factorType = pgEnum("factor_type", ['phone', 'webauthn', 'totp'])
+export const oneTimeTokenType = pgEnum("one_time_token_type", ['phone_change_token', 'email_change_token_current', 'email_change_token_new', 'recovery_token', 'reauthentication_token', 'confirmation_token'])
+export const enumUserOrganizationsStatus = pgEnum("enum_user_organizations_status", ['inactive', 'active', 'invited'])
+export const action = pgEnum("action", ['ERROR', 'TRUNCATE', 'DELETE', 'UPDATE', 'INSERT'])
+export const equalityOp = pgEnum("equality_op", ['in', 'gte', 'gt', 'lte', 'lt', 'neq', 'eq'])
+export const buckettype = pgEnum("buckettype", ['ANALYTICS', 'STANDARD'])
 
-
-export const permissionAuditLog = pgTable("permission_audit_log", {
-	logId: uuid("log_id").defaultRandom().primaryKey().notNull(),
-	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
-	userId: uuid("user_id").references(() => tenantUsers.userId),
-	action: varchar("action", { length: 50 }).notNull(),
-	resourceType: varchar("resource_type", { length: 50 }).notNull(),
-	resourceId: varchar("resource_id", { length: 100 }),
-	oldValues: jsonb("old_values"),
-	newValues: jsonb("new_values"),
-	details: jsonb("details"),
-	ipAddress: varchar("ip_address", { length: 45 }),
-	userAgent: text("user_agent"),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-});
-
-export const usageLogs = pgTable("usage_logs", {
-	logId: uuid("log_id").defaultRandom().primaryKey().notNull(),
-	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
-	userId: uuid("user_id").references(() => tenantUsers.userId),
-	app: varchar("app", { length: 50 }).notNull(),
-	endpoint: varchar("endpoint", { length: 255 }).notNull(),
-	method: varchar("method", { length: 10 }).notNull(),
-	statusCode: integer("status_code"),
-	responseTime: numeric("response_time", { precision: 8, scale:  2 }),
-	source: varchar("source", { length: 50 }).notNull(),
-	ipAddress: varchar("ip_address", { length: 45 }),
-	userAgent: text("user_agent"),
-	requestSize: integer("request_size"),
-	responseSize: integer("response_size"),
-	metadata: jsonb("metadata").default({}),
-	errorMessage: text("error_message"),
-	errorStack: text("error_stack"),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-});
-
-export const roleTemplates = pgTable("role_templates", {
-	templateId: uuid("template_id").defaultRandom().primaryKey().notNull(),
-	templateName: varchar("template_name", { length: 100 }).notNull(),
-	displayName: varchar("display_name", { length: 100 }).notNull(),
-	description: text("description"),
-	category: varchar("category", { length: 50 }),
-	permissions: jsonb("permissions").notNull(),
-	restrictions: jsonb("restrictions").default({}),
-	targetTools: jsonb("target_tools").notNull(),
-	isActive: boolean("is_active").default(true),
-	sortOrder: integer("sort_order").default(0),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
-});
-
-export const userRoleAssignments = pgTable("user_role_assignments", {
-	id: uuid("id").defaultRandom().primaryKey().notNull(),
-	userId: uuid("user_id").notNull().references(() => tenantUsers.userId),
-	roleId: uuid("role_id").notNull().references(() => customRoles.roleId),
-	assignedBy: uuid("assigned_by").notNull().references(() => tenantUsers.userId),
-	assignedAt: timestamp("assigned_at", { mode: 'string' }).defaultNow(),
-	isTemporary: boolean("is_temporary").default(false),
-	expiresAt: timestamp("expires_at", { mode: 'string' }),
-	isActive: boolean("is_active").default(true),
-	deactivatedAt: timestamp("deactivated_at", { mode: 'string' }),
-	deactivatedBy: uuid("deactivated_by").references(() => tenantUsers.userId),
-});
-
-export const rateLimitLogs = pgTable("rate_limit_logs", {
-	logId: uuid("log_id").defaultRandom().primaryKey().notNull(),
-	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
-	userId: uuid("user_id").references(() => tenantUsers.userId),
-	endpoint: varchar("endpoint", { length: 255 }).notNull(),
-	limitType: varchar("limit_type", { length: 50 }).notNull(),
-	limitValue: integer("limit_value").notNull(),
-	currentCount: integer("current_count").notNull(),
-	windowStart: timestamp("window_start", { mode: 'string' }).notNull(),
-	windowEnd: timestamp("window_end", { mode: 'string' }).notNull(),
-	ipAddress: varchar("ip_address", { length: 45 }),
-	userAgent: text("user_agent"),
-	wasBlocked: boolean("was_blocked").default(false),
-	blockedReason: varchar("blocked_reason", { length: 255 }),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-});
-
-export const usageAlerts = pgTable("usage_alerts", {
-	alertId: uuid("alert_id").defaultRandom().primaryKey().notNull(),
-	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
-	alertType: varchar("alert_type", { length: 50 }).notNull(),
-	severity: varchar("severity", { length: 20 }).notNull(),
-	title: varchar("title", { length: 255 }).notNull(),
-	message: text("message").notNull(),
-	metricType: varchar("metric_type", { length: 50 }).notNull(),
-	currentValue: numeric("current_value", { precision: 15, scale:  2 }),
-	limitValue: numeric("limit_value", { precision: 15, scale:  2 }),
-	percentage: numeric("percentage", { precision: 5, scale:  2 }),
-	isRead: boolean("is_read").default(false),
-	isSent: boolean("is_sent").default(false),
-	sentAt: timestamp("sent_at", { mode: 'string' }),
-	readAt: timestamp("read_at", { mode: 'string' }),
-	actionRequired: varchar("action_required", { length: 100 }),
-	actionTaken: varchar("action_taken", { length: 100 }),
-	resolvedAt: timestamp("resolved_at", { mode: 'string' }),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-});
-
-export const usageMetricsDaily = pgTable("usage_metrics_daily", {
-	metricId: uuid("metric_id").defaultRandom().primaryKey().notNull(),
-	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
-	app: varchar("app", { length: 50 }).notNull(),
-	date: timestamp("date", { mode: 'string' }).notNull(),
-	apiCalls: integer("api_calls").default(0),
-	storageUsed: numeric("storage_used", { precision: 15, scale:  2 }).default('0'),
-	activeUsers: integer("active_users").default(0),
-	totalRequests: integer("total_requests").default(0),
-	avgResponseTime: numeric("avg_response_time", { precision: 8, scale:  2 }).default('0'),
-	errorCount: integer("error_count").default(0),
-	featureUsage: jsonb("feature_usage").default({}),
-	usageBySource: jsonb("usage_by_source").default({}),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
-});
-
-export const tenantInvitations = pgTable("tenant_invitations", {
-	invitationId: uuid("invitation_id").defaultRandom().primaryKey().notNull(),
-	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
-	email: varchar("email", { length: 255 }).notNull(),
-	roleId: uuid("role_id"),
-	invitedBy: uuid("invited_by").notNull(),
-	invitationToken: varchar("invitation_token", { length: 255 }).notNull(),
-	status: varchar("status", { length: 20 }).default('pending'::character varying),
-	expiresAt: timestamp("expires_at", { mode: 'string' }).notNull(),
-	acceptedAt: timestamp("accepted_at", { mode: 'string' }),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-});
-
-export const pendingTenants = pgTable("pending_tenants", {
-	tenantId: uuid("tenant_id").primaryKey().notNull(),
-	companyName: varchar("company_name", { length: 255 }).notNull(),
-	subdomain: varchar("subdomain", { length: 100 }).notNull(),
-	adminEmail: varchar("admin_email", { length: 255 }),
-	signupToken: varchar("signup_token", { length: 255 }).notNull(),
-	signupData: jsonb("signup_data"),
-	expiresAt: timestamp("expires_at", { mode: 'string' }).notNull(),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-});
 
 export const tenants = pgTable("tenants", {
 	tenantId: uuid("tenant_id").defaultRandom().primaryKey().notNull(),
@@ -175,11 +34,96 @@ export const tenants = pgTable("tenants", {
 	lastActivityAt: timestamp("last_activity_at", { mode: 'string' }),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
+	logo: varchar("logo", { length: 500 }),
+	customBranding: jsonb("custom_branding").default({}),
+	onboardingCompleted: boolean("onboarding_completed").default(false),
+	onboardingStep: varchar("onboarding_step", { length: 50 }),
+	onboardingProgress: jsonb("onboarding_progress").default({}),
+	onboardingStartedAt: timestamp("onboarding_started_at", { mode: 'string' }),
+	setupCompletionRate: integer("setup_completion_rate").default(0),
+	trialStartedAt: timestamp("trial_started_at", { mode: 'string' }),
+	trialStatus: varchar("trial_status", { length: 20 }).default('active'::character varying),
+	subscriptionStatus: varchar("subscription_status", { length: 20 }).default('trial'::character varying),
+	featuresEnabled: jsonb("features_enabled").default({}),
+	firstLoginAt: timestamp("first_login_at", { mode: 'string' }),
+	initialSetupData: jsonb("initial_setup_data").default({}),
+	stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
+	legalCompanyName: varchar("legal_company_name", { length: 255 }),
+	companyId: varchar("company_id", { length: 100 }),
+	dunsNumber: varchar("duns_number", { length: 50 }),
+	companyType: varchar("company_type", { length: 100 }),
+	ownership: varchar("ownership", { length: 100 }),
+	annualRevenue: numeric("annual_revenue", { precision: 15, scale:  2 }),
+	numberOfEmployees: integer("number_of_employees"),
+	tickerSymbol: varchar("ticker_symbol", { length: 20 }),
+	website: varchar("website", { length: 500 }),
+	companyDescription: text("company_description"),
+	foundedDate: date("founded_date"),
+	billingStreet: varchar("billing_street", { length: 255 }),
+	billingCity: varchar("billing_city", { length: 100 }),
+	billingState: varchar("billing_state", { length: 100 }),
+	billingZip: varchar("billing_zip", { length: 20 }),
+	billingCountry: varchar("billing_country", { length: 100 }),
+	shippingStreet: varchar("shipping_street", { length: 255 }),
+	shippingCity: varchar("shipping_city", { length: 100 }),
+	shippingState: varchar("shipping_state", { length: 100 }),
+	shippingZip: varchar("shipping_zip", { length: 20 }),
+	shippingCountry: varchar("shipping_country", { length: 100 }),
+	phone: varchar("phone", { length: 50 }),
+	fax: varchar("fax", { length: 50 }),
+	defaultLanguage: varchar("default_language", { length: 10 }).default('en'::character varying),
+	defaultLocale: varchar("default_locale", { length: 20 }).default('en-US'::character varying),
+	defaultCurrency: varchar("default_currency", { length: 3 }).default('USD'::character varying),
+	multiCurrencyEnabled: boolean("multi_currency_enabled").default(false),
+	advancedCurrencyManagement: boolean("advanced_currency_management").default(false),
+	defaultTimezone: varchar("default_timezone", { length: 50 }).default('UTC'::character varying),
+	firstDayOfWeek: integer("first_day_of_week").default(1),
+	gstin: varchar("gstin", { length: 15 }),
 },
 (table) => {
 	return {
+		idxTenantsIndustry: index("idx_tenants_industry").on(table.industry),
+		idxTenantsCompanyType: index("idx_tenants_company_type").on(table.companyType),
+		idxTenantsCompanySize: index("idx_tenants_company_size").on(table.companySize),
+		idxTenantsCountry: index("idx_tenants_country").on(table.country),
+		idxTenantsBillingCountry: index("idx_tenants_billing_country").on(table.billingCountry),
+		idxTenantsShippingCountry: index("idx_tenants_shipping_country").on(table.shippingCountry),
 		tenantsSubdomainUnique: unique("tenants_subdomain_unique").on(table.subdomain),
 		tenantsKindeOrgIdUnique: unique("tenants_kinde_org_id_unique").on(table.kindeOrgId),
+	}
+});
+
+export const activityLogs = pgTable("activity_logs", {
+	logId: uuid("log_id").defaultRandom().primaryKey().notNull(),
+	userId: uuid("user_id").references(() => tenantUsers.userId),
+	tenantId: uuid("tenant_id").references(() => tenants.tenantId),
+	appId: uuid("app_id").references(() => applications.appId),
+	action: varchar("action", { length: 100 }).notNull(),
+	resourceType: varchar("resource_type", { length: 50 }),
+	resourceId: varchar("resource_id", { length: 255 }),
+	metadata: jsonb("metadata"),
+	ipAddress: varchar("ip_address", { length: 45 }),
+	userAgent: text("user_agent"),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+});
+
+export const applications = pgTable("applications", {
+	appId: uuid("app_id").defaultRandom().primaryKey().notNull(),
+	appCode: varchar("app_code", { length: 50 }).notNull(),
+	appName: varchar("app_name", { length: 100 }).notNull(),
+	description: text("description"),
+	icon: varchar("icon", { length: 255 }),
+	baseUrl: varchar("base_url", { length: 255 }).notNull(),
+	status: varchar("status", { length: 20 }).default('active'::character varying).notNull(),
+	version: varchar("version", { length: 20 }),
+	isCore: boolean("is_core").default(false),
+	sortOrder: integer("sort_order").default(0),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
+},
+(table) => {
+	return {
+		applicationsAppCodeUnique: unique("applications_app_code_unique").on(table.appCode),
 	}
 });
 
@@ -198,17 +142,19 @@ export const auditLogs = pgTable("audit_logs", {
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 });
 
-export const userSessions = pgTable("user_sessions", {
-	sessionId: uuid("session_id").defaultRandom().primaryKey().notNull(),
-	userId: uuid("user_id").notNull().references(() => tenantUsers.userId),
-	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
-	sessionToken: varchar("session_token", { length: 255 }).notNull(),
-	ipAddress: varchar("ip_address", { length: 45 }),
-	userAgent: text("user_agent"),
-	loginAt: timestamp("login_at", { mode: 'string' }).defaultNow(),
-	lastActivityAt: timestamp("last_activity_at", { mode: 'string' }).defaultNow(),
-	expiresAt: timestamp("expires_at", { mode: 'string' }).notNull(),
-	isActive: boolean("is_active").default(true),
+export const organizationApplications = pgTable("organization_applications", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	tenantId: uuid("tenant_id").references(() => tenants.tenantId),
+	appId: uuid("app_id").references(() => applications.appId),
+	isEnabled: boolean("is_enabled").default(true),
+	enabledModules: jsonb("enabled_modules"),
+	customPermissions: jsonb("custom_permissions"),
+	licenseCount: integer("license_count").default(0),
+	maxUsers: integer("max_users"),
+	subscriptionTier: varchar("subscription_tier", { length: 50 }),
+	expiresAt: timestamp("expires_at", { mode: 'string' }),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
 });
 
 export const payments = pgTable("payments", {
@@ -256,61 +202,6 @@ export const payments = pgTable("payments", {
 	disputedAt: timestamp("disputed_at", { mode: 'string' }),
 	settledAt: timestamp("settled_at", { mode: 'string' }),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
-},
-(table) => {
-	return {
-		idxPaymentsStatus: index("idx_payments_status").on(table.status),
-		idxPaymentsCreatedAt: index("idx_payments_created_at").on(table.createdAt),
-		idxPaymentsStripePaymentIntent: index("idx_payments_stripe_payment_intent").on(table.stripePaymentIntentId),
-		idxPaymentsPaymentType: index("idx_payments_payment_type").on(table.paymentType),
-		idxPaymentsBillingReason: index("idx_payments_billing_reason").on(table.billingReason),
-		idxPaymentsTenant: index("idx_payments_tenant").on(table.tenantId),
-	}
-});
-
-export const subscriptions = pgTable("subscriptions", {
-	subscriptionId: uuid("subscription_id").defaultRandom().primaryKey().notNull(),
-	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
-	stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }),
-	stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
-	stripePriceId: varchar("stripe_price_id", { length: 255 }),
-	plan: varchar("plan", { length: 50 }).notNull(),
-	status: varchar("status", { length: 20 }).notNull(),
-	subscribedTools: jsonb("subscribed_tools").notNull(),
-	usageLimits: jsonb("usage_limits").notNull(),
-	monthlyPrice: numeric("monthly_price", { precision: 10, scale:  2 }),
-	yearlyPrice: numeric("yearly_price", { precision: 10, scale:  2 }),
-	billingCycle: varchar("billing_cycle", { length: 20 }).default('monthly'::character varying),
-	currentPeriodStart: timestamp("current_period_start", { mode: 'string' }),
-	currentPeriodEnd: timestamp("current_period_end", { mode: 'string' }),
-	cancelAt: timestamp("cancel_at", { mode: 'string' }),
-	canceledAt: timestamp("canceled_at", { mode: 'string' }),
-	trialStart: timestamp("trial_start", { mode: 'string' }),
-	trialEnd: timestamp("trial_end", { mode: 'string' }),
-	addOns: jsonb("add_ons").default([]),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
-},
-(table) => {
-	return {
-		subscriptionsStripeSubscriptionIdUnique: unique("subscriptions_stripe_subscription_id_unique").on(table.stripeSubscriptionId),
-	}
-});
-
-export const usageBilling = pgTable("usage_billing", {
-	billingId: uuid("billing_id").defaultRandom().primaryKey().notNull(),
-	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
-	subscriptionId: uuid("subscription_id").references(() => subscriptions.subscriptionId),
-	billingPeriodStart: timestamp("billing_period_start", { mode: 'string' }).notNull(),
-	billingPeriodEnd: timestamp("billing_period_end", { mode: 'string' }).notNull(),
-	apiCallsUsed: integer("api_calls_used").default(0),
-	storageUsed: numeric("storage_used", { precision: 15, scale:  2 }).default('0'),
-	activeUsers: integer("active_users").default(0),
-	overageCharges: numeric("overage_charges", { precision: 10, scale:  2 }).default('0'),
-	overageDetails: jsonb("overage_details").default({}),
-	isBilled: boolean("is_billed").default(false),
-	billedAt: timestamp("billed_at", { mode: 'string' }),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 });
 
 export const subscriptionActions = pgTable("subscription_actions", {
@@ -342,29 +233,79 @@ export const subscriptionActions = pgTable("subscription_actions", {
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 });
 
-export const customRoles = pgTable("custom_roles", {
-	roleId: uuid("role_id").defaultRandom().primaryKey().notNull(),
-	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
-	roleName: varchar("role_name", { length: 100 }).notNull(),
-	description: text("description"),
-	color: varchar("color", { length: 7 }).default('#6b7280'::character varying),
-	permissions: jsonb("permissions").notNull(),
-	restrictions: jsonb("restrictions").default({}),
-	isSystemRole: boolean("is_system_role").default(false),
-	isDefault: boolean("is_default").default(false),
-	priority: integer("priority").default(0),
-	createdBy: uuid("created_by").notNull().references(() => tenantUsers.userId),
-	lastModifiedBy: uuid("last_modified_by").references(() => tenantUsers.userId),
+export const trialEvents = pgTable("trial_events", {
+	eventId: uuid("event_id").defaultRandom().primaryKey().notNull(),
+	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId, { onDelete: "cascade" } ),
+	subscriptionId: uuid("subscription_id").references(() => subscriptions.subscriptionId, { onDelete: "cascade" } ),
+	eventType: varchar("event_type", { length: 50 }).notNull(),
+	eventData: jsonb("event_data").default({}),
+	userId: uuid("user_id"),
+	ipAddress: inet("ip_address"),
+	userAgent: text("user_agent"),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
-	kindeRoleId: varchar("kinde_role_id", { length: 255 }),
-	kindeRoleKey: varchar("kinde_role_key", { length: 255 }),
 },
 (table) => {
 	return {
-		idxCustomRolesKindeRoleId: index("idx_custom_roles_kinde_role_id").on(table.kindeRoleId),
-		idxCustomRolesKindeRoleKey: index("idx_custom_roles_kinde_role_key").on(table.kindeRoleKey),
+		idxTrialEventsSubscription: index("idx_trial_events_subscription").on(table.subscriptionId, table.eventType),
+		idxTrialEventsTenant: index("idx_trial_events_tenant").on(table.tenantId, table.eventType, table.createdAt),
+		idxTrialEventsTypeDate: index("idx_trial_events_type_date").on(table.eventType, table.createdAt),
 	}
+});
+
+export const trialRestrictions = pgTable("trial_restrictions", {
+	restrictionId: uuid("restriction_id").defaultRandom().primaryKey().notNull(),
+	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId, { onDelete: "cascade" } ),
+	restrictionType: varchar("restriction_type", { length: 50 }).notNull(),
+	isActive: boolean("is_active").default(true),
+	restrictionData: jsonb("restriction_data").default({}),
+	appliedAt: timestamp("applied_at", { mode: 'string' }).defaultNow(),
+	removedAt: timestamp("removed_at", { mode: 'string' }),
+},
+(table) => {
+	return {
+		idxTrialRestrictionsTenant: index("idx_trial_restrictions_tenant").on(table.tenantId, table.isActive),
+		idxTrialRestrictionsType: index("idx_trial_restrictions_type").on(table.restrictionType, table.isActive),
+	}
+});
+
+export const trialStatusView = pgTable("trial_status_view", {
+	tenantId: uuid("tenant_id"),
+	subscriptionId: uuid("subscription_id"),
+	plan: varchar("plan", { length: 50 }),
+	status: varchar("status", { length: 20 }),
+	trialStart: timestamp("trial_start", { mode: 'string' }),
+	trialEnd: timestamp("trial_end", { mode: 'string' }),
+	currentPeriodStart: timestamp("current_period_start", { mode: 'string' }),
+	currentPeriodEnd: timestamp("current_period_end", { mode: 'string' }),
+	hasEverUpgraded: boolean("has_ever_upgraded"),
+	trialToggledOff: boolean("trial_toggled_off"),
+	lastReminderSentAt: timestamp("last_reminder_sent_at", { mode: 'string' }),
+	reminderCount: integer("reminder_count"),
+	companyName: varchar("company_name", { length: 255 }),
+	adminEmail: varchar("admin_email", { length: 255 }),
+	isExpired: boolean("is_expired"),
+	expiryDate: timestamp("expiry_date", { mode: 'string' }),
+});
+
+export const usageAlerts = pgTable("usage_alerts", {
+	alertId: uuid("alert_id").defaultRandom().primaryKey().notNull(),
+	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
+	alertType: varchar("alert_type", { length: 50 }).notNull(),
+	severity: varchar("severity", { length: 20 }).notNull(),
+	title: varchar("title", { length: 255 }).notNull(),
+	message: text("message").notNull(),
+	metricType: varchar("metric_type", { length: 50 }).notNull(),
+	currentValue: numeric("current_value", { precision: 15, scale:  2 }),
+	limitValue: numeric("limit_value", { precision: 15, scale:  2 }),
+	percentage: numeric("percentage", { precision: 5, scale:  2 }),
+	isRead: boolean("is_read").default(false),
+	isSent: boolean("is_sent").default(false),
+	sentAt: timestamp("sent_at", { mode: 'string' }),
+	readAt: timestamp("read_at", { mode: 'string' }),
+	actionRequired: varchar("action_required", { length: 100 }),
+	actionTaken: varchar("action_taken", { length: 100 }),
+	resolvedAt: timestamp("resolved_at", { mode: 'string' }),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 });
 
 export const tenantUsers = pgTable("tenant_users", {
@@ -389,64 +330,54 @@ export const tenantUsers = pgTable("tenant_users", {
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
 	invitedBy: uuid("invited_by"),
 	invitedAt: timestamp("invited_at", { mode: 'string' }),
-	invitationToken: varchar("invitation_token", { length: 255 }),
-	invitationExpiresAt: timestamp("invitation_expires_at", { mode: 'string' }),
-	invitationAcceptedAt: timestamp("invitation_accepted_at", { mode: 'string' }),
+	firstName: varchar("first_name", { length: 100 }),
+	lastName: varchar("last_name", { length: 100 }),
+	username: varchar("username", { length: 100 }),
+	alias: varchar("alias", { length: 100 }),
+	phone: varchar("phone", { length: 50 }),
+	mobile: varchar("mobile", { length: 50 }),
+	managerId: uuid("manager_id"),
+	profileData: jsonb("profile_data").default({}),
 },
 (table) => {
 	return {
-		idxTenantUsersInvitedBy: index("idx_tenant_users_invited_by").on(table.invitedBy),
-		idxTenantUsersInvitationToken: index("idx_tenant_users_invitation_token").on(table.invitationToken),
-		tenantUsersInvitedByFkey: foreignKey({
+		tenantUsersInvitedByTenantUsersUserIdFk: foreignKey({
 			columns: [table.invitedBy],
 			foreignColumns: [table.userId],
-			name: "tenant_users_invited_by_fkey"
+			name: "tenant_users_invited_by_tenant_users_user_id_fk"
+		}),
+		tenantUsersManagerIdFkey: foreignKey({
+			columns: [table.managerId],
+			foreignColumns: [table.userId],
+			name: "tenant_users_manager_id_fkey"
 		}),
 	}
 });
 
-export const organizationApplications = pgTable("organization_applications", {
+export const userRoleAssignments = pgTable("user_role_assignments", {
 	id: uuid("id").defaultRandom().primaryKey().notNull(),
-	tenantId: uuid("tenant_id").references(() => tenants.tenantId),
-	appId: uuid("app_id").references(() => applications.appId),
-	isEnabled: boolean("is_enabled").default(true),
-	enabledModules: jsonb("enabled_modules"),
-	customPermissions: jsonb("custom_permissions"),
-	licenseCount: integer("license_count").default(0),
-	maxUsers: integer("max_users"),
-	subscriptionTier: varchar("subscription_tier", { length: 50 }),
+	userId: uuid("user_id").notNull().references(() => tenantUsers.userId),
+	roleId: uuid("role_id").notNull().references(() => customRoles.roleId),
+	assignedBy: uuid("assigned_by").notNull().references(() => tenantUsers.userId),
+	assignedAt: timestamp("assigned_at", { mode: 'string' }).defaultNow(),
+	isTemporary: boolean("is_temporary").default(false),
 	expiresAt: timestamp("expires_at", { mode: 'string' }),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
-},
-(table) => {
-	return {
-		idxOrganizationApplicationsTenantId: index("idx_organization_applications_tenant_id").on(table.tenantId),
-		idxOrganizationApplicationsAppId: index("idx_organization_applications_app_id").on(table.appId),
-		organizationApplicationsTenantIdAppIdKey: unique("organization_applications_tenant_id_app_id_key").on(table.tenantId, table.appId),
-	}
+	isActive: boolean("is_active").default(true),
+	deactivatedAt: timestamp("deactivated_at", { mode: 'string' }),
+	deactivatedBy: uuid("deactivated_by").references(() => tenantUsers.userId),
 });
 
-export const applications = pgTable("applications", {
-	appId: uuid("app_id").defaultRandom().primaryKey().notNull(),
-	appCode: varchar("app_code", { length: 50 }).notNull(),
-	appName: varchar("app_name", { length: 100 }).notNull(),
-	description: text("description"),
-	icon: varchar("icon", { length: 255 }),
-	baseUrl: varchar("base_url", { length: 255 }).notNull(),
-	status: varchar("status", { length: 20 }).default('active'::character varying).notNull(),
-	version: varchar("version", { length: 20 }),
-	isCore: boolean("is_core").default(false),
-	sortOrder: integer("sort_order").default(0),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
-},
-(table) => {
-	return {
-		idxApplicationsAppCode: index("idx_applications_app_code").on(table.appCode),
-		idxApplicationsStatus: index("idx_applications_status").on(table.status),
-		applicationsAppCodeKey: unique("applications_app_code_key").on(table.appCode),
-	}
+export const userSessions = pgTable("user_sessions", {
+	sessionId: uuid("session_id").defaultRandom().primaryKey().notNull(),
+	userId: uuid("user_id").notNull().references(() => tenantUsers.userId),
+	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
+	sessionToken: varchar("session_token", { length: 255 }).notNull(),
+	ipAddress: varchar("ip_address", { length: 45 }),
+	userAgent: text("user_agent"),
+	loginAt: timestamp("login_at", { mode: 'string' }).defaultNow(),
+	lastActivityAt: timestamp("last_activity_at", { mode: 'string' }).defaultNow(),
+	expiresAt: timestamp("expires_at", { mode: 'string' }).notNull(),
+	isActive: boolean("is_active").default(true),
 });
 
 export const applicationModules = pgTable("application_modules", {
@@ -458,11 +389,132 @@ export const applicationModules = pgTable("application_modules", {
 	isCore: boolean("is_core").default(false),
 	permissions: jsonb("permissions"),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+});
+
+export const customRoles = pgTable("custom_roles", {
+	roleId: uuid("role_id").defaultRandom().primaryKey().notNull(),
+	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
+	roleName: varchar("role_name", { length: 100 }).notNull(),
+	description: text("description"),
+	color: varchar("color", { length: 7 }).default('#6b7280'::character varying),
+	permissions: jsonb("permissions").notNull(),
+	restrictions: jsonb("restrictions").default({}),
+	isSystemRole: boolean("is_system_role").default(false),
+	isDefault: boolean("is_default").default(false),
+	priority: integer("priority").default(0),
+	createdBy: uuid("created_by").notNull().references(() => tenantUsers.userId),
+	lastModifiedBy: uuid("last_modified_by").references(() => tenantUsers.userId),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
+	kindeRoleId: varchar("kinde_role_id", { length: 255 }),
+	kindeRoleKey: varchar("kinde_role_key", { length: 255 }),
+});
+
+export const ssoTokens = pgTable("sso_tokens", {
+	tokenId: uuid("token_id").defaultRandom().primaryKey().notNull(),
+	userId: uuid("user_id").references(() => tenantUsers.userId),
+	appId: uuid("app_id").references(() => applications.appId),
+	token: text("token").notNull(),
+	expiresAt: timestamp("expires_at", { mode: 'string' }).notNull(),
+	isRevoked: boolean("is_revoked").default(false),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+});
+
+export const subscriptions = pgTable("subscriptions", {
+	subscriptionId: uuid("subscription_id").defaultRandom().primaryKey().notNull(),
+	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
+	stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }),
+	stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
+	stripePriceId: varchar("stripe_price_id", { length: 255 }),
+	plan: varchar("plan", { length: 50 }).notNull(),
+	status: varchar("status", { length: 20 }).notNull(),
+	subscribedTools: jsonb("subscribed_tools").default([]),
+	usageLimits: jsonb("usage_limits").default({}),
+	monthlyPrice: numeric("monthly_price", { precision: 10, scale:  2 }).default('0'),
+	yearlyPrice: numeric("yearly_price", { precision: 10, scale:  2 }).default('0'),
+	billingCycle: varchar("billing_cycle", { length: 20 }).default('monthly'::character varying),
+	currentPeriodStart: timestamp("current_period_start", { mode: 'string' }),
+	currentPeriodEnd: timestamp("current_period_end", { mode: 'string' }),
+	canceledAt: timestamp("canceled_at", { mode: 'string' }),
+	trialStart: timestamp("trial_start", { mode: 'string' }),
+	trialEnd: timestamp("trial_end", { mode: 'string' }),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
+	firstUpgradeAt: timestamp("first_upgrade_at", { mode: 'string' }),
+	lastDowngradeAt: timestamp("last_downgrade_at", { mode: 'string' }),
+	trialToggledOff: boolean("trial_toggled_off").default(false),
+	isTrialUser: boolean("is_trial_user").default(false),
+	hasEverUpgraded: boolean("has_ever_upgraded").default(false),
+	cancelationReason: text("cancelation_reason"),
+	lastReminderSentAt: timestamp("last_reminder_sent_at", { mode: 'string' }),
+	reminderCount: integer("reminder_count").default(0),
+	restrictionsAppliedAt: timestamp("restrictions_applied_at", { mode: 'string' }),
+	cancelAt: timestamp("cancel_at", { mode: 'string' }),
+	suspendedAt: timestamp("suspended_at", { mode: 'string' }),
+	suspendedReason: text("suspended_reason"),
+	addOns: jsonb("add_ons").default([]),
+});
+
+export const tenantInvitations = pgTable("tenant_invitations", {
+	invitationId: uuid("invitation_id").defaultRandom().primaryKey().notNull(),
+	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
+	email: varchar("email", { length: 255 }).notNull(),
+	roleId: uuid("role_id"),
+	invitedBy: uuid("invited_by").notNull(),
+	invitationToken: varchar("invitation_token", { length: 255 }).notNull(),
+	status: varchar("status", { length: 20 }).default('pending'::character varying),
+	expiresAt: timestamp("expires_at", { mode: 'string' }).notNull(),
+	acceptedAt: timestamp("accepted_at", { mode: 'string' }),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+	invitationUrl: varchar("invitation_url", { length: 1000 }),
+	cancelledAt: timestamp("cancelled_at", { mode: 'string' }),
+	cancelledBy: uuid("cancelled_by"),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
 },
 (table) => {
 	return {
-		idxApplicationModulesAppId: index("idx_application_modules_app_id").on(table.appId),
+		idxTenantInvitationsEmail: index("idx_tenant_invitations_email").on(table.email),
+		idxTenantInvitationsStatus: index("idx_tenant_invitations_status").on(table.status),
+		idxTenantInvitationsToken: index("idx_tenant_invitations_token").on(table.invitationToken),
+		tenantInvitationsInvitationTokenUnique: unique("tenant_invitations_invitation_token_unique").on(table.invitationToken),
 	}
+});
+
+export const usageLogs = pgTable("usage_logs", {
+	logId: uuid("log_id").defaultRandom().primaryKey().notNull(),
+	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
+	userId: uuid("user_id").references(() => tenantUsers.userId),
+	app: varchar("app", { length: 50 }).notNull(),
+	endpoint: varchar("endpoint", { length: 255 }).notNull(),
+	method: varchar("method", { length: 10 }).notNull(),
+	statusCode: integer("status_code"),
+	responseTime: numeric("response_time", { precision: 8, scale:  2 }),
+	source: varchar("source", { length: 50 }).notNull(),
+	ipAddress: varchar("ip_address", { length: 45 }),
+	userAgent: text("user_agent"),
+	requestSize: integer("request_size"),
+	responseSize: integer("response_size"),
+	metadata: jsonb("metadata").default({}),
+	errorMessage: text("error_message"),
+	errorStack: text("error_stack"),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+});
+
+export const usageMetricsDaily = pgTable("usage_metrics_daily", {
+	metricId: uuid("metric_id").defaultRandom().primaryKey().notNull(),
+	tenantId: uuid("tenant_id").notNull().references(() => tenants.tenantId),
+	app: varchar("app", { length: 50 }).notNull(),
+	date: timestamp("date", { mode: 'string' }).notNull(),
+	apiCalls: integer("api_calls").default(0),
+	storageUsed: numeric("storage_used", { precision: 15, scale:  2 }).default('0'),
+	activeUsers: integer("active_users").default(0),
+	totalRequests: integer("total_requests").default(0),
+	avgResponseTime: numeric("avg_response_time", { precision: 8, scale:  2 }).default('0'),
+	errorCount: integer("error_count").default(0),
+	featureUsage: jsonb("feature_usage").default({}),
+	usageBySource: jsonb("usage_by_source").default({}),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
 });
 
 export const userApplicationPermissions = pgTable("user_application_permissions", {
@@ -475,95 +527,19 @@ export const userApplicationPermissions = pgTable("user_application_permissions"
 	grantedBy: uuid("granted_by").references(() => tenantUsers.userId),
 	grantedAt: timestamp("granted_at", { mode: 'string' }).defaultNow(),
 	expiresAt: timestamp("expires_at", { mode: 'string' }),
-},
-(table) => {
-	return {
-		idxUserApplicationPermissionsUserId: index("idx_user_application_permissions_user_id").on(table.userId),
-		idxUserApplicationPermissionsAppId: index("idx_user_application_permissions_app_id").on(table.appId),
-	}
 });
 
-export const subscriptionPlans = pgTable("subscription_plans", {
-	planId: uuid("plan_id").defaultRandom().primaryKey().notNull(),
-	planCode: varchar("plan_code", { length: 50 }).notNull(),
-	planName: varchar("plan_name", { length: 100 }).notNull(),
-	planType: varchar("plan_type", { length: 20 }).notNull(),
-	description: text("description"),
-	price: numeric("price", { precision: 10, scale:  2 }),
-	billingCycle: varchar("billing_cycle", { length: 20 }),
-	includedApps: jsonb("included_apps"),
-	features: jsonb("features"),
-	maxUsers: integer("max_users"),
-	maxOrganizations: integer("max_organizations"),
-	isActive: boolean("is_active").default(true),
-	isCustom: boolean("is_custom").default(false),
+export const webhookLogs = pgTable("webhook_logs", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(),
+	eventId: varchar("event_id", { length: 255 }).notNull(),
+	eventType: varchar("event_type", { length: 100 }).notNull(),
+	status: varchar("status", { length: 50 }).notNull(),
+	errorMessage: text("error_message"),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
 },
 (table) => {
 	return {
-		idxSubscriptionPlansPlanCode: index("idx_subscription_plans_plan_code").on(table.planCode),
-		subscriptionPlansPlanCodeKey: unique("subscription_plans_plan_code_key").on(table.planCode),
-	}
-});
-
-export const organizationSubscriptions = pgTable("organization_subscriptions", {
-	subscriptionId: uuid("subscription_id").defaultRandom().primaryKey().notNull(),
-	tenantId: uuid("tenant_id").references(() => tenants.tenantId),
-	planId: uuid("plan_id").references(() => subscriptionPlans.planId),
-	status: varchar("status", { length: 20 }).notNull(),
-	currentPeriodStart: timestamp("current_period_start", { mode: 'string' }),
-	currentPeriodEnd: timestamp("current_period_end", { mode: 'string' }),
-	cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
-	trialEndsAt: timestamp("trial_ends_at", { mode: 'string' }),
-	customPricing: jsonb("custom_pricing"),
-	paymentMethodId: varchar("payment_method_id", { length: 255 }),
-	lastPaymentAt: timestamp("last_payment_at", { mode: 'string' }),
-	nextPaymentAt: timestamp("next_payment_at", { mode: 'string' }),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
-},
-(table) => {
-	return {
-		idxOrganizationSubscriptionsTenantId: index("idx_organization_subscriptions_tenant_id").on(table.tenantId),
-	}
-});
-
-export const ssoTokens = pgTable("sso_tokens", {
-	tokenId: uuid("token_id").defaultRandom().primaryKey().notNull(),
-	userId: uuid("user_id").references(() => tenantUsers.userId),
-	appId: uuid("app_id").references(() => applications.appId),
-	token: text("token").notNull(),
-	expiresAt: timestamp("expires_at", { mode: 'string' }).notNull(),
-	isRevoked: boolean("is_revoked").default(false),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-},
-(table) => {
-	return {
-		idxSsoTokensUserId: index("idx_sso_tokens_user_id").on(table.userId),
-		idxSsoTokensAppId: index("idx_sso_tokens_app_id").on(table.appId),
-		idxSsoTokensToken: index("idx_sso_tokens_token").on(table.token),
-	}
-});
-
-export const activityLogs = pgTable("activity_logs", {
-	logId: uuid("log_id").defaultRandom().primaryKey().notNull(),
-	userId: uuid("user_id").references(() => tenantUsers.userId),
-	tenantId: uuid("tenant_id").references(() => tenants.tenantId),
-	appId: uuid("app_id").references(() => applications.appId),
-	action: varchar("action", { length: 100 }).notNull(),
-	resourceType: varchar("resource_type", { length: 50 }),
-	resourceId: varchar("resource_id", { length: 255 }),
-	metadata: jsonb("metadata"),
-	ipAddress: varchar("ip_address", { length: 45 }),
-	userAgent: text("user_agent"),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-},
-(table) => {
-	return {
-		idxActivityLogsUserId: index("idx_activity_logs_user_id").on(table.userId),
-		idxActivityLogsTenantId: index("idx_activity_logs_tenant_id").on(table.tenantId),
-		idxActivityLogsAppId: index("idx_activity_logs_app_id").on(table.appId),
-		idxActivityLogsCreatedAt: index("idx_activity_logs_created_at").on(table.createdAt),
+		webhookLogsEventIdUnique: unique("webhook_logs_event_id_unique").on(table.eventId),
 	}
 });

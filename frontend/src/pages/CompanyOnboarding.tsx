@@ -86,7 +86,7 @@ interface OnboardingFormData {
   // Company Profile
   companyName: string;
   legalCompanyName: string;
-  companyId: string;
+  gstin: string;
   dunsNumber: string;
   industry: string;
   companyType: string;
@@ -119,7 +119,7 @@ interface OnboardingFormData {
   multiCurrencyEnabled: boolean;
   advancedCurrencyManagement: boolean;
   defaultTimeZone: string;
-  firstDayOfWeek: string;
+  firstDayOfWeek: string; // Will be converted to number when sending to backend
   
   // Administrator Setup
   adminFirstName: string;
@@ -144,7 +144,7 @@ const CompanyOnboarding: React.FC = () => {
     // Company Profile
     companyName: '',
     legalCompanyName: '',
-    companyId: '',
+    gstin: '',
     dunsNumber: '',
     industry: '',
     companyType: '',
@@ -177,7 +177,7 @@ const CompanyOnboarding: React.FC = () => {
     multiCurrencyEnabled: false,
     advancedCurrencyManagement: false,
     defaultTimeZone: 'UTC',
-    firstDayOfWeek: 'Monday',
+    firstDayOfWeek: '1',
     
     // Administrator Setup
     adminFirstName: '',
@@ -196,6 +196,10 @@ const CompanyOnboarding: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [showGSTINModal, setShowGSTINModal] = useState(false);
+  const [gstinValidationResult, setGstinValidationResult] = useState<any>(null);
+
+
 
   // Load saved form data on component mount
   useEffect(() => {
@@ -216,6 +220,11 @@ const CompanyOnboarding: React.FC = () => {
       value !== '' && value !== false
     ).length;
     setProgress((filledFields / totalFields) * 100);
+  }, [formData]);
+
+  // Debug: Log form data changes
+  useEffect(() => {
+    console.log('Form data updated:', formData);
   }, [formData]);
 
   const loadFormProgress = () => {
@@ -240,6 +249,96 @@ const CompanyOnboarding: React.FC = () => {
       }));
     } catch (error) {
       console.error('Error saving form progress:', error);
+    }
+  };
+
+  const validateGSTIN = async (gstin: string) => {
+    if (!gstin || gstin.length !== 15) {
+      toast.error('Please enter a valid 15-digit GSTIN');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      
+      const response = await fetch('/api/onboarding/validate-gstin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ gstin: gstin.toUpperCase() }),
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data.isValid) {
+        toast.success('GSTIN validated successfully!');
+        
+        // Store the validation result and show modal
+        setGstinValidationResult(result.data);
+        setShowGSTINModal(true);
+        
+        // Auto-fill company details if available
+        if (result.data.companyDetails) {
+          const details = result.data.companyDetails;
+          
+          // Safely parse the date
+          let parsedDate = '';
+          if (details.registrationDate) {
+            try {
+              // Handle DD/MM/YYYY format
+              const dateParts = details.registrationDate.split('/');
+              if (dateParts.length === 3) {
+                const day = parseInt(dateParts[0]);
+                const month = parseInt(dateParts[1]) - 1; // Month is 0-indexed
+                const year = parseInt(dateParts[2]);
+                const date = new Date(year, month, day);
+                if (!isNaN(date.getTime())) {
+                  parsedDate = date.toISOString().split('T')[0];
+                }
+              }
+            } catch (dateError) {
+              console.warn('Could not parse registration date:', details.registrationDate);
+            }
+          }
+          
+          const updatedFormData = {
+            ...formData,
+            companyName: details.companyName || formData.companyName,
+            legalCompanyName: details.legalCompanyName || formData.legalCompanyName,
+            companyType: details.businessType || formData.companyType,
+            billingStreet: details.address.street || formData.billingStreet,
+            billingCity: details.address.city || formData.billingCity,
+            billingState: details.address.state || formData.billingState,
+            billingZip: details.address.pincode || formData.billingZip,
+            foundedDate: parsedDate || formData.foundedDate,
+
+          };
+
+          console.log('Current form data:', formData);
+          console.log('Updated form data:', updatedFormData);
+          
+          setFormData(updatedFormData);
+
+          // Debug log to see what's being set
+          console.log('Auto-filling form with GSTIN data:', {
+            companyName: details.companyName,
+            legalCompanyName: details.legalCompanyName,
+            companyType: details.businessType,
+            foundedDate: parsedDate,
+            address: details.address
+          });
+          
+          toast.success('Company details auto-filled from GSTIN!');
+        }
+      } else {
+        toast.error(result.data?.error || 'GSTIN validation failed');
+      }
+    } catch (error) {
+      console.error('GSTIN validation error:', error);
+      toast.error('Failed to validate GSTIN. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -348,18 +447,40 @@ const CompanyOnboarding: React.FC = () => {
           <p className="text-xs text-gray-500">Used for contracts and legal documents</p>
         </div>
 
+
+
         <div className="space-y-2">
-          <Label htmlFor="companyId" className="flex items-center gap-2">
-            Company ID/Registration <Info className="h-3 w-3 text-gray-400" />
+          <Label htmlFor="gstin" className="flex items-center gap-2">
+            GSTIN <Info className="h-3 w-3 text-gray-400" />
           </Label>
-          <Input
-            id="companyId"
-            value={formData.companyId}
-            onChange={(e) => handleInputChange('companyId', e.target.value)}
-            placeholder="Legal entity ID"
-            className="focus:ring-2 focus:ring-blue-500"
-          />
-          <p className="text-xs text-gray-500">Unique identifier for your company</p>
+          <div className="flex gap-2">
+            <Input
+              id="gstin"
+              value={formData.gstin}
+              onChange={(e) => handleInputChange('gstin', e.target.value)}
+              placeholder="15-digit GSTIN"
+              maxLength={15}
+              className="focus:ring-2 focus:ring-blue-500 font-mono uppercase"
+              style={{ textTransform: 'uppercase' }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => validateGSTIN(formData.gstin)}
+              disabled={!formData.gstin || formData.gstin.length !== 15}
+              className="whitespace-nowrap"
+            >
+              Validate
+            </Button>
+          </div>
+          <p className="text-xs text-gray-500">15-digit GST identification number</p>
+          {formData.gstin && formData.gstin.length === 15 && (
+            <p className="text-xs text-blue-600 flex items-center gap-1">
+              <CheckCircle className="h-3 w-3" />
+              Ready to validate
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -778,8 +899,8 @@ const CompanyOnboarding: React.FC = () => {
               <SelectValue placeholder="Select first day" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Monday">Monday</SelectItem>
-              <SelectItem value="Sunday">Sunday</SelectItem>
+              <SelectItem value="1">Monday</SelectItem>
+              <SelectItem value="7">Sunday</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -1148,8 +1269,276 @@ const CompanyOnboarding: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {/* GSTIN Validation Modal */}
+      {showGSTINModal && gstinValidationResult && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  <CheckCircle className="h-6 w-6 text-green-500" />
+                  GSTIN Validation Results
+                </h2>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowGSTINModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </Button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-green-800 mb-3">Company Details</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-700">Trade Name:</span>
+                      <p className="text-gray-900">{gstinValidationResult.companyDetails?.companyName}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Legal Name:</span>
+                      <p className="text-gray-900">{gstinValidationResult.companyDetails?.legalCompanyName}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Business Type:</span>
+                      <p className="text-gray-900">{gstinValidationResult.companyDetails?.businessType}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Status:</span>
+                      <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
+                        {gstinValidationResult.companyDetails?.status}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Registration Date:</span>
+                      <p className="text-gray-900">{gstinValidationResult.companyDetails?.registrationDate}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">GSTIN:</span>
+                      <p className="text-gray-900 font-mono">{gstinValidationResult.companyDetails?.gstin}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Address Information */}
+                {gstinValidationResult.companyDetails?.address && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h3 className="font-semibold text-blue-800 mb-3">Registered Address</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="font-medium text-gray-700">Street:</span>
+                        <p className="text-gray-900">{gstinValidationResult.companyDetails.address.street}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">City:</span>
+                        <p className="text-gray-900">{gstinValidationResult.companyDetails.address.city}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">State:</span>
+                        <p className="text-gray-900">{gstinValidationResult.companyDetails.address.state}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">Pincode:</span>
+                        <p className="text-gray-900">{gstinValidationResult.companyDetails.address.pincode}</p>
+                      </div>
+                      {gstinValidationResult.companyDetails.address.building && (
+                        <div>
+                          <span className="font-medium text-gray-700">Building:</span>
+                          <p className="text-gray-900">{gstinValidationResult.companyDetails.address.building}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Nature of Business */}
+                {gstinValidationResult.companyDetails?.nature && gstinValidationResult.companyDetails.nature.length > 0 && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <h3 className="font-semibold text-purple-800 mb-3">Nature of Business</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {gstinValidationResult.companyDetails.nature.map((nature: string, index: number) => (
+                        <Badge key={index} variant="secondary" className="bg-purple-100 text-purple-800">
+                          {nature}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tax Information */}
+                {gstinValidationResult.validationDetails?.taxType && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <h3 className="font-semibold text-orange-800 mb-3">Tax Information</h3>
+                    <p className="text-sm text-gray-900">{gstinValidationResult.validationDetails.taxType}</p>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4 border-t">
+                  <Button
+                    onClick={() => setShowGSTINModal(false)}
+                    className="flex-1"
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowGSTINModal(false);
+                      toast.success('Company details have been auto-filled!');
+                    }}
+                    className="flex-1"
+                  >
+                    Use These Details
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+  // GSTIN Validation Modal
+  const renderGSTINModal = () => {
+    if (!showGSTINModal || !gstinValidationResult) return null;
+
+    const details = gstinValidationResult.companyDetails;
+    const validation = gstinValidationResult.validationDetails;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <CheckCircle className="h-6 w-6 text-green-500" />
+                GSTIN Validation Results
+              </h2>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowGSTINModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </Button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Company Information */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <h3 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Company Details
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium text-gray-700">Trade Name:</span>
+                    <p className="text-gray-900">{details.tradeName || details.companyName}</p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Legal Name:</span>
+                    <p className="text-gray-900">{details.legalCompanyName}</p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Business Type:</span>
+                    <p className="text-gray-900">{details.businessType}</p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Status:</span>
+                    <span className={`px-2 py-1 rounded-full text-xs ${
+                      details.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {details.status}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Registration Date:</span>
+                    <p className="text-gray-900">{details.registrationDate}</p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">GSTIN:</span>
+                    <p className="text-gray-900 font-mono">{details.gstin}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Address Information */}
+              {details.address && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                    <MapPin className="h-4 w-4" />
+                    Registered Address
+                  </h3>
+                  <div className="text-sm space-y-2">
+                    <p className="text-gray-900">
+                      {details.address.street && `${details.address.street}, `}
+                      {details.address.building && `${details.address.building}, `}
+                      {details.address.city && `${details.address.city}, `}
+                      {details.address.state && `${details.address.state} `}
+                      {details.address.pincode && `${details.address.pincode}`}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Nature of Business */}
+              {details.nature && details.nature.length > 0 && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-purple-800 mb-3 flex items-center gap-2">
+                    <Info className="h-4 w-4" />
+                    Nature of Business
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {details.nature.map((nature: string, index: number) => (
+                      <Badge key={index} variant="secondary" className="bg-purple-100 text-purple-800">
+                        {nature}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Tax Information */}
+              {validation.taxType && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-orange-800 mb-3 flex items-center gap-2">
+                    <CreditCard className="h-4 w-4" />
+                    Tax Information
+                  </h3>
+                  <p className="text-sm text-gray-900">{validation.taxType}</p>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4 border-t">
+                <Button
+                  onClick={() => setShowGSTINModal(false)}
+                  className="flex-1"
+                >
+                  Close
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowGSTINModal(false);
+                    toast.success('Company details have been auto-filled!');
+                  }}
+                  className="flex-1"
+                >
+                  Use These Details
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
 export default CompanyOnboarding;

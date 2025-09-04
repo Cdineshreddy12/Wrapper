@@ -1,23 +1,38 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
-  Users, 
-  Shield, 
-  Crown, 
-  Activity, 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Settings, 
-  Package, 
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import {
+  Users,
+  Shield,
+  Crown,
+  Activity,
+  Plus,
+  Edit,
+  Trash2,
+  Settings,
+  Package,
   Building,
   TrendingUp,
   Clock,
   Eye,
-  ExternalLink
+  ExternalLink,
+  MapPin,
+  Network,
+  ChevronRight,
+  ChevronDown,
+  Globe,
+  Home,
+  BarChart3,
+  Zap,
+  Layers,
+  TreePine
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -43,6 +58,72 @@ interface Application {
   subscriptionTier: string;
   enabledModules: string[];
   maxUsers: number;
+}
+
+interface Organization {
+  organizationId: string;
+  organizationName: string;
+  organizationType: 'parent' | 'sub';
+  organizationLevel: number;
+  hierarchyPath: string;
+  description?: string;
+  gstin?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  parentOrganizationId?: string;
+  responsiblePersonId?: string;
+  children?: Organization[];
+}
+
+interface Location {
+  locationId: string;
+  locationName: string;
+  address: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    country?: string;
+  };
+  city?: string;
+  state?: string;
+  country?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  capacity?: {
+    maxOccupancy?: number;
+    currentOccupancy?: number;
+    utilizationPercentage?: number;
+    resources?: Record<string, any>;
+  };
+  organizationCount?: number;
+  organizations?: Array<{
+    organizationId: string;
+    organizationName: string;
+    organizationType: string;
+    assignedAt: string;
+  }>;
+}
+
+interface OrganizationHierarchy {
+  success: boolean;
+  hierarchy: Organization[];
+  totalOrganizations: number;
+  message: string;
+}
+
+interface LocationAnalytics {
+  success: boolean;
+  analytics: {
+    locationId: string;
+    locationName: string;
+    capacity?: any;
+    utilizationPercentage?: number;
+    lastUpdated?: string;
+  };
+  message: string;
 }
 
 interface OrganizationManagementProps {

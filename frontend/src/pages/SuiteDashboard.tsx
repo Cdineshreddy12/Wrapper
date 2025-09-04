@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
+import api from '../lib/api';
 
 interface Application {
   appId: string;
@@ -28,27 +29,20 @@ const SuiteDashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // API helper function
+  // API helper function using enhanced token retrieval
   const makeRequest = async (endpoint: string, options: RequestInit = {}) => {
-    const token = await getToken();
-    
     try {
-      const response = await fetch(`https://wrapper.zopkit.com${endpoint}`, {
-        ...options,
+      // Create a custom axios instance for the external API
+      const customApi = api.create({
+        baseURL: 'https://wrapper.zopkit.com',
+        withCredentials: true,
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
-          ...options.headers
-        }
+        },
       });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || `HTTP ${response.status}`);
-      }
-      
-      return data;
+
+      const response = await customApi(endpoint, options);
+      return response.data;
     } catch (err: any) {
       throw err;
     }

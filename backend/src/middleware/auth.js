@@ -15,10 +15,11 @@ const PUBLIC_ROUTES = [
   '/api/subscriptions/test-webhook', // Test webhook endpoint (for debugging)
   '/api/subscriptions/debug-stripe-config', // Stripe config debug endpoint
   '/api/payments/webhook', // Payment webhook endpoint
-  '/api/onboarding',
+  // REMOVED: '/api/onboarding' - should require authentication
   '/api/invitations',
   // Removed resolve-org endpoint
-  '/api/organizations/',
+  // '/api/organizations', // REMOVED: Organization routes should require authentication
+  '/api/locations', // RESTORED: Location routes handle their own authentication properly
   '/docs',
   '/api/metrics/', // Add metrics endpoints for dashboard access
 ];

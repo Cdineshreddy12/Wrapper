@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import useSilentAuth from '@/hooks/useSilentAuth';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import api from '@/lib/api';
 
 interface SilentAuthGuardProps {
   children: React.ReactNode;
@@ -131,17 +132,15 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
         return;
       }
 
-      // Check if user needs onboarding
-      const response = await fetch('/admin/auth-status', {
+      // Check if user needs onboarding using enhanced api.ts
+      const response = await api('/admin/auth-status', {
         headers: {
-          'Authorization': `Bearer ${authState.accessToken}`,
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
       });
 
-      if (response.ok) {
-        const status = await response.json();
+      if (response.status === 200) {
+        const status = response.data;
         
         if (status.hasUser && status.hasTenant && status.isOnboarded) {
           // User is fully set up, redirect to dashboard

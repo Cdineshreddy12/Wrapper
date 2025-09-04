@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
+import api from '../lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -49,19 +50,17 @@ export function PaymentHistory() {
 
   const makeRequest = async (endpoint: string) => {
     try {
-      const token = await getToken()
-      const response = await fetch(`https://wrapper.zopkit.com${endpoint}`, {
+      // Create a custom axios instance for the external payment API
+      const paymentApi = api.create({
+        baseURL: 'https://wrapper.zopkit.com',
+        withCredentials: true,
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
-      })
+      });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-
-      return await response.json()
+      const response = await paymentApi(endpoint);
+      return response.data;
     } catch (error) {
       console.error(`API Error ${endpoint}:`, error)
       throw error

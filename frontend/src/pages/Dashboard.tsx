@@ -1,5 +1,6 @@
- import React, { useState, useCallback, useEffect } from 'react'
+ import React, { useState, useCallback } from 'react'
 import { useDashboardData } from '../hooks/useDashboardData'
+import api from '../lib/api'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { 
   BarChart, 
@@ -42,6 +43,7 @@ import { ActivityDashboard } from '@/components/activity/ActivityDashboard'
 import { UserManagementDashboard } from '@/components/users/UserManagementDashboard'
 import TestUserSyncAPIs from '@/pages/TestUserSyncAPIs'
 import AdminDashboard from '@/pages/AdminDashboard'
+import { OrganizationManagement } from '@/components/OrganizationManagement-Updated'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useTrialStatus } from '@/hooks/useTrialStatus'
 import { formatCurrency } from '@/lib/utils'
@@ -82,6 +84,8 @@ export function Dashboard() {
     const pathSegments = location.pathname.split('/')
     if (pathSegments.includes('user-apps')) {
       selectedTab = 'user-apps'
+    } else if (pathSegments.includes('organizations')) {
+      selectedTab = 'organizations'
     } else if (pathSegments.includes('test-apis')) {
       selectedTab = 'test-apis'
     } else if (pathSegments.includes('users')) {
@@ -301,6 +305,7 @@ export function Dashboard() {
               <nav className="-mb-px flex space-x-8">
                 {[
                   { id: 'overview', label: 'Overview', icon: BarChart3 },
+                  { id: 'organizations', label: 'Organizations', icon: Building },
                   { id: 'applications', label: 'Applications', icon: Package },
                   { id: 'analytics', label: 'Analytics', icon: TrendingUp },
                   { id: 'users', label: 'Users', icon: Users },
@@ -330,13 +335,50 @@ export function Dashboard() {
 
           {/* Tab Content */}
           {selectedTab === 'overview' && (
-            <OverviewTab 
-              data={dashboardData} 
+            <OverviewTab
+              data={dashboardData}
               isLoading={isLoading}
               onRefresh={refreshDashboard}
             />
           )}
-          
+
+          {selectedTab === 'organizations' && (
+            <div className="space-y-6">
+              <OrganizationManagement
+                employees={employees || []}
+                applications={applications || []}
+                isAdmin={isAdmin || false}
+                makeRequest={async (endpoint: string, options?: RequestInit) => {
+                  // Use enhanced api.ts for proper authentication and error handling
+                  try {
+                    // Vite proxy handles /api routing, so just ensure proper endpoint format
+                    const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+
+                    // Configure request with proper headers
+                    const config = {
+                      ...options,
+                      headers: {
+                        'X-Application': 'crm',
+                        ...options?.headers,
+                      },
+                    };
+
+                    const response = await api(normalizedEndpoint, config);
+                    return response.data;
+                  } catch (error: any) {
+                    console.error('API request failed:', error);
+                    throw error;
+                  }
+                }}
+                loadDashboardData={refreshDashboard}
+                inviteEmployee={() => {
+                  // Implement invite employee function
+                  console.log('Invite employee clicked');
+                }}
+              />
+            </div>
+          )}
+
           {selectedTab === 'applications' && (
             <ApplicationsTab 
               applications={applications || []}
@@ -438,7 +480,7 @@ function OverviewTab({
   isLoading: boolean;
   onRefresh: () => void;
 }) {
-  const { metrics, applications, employees } = data
+  const { metrics, applications } = data
   const navigate = useNavigate()
 
   return (
@@ -626,65 +668,7 @@ function AnalyticsTab() {
   )
 }
 
-// Admin Tab Component
-function AdminTab() {
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Crown className="w-5 h-5 text-yellow-500" />
-              Admin Controls
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button className="w-full justify-start gap-2">
-              <Users className="w-4 h-4" />
-              Manage Users
-            </Button>
-            <Button className="w-full justify-start gap-2" variant="outline">
-              <Shield className="w-4 h-4" />
-              Role Management
-            </Button>
-            <Button className="w-full justify-start gap-2" variant="outline">
-              <Settings className="w-4 h-4" />
-              System Settings
-            </Button>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>System Status</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Database</span>
-              <Badge variant="default" className="bg-green-100 text-green-800">
-                Healthy
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">API</span>
-              <Badge variant="default" className="bg-green-100 text-green-800">
-                Operational
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Storage</span>
-              <Badge variant="default" className="bg-yellow-100 text-yellow-800">
-                78% Used
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Payment Analytics - Component removed for cleanup */}
-    </div>
-  )
-}
 
 // Metric Card Component
 function MetricCard({

@@ -2,9 +2,9 @@ import React, { useMemo, useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
+import SimpleOnboarding from './pages/SimpleOnboarding'
 
-
-import api, { setKindeTokenGetter } from '@/lib/api'
+import api from '@/lib/api'
 
 // Kinde Authentication
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
@@ -87,20 +87,8 @@ const LoadingScreen = () => (
 
 // Auth initializer component
 const AuthInitializer: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { getToken } = useKindeAuth();
-  
-  useEffect(() => {
-    // Set up the token getter for API calls
-    setKindeTokenGetter(async () => {
-      try {
-        const token = await getToken();
-        return token || null;
-      } catch (error) {
-        console.error('Failed to get Kinde token:', error);
-        return null;
-      }
-    });
-  }, [getToken]);
+  // Token getter is now handled by KindeProvider.tsx to avoid conflicts
+  // The enhanced api.ts will automatically get tokens from the configured getter
   
   return <>{children}</>;
 };
@@ -199,7 +187,7 @@ function AppContent() {
           
           <Route 
             path="/onboarding" 
-            element={<CompanyOnboarding />}
+            element={<SimpleOnboarding />}
           />
           
           <Route 

@@ -5,7 +5,12 @@ import { tenants } from './tenants.js';
 export const subscriptions = pgTable('subscriptions', {
   subscriptionId: uuid('subscription_id').primaryKey().defaultRandom(),
   tenantId: uuid('tenant_id').references(() => tenants.tenantId).notNull(),
-  
+
+  // Entity Context for Multi-Entity Billing
+  entityType: varchar('entity_type', { length: 20 }).default('organization'), // 'organization', 'location'
+  entityId: uuid('entity_id'), // NULL for tenant-level, specific ID for entity-level
+  parentEntityId: uuid('parent_entity_id'), // Parent entity for billing hierarchy
+
   // Plan information
   plan: varchar('plan', { length: 50 }).notNull(),
   status: varchar('status', { length: 20 }).notNull(), // 'active', 'past_due', 'canceled', 'trialing', 'suspended'
@@ -31,10 +36,20 @@ export const subscriptions = pgTable('subscriptions', {
   reminderCount: integer('reminder_count').default(0), // How many reminders sent
   restrictionsAppliedAt: timestamp('restrictions_applied_at'), // When restrictions were applied
   
+  // Credit System Integration
+  billingModel: varchar('billing_model', { length: 20 }).default('bulk_then_per_usage'), // 'bulk', 'per_usage', 'hybrid'
+  creditAllocation: jsonb('credit_allocation').default({}), // Credit allocation per entity
+  overageLimits: jsonb('overage_limits').default({
+    period: 'day',
+    maxOps: 10000,
+    allowOverage: true
+  }),
+  discountTiersKey: varchar('discount_tiers_key', { length: 100 }), // Reference to discount configuration
+
   // Usage and limits
   subscribedTools: jsonb('subscribed_tools').default([]),
   usageLimits: jsonb('usage_limits').default({}),
-  
+
   // Billing cycle and pricing
   billingCycle: varchar('billing_cycle', { length: 20 }).default('monthly'), // 'monthly', 'yearly'
   monthlyPrice: decimal('monthly_price', { precision: 10, scale: 2 }).default('0'),

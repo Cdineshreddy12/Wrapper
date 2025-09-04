@@ -10,6 +10,7 @@ import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { CRM_PERMISSION_MATRIX, CRM_SPECIAL_PERMISSIONS } from '../data/comprehensive-crm-permissions.js';
 import ErrorResponses from '../utils/error-responses.js';
+import GSTINValidationService from '../services/gstin-validation-service.js';
 
 export default async function onboardingRoutes(fastify, options) {
   
@@ -41,7 +42,7 @@ export default async function onboardingRoutes(fastify, options) {
       try {
         const testOrg = await kindeService.createOrganization({
           name: 'Test Organization',
-          external_id: 'test-org-' + Date.now()
+          external_id: 'test-org-' + Date.now() 
         });
         orgCreationResult = testOrg.success ? 'Success' : `Failed: ${testOrg.message}`;
       } catch (error) {
@@ -65,6 +66,61 @@ export default async function onboardingRoutes(fastify, options) {
       return reply.code(500).send({ 
         error: 'Failed to test Kinde connection',
         message: error.message 
+      });
+    }
+  });
+
+  // GSTIN validation endpoint
+  fastify.post('/validate-gstin', async (request, reply) => {
+    try {
+      const { gstin } = request.body;
+      
+      if (!gstin) {
+        return reply.code(400).send({
+          success: false,
+          error: 'Missing GSTIN',
+          message: 'GSTIN is required'
+        });
+      }
+
+      console.log('🔍 Validating GSTIN:', gstin);
+      
+      // Validate GSTIN using external API
+      const validationResult = await GSTINValidationService.validateGSTIN(gstin);
+      
+      if (validationResult.isValid) {
+        // Auto-fill company details if GSTIN is valid
+        const companyDetails = GSTINValidationService.extractCompanyInfo(validationResult);
+        
+        return reply.send({
+          success: true,
+          message: 'GSTIN validated successfully',
+          data: {
+            gstin: validationResult.details.gstin,
+            isValid: true,
+            companyDetails: companyDetails,
+            validationDetails: validationResult.details
+          }
+        });
+      } else {
+        return reply.send({
+          success: false,
+          message: 'GSTIN validation failed',
+          data: {
+            gstin: gstin,
+            isValid: false,
+            error: validationResult.error,
+            companyDetails: null
+          }
+        });
+      }
+      
+    } catch (error) {
+      console.error('❌ GSTIN validation error:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'GSTIN validation failed',
+        message: error.message
       });
     }
   });
@@ -105,6 +161,9 @@ export default async function onboardingRoutes(fastify, options) {
       });
     }
   });
+
+
+  //the test onborading flow should be removed in the future
 
   // Test full onboarding flow (simulation)
   fastify.post('/test-onboarding-flow', async (request, reply) => {
@@ -184,6 +243,10 @@ export default async function onboardingRoutes(fastify, options) {
     }
   });
   
+
+
+  //creation of the sub domain in the aws is pending for now ,it should be done immediately after the organization is created 
+
   // Check subdomain availability
   fastify.post('/check-subdomain', {
     schema: {
@@ -213,6 +276,8 @@ export default async function onboardingRoutes(fastify, options) {
     }
   });
 
+
+  
   // Get onboarding status
   fastify.get('/status', async (request, reply) => {
     try {
@@ -623,7 +688,7 @@ export default async function onboardingRoutes(fastify, options) {
         // Company Profile
         companyName,
         legalCompanyName,
-        companyId,
+        gstin,
         dunsNumber,
         industry,
         companyType,
@@ -694,14 +759,18 @@ export default async function onboardingRoutes(fastify, options) {
         .toLowerCase()
         .replace(/[^a-z0-9]/g, '')
         .substring(0, 8);
+      
+      // Generate unique subdomain and Kinde org ID to avoid conflicts
+      const uniqueSubdomain = `${orgCode}-${Date.now()}`;
+      const uniqueKindeOrgId = `${orgCode}-${Date.now()}`;
 
       // Create tenant record
       const tenantId = uuidv4();
       const newTenant = await db.insert(tenants).values({
         tenantId: tenantId,
         companyName: companyName,
-        subdomain: orgCode,
-        kindeOrgId: orgCode,
+        subdomain: uniqueSubdomain,
+        kindeOrgId: uniqueKindeOrgId,
         adminEmail: adminEmail,
         industry: industry,
         onboardingCompleted: true,
@@ -712,7 +781,7 @@ export default async function onboardingRoutes(fastify, options) {
         
         // Additional company fields
         legalCompanyName: legalCompanyName || companyName,
-        companyId: companyId,
+        gstin: gstin,
         dunsNumber: dunsNumber,
         companyType: companyType,
         ownership: ownership,
@@ -720,7 +789,7 @@ export default async function onboardingRoutes(fastify, options) {
         numberOfEmployees: numberOfEmployees ? parseInt(numberOfEmployees) : null,
         tickerSymbol: tickerSymbol,
         website: website,
-        description: description,
+        companyDescription: description,
         foundedDate: foundedDate ? new Date(foundedDate) : null,
         
         // Address fields
@@ -744,7 +813,7 @@ export default async function onboardingRoutes(fastify, options) {
         multiCurrencyEnabled: multiCurrencyEnabled || false,
         advancedCurrencyManagement: advancedCurrencyManagement || false,
         defaultTimeZone: defaultTimeZone,
-        firstDayOfWeek: firstDayOfWeek
+        firstDayOfWeek: parseInt(firstDayOfWeek) || 1
       }).returning();
 
       // Create admin user record
@@ -763,6 +832,10 @@ export default async function onboardingRoutes(fastify, options) {
         mobile: adminMobile,
         title: adminTitle,
         department: adminDepartment,
+        profileData: {
+          role: adminRole,
+          profile: adminProfile
+        },
         isActive: true,
         isVerified: true,
         isTenantAdmin: true,

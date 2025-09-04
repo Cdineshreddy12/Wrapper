@@ -197,10 +197,21 @@ class KindeService {
   async validateToken(token) {
     try {
       console.log('🔍 validateToken - Starting validation...');
-      
+
+      if (!token || token.trim() === '') {
+        throw new Error('No token provided');
+      }
+
+      console.log('🔑 Token validation - Token length:', token.length);
+      console.log('🔑 Token validation - Token format check:', token.includes('.') ? 'JWT format' : 'Unknown format');
+
       // Get user info (this handles all the fallback strategies)
       const userInfo = await this.getEnhancedUserInfo(token);
-      
+
+      if (!userInfo || !userInfo.id) {
+        throw new Error('Invalid user info returned from token validation');
+      }
+
       // Build user context
       const userContext = {
         userId: userInfo.id,
@@ -219,12 +230,30 @@ class KindeService {
         organizations: userInfo.organizations,
         hasMultipleOrganizations: !!userInfo.hasMultipleOrganizations
       };
-      
-      console.log('✅ validateToken - Success:', userContext);
+
+      console.log('✅ validateToken - Success:', {
+        userId: userContext.userId,
+        email: userContext.email,
+        hasOrg: !!userContext.organization
+      });
       return userContext;
     } catch (error) {
-      console.error('❌ validateToken - Error:', error);
-      throw new Error('Token validation failed');
+      console.error('❌ validateToken - Error:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack?.split('\n')[0] // Only first line of stack
+      });
+
+      // Provide more specific error messages
+      if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+        throw new Error('Token is unauthorized or expired');
+      } else if (error.message.includes('400') || error.message.includes('Bad Request')) {
+        throw new Error('Invalid token format');
+      } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED')) {
+        throw new Error('Unable to connect to authentication service');
+      }
+
+      throw new Error(`Token validation failed: ${error.message}`);
     }
   }
 
@@ -882,6 +911,41 @@ class KindeService {
         provider: 'google'
       }
     });
+  }
+
+  /**
+   * Generate login URL for organization-specific authentication
+   */
+  generateLoginUrl(orgCode, redirectUri, options = {}) {
+    try {
+      console.log(`🔗 generateLoginUrl - Generating login URL for org: ${orgCode}`);
+
+      const {
+        state = 'onboarding_complete',
+        prompt = 'select_account',
+        additionalParams = {}
+      } = options;
+
+      const baseUrl = `${this.baseURL}/oauth2/auth`;
+      const params = new URLSearchParams({
+        client_id: this.oauthClientId,
+        redirect_uri: redirectUri,
+        response_type: 'code',
+        scope: 'openid profile email offline',
+        state: state,
+        prompt: prompt,
+        org_code: orgCode, // Add organization code for org-specific login
+        ...additionalParams
+      });
+
+      const loginUrl = `${baseUrl}?${params.toString()}`;
+      console.log(`✅ generateLoginUrl - Generated URL: ${loginUrl.substring(0, 100)}...`);
+
+      return loginUrl;
+    } catch (error) {
+      console.error('❌ generateLoginUrl - Error:', error);
+      throw new Error('Failed to generate login URL');
+    }
   }
 
   /**

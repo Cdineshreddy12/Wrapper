@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
+
 import { 
   CreditCard, 
   Download, 
@@ -25,10 +26,11 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { subscriptionAPI, setKindeTokenGetter } from '@/lib/api'
+import { subscriptionAPI, setKindeTokenGetter, api } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import toast from 'react-hot-toast'
 import { PaymentDetailsModal } from '@/components/PaymentDetailsModal'
+import { PaymentUpgradeModal } from '@/components/PaymentUpgradeModal'
 
 interface Plan {
   id: string
@@ -167,6 +169,14 @@ export function Billing() {
 
   // Add state for manual cleanup
   const [isCleaningUp, setIsCleaningUp] = useState(false)
+
+  // Add state for upgrade modal
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [upgradeModalPlan, setUpgradeModalPlan] = useState<string>('')
+
+  // Add state for profile completion status
+  const [profileCompleted, setProfileCompleted] = useState<boolean | null>(null)
+  const [isCheckingProfile, setIsCheckingProfile] = useState(false)
 
   // Get Kinde authentication state
   const { isAuthenticated, isLoading, user, getToken, login } = useKindeAuth()
@@ -376,20 +386,21 @@ export function Billing() {
   // Handle payment success after refetchSubscription is available
   useEffect(() => {
     if (paymentSuccess) {
-      toast.success('🎉 Payment successful! Your subscription is now active.', {
+      toast.success('🎉 Payment successful! Your subscription is now active with all features enabled.', {
         duration: 6000,
       })
-      
+
       // Clear trial expiry data from localStorage and trigger cleanup
       localStorage.removeItem('trialExpired')
-      
+
       // Dispatch custom events to clear trial state
       window.dispatchEvent(new CustomEvent('paymentSuccess'))
       window.dispatchEvent(new CustomEvent('subscriptionUpgraded'))
-      
+      window.dispatchEvent(new CustomEvent('profileCompleted'))
+
       // Invalidate all queries to refresh data
       queryClient.invalidateQueries()
-      
+
       // Clean up URL
       window.history.replaceState({}, '', window.location.pathname)
     }
@@ -586,9 +597,32 @@ export function Billing() {
     }
   });
 
+  // Check profile completion status
+  const checkProfileStatus = async () => {
+    try {
+      setIsCheckingProfile(true);
+      console.log('🔍 Checking profile completion status...');
+
+      const response = await api.get('/payment-upgrade/profile-status');
+      const status = response.data;
+
+      console.log('📋 Profile status:', status);
+      setProfileCompleted(status.profileCompleted);
+
+      return status;
+    } catch (error) {
+      console.error('❌ Failed to check profile status:', error);
+      // If we can't check status, assume profile is not completed
+      setProfileCompleted(false);
+      return { profileCompleted: false };
+    } finally {
+      setIsCheckingProfile(false);
+    }
+  };
+
   const handleUpgrade = async (planId: string) => {
     console.log('🎯 Upgrade button clicked for plan:', planId);
-    
+
     if (planId === 'free') {
       toast.error('You are already on the free plan');
       return;
@@ -600,20 +634,92 @@ export function Billing() {
       return;
     }
 
-    setSelectedPlan(planId);
-    setIsUpgrading(true);
+    // Check profile completion status first
+    const profileStatus = await checkProfileStatus();
 
-    // Show immediate feedback
-    toast.loading(`Setting up your ${planId} plan upgrade...`, {
-      duration: 2000,
-    });
+    if (profileStatus.profileCompleted) {
+      console.log('✅ Profile already completed, proceeding directly to payment');
 
+      // Profile is completed, skip form and go directly to payment
+      setSelectedPlan(planId);
+      setIsUpgrading(true);
+
+      toast.loading(`Setting up your ${planId} plan upgrade...`, { duration: 2000 });
+
+      try {
+        console.log('🚀 Starting checkout process for completed profile...');
+        await createCheckoutMutation.mutateAsync({
+          planId: planId,
+          billingCycle
+        });
+      } catch (error) {
+        console.error('❌ Payment failed:', error);
+        setIsUpgrading(false);
+        toast.error('Payment failed. Please try again.');
+      }
+    } else {
+      console.log('📝 Profile not completed, showing form');
+
+      // Profile is not completed, show the form
+      setUpgradeModalPlan(planId);
+      setShowUpgradeModal(true);
+    }
+  };
+
+  const handleUpgradeComplete = async (upgradeData: any) => {
+    console.log('✅ Upgrade form completed, proceeding with two-step process:', upgradeData);
+
+    // Step 1: Complete profile first
     try {
-      console.log('🚀 Starting checkout process...');
-      await createCheckoutMutation.mutateAsync({ planId, billingCycle });
+      console.log('📝 Step 1: Completing profile...');
+      toast.loading('Completing your profile...', { duration: 2000 });
+
+      // Include selected plan in the data for validation
+      const profileData = {
+        ...upgradeData,
+        selectedPlan: upgradeModalPlan
+      };
+
+      const profileResponse = await api.post('/payment-upgrade/complete-profile', profileData);
+
+      if (profileResponse.data.success) {
+        console.log('✅ Profile completed successfully');
+
+        // Update profile completion status
+        setProfileCompleted(true);
+
+        toast.success('Profile completed! Proceeding to payment...', { duration: 2000 });
+
+        // Step 2: Now proceed to payment
+        setSelectedPlan(upgradeModalPlan);
+        setIsUpgrading(true);
+
+        // Don't close modal yet - let the payment process complete
+        console.log('🚀 Step 2: Starting checkout process...');
+
+        try {
+          await createCheckoutMutation.mutateAsync({
+            planId: upgradeModalPlan,
+            billingCycle
+          });
+
+          // Close modal after successful payment
+          setShowUpgradeModal(false);
+        } catch (paymentError) {
+          console.error('❌ Payment failed:', paymentError);
+          toast.error('Payment failed. Please try again.');
+          setIsUpgrading(false);
+          // Keep modal open so user can try again
+        }
+      } else {
+        console.error('❌ Profile completion failed:', profileResponse.data.message);
+        toast.error('Failed to complete profile. Please try again.');
+        setShowUpgradeModal(false);
+      }
     } catch (error) {
-      console.error('❌ Upgrade process failed:', error);
-      setIsUpgrading(false);
+      console.error('❌ Profile completion or payment failed:', error);
+      toast.error('Something went wrong. Please try again.');
+      setShowUpgradeModal(false);
     }
   };
 
@@ -688,29 +794,28 @@ export function Billing() {
     try {
       console.log('🧪 Testing with manual token:', manualToken.substring(0, 20) + '...');
       
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://wrapper.zopkit.com/api'}/subscriptions/current`, {
-        method: 'GET',
+      // Create a custom axios instance with manual token for testing
+      const testApi = api.create({
+        baseURL: import.meta.env.VITE_API_URL || '/api',
+        withCredentials: true,
         headers: {
-          'Authorization': `Bearer ${manualToken}`,
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${manualToken}` // Manual token override
+        }
       });
 
-      const data = await response.json();
-      console.log('Manual token test result:', { status: response.status, data });
-      
-      if (response.ok) {
-        toast.success('Manual token test successful!');
-        setAuthTestResult('✅ Manual Success');
-      } else {
-        toast.error(`Manual token test failed: ${response.status}`);
-        setAuthTestResult(`❌ Manual ${response.status}`);
-      }
-    } catch (error) {
+      const response = await testApi('/subscriptions/current');
+      console.log('Manual token test result:', { status: response.status, data: response.data });
+
+      toast.success('Manual token test successful!');
+      setAuthTestResult('✅ Manual Success');
+    } catch (error: any) {
       console.error('Manual token test error:', error);
-      toast.error('Manual token test failed');
-      setAuthTestResult('❌ Manual Error');
+      const status = error.response?.status || 'Network Error';
+      const message = error.response?.data?.message || error.message || 'Unknown error';
+
+      toast.error(`Token test failed: ${status}`);
+      setAuthTestResult(`❌ Manual Failed: ${status}`);
     }
   };
 
@@ -1263,11 +1368,16 @@ export function Billing() {
                       ) : (
                   <Button
                     onClick={() => handleUpgrade(plan.id)}
-                          disabled={isUpgrading && selectedPlan === plan.id}
+                          disabled={isUpgrading && selectedPlan === plan.id || isCheckingProfile}
                     className="w-full"
                           variant={plan.popular ? "default" : "outline"}
                         >
-                          {isUpgrading && selectedPlan === plan.id ? (
+                          {isCheckingProfile ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                              Checking...
+                            </>
+                          ) : isUpgrading && selectedPlan === plan.id ? (
                             <>
                               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                               Processing...
@@ -1606,6 +1716,15 @@ export function Billing() {
           setSelectedPaymentForDetails(null)
           setSelectedPaymentForRefund(paymentId)
         }}
+      />
+
+      {/* Payment Upgrade Modal */}
+      <PaymentUpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        selectedPlan={upgradeModalPlan}
+        onUpgradeComplete={handleUpgradeComplete}
+        isProcessingPayment={isUpgrading}
       />
     </div>
   )

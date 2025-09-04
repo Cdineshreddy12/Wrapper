@@ -22,7 +22,10 @@ import internalRoutes from './routes/internal.js';
 import enhancedInternalRoutes from './routes/internal-enhanced.js';
 import webhookRoutes from './routes/webhooks.js';
 import proxyRoutes from './routes/proxy.js';
-import onboardingRoutes from './routes/onboarding-clean.js';
+import onboardingRoutes from './routes/onboarding-router.js';
+import enhancedOnboardingRoutes from './routes/enhanced-onboarding.js';
+import onboardingAnalyticsRoutes from './routes/onboarding-analytics.js';
+import dnsManagementRoutes from './routes/dns-management.js';
 import adminRoutes from './routes/admin.js';
 import invitationRoutes from './routes/invitations.js';
 import suiteRoutes from './routes/suite.js';
@@ -37,6 +40,9 @@ import healthRoutes from './routes/health.js';
 import permissionSyncRoutes from './routes/permission-sync.js';
 import userSyncRoutes from './routes/user-sync.js';
 import userApplicationRoutes from './routes/user-applications.js';
+import organizationRoutes from './routes/organizations.js';
+import locationRoutes from './routes/locations.js';
+import paymentUpgradeRoutes from './routes/payment-upgrade.js';
 
 
 // Import middleware
@@ -116,6 +122,7 @@ async function registerPlugins() {
       'Content-Type', 
       'Authorization', 
       'X-Requested-With',
+      'X-Application',
       'X-Kinde-User-ID',      // CRM sends this
       'X-Organization-ID',    // CRM sends this
       'Origin',               // Browser sends this
@@ -324,6 +331,9 @@ async function registerRoutes() {
   await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
   await fastify.register(proxyRoutes, { prefix: '/api/proxy' });
   await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
+  await fastify.register(enhancedOnboardingRoutes, { prefix: '/api/onboarding' });
+  await fastify.register(onboardingAnalyticsRoutes, { prefix: '/api/onboarding/analytics' });
+  await fastify.register(dnsManagementRoutes, { prefix: '/api/dns' });
   await fastify.register(adminRoutes, { prefix: '/api/admin' });
   await fastify.register(suiteRoutes, { prefix: '/api/suite' });
   await fastify.register(paymentRoutes, { prefix: '/api/payments' });
@@ -335,6 +345,9 @@ async function registerRoutes() {
   await fastify.register(permissionSyncRoutes, { prefix: '/api/permission-sync' });
   await fastify.register(userSyncRoutes, { prefix: '/api/user-sync' });
   await fastify.register(userApplicationRoutes, { prefix: '/api/user-applications' });
+  await fastify.register(organizationRoutes, { prefix: '/api/organizations' });
+  await fastify.register(locationRoutes, { prefix: '/api/locations' });
+  await fastify.register(paymentUpgradeRoutes, { prefix: '/api/payment-upgrade' });
 await fastify.register(enhancedCrmIntegrationRoutes, { prefix: '/api/enhanced-crm-integration' });
 await fastify.register(healthRoutes, { prefix: '/api' });
   // Applications endpoint (proxy to suite applications)

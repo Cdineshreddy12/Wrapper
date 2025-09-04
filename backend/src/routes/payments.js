@@ -579,20 +579,19 @@ async function handleDisputeCreated(dispute) {
 // Utility function to find tenant by Stripe customer ID
 async function findTenantByCustomer(customerId) {
   if (!customerId) return null;
-  
+
   try {
-    // You'll need to implement this based on your tenant/customer mapping
-    // This is a placeholder - replace with your actual implementation
     const { db } = await import('../db/index.js');
-    const { sql } = await import('drizzle-orm');
-    
-    const result = await db.execute(sql`
-      SELECT tenant_id FROM subscriptions 
-      WHERE stripe_customer_id = ${customerId}
-      LIMIT 1
-    `);
-    
-    return result.rows[0]?.tenant_id || null;
+    const { tenants } = await import('../db/schema/index.js');
+    const { eq } = await import('drizzle-orm');
+
+    const [tenant] = await db
+      .select({ tenantId: tenants.tenantId })
+      .from(tenants)
+      .where(eq(tenants.stripeCustomerId, customerId))
+      .limit(1);
+
+    return tenant?.tenantId || null;
   } catch (error) {
     console.error('Error finding tenant by customer:', error);
     return null;
@@ -602,34 +601,195 @@ async function findTenantByCustomer(customerId) {
 // Placeholder handlers for other events
 async function handlePaymentMethodAttached(paymentMethod) {
   console.log('🔗 Payment Method Attached:', paymentMethod.id);
+
+  try {
+    const tenantId = await findTenantByCustomer(paymentMethod.customer);
+    if (!tenantId) return;
+
+    // Update payment method status in our database
+    await PaymentService.recordPayment({
+      tenantId,
+      paymentMethod: paymentMethod.type,
+      paymentMethodDetails: paymentMethod.card || paymentMethod,
+      status: 'active',
+      description: `Payment method ${paymentMethod.id} attached`
+    });
+  } catch (error) {
+    console.error('❌ Error handling payment method attachment:', error);
+  }
 }
 
 async function handlePaymentMethodDetached(paymentMethod) {
   console.log('🔓 Payment Method Detached:', paymentMethod.id);
+
+  try {
+    const tenantId = await findTenantByCustomer(paymentMethod.customer);
+    if (!tenantId) return;
+
+    // Mark payment method as inactive in our database
+    await PaymentService.recordPayment({
+      tenantId,
+      paymentMethod: paymentMethod.type,
+      paymentMethodDetails: paymentMethod.card || paymentMethod,
+      status: 'inactive',
+      description: `Payment method ${paymentMethod.id} detached`
+    });
+  } catch (error) {
+    console.error('❌ Error handling payment method detachment:', error);
+  }
 }
 
 async function handleInvoiceCreated(invoice) {
   console.log('📝 Invoice Created:', invoice.id);
+
+  try {
+    const tenantId = await findTenantByCustomer(invoice.customer);
+    if (!tenantId) return;
+
+    // Record invoice creation
+    await PaymentService.recordPayment({
+      tenantId,
+      stripeInvoiceId: invoice.id,
+      amount: (invoice.amount_due / 100).toString(),
+      currency: invoice.currency.toUpperCase(),
+      status: 'pending',
+      paymentType: 'subscription',
+      billingReason: invoice.billing_reason,
+      invoiceNumber: invoice.number,
+      description: `Invoice ${invoice.number} created`,
+      metadata: {
+        invoice_status: invoice.status,
+        subscription_id: invoice.subscription
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error handling invoice creation:', error);
+  }
 }
 
 async function handleInvoiceFinalized(invoice) {
   console.log('✅ Invoice Finalized:', invoice.id);
+
+  try {
+    const tenantId = await findTenantByCustomer(invoice.customer);
+    if (!tenantId) return;
+
+    // Update invoice status to finalized
+    await PaymentService.updatePaymentStatus(
+      invoice.payment_intent,
+      'pending',
+      {
+        invoice_finalized: true,
+        invoice_number: invoice.number,
+        finalized_at: new Date().toISOString()
+      }
+    );
+  } catch (error) {
+    console.error('❌ Error handling invoice finalization:', error);
+  }
 }
 
 async function handleInvoicePaymentActionRequired(invoice) {
   console.log('⚠️ Invoice Payment Action Required:', invoice.id);
+
+  try {
+    const tenantId = await findTenantByCustomer(invoice.customer);
+    if (!tenantId) return;
+
+    // Update payment status to requires_action
+    await PaymentService.updatePaymentStatus(
+      invoice.payment_intent,
+      'requires_action',
+      {
+        action_required: true,
+        invoice_id: invoice.id,
+        next_action: invoice.payment_intent?.next_action,
+        action_required_at: new Date().toISOString()
+      }
+    );
+  } catch (error) {
+    console.error('❌ Error handling invoice payment action required:', error);
+  }
 }
 
 async function handleSubscriptionCreated(subscription) {
   console.log('🔄 Subscription Created:', subscription.id);
+
+  try {
+    const tenantId = await findTenantByCustomer(subscription.customer);
+    if (!tenantId) return;
+
+    // Update subscription status in our database
+    const { db } = await import('../db/index.js');
+    const { subscriptions } = await import('../db/schema/index.js');
+    const { eq } = await import('drizzle-orm');
+
+    await db
+      .update(subscriptions)
+      .set({
+        stripeSubscriptionId: subscription.id,
+        status: subscription.status,
+        currentPeriodStart: subscription.current_period_start ? new Date(subscription.current_period_start * 1000) : null,
+        currentPeriodEnd: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
+        updatedAt: new Date()
+      })
+      .where(eq(subscriptions.tenantId, tenantId));
+  } catch (error) {
+    console.error('❌ Error handling subscription creation:', error);
+  }
 }
 
 async function handleSubscriptionUpdated(subscription) {
   console.log('🔄 Subscription Updated:', subscription.id);
+
+  try {
+    const tenantId = await findTenantByCustomer(subscription.customer);
+    if (!tenantId) return;
+
+    // Update subscription details in our database
+    const { db } = await import('../db/index.js');
+    const { subscriptions } = await import('../db/schema/index.js');
+    const { eq } = await import('drizzle-orm');
+
+    await db
+      .update(subscriptions)
+      .set({
+        status: subscription.status,
+        currentPeriodStart: subscription.current_period_start ? new Date(subscription.current_period_start * 1000) : null,
+        currentPeriodEnd: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
+        cancelAt: subscription.cancel_at ? new Date(subscription.cancel_at * 1000) : null,
+        canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null,
+        updatedAt: new Date()
+      })
+      .where(eq(subscriptions.stripeSubscriptionId, subscription.id));
+  } catch (error) {
+    console.error('❌ Error handling subscription update:', error);
+  }
 }
 
 async function handleSubscriptionDeleted(subscription) {
   console.log('🗑️ Subscription Deleted:', subscription.id);
+
+  try {
+    const tenantId = await findTenantByCustomer(subscription.customer);
+    if (!tenantId) return;
+
+    // Mark subscription as canceled in our database
+    const { db } = await import('../db/index.js');
+    const { subscriptions } = await import('../db/schema/index.js');
+    const { eq } = await import('drizzle-orm');
+
+    await db
+      .update(subscriptions)
+      .set({
+        status: 'canceled',
+        canceledAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(subscriptions.stripeSubscriptionId, subscription.id));
+  } catch (error) {
+    console.error('❌ Error handling subscription deletion:', error);
+  }
 }
 
 async function handleChargeCaptured(charge) {
