@@ -39,6 +39,7 @@ import UserApplicationAccessPage from '@/pages/UserApplicationAccess'
 import UserApplicationManagement from '@/pages/UserApplicationManagement'
 import SuiteDashboard from '@/pages/SuiteDashboard'
 import AdminDashboardPage from '@/pages/AdminDashboardPage'
+import { DesignSystemShowcase } from './components/examples/DesignSystemShowcase'
 
 // Create an optimized query client with better caching strategy
 const queryClient = new QueryClient({
@@ -173,7 +174,7 @@ function AppContent() {
           <Route 
             path="/landing" 
             element={
-            authState.isAuthenticated ? <Navigate to="/" replace /> : <Landing />
+            authState.isAuthenticated ? <Navigate to="/" replace /> : <DesignSystemShowcase />
             } 
           />
           

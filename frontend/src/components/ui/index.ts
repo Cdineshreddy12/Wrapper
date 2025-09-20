@@ -14,6 +14,16 @@ export { Input } from './input'
 export { Label } from './label'
 export { Textarea } from './textarea'
 export { Checkbox } from './checkbox'
+export { Switch } from './switch'
+export { RadioGroup, RadioGroupItem } from './radio-group'
+export { 
+  FormField, 
+  FormInput, 
+  FormTextarea, 
+  FormSelect, 
+  FormCheckbox, 
+  FormSwitch 
+} from './form-field'
 export { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './dialog'
 export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './dropdown-menu'
 export { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select'
