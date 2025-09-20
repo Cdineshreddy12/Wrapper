@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { Toaster as Sonner } from 'sonner'
-import SimpleOnboarding from './pages/SimpleOnboarding'
+import { OnboardingApp } from '@/components/onboarding'
 
 import api from '@/lib/api'
 
@@ -26,7 +26,6 @@ import { OnboardingGuard } from '@/components/auth/OnboardingGuard'
 
 // Pages
 import Landing from '@/pages/Landing'
-import CompanyOnboarding from '@/pages/CompanyOnboarding'
 import { Login } from '@/pages/Login'
 import { AuthCallback } from '@/pages/AuthCallback'
 import { InviteAccept } from '@/pages/InviteAccept'
@@ -38,11 +37,8 @@ import { Usage } from '@/pages/Usage'
 import { Permissions } from '@/pages/Permissions'
 import UserApplicationAccessPage from '@/pages/UserApplicationAccess'
 import UserApplicationManagement from '@/pages/UserApplicationManagement'
-import TestUserSyncAPIs from '@/pages/TestUserSyncAPIs'
 import SuiteDashboard from '@/pages/SuiteDashboard'
 import AdminDashboardPage from '@/pages/AdminDashboardPage'
-import TestInvitationManager from '@/pages/TestInvitationManager'
-import SimpleTest from '@/pages/SimpleTest'
 
 // Create an optimized query client with better caching strategy
 const queryClient = new QueryClient({
@@ -189,9 +185,9 @@ function AppContent() {
           
 
           
-          <Route 
-            path="/onboarding" 
-            element={<SimpleOnboarding />}
+          <Route
+            path="/onboarding"
+            element={<OnboardingApp />}
           />
           
           <Route 
@@ -204,15 +200,6 @@ function AppContent() {
             element={<AuthCallback />} 
           />
 
-          {/* Test Routes */}
-          <Route 
-            path="/test-invitation-manager" 
-            element={<TestInvitationManager />} 
-          />
-          <Route 
-            path="/simple-test" 
-            element={<SimpleTest />} 
-          />
 
           {/* Invitation Accept Route - Public (handles auth internally) */}
           <Route 
@@ -267,7 +254,6 @@ function AppContent() {
           <Route path="users" element={<UserManagementDashboard />} />
           <Route path="user-apps" element={<UserApplicationAccessPage />} />
           <Route path="user-application-management" element={<UserApplicationManagement />} />
-          <Route path="test-apis" element={<TestUserSyncAPIs />} />
           <Route path="billing" element={<Billing />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="usage" element={<Usage />} />
@@ -300,7 +286,6 @@ function AppContent() {
           <Route path="users" element={<UserManagementDashboard />} />
           <Route path="user-apps" element={<UserApplicationAccessPage />} />
           <Route path="user-application-management" element={<UserApplicationManagement />} />
-          <Route path="test-apis" element={<TestUserSyncAPIs />} />
           <Route path="billing" element={<Billing />} />
           <Route path="usage" element={<Usage />} />
           <Route path="permissions" element={<Permissions />} />

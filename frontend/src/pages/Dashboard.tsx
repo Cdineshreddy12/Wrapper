@@ -42,7 +42,6 @@ import { RoleManagementDashboard } from '@/components/roles/RoleManagementDashbo
 import { UserApplicationAccess } from '@/components/users/UserApplicationAccess'
 import { ActivityDashboard } from '@/components/activity/ActivityDashboard'
 import { UserManagementDashboard } from '@/components/users/UserManagementDashboard'
-import TestUserSyncAPIs from '@/pages/TestUserSyncAPIs'
 import AdminDashboard from '@/pages/AdminDashboard'
 import  OrganizationManagement  from '@/components/OrganizationManagement'
 import { useOrganizationAuth } from '@/hooks/useOrganizationAuth'
@@ -92,8 +91,6 @@ export function Dashboard() {
       selectedTab = 'user-apps'
     } else if (pathSegments.includes('organizations')) {
       selectedTab = 'organizations'
-    } else if (pathSegments.includes('test-apis')) {
-      selectedTab = 'test-apis'
     } else if (pathSegments.includes('users')) {
       selectedTab = 'users'
     } else if (pathSegments.includes('roles')) {
@@ -536,23 +533,6 @@ export function Dashboard() {
               )}
             </div>
           )}
-          
-          {selectedTab === 'test-apis' && (
-            <div className="space-y-6">
-              {isAdmin || user?.email ? (
-                <TestUserSyncAPIs />
-              ) : (
-                <Card>
-                  <CardContent className="p-8 text-center">
-                    <Shield className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Access Restricted</h3>
-                    <p className="text-gray-600">You need admin permissions to test APIs.</p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
-          
           {selectedTab === 'activity' && (
             <div className="space-y-6">
               <ActivityDashboard />
@@ -713,14 +693,6 @@ function OverviewTab({
             >
               <Database className="h-6 w-6" />
               <span>User Application Access</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-20 flex flex-col items-center justify-center space-y-2"
-              onClick={() => navigate('/dashboard?tab=test-apis')}
-            >
-              <Settings className="h-6 w-6" />
-              <span>Test APIs</span>
             </Button>
           </div>
         </CardContent>
