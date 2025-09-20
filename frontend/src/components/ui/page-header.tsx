@@ -1,82 +1,44 @@
-import React from 'react'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { LucideIcon } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import * as React from "react"
+import { cn } from "@/lib/utils"
+import { Separator } from "@/components/ui/separator"
+import { Card, CardContent } from "@/components/ui/card"
+import { TrendingUp, TrendingDown } from "lucide-react"
 
-interface PageHeaderProps {
+interface PageHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
   title: string
   description?: string
-  icon?: LucideIcon
-  badge?: {
-    text: string
-    variant?: 'default' | 'secondary' | 'destructive' | 'outline'
-  }
   actions?: React.ReactNode
-  breadcrumbs?: Array<{
-    label: string
-    href?: string
-    icon?: LucideIcon
-  }>
-  className?: string
+  breadcrumbs?: React.ReactNode
+  showSeparator?: boolean
 }
 
-export function PageHeader({
+const PageHeader = React.forwardRef<HTMLDivElement, PageHeaderProps>(
+  ({ 
+    className, 
   title,
   description,
-  icon: Icon,
-  badge,
   actions,
   breadcrumbs,
-  className
-}: PageHeaderProps) {
+    showSeparator = true,
+    ...props 
+  }, ref) => {
   return (
-    <div className={cn("space-y-4", className)}>
-      {/* Breadcrumbs */}
-      {breadcrumbs && breadcrumbs.length > 0 && (
-        <nav className="flex items-center space-x-1 text-sm text-muted-foreground">
-          {breadcrumbs.map((crumb, index) => (
-            <div key={index} className="flex items-center">
-              {index > 0 && <span className="mx-2">/</span>}
-              <div className="flex items-center space-x-1">
-                {crumb.icon && <crumb.icon className="h-4 w-4" />}
-                {crumb.href ? (
-                  <a 
-                    href={crumb.href} 
-                    className="hover:text-foreground transition-colors"
-                  >
-                    {crumb.label}
-                  </a>
-                ) : (
-                  <span className={index === breadcrumbs.length - 1 ? 'text-foreground font-medium' : ''}>
-                    {crumb.label}
-                  </span>
-                )}
-              </div>
+      <div ref={ref} className={cn("space-y-6", className)} {...props}>
+        {breadcrumbs && (
+          <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+            {breadcrumbs}
             </div>
-          ))}
-        </nav>
-      )}
-
-      {/* Main Header */}
-      <div className="flex items-start justify-between">
-        <div className="space-y-2">
-          <div className="flex items-center space-x-3">
-            {Icon && (
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                <Icon className="h-5 w-5" />
-              </div>
-            )}
-            <div className="flex items-center space-x-2">
-              <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
-              {badge && (
-                <Badge variant={badge.variant}>{badge.text}</Badge>
-              )}
-            </div>
-          </div>
+        )}
+        
+        <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">
+              {title}
+            </h1>
           {description && (
-            <p className="text-muted-foreground max-w-2xl">{description}</p>
+              <p className="text-lg text-muted-foreground">
+                {description}
+              </p>
           )}
         </div>
         
@@ -87,43 +49,64 @@ export function PageHeader({
         )}
       </div>
       
-      <Separator />
+        {showSeparator && <Separator />}
     </div>
   )
 }
+)
+PageHeader.displayName = "PageHeader"
 
-interface StatsHeaderProps {
-  title: string
-  description?: string
-  stats: Array<{
+// StatsHeader component for dashboard-style headers with statistics
+interface StatItem {
     label: string
     value: string | number
-    icon?: LucideIcon
+  icon: React.ComponentType<{ className?: string }>
     trend?: {
       value: string
       isPositive: boolean
     }
-  }>
-  actions?: React.ReactNode
-  className?: string
 }
 
-export function StatsHeader({
+interface StatsHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
+  title: string
+  description?: string
+  stats: StatItem[]
+  actions?: React.ReactNode
+  breadcrumbs?: React.ReactNode
+  showSeparator?: boolean
+}
+
+const StatsHeader = React.forwardRef<HTMLDivElement, StatsHeaderProps>(
+  ({ 
+    className, 
   title,
   description,
   stats,
   actions,
-  className
-}: StatsHeaderProps) {
+    breadcrumbs,
+    showSeparator = true,
+    ...props 
+  }, ref) => {
   return (
-    <div className={cn("space-y-6", className)}>
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+      <div ref={ref} className={cn("space-y-6", className)} {...props}>
+        {breadcrumbs && (
+          <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+            {breadcrumbs}
+          </div>
+        )}
+        
+        <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">
+              {title}
+            </h1>
           {description && (
-            <p className="text-muted-foreground mt-2">{description}</p>
+              <p className="text-lg text-muted-foreground">
+                {description}
+              </p>
           )}
         </div>
+          
         {actions && (
           <div className="flex items-center space-x-2">
             {actions}
@@ -132,33 +115,53 @@ export function StatsHeader({
       </div>
       
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat, index) => (
-          <div key={index} className="bg-card border rounded-lg p-4">
+        {stats && stats.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {stats.map((stat, index) => {
+              const IconComponent = stat.icon
+              return (
+                <Card key={index} className="p-6">
+                  <CardContent className="p-0">
             <div className="flex items-center justify-between">
-              <div>
+                      <div className="space-y-1">
                 <p className="text-sm font-medium text-muted-foreground">
                   {stat.label}
                 </p>
-                <p className="text-2xl font-bold">{stat.value}</p>
+                        <p className="text-2xl font-bold text-foreground">
+                          {stat.value}
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="p-2 bg-primary/10 rounded-lg">
+                          <IconComponent className="h-4 w-4 text-primary" />
+                        </div>
                 {stat.trend && (
-                  <p className={cn(
-                    "text-xs",
-                    stat.trend.isPositive ? "text-green-600" : "text-red-600"
-                  )}>
-                    {stat.trend.isPositive ? '+' : ''}{stat.trend.value}
-                  </p>
-                )}
+                          <div className={cn(
+                            "flex items-center space-x-1 text-sm font-medium",
+                            stat.trend.isPositive ? "text-success" : "text-destructive"
+                          )}>
+                            {stat.trend.isPositive ? (
+                              <TrendingUp className="h-3 w-3" />
+                            ) : (
+                              <TrendingDown className="h-3 w-3" />
+                            )}
+                            <span>{stat.trend.value}</span>
               </div>
-              {stat.icon && (
-                <stat.icon className="h-8 w-8 text-muted-foreground" />
               )}
             </div>
           </div>
-        ))}
+                  </CardContent>
+                </Card>
+              )
+            })}
       </div>
+        )}
       
-      <Separator />
+        {showSeparator && <Separator />}
     </div>
   )
 } 
+)
+StatsHeader.displayName = "StatsHeader"
+
+export { PageHeader, StatsHeader }

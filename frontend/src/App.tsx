@@ -51,6 +51,7 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import TestInvitationManager from "@/pages/TestInvitationManager";
 import SimpleTest from "@/pages/SimpleTest";
 import { OnboardingForm } from "./components/onboarding";
+import { DesignSystemExample } from "./components/examples/DesignSystemExample";
 
 // Create an optimized query client with better caching strategy
 const queryClient = new QueryClient({
@@ -202,9 +203,8 @@ function AppContent() {
         {/* Root redirect based on auth status */}
         <Route path="/" element={<RootRedirect />} />
 
-        <Route path="/onboarding" element={<OnboardingForm />}>
-        
-        </Route>
+        <Route path="/onboarding" element={<DesignSystemExample />}
+        />
 
         <Route path="/login" element={<Login />} />
 

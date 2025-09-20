@@ -6,6 +6,40 @@ export { Modal, ConfirmModal } from './modal'
 export { PageHeader, StatsHeader } from './page-header'
 export { StatusBadge, UserStatusBadge, PaymentStatusBadge, SubscriptionStatusBadge } from './status-badge'
 
+// Enhanced Design System Components
+export { Container } from './container'
+export { Section } from './section'
+export { 
+  MotionDiv, 
+  MotionList, 
+  PageTransition, 
+  HoverMotion, 
+  LoadingMotion,
+  fadeInVariants,
+  slideUpVariants,
+  slideInVariants,
+  scaleInVariants,
+  staggerContainerVariants
+} from './motion'
+export { 
+  SkeletonText, 
+  SkeletonCard, 
+  SkeletonTable, 
+  SkeletonList, 
+  SkeletonForm, 
+  LoadingState 
+} from './skeleton-enhanced'
+export { 
+  EnhancedInput, 
+  EnhancedTextarea, 
+  EnhancedSelect, 
+  FormActions, 
+  FormSection 
+} from './form-enhanced'
+export { StepIndicator } from './step-indicator-enhanced'
+export type { Step, StepStatus } from './step-indicator-enhanced'
+export { HeroIllustration } from './hero-illustration'
+
 // Re-export existing ShadCN components
 export { Button } from './button'
 export { Card, CardContent, CardDescription, CardHeader, CardTitle } from './card'
