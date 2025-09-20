@@ -1,15 +1,15 @@
 import { TenantService } from '../../services/tenant-service.js';
 import { SubscriptionService } from '../../services/subscription-service.js';
-import { OnboardingOrganizationSetupService } from '../../services/onboarding-organization-setup.js';
 import { OnboardingTrackingService } from '../../services/onboarding-tracking-service.js';
 import creditAllocationService from '../../services/credit-allocation-service.js';
 import kindeService from '../../services/kinde-service.js';
 import EmailService from '../../utils/email.js';
-import { db } from '../../db/index.js';
-import { tenants, tenantUsers, customRoles, userRoleAssignments, subscriptions, organizations, onboardingEvents } from '../../db/schema/index.js';
+import { db, systemDbConnection } from '../../db/index.js';
+import { tenants, tenantUsers, customRoles, userRoleAssignments, subscriptions, entities, onboardingEvents } from '../../db/schema/index.js';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-import { CRM_PERMISSION_MATRIX, CRM_SPECIAL_PERMISSIONS } from '../../data/comprehensive-crm-permissions.js';
+
+import EnhancedOnboardingService from '../../services/onboarding-service.js';
 
 // Helper function to extract token from request
 function extractToken(request) {
@@ -34,9 +34,76 @@ const Logger = {
  * Handles the main onboarding flow and organization setup
  */
 
+// Helper function to ensure system operations use system connection
+function ensureSystemConnection(request) {
+  // Double-check we're using system connection for critical operations
+  if (!request.db || request.db === request.server?.db) {
+    console.log('⚠️ WARNING: Not using system connection for system operation!');
+    // Force system connection usage
+    const { dbManager } = require('../../db/index.js');
+    return dbManager.getSystemConnection();
+  }
+  return request.db;
+}
+
 export default async function coreOnboardingRoutes(fastify, options) {
 
-  // Complete onboarding process
+  // 🚀 **ENHANCED ONBOARDING ENDPOINT** (Bypasses RLS Bottleneck)
+  fastify.post('/onboard-enhanced', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['companyName', 'adminEmail', 'subdomain'],
+        properties: {
+          companyName: { type: 'string', minLength: 1, maxLength: 100 },
+          adminEmail: { type: 'string', format: 'email' },
+          subdomain: { type: 'string', minLength: 3, maxLength: 50 },
+          initialCredits: { type: 'number', minimum: 100, maximum: 10000, default: 1000 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      console.log('🚀 === ENHANCED ONBOARDING START ===');
+
+      const { companyName, adminEmail, subdomain, initialCredits = 1000 } = request.body;
+
+      // Use the enhanced onboarding service with credit allocation
+      const result = await EnhancedOnboardingService.completeOnboardingWorkflow(request, {
+        companyName,
+        adminEmail,
+        subdomain,
+        initialCredits
+      });
+
+      console.log('🎉 === ENHANCED ONBOARDING COMPLETE ===');
+
+      return reply.code(201).send({
+        success: true,
+        message: 'Organization onboarded successfully',
+        data: {
+          tenantId: result.tenant.tenantId,
+          adminUserId: result.adminUser.userId,
+          organizationId: result.organization.organizationId,
+          adminRoleId: result.adminRole.roleId,
+          subdomain: result.tenant.subdomain,
+          redirectUrl: result.redirectUrl
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Enhanced onboarding failed:', error);
+
+      return reply.code(500).send({
+        success: false,
+        error: 'Onboarding failed',
+        message: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+  });
+
+  // Complete onboarding process (legacy - may have RLS issues)
   fastify.post('/onboard', {
     schema: {
       body: {
@@ -165,8 +232,11 @@ export default async function coreOnboardingRoutes(fastify, options) {
       let actualOrgCode;
       const requestId = `onboard_${Date.now()}`;
 
-      // Start transaction for complete onboarding
-      const result = await db.transaction(async (tx) => {
+      // Start transaction for complete onboarding using system connection (bypasses RLS)
+      const result = await systemDbConnection.transaction(async (tx) => {
+        // NOTE: Tenant context will be set AFTER tenant creation, not before
+        // This is because we're creating a NEW tenant, so tenant_id doesn't exist yet
+
         // 1. Generate and check subdomain availability
         let finalSubdomain = generatedSubdomain;
         let counter = 1;
@@ -359,21 +429,28 @@ export default async function coreOnboardingRoutes(fastify, options) {
             trialStartedAt: tenants.trialStartedAt
           });
 
+        // Set tenant context for RLS within transaction after tenant creation
+        // Use sql template function instead of template literal
+        const { sql } = await import('drizzle-orm');
+        await tx.execute(sql`SELECT set_config('app.tenant_id', ${tenant.tenantId}, false)`);
+        console.log(`✅ Tenant context set in transaction: ${tenant.tenantId}`);
+
         console.log('✅ Tenant created in database:', tenant.tenantId);
 
         // 5. Create parent organization for the tenant
         console.log('🏢 Creating parent organization for tenant...');
         const [organization] = await tx
-          .insert(organizations)
+          .insert(entities)
           .values({
-            organizationId: uuidv4(),
+            entityId: uuidv4(),
             tenantId: tenant.tenantId,
-            parentOrganizationId: null, // This is the root organization
-            organizationLevel: 1,
+            parentEntityId: null, // This is the root organization
+            entityLevel: 1,
             hierarchyPath: '/',
-            organizationName: companyName,
-            organizationCode: `org_${finalSubdomain}_${Date.now()}`,
+            entityName: companyName,
+            entityCode: `org_${finalSubdomain}_${Date.now()}`,
             description: 'Parent organization created during onboarding',
+            entityType: 'organization',
             organizationType: 'parent',
             isActive: true,
             isDefault: true,
@@ -382,9 +459,9 @@ export default async function coreOnboardingRoutes(fastify, options) {
             updatedBy: null  // Will be updated after user creation
           })
           .returning({
-            organizationId: organizations.organizationId,
-            organizationName: organizations.organizationName,
-            organizationCode: organizations.organizationCode
+            organizationId: entities.entityId,
+            organizationName: entities.entityName,
+            organizationCode: entities.entityCode
           });
 
         console.log('✅ Parent organization created:', {
@@ -419,56 +496,16 @@ export default async function coreOnboardingRoutes(fastify, options) {
 
         // Update organization with correct user reference
         await tx
-          .update(organizations)
+          .update(entities)
           .set({
             createdBy: adminUser.userId,
             updatedBy: adminUser.userId
           })
-          .where(eq(organizations.organizationId, organization.organizationId));
+          .where(eq(entities.entityId, organization.organizationId));
 
         console.log('✅ Organization updated with correct user references');
 
-        // 7. Create SUPER ADMIN role with comprehensive plan-based permissions
-        console.log(`🔐 Creating Super Administrator role for ${selectedPlan} plan`);
-
-        // Import the Super Admin permission utility
-        const { createSuperAdminRoleConfig, logPermissionSummary } = await import('../../utils/super-admin-permissions.js');
-
-        // Generate comprehensive role configuration
-        const roleConfig = createSuperAdminRoleConfig(selectedPlan, tenant.tenantId, adminUser.userId);
-
-        // Log what permissions are being created
-        logPermissionSummary(selectedPlan, roleConfig.permissions);
-
-        const [adminRole] = await tx
-          .insert(customRoles)
-          .values(roleConfig)
-          .returning();
-
-        console.log('✅ Admin role created in database:', {
-          roleId: adminRole.roleId,
-          roleName: adminRole.roleName,
-          tenantId: adminRole.tenantId,
-          createdBy: adminRole.createdBy
-        });
-
-        // 8. Assign admin role to admin user
-        const [roleAssignment] = await tx
-          .insert(userRoleAssignments)
-          .values({
-            userId: adminUser.userId,
-            roleId: adminRole.roleId,
-            assignedBy: adminUser.userId,
-            organizationId: organization.organizationId // Use organization ID instead of tenant ID
-          })
-          .returning();
-
-        console.log('✅ Admin role assigned to user:', {
-          assignmentId: roleAssignment.assignmentId,
-          userId: roleAssignment.userId,
-          roleId: roleAssignment.roleId,
-          assignedBy: roleAssignment.assignedBy
-        });
+        // ROLE CREATION MOVED INSIDE TRANSACTION BELOW
 
         // 9. Create subscription record directly in transaction
         let subscription = null;
@@ -600,11 +637,63 @@ export default async function coreOnboardingRoutes(fastify, options) {
           // Continue without subscription - can be set up later
         }
 
+        // 7. Create SUPER ADMIN role with comprehensive plan-based permissions
+        // NOW INSIDE TRANSACTION to satisfy foreign key constraints
+        console.log(`🔐 Creating Super Administrator role for ${selectedPlan} plan`);
+
+        // Import the Super Admin permission utility
+        const { createSuperAdminRoleConfig, logPermissionSummary } = await import('../../utils/super-admin-permissions.js');
+
+        // Generate comprehensive role configuration
+        const roleConfig = createSuperAdminRoleConfig(selectedPlan, tenant.tenantId, adminUser.userId);
+
+        // Log what permissions are being created
+        logPermissionSummary(selectedPlan, roleConfig.permissions);
+
+        console.log('🔧 Creating admin role within transaction:', {
+          tenantId: tenant.tenantId,
+          createdBy: adminUser.userId,
+          operation: 'create_admin_role_in_transaction'
+        });
+
+        // Create admin role using transaction object (tx)
+        const [adminRole] = await tx
+          .insert(customRoles)
+          .values(roleConfig)
+          .returning();
+
+        console.log('✅ Admin role created in database:', {
+          roleId: adminRole.roleId,
+          roleName: adminRole.roleName,
+          tenantId: adminRole.tenantId,
+          createdBy: adminRole.createdBy
+        });
+
+        // 8. Assign admin role to admin user
+        const [roleAssignment] = await tx
+          .insert(userRoleAssignments)
+          .values({
+            userId: adminUser.userId,
+            roleId: adminRole.roleId,
+            assignedBy: adminUser.userId,
+            organizationId: tenant.tenantId // organizationId references tenants.tenantId, not entities.entityId
+          })
+          .returning();
+
+        console.log('✅ Admin role assigned to user:', {
+          assignmentId: roleAssignment.id,
+          userId: roleAssignment.userId,
+          roleId: roleAssignment.roleId,
+          assignedBy: roleAssignment.assignedBy
+        });
+
         // 9. Return the created records
         return {
           tenant,
           organization,
           adminUser,
+          adminRole,
+          roleAssignment,
           kindeOrg,
           kindeUser,
           selectedPlan,
@@ -618,7 +707,61 @@ export default async function coreOnboardingRoutes(fastify, options) {
 
       console.log('✅ Database transaction completed successfully');
 
-      // 10. Post-transaction: Enhanced Kinde organization assignment with retries
+      // 10. Post-transaction: Credit allocation (using system connection to bypass RLS)
+      console.log(`🎁 [${requestId}] Allocating trial credits after transaction...`);
+
+      try {
+        const creditResult = await creditAllocationService.allocateTrialCredits(
+          result.tenant.tenantId,
+          result.organization.organizationId,
+          {
+            creditAmount: 1000,
+            trialDays: 5 // 5 minutes for testing
+          }
+        );
+
+        console.log(`✅ [${requestId}] Credits allocated successfully!`);
+        console.log(`💰 [${requestId}] Credit ID: ${creditResult.creditId}`);
+        console.log(`🎯 [${requestId}] Credits Amount: ${creditResult.amount}`);
+        console.log(`📅 [${requestId}] Credits Expiry: ${creditResult.expiryDate}`);
+      } catch (creditError) {
+        console.error(`❌ [${requestId}] Credit allocation failed:`, creditError.message);
+        // Don't fail the entire onboarding process for credit allocation failure
+        console.warn(`⚠️ [${requestId}] Continuing onboarding despite credit allocation failure`);
+      }
+
+      // 11. Post-transaction: Track successful trial onboarding completion
+      try {
+        await OnboardingTrackingService.trackOnboardingPhase(
+          result.tenant.tenantId,
+          'trial',
+          'completed',
+          {
+            userId: result.adminUser?.userId,
+            sessionId: request.headers['x-session-id'] || null,
+            ipAddress: request.ip,
+            userAgent: request.headers['user-agent'],
+            eventData: {
+              selectedPlan,
+              subdomain: result.tenant.subdomain,
+              hasGstin: !!gstin,
+              adminEmail
+            },
+            metadata: {
+              source: 'core_onboarding',
+              version: '1.0'
+            },
+            completionRate: 100,
+            stepNumber: 1,
+            totalSteps: 1
+          }
+        );
+      } catch (trackingError) {
+        console.warn('⚠️ Trial onboarding tracking failed, but onboarding completed:', trackingError.message);
+        // Don't fail the onboarding process for tracking issues
+      }
+
+      // 12. Post-transaction: Enhanced Kinde organization assignment with retries
       console.log('🔧 Post-transaction Kinde organization assignment:', {
         userId: result.finalKindeUserId,
         orgCode: result.actualOrgCode,
@@ -656,41 +799,23 @@ export default async function coreOnboardingRoutes(fastify, options) {
           // Strategy 2: Add user to organization using correct API
           console.log('📋 Strategy 2: Adding user to organization...');
           try {
-            // First try the simple approach without exclusive mode
-            console.log('🔄 Attempting simple user-to-organization assignment...');
+            // Use exclusive mode immediately for cleaner organization assignment
+            console.log('🔄 Adding user to organization with exclusive mode...');
             const result = await kindeService.addUserToOrganization(
               userId, // Use the actual user ID
               orgCode,
-              { exclusive: false } // Disable exclusive mode to avoid cleanup issues
+              { exclusive: true } // Use exclusive mode to ensure clean assignment
             );
 
             if (result.success) {
               console.log('✅ User successfully added to organization:', result);
-              return { success: true, method: 'direct_assignment', attempt, details: result };
+              return { success: true, method: 'exclusive_assignment', attempt, details: result };
             } else {
               throw new Error('Assignment returned success=false');
             }
           } catch (addError) {
             console.log(`❌ Failed to add user to organization (attempt ${attempt}):`, addError.message);
-
-            // If the first approach fails, try with exclusive mode but simpler cleanup
-            if (attempt === 1) {
-              console.log('🔄 Retrying with exclusive mode and simpler cleanup...');
-              try {
-                const exclusiveResult = await kindeService.addUserToOrganization(
-                  userId,
-                  orgCode,
-                  { exclusive: true }
-                );
-                console.log('✅ User successfully added to organization (exclusive mode):', exclusiveResult);
-                return { success: true, method: 'exclusive_assignment', attempt, details: exclusiveResult };
-              } catch (exclusiveError) {
-                console.log(`❌ Exclusive mode also failed:`, exclusiveError.message);
-                lastError = exclusiveError;
-              }
-            } else {
-              lastError = addError;
-            }
+            lastError = addError;
 
            // Wait before retry if not the last attempt
             if (attempt < maxRetries) {
@@ -890,12 +1015,32 @@ export default async function coreOnboardingRoutes(fastify, options) {
         };
       }
 
-      // 12. Instead of just sending email, create immediate SSO login
-      // Generate auth URL for immediate login after onboarding
-      const immediateLoginUrl = kindeService.generateLoginUrl(
-        result.actualOrgCode,
-        `${process.env.FRONTEND_URL}/auth/callback?onboarding=complete&subdomain=${result.tenant.subdomain}`
-      );
+      // 12. Force refresh the user's authentication state
+      console.log('🔄 Force refreshing user authentication state after onboarding...');
+      let immediateLoginUrl;
+      try {
+        // Add a small delay to ensure Kinde has processed the organization assignment
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Generate auth URL for immediate login after onboarding with forced refresh
+        immediateLoginUrl = kindeService.generateLoginUrl(
+          result.actualOrgCode,
+          `${process.env.FRONTEND_URL}/auth/callback?onboarding=complete&subdomain=${result.tenant.subdomain}&refresh=true`
+        );
+
+        console.log('✅ Authentication refresh URL generated:', immediateLoginUrl);
+      } catch (refreshError) {
+        console.warn('⚠️ Could not generate refresh URL, using standard login URL:', refreshError.message);
+        try {
+          immediateLoginUrl = kindeService.generateLoginUrl(
+            result.actualOrgCode,
+            `${process.env.FRONTEND_URL}/auth/callback?onboarding=complete&subdomain=${result.tenant.subdomain}`
+          );
+        } catch (fallbackError) {
+          console.warn('⚠️ Could not generate fallback login URL either:', fallbackError.message);
+          immediateLoginUrl = null;
+        }
+      }
 
       // Still send welcome email for future reference
       await EmailService.sendWelcomeEmail({
@@ -908,57 +1053,6 @@ export default async function coreOnboardingRoutes(fastify, options) {
       });
 
       // Allocate free trial credits AFTER transaction completes
-      console.log(`🎁 [${requestId}] Allocating trial credits after transaction...`);
-
-      try {
-        const creditResult = await creditAllocationService.allocateTrialCredits(
-          result.tenant.tenantId,
-          {
-            creditAmount: 1000,
-            trialDays: 5 // 5 minutes for testing
-          }
-        );
-
-        console.log(`✅ [${requestId}] Credits allocated successfully!`);
-        console.log(`💰 [${requestId}] Credit ID: ${creditResult.creditId}`);
-        console.log(`🎯 [${requestId}] Credits Amount: ${creditResult.amount}`);
-        console.log(`📅 [${requestId}] Credits Expiry: ${creditResult.expiryDate}`);
-      } catch (creditError) {
-        console.error(`❌ [${requestId}] Credit allocation failed:`, creditError.message);
-        // Don't fail the entire onboarding process for credit allocation failure
-        console.warn(`⚠️ [${requestId}] Continuing onboarding despite credit allocation failure`);
-      }
-
-      // Track successful trial onboarding completion
-      try {
-        await OnboardingTrackingService.trackOnboardingPhase(
-          result.tenant.tenantId,
-          'trial',
-          'completed',
-          {
-            userId: result.adminUser?.userId,
-            sessionId: request.headers['x-session-id'] || null,
-            ipAddress: request.ip,
-            userAgent: request.headers['user-agent'],
-            eventData: {
-              selectedPlan,
-              subdomain: result.tenant.subdomain,
-              hasGstin: !!gstin,
-              adminEmail
-            },
-            metadata: {
-              source: 'core_onboarding',
-              version: '1.0'
-            },
-            completionRate: 100,
-            stepNumber: 1,
-            totalSteps: 1
-          }
-        );
-      } catch (trackingError) {
-        console.warn('⚠️ Trial onboarding tracking failed, but onboarding completed:', trackingError.message);
-        // Don't fail the onboarding process for tracking issues
-      }
 
       return {
         success: true,
@@ -985,7 +1079,7 @@ export default async function coreOnboardingRoutes(fastify, options) {
             recoveryOptions: dnsVerificationResult.recoveryOptions
           } : null,
           // Return immediate login URL for seamless SSO
-          immediateLoginUrl,
+          immediateLoginUrl: immediateLoginUrl || `https://${process.env.KINDE_DOMAIN}`,
           loginUrl: `https://${process.env.KINDE_DOMAIN}`,
           checkoutUrl: result.checkoutUrl,
           redirectToPayment: !!result.checkoutUrl

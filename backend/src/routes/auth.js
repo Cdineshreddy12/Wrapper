@@ -333,35 +333,21 @@ export default async function authRoutes(fastify, options) {
         console.log('🔍 User info:', { id: userInfo.id, email: userInfo.email });
 
         try {
-          const { UnifiedSSOService } = await import('../services/unified-sso-service.js');
-
-          // Generate unified token for the app
-          const appToken = await UnifiedSSOService.generateUnifiedToken(
-            userInfo.id,
-            userInfo.organization?.code || 'default',
-            parsedState.app_code
-          );
-
-          console.log('✅ Generated app token:', {
-            token: appToken.token.substring(0, 20) + '...',
-            expiresAt: appToken.expiresAt.toISOString(),
-            app_code: parsedState.app_code
-          });
-
+          // Direct redirect to app (SSO removed)
           const targetUrl = new URL(parsedState.redirect_url);
-          targetUrl.searchParams.set('token', appToken.token);
-          targetUrl.searchParams.set('expires_at', appToken.expiresAt.toISOString());
+          targetUrl.searchParams.set('user_id', userInfo.id);
+          targetUrl.searchParams.set('org_code', userInfo.organization?.code || 'default');
           targetUrl.searchParams.set('app_code', parsedState.app_code);
 
-          console.log('🚀 Redirecting to app with token:', targetUrl.toString());
+          console.log('🚀 Redirecting to app (direct access):', targetUrl.toString());
           return reply.redirect(targetUrl.toString());
-        } catch (tokenError) {
-          console.error('❌ Error generating app token:', tokenError);
+        } catch (error) {
+          console.error('❌ Error redirecting to app:', error);
 
           // Redirect back to app with error
           const errorUrl = new URL(parsedState.redirect_url);
-          errorUrl.searchParams.set('error', 'token_generation_failed');
-          errorUrl.searchParams.set('error_description', tokenError.message);
+          errorUrl.searchParams.set('error', 'redirect_failed');
+          errorUrl.searchParams.set('error_description', error.message);
           return reply.redirect(errorUrl.toString());
         }
       }
@@ -620,32 +606,7 @@ export default async function authRoutes(fastify, options) {
         request.cookies?.auth_token ||
         request.query.token;
 
-      if (token) {
-        try {
-          // Validate existing token
-          const { UnifiedSSOService } = await import('../services/unified-sso-service.js');
-          const tokenContext = await UnifiedSSOService.validateUnifiedToken(token);
-
-          if (tokenContext.isValid) {
-            // User is already authenticated, generate app-specific token and redirect
-            const appToken = await UnifiedSSOService.generateUnifiedToken(
-              tokenContext.kindeUserId,
-              tokenContext.kindeOrgId,
-              app_code
-            );
-
-            const targetUrl = new URL(redirect_url || getDefaultRedirectUrl(app_code));
-            targetUrl.searchParams.set('token', appToken.token);
-            targetUrl.searchParams.set('expires_at', appToken.expiresAt.toISOString());
-            targetUrl.searchParams.set('app_code', app_code);
-
-            console.log('✅ User already authenticated, redirecting to app');
-            return reply.redirect(targetUrl.toString());
-          }
-        } catch (error) {
-          console.log('⚠️ Existing token invalid, proceeding with fresh auth');
-        }
-      }
+      // SSO token validation removed - rely on standard auth middleware
 
       // User not authenticated, redirect to Kinde auth with app context
       const redirectUri = `${process.env.BACKEND_URL || 'http://localhost:3000'}/api/auth/callback`;
@@ -680,186 +641,7 @@ export default async function authRoutes(fastify, options) {
   });
 
   // Token validation endpoint for applications
-  fastify.post('/validate', async (request, reply) => {
-    try {
-      const { token, app_code } = request.body;
-
-      if (!token) {
-        return reply.code(400).send({
-          success: false,
-          error: 'Token is required'
-        });
-      }
-
-      if (!app_code) {
-        return reply.code(400).send({
-          success: false,
-          error: 'app_code is required'
-        });
-      }
-
-      console.log(`🔍 Validating token for app: ${app_code}`);
-
-      // Check if this is a test token
-      const jwt = await import('jsonwebtoken');
-      let decodedToken;
-
-      try {
-        decodedToken = jwt.default.verify(token, process.env.JWT_SECRET || 'test-secret-key');
-        console.log('🔍 Decoded token:', {
-          sub: decodedToken.sub,
-          aud: decodedToken.aud,
-          testMode: !!decodedToken.test_mode
-        });
-      } catch (jwtError) {
-        console.error('❌ JWT verification failed:', jwtError.message);
-        return reply.code(401).send({
-          success: false,
-          error: 'Invalid token',
-          message: 'Token verification failed'
-        });
-      }
-
-      // Handle test tokens (bypass database lookup)
-      if (decodedToken.sub === 'test-user-123' || decodedToken.test_mode) {
-        console.log('🧪 Processing test token validation');
-
-        return {
-          success: true,
-          data: {
-            user: {
-              id: decodedToken.user.id,
-              email: decodedToken.user.email,
-              name: decodedToken.user.name,
-              kindeUserId: decodedToken.user.kindeId
-            },
-            organization: {
-              id: decodedToken.organization.id,
-              name: decodedToken.organization.name,
-              subdomain: decodedToken.organization.subdomain,
-              kindeOrgId: decodedToken.organization.kindeOrgId
-            },
-            permissions: decodedToken.permissions || {},
-            restrictions: decodedToken.restrictions || {},
-            roles: ['test-admin'],
-            subscription: {
-              plan: decodedToken.subscription?.tier || 'premium',
-              status: decodedToken.subscription?.status || 'active'
-            },
-            tokenInfo: {
-              issuedAt: new Date(decodedToken.iat * 1000),
-              expiresAt: new Date(decodedToken.exp * 1000),
-              app_code: app_code
-            }
-          }
-        };
-      }
-
-      // If we get here, it's not a test token, so we need to handle it differently
-      console.log('🔍 Processing real token validation');
-
-      // For now, return a simple validation for non-test tokens
-      // This will be replaced with proper database lookup later
-      return {
-        success: true,
-        data: {
-          user: {
-            id: decodedToken.sub,
-            email: decodedToken.user?.email || 'unknown@example.com',
-            name: decodedToken.user?.name || 'Unknown User',
-            kindeUserId: decodedToken.sub
-          },
-          organization: {
-            id: decodedToken.organization?.id || 'unknown-org',
-            name: decodedToken.organization?.name || 'Unknown Organization',
-            subdomain: decodedToken.organization?.subdomain || 'unknown',
-            kindeOrgId: decodedToken.organization?.kindeOrgId || 'unknown'
-          },
-          permissions: decodedToken.permissions || {},
-          restrictions: decodedToken.restrictions || {},
-          roles: ['user'],
-          subscription: {
-            plan: decodedToken.subscription?.tier || 'trial',
-            status: decodedToken.subscription?.status || 'active'
-          },
-          tokenInfo: {
-            issuedAt: new Date(decodedToken.iat * 1000),
-            expiresAt: new Date(decodedToken.exp * 1000),
-            app_code: app_code
-          }
-        }
-      };
-
-      // Handle real tokens (existing logic)
-      const { UnifiedSSOService } = await import('../services/unified-sso-service.js');
-      const tokenContext = await UnifiedSSOService.validateUnifiedToken(token);
-
-      if (!tokenContext.isValid) {
-        return reply.code(401).send({
-          success: false,
-          error: 'Invalid or expired token',
-          message: tokenContext.error
-        });
-      }
-
-      // Check app access
-      const accessCheck = UnifiedSSOService.checkAppAccess(tokenContext, app_code);
-      if (!accessCheck.allowed) {
-        return reply.code(403).send({
-          success: false,
-          error: 'App access denied',
-          reason: accessCheck.reason
-        });
-      }
-
-      // Get user permissions for the specific app
-      const userPermissions = await getUserPermissionsForApp(
-        tokenContext.kindeUserId,
-        tokenContext.kindeOrgId,
-        app_code
-      );
-
-      console.log('✅ Token validated successfully');
-
-      return {
-        success: true,
-        data: {
-          user: {
-            id: userPermissions.user.id,
-            email: userPermissions.user.email,
-            name: userPermissions.user.name,
-            kindeUserId: tokenContext.kindeUserId
-          },
-          organization: {
-            id: userPermissions.tenant.id,
-            name: userPermissions.tenant.name,
-            subdomain: userPermissions.tenant.subdomain,
-            kindeOrgId: tokenContext.kindeOrgId
-          },
-          permissions: userPermissions.permissions,
-          restrictions: userPermissions.restrictions,
-          roles: userPermissions.roles,
-          subscription: {
-            plan: userPermissions.context.subscription?.plan || 'trial',
-            status: userPermissions.context.subscription?.status || 'active'
-          },
-          tokenInfo: {
-            issuedAt: tokenContext.issuedAt,
-            expiresAt: tokenContext.expiresAt,
-            app_code: app_code
-          }
-        }
-      };
-
-    } catch (error) {
-      console.error('❌ Token validation error:', error);
-      return reply.code(500).send({
-        success: false,
-        error: 'Token validation failed',
-        message: error.message
-      });
-    }
-  });
+  // SSO token validation route removed
 
   // CRM-specific user permissions endpoint (no auth required for testing)
   fastify.post('/crm-permissions', async (request, reply) => {
@@ -1008,64 +790,7 @@ export default async function authRoutes(fastify, options) {
     }
   });
 
-  // Generate app-specific token endpoint
-  fastify.post('/generate-app-token', async (request, reply) => {
-    try {
-      const { token, app_code } = request.body;
-
-      if (!token) {
-        return reply.code(400).send({
-          success: false,
-          error: 'Token is required'
-        });
-      }
-
-      if (!app_code) {
-        return reply.code(400).send({
-          success: false,
-          error: 'app_code is required'
-        });
-      }
-
-      console.log(`🔍 Generating app-specific token for: ${app_code}`);
-
-      // Validate the original token
-      const { UnifiedSSOService } = await import('../services/unified-sso-service.js');
-      const tokenContext = await UnifiedSSOService.validateUnifiedToken(token);
-
-      if (!tokenContext.isValid) {
-        return reply.code(401).send({
-          success: false,
-          error: 'Invalid or expired token',
-          message: tokenContext.error
-        });
-      }
-
-      // Generate app-specific token
-      const appToken = await UnifiedSSOService.generateUnifiedToken(
-        tokenContext.kindeUserId,
-        tokenContext.kindeOrgId,
-        app_code
-      );
-
-      console.log('✅ App-specific token generated successfully');
-
-      return {
-        success: true,
-        token: appToken.token,
-        expiresAt: appToken.expiresAt.toISOString(),
-        app_code: app_code
-      };
-
-    } catch (error) {
-      console.error('❌ App token generation error:', error);
-      return reply.code(500).send({
-        success: false,
-        error: 'Token generation failed',
-        message: error.message
-      });
-    }
-  });
+  // SSO app token generation endpoint removed
 
   // Logout endpoint for applications
   fastify.get('/logout', async (request, reply) => {

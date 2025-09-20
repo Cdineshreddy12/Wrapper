@@ -34,6 +34,7 @@ interface UserClassification {
 }
 
 interface ApplicationGroup {
+  appCode: string
   appInfo: {
     appCode: string
     appName: string
@@ -41,6 +42,9 @@ interface ApplicationGroup {
   }
   users: UserClassification[]
   totalUsers: number
+  userCount?: number
+  icon?: string
+  baseUrl?: string
 }
 
 interface ClassificationData {
@@ -198,19 +202,41 @@ export function UserApplicationAccess() {
 
   const getApplications = () => {
     if (!classificationData?.data.byApplication) return []
+
     return Object.entries(classificationData.data.byApplication)
-      .map(([appCode, appData]) => ({ appCode, ...appData }))
+      .map(([appCode, appData]: [string, any]) => {
+        // Ensure we have the required structure
+        if (!appData || typeof appData !== 'object') {
+          console.warn(`Invalid appData for ${appCode}:`, appData)
+          return null
+        }
+
+        // Handle both flattened and nested appInfo structures
+        const appInfo = appData.appInfo || {
+          appCode: appData.appCode || appCode,
+          appName: appData.appName || 'Unknown App',
+          description: appData.description || ''
+        }
+
+        return {
+          appCode,
+          appInfo,
+          users: appData.users || [],
+          totalUsers: appData.totalUsers || appData.userCount || 0
+        }
+      })
+      .filter(app => app !== null)
       .sort((a, b) => b.totalUsers - a.totalUsers)
   }
 
   const getFilteredUsers = () => {
     if (!classificationData?.data) return []
-    
+
     if (selectedApp === 'all') {
-      return Object.values(classificationData.data.byUser)
+      return Object.values(classificationData.data.byUser || {})
     }
-    
-    const appData = classificationData.data.byApplication[selectedApp]
+
+    const appData = classificationData.data.byApplication?.[selectedApp]
     return appData?.users || []
   }
 
@@ -415,7 +441,7 @@ export function UserApplicationAccess() {
           <TabsTrigger value="sync-management">Sync Management</TabsTrigger>
           {getApplications().slice(0, 4).map(app => (
             <TabsTrigger key={app.appCode} value={app.appCode}>
-              {app.appInfo.appName} ({app.totalUsers})
+              {app.appInfo?.appName || 'Unknown App'} ({app.totalUsers || 0})
             </TabsTrigger>
           ))}
         </TabsList>
@@ -513,20 +539,20 @@ export function UserApplicationAccess() {
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {getApplications().map(app => (
-                    <div key={app.appCode} className="border rounded-lg p-4 space-y-3">
+                    <div key={app.appCode || 'unknown'} className="border rounded-lg p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <h4 className="font-medium">{app.appInfo.appName}</h4>
-                        <Badge variant="secondary">{app.totalUsers} users</Badge>
+                        <h4 className="font-medium">{app.appInfo?.appName || 'Unknown App'}</h4>
+                        <Badge variant="secondary">{app.totalUsers || 0} users</Badge>
                       </div>
                       
-                      <p className="text-sm text-gray-600">{app.appInfo.description}</p>
+                      <p className="text-sm text-gray-600">{app.appInfo?.description || 'No description available'}</p>
                       
                       <div className="space-y-2">
                         <Button 
                           size="sm" 
                           variant="outline"
-                          onClick={() => handleSyncApp(app.appCode)}
-                          disabled={syncLoading === app.appCode}
+                          onClick={() => handleSyncApp(app.appCode || '')}
+                          disabled={syncLoading === (app.appCode || '')}
                           className="w-full"
                         >
                           {syncLoading === app.appCode ? (
@@ -534,11 +560,11 @@ export function UserApplicationAccess() {
                           ) : (
                             <RotateCw className="h-4 w-4 mr-2" />
                           )}
-                          Sync {app.appCode.toUpperCase()}
+                          Sync {(app.appCode || '').toUpperCase()}
                         </Button>
                         
                         <div className="text-xs text-gray-500 text-center">
-                          Status: {syncStatusData?.data.applicationStatus[app.appCode]?.isConfigured ? 
+                          Status: {syncStatusData?.data.applicationStatus[app.appCode || '']?.isConfigured ? 
                             <span className="text-green-600">Configured</span> : 
                             <span className="text-red-600">Not Configured</span>
                           }
@@ -624,16 +650,16 @@ export function UserApplicationAccess() {
                   {getApplications().map(app => (
                     <div key={app.appCode} className="flex justify-between items-center p-3 border rounded-lg">
                       <div>
-                        <h4 className="font-medium">{app.appInfo.appName}</h4>
-                        <p className="text-sm text-gray-600">{app.appInfo.description}</p>
+                        <h4 className="font-medium">{app.appInfo?.appName || 'Unknown App'}</h4>
+                        <p className="text-sm text-gray-600">{app.appInfo?.description || 'No description available'}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant="secondary">{app.totalUsers} users</Badge>
+                        <Badge variant="secondary">{app.totalUsers || 0} users</Badge>
                         <Button 
                           size="sm" 
                           variant="outline"
-                          onClick={() => handleSyncApp(app.appCode)}
-                          disabled={syncLoading === app.appCode}
+                          onClick={() => handleSyncApp(app.appCode || '')}
+                          disabled={syncLoading === (app.appCode || '')}
                         >
                           {syncLoading === app.appCode ? (
                             <RefreshCw className="h-4 w-4 animate-spin" />
@@ -685,9 +711,9 @@ export function UserApplicationAccess() {
           <TabsContent key={app.appCode} value={app.appCode} className="mt-6">
             <Card>
               <CardHeader>
-                <CardTitle>{app.appInfo.appName} Users</CardTitle>
+                <CardTitle>{app.appInfo?.appName || 'Unknown App'} Users</CardTitle>
                 <CardDescription>
-                  Users with access to {app.appInfo.appName} ({app.totalUsers} users)
+                  Users with access to {app.appInfo?.appName || 'Unknown App'} ({app.totalUsers || 0} users)
                 </CardDescription>
               </CardHeader>
               <CardContent>

@@ -11,13 +11,15 @@
  *   npm run sync-permissions:summary   # Show summary
  */
 
-import { db } from '../db/index.js';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import { applications, applicationModules } from '../db/schema/suite-schema.js';
 import { BUSINESS_SUITE_MATRIX, PermissionMatrixUtils } from '../data/permission-matrix.js';
 import { eq, and } from 'drizzle-orm';
+import 'dotenv/config';
 
 class PermissionSyncService {
-  
+ 
   constructor() {
     this.stats = {
       appsCreated: 0,
@@ -28,6 +30,19 @@ class PermissionSyncService {
       totalModules: 0,
       totalPermissions: 0
     };
+
+    // Initialize database connection
+    if (!process.env.DATABASE_URL) {
+      throw new Error('DATABASE_URL environment variable is required');
+    }
+
+    const client = postgres(process.env.DATABASE_URL, {
+      prepare: false,
+      connection: {
+        search_path: 'public'
+      }
+    });
+    this.db = drizzle(client);
   }
 
   // 🔍 **VALIDATE PERMISSION MATRIX**
@@ -104,28 +119,34 @@ class PermissionSyncService {
   }
 
   // 🔄 **SYNC ALL APPLICATIONS**
-  async syncAll() {
+  async syncAll(dryRun = false) {
     console.log('🔄 Starting full permission matrix sync...\n');
-    
+
     // 1. Validate matrix first
     if (!(await this.validateMatrix())) {
       console.error('❌ Matrix validation failed. Aborting sync.');
       return false;
     }
-    
+
     // 2. Show summary
     await this.showSummary();
     console.log('');
-    
+
+    if (dryRun) {
+      console.log('🔍 DRY RUN MODE - Showing what would be synced:\n');
+      await this.showDryRunSummary();
+      return true;
+    }
+
     // 3. Sync each application
     for (const appCode of Object.keys(BUSINESS_SUITE_MATRIX)) {
       await this.syncApplication(appCode);
       console.log('');
     }
-    
+
     // 4. Show final stats
     this.showFinalStats();
-    
+
     return true;
   }
 
@@ -134,7 +155,7 @@ class PermissionSyncService {
     console.log(`  📝 Syncing application record: ${appInfo.appName}`);
     
     // Check if app exists
-    const existingApp = await db
+    const existingApp = await this.db
       .select()
       .from(applications)
       .where(eq(applications.appCode, appCode))
@@ -142,7 +163,7 @@ class PermissionSyncService {
 
     if (existingApp.length > 0) {
       // Update existing app
-      await db
+      await this.db
         .update(applications)
         .set({
           appName: appInfo.appName,
@@ -155,14 +176,14 @@ class PermissionSyncService {
           updatedAt: new Date()
         })
         .where(eq(applications.appCode, appCode));
-      
+
       console.log(`    ✅ Updated existing application: ${appInfo.appName}`);
       this.stats.appsUpdated++;
       return existingApp[0].appId;
-      
+
     } else {
       // Create new app
-      const [newApp] = await db
+      const [newApp] = await this.db
         .insert(applications)
         .values({
           appCode: appCode,
@@ -175,7 +196,7 @@ class PermissionSyncService {
           sortOrder: appInfo.sortOrder
         })
         .returning();
-      
+
       console.log(`    ✅ Created new application: ${appInfo.appName}`);
       this.stats.appsCreated++;
       return newApp.appId;
@@ -190,7 +211,7 @@ class PermissionSyncService {
       console.log(`    📝 Syncing module: ${module.moduleName}`);
       
       // Check if module exists
-      const existingModule = await db
+      const existingModule = await this.db
         .select()
         .from(applicationModules)
         .where(and(
@@ -201,7 +222,7 @@ class PermissionSyncService {
 
       if (existingModule.length > 0) {
         // Update existing module
-        await db
+        await this.db
           .update(applicationModules)
           .set({
             moduleName: module.moduleName,
@@ -210,13 +231,13 @@ class PermissionSyncService {
             permissions: module.permissions
           })
           .where(eq(applicationModules.moduleId, existingModule[0].moduleId));
-        
+
         console.log(`      ✅ Updated module: ${module.moduleName}`);
         this.stats.modulesUpdated++;
-        
+
       } else {
         // Create new module
-        await db
+        await this.db
           .insert(applicationModules)
           .values({
             appId: appId,
@@ -226,11 +247,46 @@ class PermissionSyncService {
             isCore: module.isCore,
             permissions: module.permissions
           });
-        
+
         console.log(`      ✅ Created module: ${module.moduleName}`);
         this.stats.modulesCreated++;
       }
     }
+  }
+
+  // 📊 **SHOW DRY RUN SUMMARY**
+  async showDryRunSummary() {
+    console.log('📊 **DRY RUN SUMMARY - What would be synced:**\n');
+
+    Object.keys(BUSINESS_SUITE_MATRIX).forEach(appCode => {
+      const app = BUSINESS_SUITE_MATRIX[appCode];
+      const moduleCount = Object.keys(app.modules).length;
+      let totalPerms = 0;
+
+      Object.values(app.modules).forEach(module => {
+        totalPerms += module.permissions.length;
+      });
+
+      console.log(`🏢 ${app.appInfo.appName} (${appCode})`);
+      console.log(`   📍 URL: ${app.appInfo.baseUrl}`);
+      console.log(`   📦 Modules: ${moduleCount}`);
+      console.log(`   🔐 Permissions: ${totalPerms}`);
+      console.log(`   🎯 Core: ${app.appInfo.isCore ? 'Yes' : 'No'}`);
+      console.log(`   ➡️  Would: Create application record`);
+      console.log('');
+
+      Object.keys(app.modules).forEach(moduleCode => {
+        const module = app.modules[moduleCode];
+        console.log(`   📦 Module: ${module.moduleName} (${moduleCode})`);
+        console.log(`      ➡️  Would: Create module with ${module.permissions.length} permissions`);
+      });
+      console.log('');
+    });
+
+    console.log(`📈 **WOULD SYNC TOTALS**`);
+    console.log(`   Applications: ${this.stats.totalApps}`);
+    console.log(`   Modules: ${this.stats.totalModules}`);
+    console.log(`   Permissions: ${this.stats.totalPermissions}`);
   }
 
   // 📊 **SHOW FINAL STATS**
@@ -259,11 +315,15 @@ async function main() {
       case 'validate':
         await syncService.validateMatrix();
         break;
-        
+
       case 'summary':
         await syncService.showSummary();
         break;
-        
+
+      case 'dry-run':
+        await syncService.syncAll(true);
+        break;
+
       case 'app':
         const appCode = args[1];
         if (!appCode) {
@@ -272,7 +332,7 @@ async function main() {
         }
         await syncService.syncApplication(appCode);
         break;
-        
+
       case 'sync':
       default:
         await syncService.syncAll();

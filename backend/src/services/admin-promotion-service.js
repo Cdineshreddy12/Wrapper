@@ -4,7 +4,6 @@ import {
   customRoles, 
   userRoleAssignments, 
   auditLogs,
-  activityLogs,
   tenants
 } from '../db/schema/index.js';
 import { eq, and, or, isNull, ne } from 'drizzle-orm';
@@ -506,8 +505,8 @@ export class AdminPromotionService {
       userAgent: 'Admin Promotion Service'
     });
 
-    // Also create activity log
-    await tx.insert(activityLogs).values({
+    // Also create audit log
+    await tx.insert(auditLogs).values({
       tenantId,
       userId: promotedBy,
       action: 'promote_admin',

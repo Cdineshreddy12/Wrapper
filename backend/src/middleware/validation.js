@@ -4,7 +4,7 @@
  */
 
 import { db } from '../db/index.js';
-import { tenants, organizations, tenantUsers } from '../db/schema/index.js';
+import { tenants, entities, tenantUsers } from '../db/schema/index.js';
 import { eq, and } from 'drizzle-orm';
 
 // GSTIN validation regex
@@ -72,11 +72,12 @@ export async function validateOrganizationNameUniqueness(name, tenantId, exclude
 
   const existingOrg = await db
     .select()
-    .from(organizations)
+    .from(entities)
     .where(and(
-      eq(organizations.organizationName, name.trim()),
-      eq(organizations.tenantId, tenantId),
-      excludeOrgId ? `organizations.organization_id != '${excludeOrgId}'` : undefined
+      eq(entities.entityName, name.trim()),
+      eq(entities.tenantId, tenantId),
+      eq(entities.entityType, 'organization'),
+      excludeOrgId ? `entities.entity_id != '${excludeOrgId}'` : undefined
     ))
     .limit(1);
 
@@ -121,8 +122,11 @@ export async function validateOrganizationExists(organizationId) {
 
   const organization = await db
     .select()
-    .from(organizations)
-    .where(eq(organizations.organizationId, organizationId))
+    .from(entities)
+    .where(and(
+      eq(entities.entityId, organizationId),
+      eq(entities.entityType, 'organization')
+    ))
     .limit(1);
 
   if (organization.length === 0) {
@@ -166,9 +170,12 @@ export async function validateHierarchyIntegrity(parentOrgId, childOrgId = null)
 
   // For existing org moves, check for circular references
   const parentOrg = await db
-    .select({ hierarchyPath: organizations.hierarchyPath })
-    .from(organizations)
-    .where(eq(organizations.organizationId, parentOrgId))
+    .select({ hierarchyPath: entities.hierarchyPath })
+    .from(entities)
+    .where(and(
+      eq(entities.entityId, parentOrgId),
+      eq(entities.entityType, 'organization')
+    ))
     .limit(1);
 
   if (parentOrg.length === 0) {
@@ -215,8 +222,10 @@ export function validateLocationData(data) {
  * Comprehensive organization validation
  */
 export async function validateOrganizationData(data, isUpdate = false, existingOrgId = null) {
-  const { name, organizationName, description, gstin, parentTenantId, parentOrganizationId } = data;
-  const orgName = name || organizationName; // Handle both field names
+  const { name, organizationName, entityName, description, gstin, parentTenantId, parentOrganizationId, parentEntityId } = data;
+  const orgName = name || organizationName || entityName; // Handle both field names
+  const tenantId = parentTenantId; // Use the tenant ID sent by frontend
+  const parentOrgId = parentOrganizationId || parentEntityId; // Handle both parent field names
   const errors = [];
 
   // Required field validation - only check if name is provided during update
@@ -229,7 +238,8 @@ export async function validateOrganizationData(data, isUpdate = false, existingO
     errors.push('Organization name must be at least 2 characters');
   }
 
-  if (!isUpdate && !parentTenantId) {
+  // For sub-organizations, parent tenant ID is required
+  if (!isUpdate && !tenantId && parentOrgId) {
     errors.push('Parent tenant ID is required for new organizations');
   }
 
@@ -251,29 +261,29 @@ export async function validateOrganizationData(data, isUpdate = false, existingO
   }
 
   // Business logic validations
-  if (orgName && parentTenantId) {
-    const uniquenessCheck = await validateOrganizationNameUniqueness(orgName, parentTenantId, existingOrgId);
+  if (orgName && tenantId) {
+    const uniquenessCheck = await validateOrganizationNameUniqueness(orgName, tenantId, existingOrgId);
     if (!uniquenessCheck.valid) {
       errors.push(uniquenessCheck.message);
     }
   }
 
   // Parent organization validation
-  if (parentOrganizationId) {
-    const parentValidation = await validateOrganizationExists(parentOrganizationId);
+  if (parentOrgId) {
+    const parentValidation = await validateOrganizationExists(parentOrgId);
     if (!parentValidation.valid) {
       errors.push(parentValidation.message);
     }
 
-    const hierarchyValidation = await validateHierarchyIntegrity(parentOrganizationId, existingOrgId);
+    const hierarchyValidation = await validateHierarchyIntegrity(parentOrgId, existingOrgId);
     if (!hierarchyValidation.valid) {
       errors.push(hierarchyValidation.message);
     }
   }
 
-  // Tenant validation
-  if (parentTenantId) {
-    const tenantValidation = await validateTenantExists(parentTenantId);
+  // Tenant validation (only validate tenant if provided)
+  if (tenantId) {
+    const tenantValidation = await validateTenantExists(tenantId);
     if (!tenantValidation.valid) {
       errors.push(tenantValidation.message);
     }
@@ -363,4 +373,31 @@ export function sanitizeInput(data) {
   }
 
   return sanitized;
+}
+
+/**
+ * Middleware to sanitize request input
+ */
+export function sanitizeInputMiddleware() {
+  return async (request, reply) => {
+    try {
+      // Sanitize request body if it exists
+      if (request.body && typeof request.body === 'object') {
+        request.body = sanitizeInput(request.body);
+      }
+
+      // Sanitize query parameters
+      if (request.query && typeof request.query === 'object') {
+        request.query = sanitizeInput(request.query);
+      }
+
+      // Sanitize route parameters
+      if (request.params && typeof request.params === 'object') {
+        request.params = sanitizeInput(request.params);
+      }
+    } catch (error) {
+      console.error('❌ Input sanitization error:', error);
+      // Don't fail the request for sanitization errors, just log them
+    }
+  };
 }

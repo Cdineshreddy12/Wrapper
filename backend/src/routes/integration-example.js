@@ -1,7 +1,7 @@
 // Integration Example: How to update existing routes for tenant isolation
 import { eq } from 'drizzle-orm';
 import { tenantIsolationMiddleware } from '../middleware/tenant-isolation.js';
-import { tenantUsers, organizations, customRoles } from '../db/schema/index.js';
+import { tenantUsers, entities, customRoles } from '../db/schema/index.js';
 
 // Example of how to integrate tenant isolation into existing routes
 export function integrateTenantIsolation(app, db) {
@@ -237,17 +237,18 @@ export function integrateTenantIsolation(app, db) {
   // Get organizations for current tenant
   app.get('/api/organizations', async (req, res) => {
     try {
-      const tenantOrgsQuery = req.tenantQuery(organizations);
+      const tenantOrgsQuery = req.tenantQuery(entities);
       const orgs = await tenantOrgsQuery.findAll({
-        isActive: true
+        isActive: true,
+        entityType: 'organization'
       });
 
       res.json({
         success: true,
         tenant: req.tenant.subdomain,
         organizations: orgs.map(org => ({
-          id: org.organizationId,
-          name: org.organizationName,
+          id: org.entityId,
+          name: org.entityName,
           type: org.organizationType,
           isActive: org.isActive
         }))
@@ -265,9 +266,9 @@ export function integrateTenantIsolation(app, db) {
 
       // First validate organization belongs to tenant
       const orgOwnership = await req.tenantService.validateResourceOwnership(
-        organizations,
+        entities,
         orgId,
-        { tenantId: req.tenantId },
+        { tenantId: req.tenantId, entityType: 'organization' },
         'tenant'
       );
 
@@ -311,7 +312,7 @@ export function integrateTenantIsolation(app, db) {
         roleCount
       ] = await Promise.all([
         req.tenantQuery(tenantUsers).count({ isActive: true }),
-        req.tenantQuery(organizations).count({ isActive: true }),
+        req.tenantQuery(entities).count({ isActive: true, entityType: 'organization' }),
         req.tenantQuery(customRoles).count()
       ]);
 

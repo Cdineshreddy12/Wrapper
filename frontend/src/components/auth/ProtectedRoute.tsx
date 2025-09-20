@@ -185,13 +185,15 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   // Handle unauthenticated users
-  if (!isAuthenticated || !user) {
-    console.log('🚫 ProtectedRoute: Not authenticated, redirecting to login', {
+  // Only redirect if Kinde is not still loading (prevents redirect loops)
+  if ((!isAuthenticated || !user) && !isLoading) {
+    console.log('🚫 ProtectedRoute: Not authenticated (Kinde loaded), redirecting to login', {
       isAuthenticated,
       hasUser: !!user,
+      isLoading,
       pathname: location.pathname
     });
-    
+
     if (redirectTo) {
       return <Navigate to={redirectTo} state={{ from: location }} replace />;
     }

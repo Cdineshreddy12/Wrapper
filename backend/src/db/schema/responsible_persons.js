@@ -92,68 +92,6 @@ export const responsibilityHistory = pgTable('responsibility_history', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// Delegation records
-export const responsibilityDelegations = pgTable('responsibility_delegations', {
-  delegationId: uuid('delegation_id').primaryKey().defaultRandom(),
-  assignmentId: uuid('assignment_id').references(() => responsiblePersons.assignmentId, { onDelete: 'cascade' }).notNull(),
-
-  // Delegation Details
-  delegatorUserId: uuid('delegator_user_id').references(() => tenantUsers.userId).notNull(),
-  delegateUserId: uuid('delegate_user_id').references(() => tenantUsers.userId).notNull(),
-
-  // Delegation Scope
-  delegatedScope: jsonb('delegated_scope').default({}), // Which responsibilities are delegated
-  delegationReason: text('delegation_reason'),
-
-  // Time Period
-  startDate: timestamp('start_date').notNull(),
-  endDate: timestamp('end_date'),
-  isActive: boolean('is_active').default(true),
-
-  // Approval (if required)
-  requiresApproval: boolean('requires_approval').default(false),
-  approvedBy: uuid('approved_by').references(() => tenantUsers.userId),
-  approvedAt: timestamp('approved_at'),
-
-  // Audit
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-});
-
-// Responsibility templates (for common responsibility patterns)
-export const responsibilityTemplates = pgTable('responsibility_templates', {
-  templateId: uuid('template_id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id').references(() => tenants.tenantId).notNull(),
-
-  // Template Details
-  templateName: varchar('template_name', { length: 100 }).notNull(),
-  templateCode: varchar('template_code', { length: 50 }).notNull().unique(),
-  description: text('description'),
-
-  // Template Configuration
-  entityType: varchar('entity_type', { length: 20 }).notNull(),
-  responsibilityLevel: varchar('responsibility_level', { length: 20 }).default('primary'),
-
-  // Default Scope and Permissions
-  defaultScope: jsonb('default_scope').default({}),
-  defaultPermissions: jsonb('default_permissions').default({}),
-  defaultNotifications: jsonb('default_notifications').default({}),
-
-  // Usage Tracking
-  usageCount: integer('usage_count').default(0),
-  lastUsed: timestamp('last_used'),
-
-  // Status
-  isActive: boolean('is_active').default(true),
-  isDefault: boolean('is_default').default(false),
-
-  // Audit
-  createdBy: uuid('created_by').references(() => tenantUsers.userId).notNull(),
-  updatedBy: uuid('updated_by').references(() => tenantUsers.userId),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-});
-
 // Responsibility notifications
 export const responsibilityNotifications = pgTable('responsibility_notifications', {
   notificationId: uuid('notification_id').primaryKey().defaultRandom(),
@@ -186,50 +124,4 @@ export const responsibilityNotifications = pgTable('responsibility_notifications
   // Metadata
   metadata: jsonb('metadata').default({}),
   createdAt: timestamp('created_at').defaultNow(),
-});
-
-// Responsibility coverage (for emergency scenarios)
-export const responsibilityCoverage = pgTable('responsibility_coverage', {
-  coverageId: uuid('coverage_id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id').references(() => tenants.tenantId).notNull(),
-
-  // Coverage Details
-  coverageName: varchar('coverage_name', { length: 100 }).notNull(),
-  coverageType: varchar('coverage_type', { length: 30 }).default('emergency'), // 'emergency', 'vacation', 'sick_leave'
-  description: text('description'),
-
-  // Entity Coverage
-  entityType: varchar('entity_type', { length: 20 }),
-  entityId: uuid('entity_id'),
-
-  // Coverage Period
-  startDate: timestamp('start_date').notNull(),
-  endDate: timestamp('end_date'),
-  isActive: boolean('is_active').default(true),
-
-  // Backup Responsibilities
-  backupAssignments: jsonb('backup_assignments').default([]),
-  // Example: [
-  //   { userId: 'uuid', scope: ['credit_management', 'user_management'] },
-  //   { userId: 'uuid', scope: ['audit_access', 'reporting'] }
-  // ]
-
-  // Escalation Rules
-  escalationRules: jsonb('escalation_rules').default({}),
-  // Example: {
-  //   noResponseTime: 30, // minutes
-  //   escalationContacts: ['uuid1', 'uuid2'],
-  //   finalEscalation: 'uuid3'
-  // }
-
-  // Status Tracking
-  lastChecked: timestamp('last_checked'),
-  issuesFound: integer('issues_found').default(0),
-  lastIssueAt: timestamp('last_issue_at'),
-
-  // Audit
-  createdBy: uuid('created_by').references(() => tenantUsers.userId).notNull(),
-  updatedBy: uuid('updated_by').references(() => tenantUsers.userId),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
 });

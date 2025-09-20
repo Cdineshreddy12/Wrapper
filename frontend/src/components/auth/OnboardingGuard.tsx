@@ -32,25 +32,57 @@ export function OnboardingGuard({ children, redirectTo = '/login' }: OnboardingG
       try {
         console.log('🔍 OnboardingGuard - Checking onboarding status for user:', user?.email)
         console.log('🔍 OnboardingGuard - Current URL:', location.pathname + location.search)
-        
+
         // Check if we just completed onboarding (URL parameter)
         const urlParams = new URLSearchParams(location.search)
         const justCompletedOnboarding = urlParams.get('onboarding') === 'complete'
-        
-        const response = await api.get('/admin/auth-status')
-        console.log('🔍 OnboardingGuard - Raw auth status response:', response.data)
-        
+
+        // If onboarding was just completed, force a delay to allow auth state to sync
+        if (justCompletedOnboarding) {
+          console.log('🎯 OnboardingGuard: Onboarding just completed, adding delay for auth sync')
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+
+        // CRITICAL FIX: Check onboarding status first before other API calls
+        const response = await api.get('/onboarding/status')
+        console.log('🔍 OnboardingGuard - Raw onboarding status response:', response.data)
+
+        const onboardingData = response.data?.data
+
+        // If user needs onboarding, redirect immediately
+        if (onboardingData?.needsOnboarding && !onboardingData?.isOnboarded && !justCompletedOnboarding) {
+          console.log('🔄 OnboardingGuard - User needs onboarding, redirecting to /onboarding')
+          setOnboardingStatus({
+            needsOnboarding: true,
+            onboardingCompleted: false,
+            hasUser: !!onboardingData?.user,
+            hasTenant: !!onboardingData?.organization
+          })
+          return
+        }
+
+        // Now check admin auth status for additional context
+        let authData = null
+        try {
+          const authResponse = await api.get('/admin/auth-status')
+          console.log('🔍 OnboardingGuard - Raw auth status response:', authResponse.data)
+          authData = authResponse.data
+        } catch (authError) {
+          console.log('⚠️ OnboardingGuard - Could not get admin auth status, proceeding with onboarding data only')
+        }
+
         const status: OnboardingStatus = {
-          needsOnboarding: response.data.authStatus?.needsOnboarding ?? !response.data.authStatus?.onboardingCompleted,
-          onboardingCompleted: response.data.authStatus?.onboardingCompleted || false,
-          hasUser: !!response.data.authStatus?.userId,
-          hasTenant: !!response.data.authStatus?.tenantId
+          needsOnboarding: onboardingData?.needsOnboarding ?? !onboardingData?.isOnboarded,
+          onboardingCompleted: onboardingData?.isOnboarded || false,
+          hasUser: !!onboardingData?.user,
+          hasTenant: !!onboardingData?.organization
         }
 
         // Check if this is an invited user (they should never need onboarding)
-        const isInvitedUser = response.data.authStatus?.userType === 'INVITED_USER' || 
-                              response.data.authStatus?.isInvitedUser === true ||
-                              response.data.authStatus?.onboardingCompleted === true
+        const isInvitedUser = authData?.authStatus?.userType === 'INVITED_USER' ||
+                              authData?.authStatus?.isInvitedUser === true ||
+                              authData?.authStatus?.onboardingCompleted === true ||
+                              onboardingData?.user?.userType === 'INVITED_USER'
 
         // INVITED USERS: Always skip onboarding
         if (isInvitedUser) {
@@ -112,9 +144,10 @@ export function OnboardingGuard({ children, redirectTo = '/login' }: OnboardingG
     )
   }
 
-  // If not authenticated, redirect to login
-  if (!isAuthenticated) {
-    console.log('🔄 OnboardingGuard - Not authenticated, redirecting to:', redirectTo)
+  // If not authenticated AND Kinde is not loading, redirect to login
+  // This prevents redirect loops while Kinde is still initializing
+  if (!isAuthenticated && !kindeLoading) {
+    console.log('🔄 OnboardingGuard - Not authenticated (Kinde loaded), redirecting to:', redirectTo)
     return <Navigate to={redirectTo} replace />
   }
 

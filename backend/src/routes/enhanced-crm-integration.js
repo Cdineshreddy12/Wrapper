@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { UnifiedSSOService } from '../services/unified-sso-service.js';
 
 const APP_URLS = {
   crm: process.env.CRM_APP_URL || 'http://localhost:3002',
@@ -33,20 +32,13 @@ export default async function enhancedCRMIntegration(fastify, options) {
         return reply.code(404).send({ error: 'App not found' });
       }
 
-      // 🎯 Generate unified token for this app
-      const { token, expiresAt } = await UnifiedSSOService.generateUnifiedToken(
-        userContext.kindeUserId,
-        userContext.kindeOrgId,
-        appCode
-      );
-
-      // Create secure redirect URL with token
-      const accessUrl = new URL(`${appUrl}/auth`);
-      accessUrl.searchParams.set('token', token);
-      accessUrl.searchParams.set('expires_at', expiresAt.toISOString());
+      // 🎯 Direct redirect to app (SSO removed)
+      const accessUrl = new URL(appUrl);
+      accessUrl.searchParams.set('user_id', userContext.kindeUserId || userContext.userId);
+      accessUrl.searchParams.set('org_id', userContext.kindeOrgId || userContext.tenantId);
       accessUrl.searchParams.set('app_code', appCode);
 
-      console.log('✅ Redirecting to app with unified token');
+      console.log('✅ Redirecting to app (direct access)');
       return reply.redirect(accessUrl.toString());
 
     } catch (error) {
@@ -81,20 +73,17 @@ export default async function enhancedCRMIntegration(fastify, options) {
         return reply.code(404).send({ error: 'App not found' });
       }
 
-      // 🎯 Generate fresh token for API call
-      const { token } = await UnifiedSSOService.generateUnifiedToken(
-        userContext.kindeUserId,
-        userContext.kindeOrgId,
-        appCode
-      );
-
-      // Forward request with minimal, clean headers
+      // 🎯 Forward request with user context headers (SSO removed)
       const proxyRequest = {
         method: request.method,
         url: `${targetUrl}/api/${path}`,
         headers: {
-          // 🎯 Clean, minimal headers
-          'Authorization': `Bearer ${token}`,
+          // 🎯 Include user context in headers
+          'X-User-ID': userContext.kindeUserId || userContext.userId,
+          'X-Org-ID': userContext.kindeOrgId || userContext.tenantId,
+          'X-App-Code': appCode,
+          'X-User-Email': userContext.email,
+          'X-User-Roles': JSON.stringify(userContext.roles || []),
           'Content-Type': request.headers['content-type'] || 'application/json',
           'Accept': request.headers.accept || 'application/json',
           // Remove problematic headers
@@ -174,54 +163,7 @@ export default async function enhancedCRMIntegration(fastify, options) {
     }
   });
 
-  // 🎯 METHOD 4: Token Validation (for apps to validate tokens)
-  fastify.post('/validate-token', async (request, reply) => {
-    try {
-      const { token, appCode } = request.body;
-
-      if (!token || !appCode) {
-        return reply.code(400).send({
-          error: 'Missing required fields',
-          message: 'Token and appCode are required'
-        });
-      }
-
-      // Validate token
-      const tokenContext = await UnifiedSSOService.validateUnifiedToken(token);
-      
-      if (!tokenContext.isValid) {
-        return reply.code(401).send({
-          error: 'Invalid token',
-          message: tokenContext.error
-        });
-      }
-
-      // Check app access
-      const accessCheck = UnifiedSSOService.checkAppAccess(tokenContext, appCode);
-      if (!accessCheck.allowed) {
-        return reply.code(403).send({
-          error: 'App access denied',
-          reason: accessCheck.reason
-        });
-      }
-
-      return {
-        success: true,
-        user: tokenContext.user,
-        organization: tokenContext.organization,
-        permissions: tokenContext.permissions,
-        restrictions: tokenContext.restrictions,
-        subscription: tokenContext.subscription
-      };
-
-    } catch (error) {
-      console.error('❌ Token validation failed:', error);
-      return reply.code(500).send({
-        error: 'Token validation failed',
-        message: error.message
-      });
-    }
-  });
+  // 🎯 SSO token validation route removed
 }
 
 // Helper functions

@@ -1,15 +1,16 @@
 import { pgTable, uuid, varchar, timestamp, jsonb, decimal, integer, boolean, text } from 'drizzle-orm/pg-core';
 import { tenants } from './tenants.js';
+import { entities } from './unified-entities.js';
 
 // Main subscriptions
 export const subscriptions = pgTable('subscriptions', {
   subscriptionId: uuid('subscription_id').primaryKey().defaultRandom(),
   tenantId: uuid('tenant_id').references(() => tenants.tenantId).notNull(),
 
-  // Entity Context for Multi-Entity Billing
-  entityType: varchar('entity_type', { length: 20 }).default('organization'), // 'organization', 'location'
-  entityId: uuid('entity_id'), // NULL for tenant-level, specific ID for entity-level
-  parentEntityId: uuid('parent_entity_id'), // Parent entity for billing hierarchy
+  // Entity Context for Multi-Entity Billing - FIXED REFERENCES
+  entityId: uuid('entity_id').references(() => entities.entityId), // References unified entities table
+  parentEntityId: uuid('parent_entity_id').references(() => entities.entityId), // Parent entity for billing hierarchy
+  billingEntityType: varchar('billing_entity_type', { length: 20 }).default('organization'), // For compatibility
 
   // Plan information
   plan: varchar('plan', { length: 50 }).notNull(),
@@ -144,69 +145,3 @@ export const payments = pgTable('payments', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
-
-// Trial Events - NEW TABLE for proper trial tracking
-export const trialEvents = pgTable('trial_events', {
-  eventId: uuid('event_id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id').references(() => tenants.tenantId).notNull(),
-  subscriptionId: uuid('subscription_id').references(() => subscriptions.subscriptionId),
-  eventType: varchar('event_type', { length: 50 }).notNull(), // 'trial_started', 'trial_expired', 'reminder_sent', etc.
-  eventData: jsonb('event_data').default({}),
-  userId: uuid('user_id'), // Which user triggered this event
-  ipAddress: varchar('ip_address', { length: 45 }), // IPv4 or IPv6
-  userAgent: text('user_agent'),
-  createdAt: timestamp('created_at').defaultNow(),
-});
-
-// Trial Restrictions - Track what's restricted
-export const trialRestrictions = pgTable('trial_restrictions', {
-  restrictionId: uuid('restriction_id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id').references(() => tenants.tenantId).notNull(),
-  restrictionType: varchar('restriction_type', { length: 50 }).notNull(), // 'feature_access', 'api_calls', 'user_limit'
-  isActive: boolean('is_active').default(true),
-  restrictionData: jsonb('restriction_data').default({}),
-  appliedAt: timestamp('applied_at').defaultNow(),
-  removedAt: timestamp('removed_at'),
-});
-
-// Subscription actions and changes tracking
-export const subscriptionActions = pgTable('subscription_actions', {
-  actionId: uuid('action_id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id').references(() => tenants.tenantId).notNull(),
-  subscriptionId: uuid('subscription_id').references(() => subscriptions.subscriptionId).notNull(),
-  
-  // Action Details
-  actionType: varchar('action_type', { length: 30 }).notNull(), // 'upgrade', 'downgrade', 'cancel', 'reactivate', 'pause', 'change_billing_cycle'
-  fromPlan: varchar('from_plan', { length: 50 }),
-  toPlan: varchar('to_plan', { length: 50 }),
-  fromBillingCycle: varchar('from_billing_cycle', { length: 20 }),
-  toBillingCycle: varchar('to_billing_cycle', { length: 20 }),
-  
-  // Financial Impact
-  prorationAmount: decimal('proration_amount', { precision: 10, scale: 2 }).default('0'),
-  refundAmount: decimal('refund_amount', { precision: 10, scale: 2 }).default('0'),
-  chargeAmount: decimal('charge_amount', { precision: 10, scale: 2 }).default('0'),
-  effectiveDate: timestamp('effective_date').notNull(),
-  
-  // User & Reason
-  initiatedBy: uuid('initiated_by').references(() => tenants.tenantId),
-  reason: varchar('reason', { length: 100 }),
-  adminNotes: text('admin_notes'),
-  customerNotes: text('customer_notes'),
-  
-  // Processing Status
-  status: varchar('status', { length: 20 }).default('pending'), // 'pending', 'processing', 'completed', 'failed', 'reversed'
-  stripeSubscriptionId: varchar('stripe_subscription_id', { length: 255 }),
-  stripeInvoiceId: varchar('stripe_invoice_id', { length: 255 }),
-  
-  // Impact Assessment
-  impactAssessment: jsonb('impact_assessment').default({}), // Usage impact, feature changes, etc.
-  rollbackData: jsonb('rollback_data').default({}), // Data needed to reverse the action
-  
-  // Timestamps
-  requestedAt: timestamp('requested_at').defaultNow(),
-  processedAt: timestamp('processed_at'),
-  completedAt: timestamp('completed_at'),
-  reversedAt: timestamp('reversed_at'),
-  createdAt: timestamp('created_at').defaultNow(),
-}); 

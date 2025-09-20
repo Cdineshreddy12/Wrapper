@@ -1,14 +1,132 @@
 import { db } from '../db/index.js';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, or, isNull, like } from 'drizzle-orm';
 import { applications, applicationModules, organizationApplications, userApplicationPermissions } from '../db/schema/suite-schema.js';
 import { customRoles } from '../db/schema/index.js';
+import { creditConfigurations } from '../db/schema/credit_configurations.js';
 import { PERMISSION_TIERS, getAccessibleModules, isModuleAccessible } from '../config/permission-tiers.js';
+import { BUSINESS_SUITE_MATRIX } from '../data/permission-matrix.js';
 
 /**
  * 🏗️ **CUSTOM ROLE SERVICE**
  * Demonstrates how to use applications/modules tables to create custom roles
  * and why we need organization_applications and user_application_permissions
  */
+
+/**
+ * Format permissions for UI compatibility using permission matrix definitions
+ * Includes credit consumption information from tenant-specific or global configs
+ */
+async function formatPermissionsForUI(permissionCodes, appCode, moduleCode, tenantId) {
+  if (!Array.isArray(permissionCodes)) return [];
+
+  const formattedPermissions = [];
+
+  // Get permission definitions from the business suite matrix
+  const appMatrix = BUSINESS_SUITE_MATRIX[appCode];
+  const moduleMatrix = appMatrix?.modules?.[moduleCode];
+
+  // Get credit configurations for this tenant (tenant-specific first, then global fallback)
+  const creditConfigs = await db
+    .select({
+      operationCode: creditConfigurations.operationCode,
+      creditCost: creditConfigurations.creditCost,
+      unit: creditConfigurations.unit,
+      unitMultiplier: creditConfigurations.unitMultiplier,
+      isGlobal: creditConfigurations.isGlobal
+    })
+    .from(creditConfigurations)
+    .where(and(
+      or(
+        eq(creditConfigurations.tenantId, tenantId), // Tenant-specific configs
+        isNull(creditConfigurations.tenantId) // Global configs
+      ),
+      eq(creditConfigurations.isActive, true),
+      like(creditConfigurations.operationCode, `${appCode}.${moduleCode}.%`)
+    ))
+    .orderBy(creditConfigurations.isGlobal); // Tenant-specific configs first
+
+  // Create a map of operation codes to credit costs
+  const creditCostMap = new Map();
+  creditConfigs.forEach(config => {
+    const operationCode = config.operationCode;
+    if (!creditCostMap.has(operationCode) || !config.isGlobal) {
+      // Use tenant-specific over global configs
+      creditCostMap.set(operationCode, {
+        creditCost: parseFloat(config.creditCost),
+        unit: config.unit,
+        unitMultiplier: parseFloat(config.unitMultiplier),
+        isGlobal: config.isGlobal
+      });
+    }
+  });
+
+  if (moduleMatrix?.permissions) {
+    // Use matrix definitions for proper names and descriptions
+    const matrixPermissions = moduleMatrix.permissions;
+
+    for (const code of permissionCodes) {
+      // Handle both string codes and permission objects
+      const permissionCode = typeof code === 'string' ? code : (code.code || code);
+
+      // Find the permission in the matrix
+      const matrixPerm = matrixPermissions.find(p => p.code === permissionCode);
+      if (matrixPerm) {
+        const operationCode = `${appCode}.${moduleCode}.${permissionCode}`;
+        const creditConfig = creditCostMap.get(operationCode);
+
+        formattedPermissions.push({
+          code: matrixPerm.code,
+          name: matrixPerm.name,
+          description: matrixPerm.description,
+          creditCost: creditConfig ? {
+            cost: creditConfig.creditCost,
+            unit: creditConfig.unit,
+            unitMultiplier: creditConfig.unitMultiplier,
+            isGlobal: creditConfig.isGlobal
+          } : null
+        });
+      } else {
+        // Fallback for permissions not in matrix
+        const operationCode = `${appCode}.${moduleCode}.${permissionCode}`;
+        const creditConfig = creditCostMap.get(operationCode);
+
+        formattedPermissions.push({
+          code: permissionCode,
+          name: typeof permissionCode === 'string' ? permissionCode.charAt(0).toUpperCase() + permissionCode.slice(1).replace(/_/g, ' ') : permissionCode,
+          description: typeof permissionCode === 'string' ? `${permissionCode.charAt(0).toUpperCase() + permissionCode.slice(1).replace(/_/g, ' ')} access` : `${permissionCode} access`,
+          creditCost: creditConfig ? {
+            cost: creditConfig.creditCost,
+            unit: creditConfig.unit,
+            unitMultiplier: creditConfig.unitMultiplier,
+            isGlobal: creditConfig.isGlobal
+          } : null
+        });
+      }
+    }
+  } else {
+    // Fallback if no matrix definitions found
+    for (const code of permissionCodes) {
+      // Handle both string codes and permission objects
+      const permissionCode = typeof code === 'string' ? code : (code.code || code);
+      const operationCode = `${appCode}.${moduleCode}.${permissionCode}`;
+      const creditConfig = creditCostMap.get(operationCode);
+
+      formattedPermissions.push({
+        code: permissionCode,
+        name: typeof permissionCode === 'string' ? permissionCode.charAt(0).toUpperCase() + permissionCode.slice(1).replace(/_/g, ' ') : permissionCode,
+        description: typeof permissionCode === 'string' ? `${permissionCode.charAt(0).toUpperCase() + permissionCode.slice(1).replace(/_/g, ' ')} access` : `${permissionCode} access`,
+        creditCost: creditConfig ? {
+          cost: creditConfig.creditCost,
+          unit: creditConfig.unit,
+          unitMultiplier: creditConfig.unitMultiplier,
+          isGlobal: creditConfig.isGlobal
+        } : null
+      });
+    }
+  }
+
+  return formattedPermissions;
+}
 export class CustomRoleService {
   
   /**
@@ -283,13 +401,14 @@ export class CustomRoleService {
   }
   
   /**
-   * 2️⃣ **GET ROLE CREATION OPTIONS (DYNAMIC)**
-   * Now uses automatic subscription-tier based access control
+   * 2️⃣ **GET ROLE CREATION OPTIONS (CREDIT-BASED)**
+   * Shows all enabled applications and modules for the tenant
+   * Uses organization_applications table for access control
    */
   static async getRoleCreationOptions(tenantId) {
     console.log(`🔍 Getting role creation options for tenant: ${tenantId}`);
-    
-    // Get organization's available applications with subscription info
+
+    // Get organization's available applications
     const orgApps = await db
       .select({
         appId: applications.appId,
@@ -298,7 +417,8 @@ export class CustomRoleService {
         description: applications.description,
         subscriptionTier: organizationApplications.subscriptionTier,
         isEnabled: organizationApplications.isEnabled,
-        enabledModules: organizationApplications.enabledModules
+        enabledModules: organizationApplications.enabledModules,
+        customPermissions: organizationApplications.customPermissions
       })
       .from(applications)
       .innerJoin(organizationApplications, and(
@@ -306,45 +426,87 @@ export class CustomRoleService {
         eq(organizationApplications.tenantId, tenantId),
         eq(organizationApplications.isEnabled, true)
       ));
-    
+
     console.log(`🏢 Organization has access to ${orgApps.length} applications`);
-    
-    // Get ALL modules for each app with dynamic access control
+
+    // Get modules for each app based on credit-based access control
     const appsWithModules = await Promise.all(
       orgApps.map(async (app) => {
         const allModules = await db
           .select()
           .from(applicationModules)
           .where(eq(applicationModules.appId, app.appId));
-        
-        // Use dynamic access control based on subscription tier
-        const accessibleModules = await this.getAccessibleModulesForApp(
-          app.appCode, 
-          app.subscriptionTier, 
-          allModules,
-          app.enabledModules // Fallback to explicit config
+
+        // Filter modules based on enabledModules from organization_applications
+        let accessibleModules = allModules;
+
+        if (app.enabledModules && Array.isArray(app.enabledModules) && app.enabledModules.length > 0) {
+          // Filter to only enabled modules
+          accessibleModules = allModules.filter(module =>
+            app.enabledModules.includes(module.moduleCode)
+          );
+          console.log(`  📦 ${app.appCode}: ${accessibleModules.length}/${allModules.length} modules enabled via credit system`);
+        } else {
+          // If no specific modules enabled, allow all modules (backward compatibility)
+          console.log(`  📦 ${app.appCode}: ${accessibleModules.length}/${allModules.length} modules accessible (all enabled)`);
+        }
+
+        // Process modules with permissions formatting
+        const processedModules = await Promise.all(
+          accessibleModules.map(async (module) => {
+            // Use custom permissions from organization_applications if available
+            let modulePermissions = module.permissions || [];
+
+            if (app.customPermissions && typeof app.customPermissions === 'object') {
+              const customModulePermissions = app.customPermissions[module.moduleCode];
+              if (customModulePermissions && Array.isArray(customModulePermissions)) {
+                // Check if custom permissions are already formatted objects or just codes
+                if (customModulePermissions.length > 0) {
+                  // Check if the first non-null element is a string
+                  const firstValidElement = customModulePermissions.find(perm => perm != null);
+                  if (firstValidElement && typeof firstValidElement === 'string') {
+                    // Convert string codes to formatted objects using permission matrix
+                    modulePermissions = await formatPermissionsForUI(customModulePermissions, app.appCode, module.moduleCode, tenantId);
+                  } else {
+                    // Already formatted objects, use as-is
+                    modulePermissions = customModulePermissions;
+                  }
+                } else {
+                  // Empty array, use default permissions
+                  modulePermissions = await formatPermissionsForUI(module.permissions || [], app.appCode, module.moduleCode, tenantId);
+                }
+                console.log(`    🔧 ${module.moduleCode}: Using ${modulePermissions.length} custom permissions`);
+              } else {
+                // No custom permissions, format default permissions using matrix
+                modulePermissions = await formatPermissionsForUI(module.permissions || [], app.appCode, module.moduleCode, tenantId);
+              }
+            } else {
+              // No custom permissions defined, format default permissions using matrix
+              modulePermissions = await formatPermissionsForUI(module.permissions || [], app.appCode, module.moduleCode, tenantId);
+            }
+
+            return {
+              moduleId: module.moduleId,
+              moduleCode: module.moduleCode,
+              moduleName: module.moduleName,
+              description: module.description,
+              isCore: module.isCore,
+              permissions: modulePermissions
+            };
+          })
         );
-        
-        console.log(`  📦 ${app.appCode}: ${accessibleModules.length}/${allModules.length} modules accessible (${app.subscriptionTier})`);
-        
+
         return {
           appId: app.appId,
           appCode: app.appCode,
           appName: app.appName,
           description: app.description,
           subscriptionTier: app.subscriptionTier,
-          modules: accessibleModules.map(module => ({
-            moduleId: module.moduleId,
-            moduleCode: module.moduleCode,
-            moduleName: module.moduleName,
-            description: module.description,
-            isCore: module.isCore,
-            permissions: module.permissions || []
-          }))
+          modules: processedModules
         };
       })
     );
-    
+
     return appsWithModules;
   }
 

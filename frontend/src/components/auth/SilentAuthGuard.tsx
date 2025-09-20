@@ -133,7 +133,7 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
       }
 
       // Check if user needs onboarding using enhanced api.ts
-      const response = await api('/admin/auth-status', {
+      const response = await api('/api/admin/auth-status', {
         headers: {
           'Content-Type': 'application/json',
         },

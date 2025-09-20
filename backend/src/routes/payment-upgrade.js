@@ -4,7 +4,7 @@
 
 import { authenticateToken } from '../middleware/auth.js';
 import { db } from '../db/index.js';
-import { tenants, tenantUsers, subscriptions, organizations } from '../db/schema/index.js';
+import { tenants, tenantUsers, subscriptions, entities } from '../db/schema/index.js';
 import { eq, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import EmailService from '../utils/email.js';
@@ -132,10 +132,9 @@ export default async function paymentUpgradeRoutes(fastify, options) {
           defaultTimeZone: { type: 'string' },
           firstDayOfWeek: { type: 'number' },
 
-          // Plan selection for validation
-          selectedPlan: { type: 'string', enum: ['starter', 'professional', 'enterprise'] },
-          maxUsers: { type: 'number', minimum: 1, maximum: 1000 },
-          maxProjects: { type: 'number', minimum: 1, maximum: 1000 }
+          // Credit purchase options
+          creditPackage: { type: 'string', enum: ['basic', 'standard', 'premium', 'enterprise'] },
+          credits: { type: 'number', minimum: 100, maximum: 50000 }
         }
       },
       response: {
@@ -186,7 +185,10 @@ export default async function paymentUpgradeRoutes(fastify, options) {
         multiCurrencyEnabled,
         advancedCurrencyManagement,
         defaultTimeZone,
-        firstDayOfWeek
+        firstDayOfWeek,
+        // Credit purchase options
+        creditPackage,
+        credits
       } = request.body;
 
       console.log('📝 Completing comprehensive profile for tenant:', userContext.tenantId);
@@ -294,7 +296,8 @@ export default async function paymentUpgradeRoutes(fastify, options) {
                 ipAddress: request.ip,
                 userAgent: request.headers['user-agent'],
                 eventData: {
-                  selectedPlan: request.body.selectedPlan,
+                  creditPackage: creditPackage,
+                  credits: credits,
                   fieldsCompleted: Object.keys(profileUpdateData).length,
                   hasBillingInfo: !!(billingStreet && billingCity),
                   hasCompanyInfo: !!(legalCompanyName && industry),
@@ -334,14 +337,15 @@ export default async function paymentUpgradeRoutes(fastify, options) {
       let organizationUpdateResult = [];
       try {
         organizationUpdateResult = await db
-          .update(organizations)
+          .update(entities)
           .set({
             updatedBy: userContext.userId,
             updatedAt: new Date()
           })
           .where(and(
-            eq(organizations.tenantId, userContext.tenantId),
-            eq(organizations.organizationType, 'parent')
+            eq(entities.tenantId, userContext.tenantId),
+            eq(entities.organizationType, 'parent'),
+            eq(entities.entityType, 'organization')
           ))
           .returning();
         console.log('✅ Organization metadata updated');
@@ -372,15 +376,16 @@ export default async function paymentUpgradeRoutes(fastify, options) {
     }
   });
 
-  // Upgrade from trial to paid plan with comprehensive profile completion (legacy endpoint)
-  fastify.post('/upgrade-plan', {
+  // Purchase additional credits with profile completion
+  fastify.post('/purchase-credits', {
     preHandler: [authenticateToken],
     schema: {
       body: {
         type: 'object',
-        required: ['selectedPlan', 'gstin'],
+        required: ['creditPackage', 'gstin'],
         properties: {
-          selectedPlan: { type: 'string', enum: ['starter', 'professional', 'enterprise'] },
+          creditPackage: { type: 'string', enum: ['basic', 'standard', 'premium', 'enterprise'] },
+          credits: { type: 'number', minimum: 100, maximum: 50000 },
           gstin: { type: 'string', minLength: 15, maxLength: 15 },
           maxUsers: { type: 'number', minimum: 1, maximum: 1000 },
           maxProjects: { type: 'number', minimum: 1, maximum: 1000 },
@@ -440,7 +445,8 @@ export default async function paymentUpgradeRoutes(fastify, options) {
     try {
       const { userContext } = request;
       const {
-        selectedPlan,
+        creditPackage,
+        credits,
         gstin,
         maxUsers,
         maxProjects,
@@ -481,9 +487,10 @@ export default async function paymentUpgradeRoutes(fastify, options) {
         firstDayOfWeek
       } = request.body;
 
-      console.log('💰 Processing payment upgrade:', {
+      console.log('💰 Processing credit purchase:', {
         userId: userContext.userId,
-        selectedPlan,
+        creditPackage,
+        credits,
         gstin: gstin ? 'provided' : 'not provided'
       });
 
@@ -574,7 +581,8 @@ export default async function paymentUpgradeRoutes(fastify, options) {
               ipAddress: request.ip,
               userAgent: request.headers['user-agent'],
               eventData: {
-                selectedPlan,
+                creditPackage,
+                credits,
                 fieldsCompleted: Object.keys(profileUpdateData).length,
                 hasBillingInfo: !!(billingStreet && billingCity),
                 hasCompanyInfo: !!(legalCompanyName && industry),
@@ -607,14 +615,15 @@ export default async function paymentUpgradeRoutes(fastify, options) {
       let organizationUpdateResult = [];
       try {
         organizationUpdateResult = await db
-          .update(organizations)
+          .update(entities)
           .set({
             updatedBy: userContext.userId,
             updatedAt: new Date()
           })
           .where(and(
-            eq(organizations.tenantId, userContext.tenantId),
-            eq(organizations.organizationType, 'parent')
+            eq(entities.tenantId, userContext.tenantId),
+            eq(entities.organizationType, 'parent'),
+            eq(entities.entityType, 'organization')
           ))
           .returning();
         console.log('✅ Organization metadata updated');
@@ -626,39 +635,49 @@ export default async function paymentUpgradeRoutes(fastify, options) {
       // Create new subscription for paid plan
       const subscriptionId = uuidv4();
 
-      // Set plan limits based on selected plan
-      const planLimits = {
-        starter: {
-          tools: ['crm', 'hr'],
-          apiCalls: 25000,
-          storage: 10000000000, // 10GB
-          users: maxUsers || 10,
-          roles: 5,
-          projects: maxProjects || 25
+      // Set credit package limits based on credit package
+      const creditPackageLimits = {
+        basic: {
+          tools: ['crm'],
+          apiCalls: Math.min(credits * 10, 50000), // 10 API calls per credit, max 50k
+          storage: Math.min(credits * 1000000, 10000000000), // 1MB per credit, max 10GB
+          users: Math.min(Math.floor(credits / 50), 25), // 50 credits per user, max 25 users
+          roles: Math.min(Math.floor(credits / 100), 10), // 100 credits per role, max 10 roles
+          projects: Math.min(Math.floor(credits / 20), 100) // 20 credits per project, max 100 projects
         },
-        professional: {
+        standard: {
+          tools: ['crm', 'hr'],
+          apiCalls: Math.min(credits * 15, 100000), // 15 API calls per credit, max 100k
+          storage: Math.min(credits * 2000000, 50000000000), // 2MB per credit, max 50GB
+          users: Math.min(Math.floor(credits / 40), 50), // 40 credits per user, max 50 users
+          roles: Math.min(Math.floor(credits / 80), 15), // 80 credits per role, max 15 roles
+          projects: Math.min(Math.floor(credits / 15), 200) // 15 credits per project, max 200 projects
+        },
+        premium: {
           tools: ['crm', 'hr', 'affiliate'],
-          apiCalls: 50000,
-          storage: 50000000000, // 50GB
-          users: maxUsers || 25,
-          roles: 10,
-          projects: maxProjects || 100
+          apiCalls: Math.min(credits * 20, 200000), // 20 API calls per credit, max 200k
+          storage: Math.min(credits * 3000000, 100000000000), // 3MB per credit, max 100GB
+          users: Math.min(Math.floor(credits / 30), 100), // 30 credits per user, max 100 users
+          roles: Math.min(Math.floor(credits / 60), 20), // 60 credits per role, max 20 roles
+          projects: Math.min(Math.floor(credits / 10), 500) // 10 credits per project, max 500 projects
         },
         enterprise: {
           tools: ['crm', 'hr', 'affiliate', 'accounting', 'inventory'],
-          apiCalls: 100000,
-          storage: 100000000000, // 100GB
-          users: maxUsers || 100,
-          roles: 20,
-          projects: maxProjects || 500
+          apiCalls: Math.min(credits * 25, 500000), // 25 API calls per credit, max 500k
+          storage: Math.min(credits * 5000000, 500000000000), // 5MB per credit, max 500GB
+          users: Math.min(Math.floor(credits / 20), 500), // 20 credits per user, max 500 users
+          roles: Math.min(Math.floor(credits / 40), 50), // 40 credits per role, max 50 roles
+          projects: Math.min(Math.floor(credits / 5), 1000) // 5 credits per project, max 1000 projects
         }
       };
 
-      const planConfig = planLimits[selectedPlan];
-      const planPrices = {
-        starter: 29,
-        professional: 79,
-        enterprise: 199
+      const planConfig = creditPackageLimits[creditPackage];
+      // Calculate price based on credits and package
+      const creditPrices = {
+        basic: credits * 0.10, // $0.10 per credit for basic
+        standard: credits * 0.15, // $0.15 per credit for standard
+        premium: credits * 0.20, // $0.20 per credit for premium
+        enterprise: credits * 0.25 // $0.25 per credit for enterprise
       };
 
       const [newSubscription] = await db
@@ -666,16 +685,21 @@ export default async function paymentUpgradeRoutes(fastify, options) {
         .values({
           subscriptionId,
           tenantId: userContext.tenantId,
-          plan: selectedPlan,
+          plan: 'credit-based',
           status: 'active',
           subscribedTools: planConfig.tools,
           usageLimits: planConfig,
-          monthlyPrice: planPrices[selectedPlan].toString(),
-          yearlyPrice: (planPrices[selectedPlan] * 10).toString(), // 2 months free
+          monthlyPrice: creditPrices[creditPackage].toString(),
+          yearlyPrice: (creditPrices[creditPackage] * 12).toString(), // Monthly pricing for annual
           billingCycle: 'monthly',
           currentPeriodStart: new Date(),
           currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-          addOns: [],
+          addOns: [{
+            type: 'credits',
+            package: creditPackage,
+            amount: credits,
+            price: creditPrices[creditPackage]
+          }],
           upgradedFromTrial: true,
           upgradeDate: new Date()
         })
@@ -687,7 +711,7 @@ export default async function paymentUpgradeRoutes(fastify, options) {
         .set({
           subscriptionStatus: 'active',
           planUpgradedAt: new Date(),
-          upgradedPlan: selectedPlan,
+          upgradedPlan: `credit-${creditPackage}`,
           gstin: gstin,
           updatedAt: new Date()
         })
@@ -707,7 +731,8 @@ export default async function paymentUpgradeRoutes(fastify, options) {
             ipAddress: request.ip,
             userAgent: request.headers['user-agent'],
             eventData: {
-              selectedPlan,
+              creditPackage,
+              credits,
               subscriptionId,
               gstinUpdated: !!organizationUpdateResult.length,
               profileCompleted,
@@ -727,18 +752,21 @@ export default async function paymentUpgradeRoutes(fastify, options) {
         console.warn('⚠️ Upgrade onboarding tracking failed, but upgrade completed:', trackingError.message);
       }
 
-      console.log('✅ Payment upgrade completed:', {
+      console.log('✅ Credit purchase completed:', {
         subscriptionId,
-        selectedPlan,
+        creditPackage,
+        credits,
         gstinUpdated: !!organizationUpdateResult.length
       });
 
       return {
         success: true,
-        message: `Successfully upgraded to ${selectedPlan} plan${profileCompleted ? ' with profile completion' : ''}`,
+        message: `Successfully purchased ${credits} credits (${creditPackage} package)${profileCompleted ? ' with profile completion' : ''}`,
         subscription: {
           subscriptionId,
-          plan: selectedPlan,
+          plan: 'credit-based',
+          creditPackage,
+          credits,
           status: 'active',
           tools: planConfig.tools,
           limits: planConfig
@@ -787,14 +815,15 @@ export default async function paymentUpgradeRoutes(fastify, options) {
       // Get organization info
       const [organization] = await db
         .select({
-          organizationId: organizations.organizationId,
-          organizationName: organizations.organizationName,
-          gstin: organizations.gstin
+          organizationId: entities.entityId,
+          organizationName: entities.entityName,
+          gstin: entities.gstin
         })
-        .from(organizations)
+        .from(entities)
         .where(and(
-          eq(organizations.tenantId, userContext.tenantId),
-          eq(organizations.organizationType, 'parent')
+          eq(entities.tenantId, userContext.tenantId),
+          eq(entities.organizationType, 'parent'),
+          eq(entities.entityType, 'organization')
         ))
         .limit(1);
 

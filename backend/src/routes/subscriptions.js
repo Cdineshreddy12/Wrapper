@@ -4,7 +4,7 @@ import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { trackUsage } from '../middleware/usage.js';
 import { getPlanLimits } from '../middleware/planRestrictions.js';
 import { db } from '../db/index.js';
-import { tenants, payments, subscriptionActions, subscriptions } from '../db/schema/index.js';
+import { tenants, payments, subscriptions } from '../db/schema/index.js';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import ErrorResponses from '../utils/error-responses.js';
 
@@ -72,18 +72,18 @@ export default async function subscriptionRoutes(fastify, options) {
     }
   });
 
-  // Get available plans
-  fastify.get('/plans', async (request, reply) => {
+  // Get available credit packages
+  fastify.get('/credit-packages', async (request, reply) => {
     try {
-      const plans = await SubscriptionService.getAvailablePlans();
-      
+      const packages = await SubscriptionService.getAvailablePlans();
+
       return {
         success: true,
-        data: plans
+        data: packages
       };
     } catch (error) {
-      request.log.error('Error fetching plans:', error);
-      return reply.code(500).send({ error: 'Failed to fetch plans' });
+      request.log.error('Error fetching credit packages:', error);
+      return reply.code(500).send({ error: 'Failed to fetch credit packages' });
     }
   });
 
@@ -168,10 +168,10 @@ export default async function subscriptionRoutes(fastify, options) {
     schema: {
       body: {
         type: 'object',
-        required: ['planId', 'billingCycle', 'successUrl', 'cancelUrl'],
+        required: ['packageId', 'credits', 'successUrl', 'cancelUrl'],
         properties: {
-          planId: { type: 'string' },
-          billingCycle: { type: 'string', enum: ['monthly', 'yearly'] },
+          packageId: { type: 'string' },
+          credits: { type: 'number', minimum: 100, maximum: 50000 },
           successUrl: { type: 'string' },
           cancelUrl: { type: 'string' }
         }
@@ -179,7 +179,7 @@ export default async function subscriptionRoutes(fastify, options) {
     }
   }, async (request, reply) => {
     try {
-      const { planId, billingCycle, successUrl, cancelUrl } = request.body;
+      const { packageId, credits, successUrl, cancelUrl } = request.body;
       const tenantId = request.userContext.tenantId;
       const userId = request.userContext.userId;
 
@@ -217,31 +217,32 @@ export default async function subscriptionRoutes(fastify, options) {
 
       console.log('✅ Checkout - Found tenant:', tenant.companyName);
 
-      // Check if plan is valid and not free
-      const plans = await SubscriptionService.getAvailablePlans();
-      const plan = plans.find(p => p.id === planId);
-      
-      if (!plan) {
-        return reply.code(400).send({ error: 'Invalid plan selected' });
+      // Check if credit package is valid
+      const packages = await SubscriptionService.getAvailablePlans();
+      const selectedPackage = packages.find(p => p.id === packageId);
+
+      if (!selectedPackage) {
+        return reply.code(400).send({ error: 'Invalid credit package selected' });
       }
 
-      if (plan.id === 'free') {
-        return reply.code(400).send({ 
-          error: 'Cannot create checkout for free plan',
-          message: 'Free plan does not require payment'
+      // Validate credits are within package limits
+      if (credits < selectedPackage.minCredits || credits > selectedPackage.maxCredits) {
+        return reply.code(400).send({
+          error: 'Invalid credit amount',
+          message: `Credits must be between ${selectedPackage.minCredits} and ${selectedPackage.maxCredits} for ${selectedPackage.name} package`
         });
       }
 
-      console.log('🎯 Checkout - Creating checkout session for plan:', plan.name);
+      console.log('🎯 Checkout - Creating checkout session for credit package:', selectedPackage.name, 'with', credits, 'credits');
 
-      // Create Stripe checkout session
+      // Create Stripe checkout session for credit purchase
       const checkoutUrl = await SubscriptionService.createCheckoutSession({
         tenantId,
-        planId,
+        planId: packageId,
+        credits,
         customerId: tenant.stripeCustomerId || null,
         successUrl,
-        cancelUrl,
-        billingCycle
+        cancelUrl
       });
 
       console.log('✅ Checkout - Session created successfully');
@@ -305,7 +306,25 @@ export default async function subscriptionRoutes(fastify, options) {
       };
     } catch (error) {
       request.log.error('Error fetching billing history:', error);
-      return reply.code(500).send({ error: 'Failed to fetch billing history' });
+      console.error('❌ Billing history error details:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack?.substring(0, 300)
+      });
+
+      // Check if it's a database table issue
+      if (error.message?.includes('relation "credit_purchases" does not exist')) {
+        return reply.code(503).send({
+          error: 'Billing History Unavailable',
+          message: 'Billing history is not yet available. Please contact support if this persists.',
+          details: 'Database table not found'
+        });
+      }
+
+      return reply.code(500).send({
+        error: 'Failed to fetch billing history',
+        message: 'Unable to retrieve billing history at this time.'
+      });
     }
   });
 
@@ -340,7 +359,8 @@ export default async function subscriptionRoutes(fastify, options) {
     }
   });
 
-  // Change subscription plan (upgrade/downgrade)
+  // Plan changes disabled - credit-based system uses credit purchases instead
+  /*
   fastify.post('/change-plan', {
     preHandler: authenticateToken,
     schema: {
@@ -359,7 +379,7 @@ export default async function subscriptionRoutes(fastify, options) {
       const tenantId = request.userContext.tenantId;
 
       if (!tenantId) {
-        return reply.code(400).send({ 
+        return reply.code(400).send({
           error: 'No organization found',
           message: 'User must be associated with an organization'
         });
@@ -372,7 +392,7 @@ export default async function subscriptionRoutes(fastify, options) {
         planId,
         billingCycle
       });
-      
+
       // If result contains a checkout URL, return it for payment
       if (typeof result === 'string' && result.startsWith('http')) {
         return {
@@ -385,7 +405,7 @@ export default async function subscriptionRoutes(fastify, options) {
           message: 'Redirecting to payment for plan change'
         };
       }
-      
+
       return {
         success: true,
         data: result,
@@ -393,12 +413,13 @@ export default async function subscriptionRoutes(fastify, options) {
       };
     } catch (error) {
       request.log.error('Error changing plan:', error);
-      return reply.code(500).send({ 
+      return reply.code(500).send({
         error: 'Failed to change plan',
         message: error.message
       });
     }
   });
+  */
 
   // Debug Stripe configuration (for troubleshooting webhook issues)
   fastify.get('/debug-stripe-config', async (request, reply) => {
@@ -472,6 +493,10 @@ export default async function subscriptionRoutes(fastify, options) {
       rawBody: true
     }
   }, async (request, reply) => {
+    console.log('🎣 SUBSCRIPTION WEBHOOK ENDPOINT HIT - URL:', request.url);
+    console.log('🎣 Request method:', request.method);
+    console.log('🎣 Request headers:', Object.keys(request.headers));
+
     try {
       const sig = request.headers['stripe-signature'];
       const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -713,7 +738,8 @@ export default async function subscriptionRoutes(fastify, options) {
     }
   });
 
-  // Immediate downgrade with optional refund
+  // Downgrade disabled - credit-based system uses credit purchases instead
+  /*
   fastify.post('/immediate-downgrade', {
     preHandler: authenticateToken,
     schema: {
@@ -755,12 +781,13 @@ export default async function subscriptionRoutes(fastify, options) {
       };
     } catch (error) {
       request.log.error('Error processing immediate downgrade:', error);
-      return reply.code(500).send({ 
+      return reply.code(500).send({
         error: 'Failed to process downgrade',
         message: error.message
       });
     }
   });
+  */
 
   // Process refund for a specific payment
   fastify.post('/refund', {
@@ -927,31 +954,9 @@ export default async function subscriptionRoutes(fastify, options) {
       }
 
       // Get subscription actions
-      const actions = await db
-        .select()
-        .from(subscriptionActions)
-        .where(eq(subscriptionActions.tenantId, tenantId))
-        .orderBy(desc(subscriptionActions.createdAt));
-
-      const formattedActions = actions.map(action => ({
-        id: action.actionId,
-        type: action.actionType,
-        fromPlan: action.fromPlan,
-        toPlan: action.toPlan,
-        fromBillingCycle: action.fromBillingCycle,
-        toBillingCycle: action.toBillingCycle,
-        prorationAmount: parseFloat(action.prorationAmount || 0),
-        refundAmount: parseFloat(action.refundAmount || 0),
-        chargeAmount: parseFloat(action.chargeAmount || 0),
-        effectiveDate: action.effectiveDate,
-        reason: action.reason,
-        status: action.status,
-        impactAssessment: action.impactAssessment,
-        requestedAt: action.requestedAt,
-        processedAt: action.processedAt,
-        completedAt: action.completedAt,
-        reversedAt: action.reversedAt
-      }));
+      // Subscription actions are now handled by Stripe webhooks
+      // Return empty array for now
+      const formattedActions = [];
       
       return {
         success: true,

@@ -16,8 +16,8 @@ import {
 export function createRLSRoutes(app, db, connectionString) {
   const rlsService = new RLSTenantIsolationService(db, connectionString);
 
-  // Apply RLS middleware
-  app.use('/api/rls', rlsService.middleware());
+  // For Fastify, we register routes directly instead of using middleware
+  // The RLS service middleware will be applied per route
 
   // ============================================================================
   // RLS AUTOMATIC ISOLATION EXAMPLES

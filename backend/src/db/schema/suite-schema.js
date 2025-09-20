@@ -64,29 +64,3 @@ export const userApplicationPermissions = pgTable('user_application_permissions'
 });
 
 
-
-// SSO tokens for app authentication
-export const ssoTokens = pgTable('sso_tokens', {
-  tokenId: uuid('token_id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').references(() => tenantUsers.userId),
-  appId: uuid('app_id').references(() => applications.appId),
-  token: text('token').notNull(),
-  expiresAt: timestamp('expires_at').notNull(),
-  isRevoked: boolean('is_revoked').default(false),
-  createdAt: timestamp('created_at').defaultNow()
-});
-
-// Activity logs for audit
-export const activityLogs = pgTable('activity_logs', {
-  logId: uuid('log_id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').references(() => tenantUsers.userId),
-  tenantId: uuid('tenant_id').references(() => tenants.tenantId),
-  appId: uuid('app_id').references(() => applications.appId),
-  action: varchar('action', { length: 100 }).notNull(),
-  resourceType: varchar('resource_type', { length: 50 }),
-  resourceId: varchar('resource_id', { length: 255 }),
-  metadata: jsonb('metadata'),
-  ipAddress: varchar('ip_address', { length: 45 }),
-  userAgent: text('user_agent'),
-  createdAt: timestamp('created_at').defaultNow()
-}); 

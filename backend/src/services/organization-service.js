@@ -5,12 +5,13 @@
 
 import { db } from '../db/index.js';
 import { tenants } from '../db/schema/tenants.js';
-import { organizations } from '../db/schema/organizations.js';
+import { entities } from '../db/schema/unified-entities.js';
 import { organizationMemberships } from '../db/schema/organization_memberships.js';
 import { eq, and, or, sql, inArray } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import DataIsolationService from './data-isolation-service.js';
 import ApplicationDataIsolationService from './application-data-isolation-service.js';
+import HierarchyManager from '../utils/hierarchy-manager.js';
 
 export class OrganizationService {
 
@@ -37,11 +38,12 @@ export class OrganizationService {
     // Check if a parent organization already exists for this tenant
     const existingParentOrg = await db
       .select()
-      .from(organizations)
+      .from(entities)
       .where(and(
-        eq(organizations.tenantId, parentTenantId),
-        eq(organizations.organizationType, 'parent'),
-        eq(organizations.isActive, true)
+        eq(entities.tenantId, parentTenantId),
+        eq(entities.entityType, 'organization'),
+        eq(entities.organizationType, 'business_unit'), // Parent org
+        eq(entities.isActive, true)
       ))
       .limit(1);
 
@@ -51,18 +53,20 @@ export class OrganizationService {
 
     const organizationId = uuidv4();
 
-    // Create organization
-    const organization = await db.insert(organizations).values({
-      organizationId,
+    // Create organization entity
+    const organization = await db.insert(entities).values({
+      entityId: organizationId,
       tenantId: parentTenantId,
-      organizationName: name,
+      entityType: 'organization',
+      entityName: name,
+      entityCode: `ORG_${organizationId.substring(0, 8)}`, // Generate code
       description,
-      gstin,
-      organizationType: 'parent',
-      organizationLevel: 1,
-      hierarchyPath: organizationId,
+      organizationType: 'business_unit', // Parent organization
+      entityLevel: 1,
+      hierarchyPath: name, // Will be updated by trigger
       responsiblePersonId: createdBy,
       isActive: true,
+      isDefault: true,
       createdBy,
       createdAt: new Date()
     }).returning();
@@ -80,11 +84,13 @@ export class OrganizationService {
   async getParentOrganization(tenantId) {
     const parentOrg = await db
       .select()
-      .from(organizations)
+      .from(entities)
       .where(and(
-        eq(organizations.tenantId, tenantId),
-        eq(organizations.organizationType, 'parent'),
-        eq(organizations.isActive, true)
+        eq(entities.tenantId, tenantId),
+        eq(entities.entityType, 'organization'),
+        eq(entities.organizationType, 'business_unit'), // Parent org
+        eq(entities.isActive, true),
+        eq(entities.isDefault, true)
       ))
       .limit(1);
 
@@ -103,46 +109,79 @@ export class OrganizationService {
    * Create a sub-organization under a parent organization
    */
   async createSubOrganization(data, createdBy) {
-    const { name, description, gstin, parentOrganizationId } = data;
+    const { name, description, gstin, parentOrganizationId, organizationType, tenantId } = data;
+
+    console.log('🏗️ OrganizationService.createSubOrganization called with:', {
+      name,
+      description,
+      parentOrganizationId,
+      organizationType,
+      tenantId,
+      createdBy
+    });
 
     // Validate input
+    console.log('🔍 Validating organization data...');
     this.validateOrganizationData(data);
-
-    // Get parent organization details
-    const parentOrg = await db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.organizationId, parentOrganizationId))
-      .limit(1);
-
-    if (parentOrg.length === 0) {
-      throw new Error('Parent organization not found');
-    }
+    console.log('✅ Organization data validation passed');
 
     const organizationId = uuidv4();
-    const hierarchyPath = `${parentOrg[0].hierarchyPath}.${organizationId}`;
+    let tenantIdToUse, parentEntityId;
 
-    // Create sub-organization
-    const organization = await db.insert(organizations).values({
-      organizationId,
-      tenantId: parentOrg[0].tenantId,
-      parentOrganizationId,
-      organizationName: name,
+    if (parentOrganizationId) {
+      // Get parent organization details for sub-organization
+      const parentOrg = await db
+        .select()
+        .from(entities)
+        .where(and(
+          eq(entities.entityId, parentOrganizationId),
+          eq(entities.entityType, 'organization')
+        ))
+        .limit(1);
+
+      if (parentOrg.length === 0) {
+        throw new Error('Parent organization not found');
+      }
+
+      tenantIdToUse = parentOrg[0].tenantId;
+      parentEntityId = parentOrganizationId;
+    } else {
+      // Create top-level organization - need tenantId from somewhere else
+      console.log('🏢 Creating top-level organization, checking tenantId...');
+      if (!tenantId) {
+        console.log('❌ No tenantId provided for top-level organization');
+        throw new Error('Tenant ID is required for top-level organization creation');
+      }
+
+      console.log('✅ Using tenantId for top-level organization:', tenantId);
+      tenantIdToUse = tenantId;
+      parentEntityId = null;
+    }
+
+    // Create organization
+    console.log('💾 Inserting organization into database...');
+    const organization = await db.insert(entities).values({
+      entityId: organizationId,
+      tenantId: tenantIdToUse,
+      entityType: 'organization',
+      parentEntityId: parentEntityId,
+      entityName: name,
+      entityCode: organizationType === 'parent' ? `PARENT_${organizationId.substring(0, 8)}` : `ORG_${organizationId.substring(0, 8)}`,
       description,
-      gstin,
-      organizationType: 'sub',
-      organizationLevel: parentOrg[0].organizationLevel + 1,
-      hierarchyPath,
+      organizationType: organizationType || 'department',
       responsiblePersonId: createdBy,
       isActive: true,
       createdBy,
       createdAt: new Date()
     }).returning();
 
+    console.log('✅ Organization inserted successfully:', organization[0]);
+    // Note: Hierarchy paths are automatically maintained by database triggers
+
     return {
       success: true,
       organization: organization[0],
-      message: 'Sub-organization created successfully'
+      message: 'Organization created successfully'
     };
   }
 
@@ -156,11 +195,14 @@ export class OrganizationService {
       // First, check if organization exists with a simple query
       const orgCheck = await db
         .select({
-          organizationId: organizations.organizationId,
-          organizationName: organizations.organizationName
+          organizationId: entities.entityId,
+          organizationName: entities.entityName
         })
-        .from(organizations)
-        .where(eq(organizations.organizationId, organizationId))
+        .from(entities)
+        .where(and(
+          eq(entities.entityId, organizationId),
+          eq(entities.entityType, 'organization')
+        ))
         .limit(1);
 
       if (!orgCheck || orgCheck.length === 0) {
@@ -172,8 +214,11 @@ export class OrganizationService {
       // Now get full details
       const organization = await db
         .select()
-        .from(organizations)
-        .where(eq(organizations.organizationId, organizationId))
+        .from(entities)
+        .where(and(
+          eq(entities.entityId, organizationId),
+          eq(entities.entityType, 'organization')
+        ))
         .limit(1);
 
       console.log('📊 Full organization query result:', organization);
@@ -187,16 +232,19 @@ export class OrganizationService {
 
       // Get parent organization details if exists
       let parentOrganization = null;
-      if (orgData.parentOrganizationId) {
-        console.log('👨‍👩‍👧‍👦 Getting parent organization:', orgData.parentOrganizationId);
+      if (orgData.parentEntityId) {
+        console.log('👨‍👩‍👧‍👦 Getting parent organization:', orgData.parentEntityId);
         try {
           const parent = await db
             .select({
-              organizationId: organizations.organizationId,
-              organizationName: organizations.organizationName
+              organizationId: entities.entityId,
+              organizationName: entities.entityName
             })
-            .from(organizations)
-            .where(eq(organizations.organizationId, orgData.parentOrganizationId))
+            .from(entities)
+            .where(and(
+              eq(entities.entityId, orgData.parentEntityId),
+              eq(entities.entityType, 'organization')
+            ))
             .limit(1);
 
           if (parent && parent.length > 0) {
@@ -227,17 +275,20 @@ export class OrganizationService {
   async getSubOrganizations(parentOrganizationId) {
     const subOrgs = await db
       .select({
-        organizationId: organizations.organizationId,
-        organizationName: organizations.organizationName,
-        description: organizations.description,
-        organizationType: organizations.organizationType,
-        organizationLevel: organizations.organizationLevel,
-        isActive: organizations.isActive,
-        createdAt: organizations.createdAt
+        organizationId: entities.entityId,
+        organizationName: entities.entityName,
+        description: entities.description,
+        organizationType: entities.organizationType,
+        organizationLevel: entities.entityLevel,
+        isActive: entities.isActive,
+        createdAt: entities.createdAt
       })
-      .from(organizations)
-      .where(eq(organizations.parentOrganizationId, parentOrganizationId))
-      .orderBy(organizations.createdAt);
+      .from(entities)
+      .where(and(
+        eq(entities.parentEntityId, parentOrganizationId),
+        eq(entities.entityType, 'organization')
+      ))
+      .orderBy(entities.createdAt);
 
     return {
       success: true,
@@ -251,85 +302,109 @@ export class OrganizationService {
    * Get organization hierarchy tree
    */
   async getOrganizationHierarchy(tenantId, userContext = null, applicationContext = null) {
-    let query = db
-      .select({
-        organizationId: organizations.organizationId,
-        parentOrganizationId: organizations.parentOrganizationId,
-        organizationName: organizations.organizationName,
-        organizationType: organizations.organizationType,
-        organizationLevel: organizations.organizationLevel,
-        hierarchyPath: organizations.hierarchyPath,
-        isActive: organizations.isActive
-      })
-      .from(organizations)
-      .where(eq(organizations.tenantId, tenantId))
-      .orderBy(organizations.organizationLevel, organizations.createdAt);
+    try {
+      // Use HierarchyManager to get the complete entity hierarchy
+      const hierarchyResult = await HierarchyManager.getEntityHierarchyTree(tenantId);
 
-    // Apply data isolation if user context is provided
-    if (userContext) {
-      let accessibleOrgs = [];
+      if (!hierarchyResult.success) {
+        throw new Error(hierarchyResult.message);
+      }
 
-      // If application context is provided, use application-specific filtering
-      if (applicationContext?.application) {
-        const appAccess = await ApplicationDataIsolationService.getUserApplicationAccess(
-          userContext,
-          applicationContext.application
-        );
+      // Filter to only organizations and apply data isolation if needed
+      let hierarchy = hierarchyResult.hierarchy.filter(entity => entity.entityType === 'organization');
 
-        if (!appAccess.hasAccess) {
-          return {
-            success: true,
-            hierarchy: [],
-            totalOrganizations: 0,
-            message: `User does not have access to ${applicationContext.application} application`
-          };
+      if (userContext) {
+        let accessibleOrgs = [];
+
+        // If application context is provided, use application-specific filtering
+        if (applicationContext?.application) {
+          const appAccess = await ApplicationDataIsolationService.getUserApplicationAccess(
+            userContext,
+            applicationContext.application
+          );
+
+          if (!appAccess.hasAccess) {
+            return {
+              success: true,
+              hierarchy: [],
+              totalOrganizations: 0,
+              message: `User does not have access to ${applicationContext.application} application`
+            };
+          }
+
+          accessibleOrgs = appAccess.organizations;
+        } else {
+          // Use regular organizational access
+          accessibleOrgs = await DataIsolationService.getUserAccessibleOrganizations(userContext);
         }
 
-        accessibleOrgs = appAccess.organizations;
-      } else {
-        // Use regular organizational access
-        accessibleOrgs = await DataIsolationService.getUserAccessibleOrganizations(userContext);
+        if (accessibleOrgs.length > 0) {
+          // Filter hierarchy to only include accessible organizations
+          hierarchy = hierarchy.filter(org => accessibleOrgs.includes(org.entityId));
+        } else {
+          // User has no access to any organizations
+          return { success: true, hierarchy: [], totalOrganizations: 0 };
+        }
       }
 
-      if (accessibleOrgs.length > 0) {
-        query = query.where(inArray(organizations.organizationId, accessibleOrgs));
-      } else {
-        // User has no access to any organizations
-        return { success: true, hierarchy: [], totalOrganizations: 0 };
-      }
-    }
+      // Transform to match expected format
+      const transformedHierarchy = hierarchy.map(org => ({
+        organizationId: org.entityId,
+        organizationName: org.entityName,
+        organizationType: org.organizationType,
+        organizationLevel: org.entityLevel,
+        hierarchyPath: org.hierarchyPath,
+        fullHierarchyPath: org.fullHierarchyPath,
+        description: org.description,
+        isActive: org.isActive,
+        createdAt: org.createdAt,
+        updatedAt: org.updatedAt,
+        parentOrganizationId: org.parentEntityId,
+        children: org.children || []
+      }));
 
-    const allOrgs = await query;
-
-    // Build hierarchy tree
-    const hierarchyMap = {};
-    const rootOrgs = [];
-
-    // First pass: create all nodes
-    allOrgs.forEach(org => {
-      hierarchyMap[org.organizationId] = {
-        ...org,
-        children: []
+      return {
+        success: true,
+        hierarchy: transformedHierarchy,
+        totalOrganizations: transformedHierarchy.length,
+        message: 'Organization hierarchy retrieved successfully'
       };
-    });
+    } catch (error) {
+      console.error('Error in getOrganizationHierarchy:', error);
 
-    // Second pass: build tree structure
-    allOrgs.forEach(org => {
-      if (org.parentOrganizationId) {
-        if (hierarchyMap[org.parentOrganizationId]) {
-          hierarchyMap[org.parentOrganizationId].children.push(hierarchyMap[org.organizationId]);
-        }
-      } else {
-        rootOrgs.push(hierarchyMap[org.organizationId]);
-      }
-    });
+      // Fallback to simple query if hierarchy manager fails
+      console.log('Falling back to simple hierarchy query...');
+      const allOrgs = await db
+        .select({
+          organizationId: entities.entityId,
+          parentOrganizationId: entities.parentEntityId,
+          organizationName: entities.entityName,
+          organizationType: entities.organizationType,
+          organizationLevel: entities.entityLevel,
+          hierarchyPath: entities.hierarchyPath,
+          description: entities.description,
+          isActive: entities.isActive,
+          createdAt: entities.createdAt,
+          updatedAt: entities.updatedAt
+        })
+        .from(entities)
+        .where(and(
+          eq(entities.tenantId, tenantId),
+          eq(entities.entityType, 'organization'),
+          eq(entities.isActive, true)
+        ))
+        .orderBy(entities.entityLevel, entities.createdAt);
 
-    return {
-      success: true,
-      hierarchy: rootOrgs,
-      totalOrganizations: allOrgs.length,
-      message: 'Organization hierarchy retrieved successfully'
-    };
+      return {
+        success: true,
+        hierarchy: allOrgs.map(org => ({
+          ...org,
+          children: [] // Simple fallback doesn't build tree structure
+        })),
+        totalOrganizations: allOrgs.length,
+        message: 'Organization hierarchy retrieved (fallback mode)'
+      };
+    }
   }
 
   /**
@@ -339,59 +414,55 @@ export class OrganizationService {
     // Validate organization exists
     const organization = await db
       .select()
-      .from(organizations)
-      .where(eq(organizations.organizationId, organizationId))
+      .from(entities)
+      .where(and(
+        eq(entities.entityId, organizationId),
+        eq(entities.entityType, 'organization')
+      ))
       .limit(1);
 
     if (organization.length === 0) {
       throw new Error('Organization not found');
     }
 
-    const org = organization[0];
-
     // Validate new parent exists (if provided)
-    let newParent = null;
     if (newParentId) {
       const parentCheck = await db
         .select()
-        .from(organizations)
-        .where(eq(organizations.organizationId, newParentId))
+        .from(entities)
+        .where(and(
+          eq(entities.entityId, newParentId),
+          eq(entities.entityType, 'organization')
+        ))
         .limit(1);
 
       if (parentCheck.length === 0) {
         throw new Error('New parent organization not found');
       }
 
-      newParent = parentCheck[0];
-
-      // Check for circular reference
-      if (newParent.hierarchyPath.includes(organizationId)) {
-        throw new Error('Cannot move organization to its own descendant (circular reference)');
+      // Validate hierarchy integrity (prevent circular references)
+      const validation = await HierarchyManager.validateHierarchyIntegrity(organizationId, newParentId);
+      if (!validation.valid) {
+        throw new Error(validation.message);
       }
     }
 
-    // Calculate new hierarchy path and level
-    const newHierarchyPath = newParentId
-      ? `${newParent.hierarchyPath}.${organizationId}`
-      : organizationId;
-
-    const newLevel = newParentId ? newParent.organizationLevel + 1 : 1;
-
     // Update the organization
     const updatedOrg = await db
-      .update(organizations)
+      .update(entities)
       .set({
-        parentOrganizationId: newParentId,
-        hierarchyPath: newHierarchyPath,
-        organizationLevel: newLevel,
+        parentEntityId: newParentId,
         updatedBy: movedBy,
         updatedAt: new Date()
       })
-      .where(eq(organizations.organizationId, organizationId))
+      .where(and(
+        eq(entities.entityId, organizationId),
+        eq(entities.entityType, 'organization')
+      ))
       .returning();
 
-    // Update hierarchy paths for all descendants
-    await this.updateDescendantHierarchyPaths(organizationId, newHierarchyPath, newLevel);
+    // Update hierarchy paths for the moved organization and all its descendants
+    await HierarchyManager.updateEntityHierarchyPaths(organizationId);
 
     return {
       success: true,
@@ -400,62 +471,22 @@ export class OrganizationService {
     };
   }
 
-  /**
-   * Update hierarchy paths for all descendants after a move
-   */
-  async updateDescendantHierarchyPaths(parentOrgId, newParentPath, newParentLevel) {
-    try {
-      console.log('🔄 Updating descendant hierarchy paths for:', parentOrgId);
-
-      // Find all descendants using string contains approach
-      const allOrgs = await db
-        .select()
-        .from(organizations)
-        .where(sql`${organizations.hierarchyPath} LIKE ${`%${parentOrgId}%`}`);
-
-      const descendants = allOrgs.filter(org =>
-        org.hierarchyPath &&
-        org.hierarchyPath.includes(`${parentOrgId}.`) &&
-        org.organizationId !== parentOrgId
-      );
-
-      console.log('📊 Found descendants:', descendants.length);
-
-      // Update each descendant's hierarchy path and level
-      for (const descendant of descendants) {
-        const relativePath = descendant.hierarchyPath.replace(`${parentOrgId}.`, '');
-        const newPath = `${newParentPath}.${relativePath}`;
-        const newLevel = newParentLevel + (descendant.organizationLevel - 1); // Adjust level relative to new parent
-
-        console.log(`🔄 Updating ${descendant.organizationId}: ${descendant.hierarchyPath} → ${newPath}`);
-
-        await db
-          .update(organizations)
-          .set({
-            hierarchyPath: newPath,
-            organizationLevel: newLevel,
-            updatedAt: new Date()
-          })
-          .where(eq(organizations.organizationId, descendant.organizationId));
-      }
-
-      console.log('✅ Descendant hierarchy paths updated successfully');
-    } catch (error) {
-      console.error('❌ Error updating descendant hierarchy paths:', error);
-      throw error;
-    }
-  }
 
   /**
    * Update organization details
    */
   async updateOrganization(organizationId, updateData, updatedBy) {
-    const allowedFields = ['organizationName', 'description', 'gstin', 'responsiblePersonId'];
+    const allowedFields = ['entityName', 'organizationName', 'description', 'responsiblePersonId'];
 
     const updateFields = {};
     Object.keys(updateData).forEach(key => {
       if (allowedFields.includes(key)) {
-        updateFields[key] = updateData[key];
+        // Map old field names to new ones
+        if (key === 'organizationName') {
+          updateFields.entityName = updateData[key];
+        } else {
+          updateFields[key] = updateData[key];
+        }
       }
     });
 
@@ -467,9 +498,12 @@ export class OrganizationService {
     updateFields.updatedBy = updatedBy;
 
     const updatedOrg = await db
-      .update(organizations)
+      .update(entities)
       .set(updateFields)
-      .where(eq(organizations.organizationId, organizationId))
+      .where(and(
+        eq(entities.entityId, organizationId),
+        eq(entities.entityType, 'organization')
+      ))
       .returning();
 
     if (updatedOrg.length === 0) {
@@ -489,9 +523,13 @@ export class OrganizationService {
   async deleteOrganization(organizationId, deletedBy) {
     // Check if organization has sub-organizations
     const subOrgs = await db
-      .select({ organizationId: organizations.organizationId })
-      .from(organizations)
-      .where(eq(organizations.parentOrganizationId, organizationId))
+      .select({ organizationId: entities.entityId })
+      .from(entities)
+      .where(and(
+        eq(entities.parentEntityId, organizationId),
+        eq(entities.entityType, 'organization'),
+        eq(entities.isActive, true)
+      ))
       .limit(1);
 
     if (subOrgs.length > 0) {
@@ -499,13 +537,16 @@ export class OrganizationService {
     }
 
     const deletedOrg = await db
-      .update(organizations)
+      .update(entities)
       .set({
         isActive: false,
         updatedAt: new Date(),
         updatedBy: deletedBy
       })
-      .where(eq(organizations.organizationId, organizationId))
+      .where(and(
+        eq(entities.entityId, organizationId),
+        eq(entities.entityType, 'organization')
+      ))
       .returning();
 
     if (deletedOrg.length === 0) {

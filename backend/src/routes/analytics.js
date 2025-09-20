@@ -2,7 +2,7 @@ import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { trackUsage } from '../middleware/usage.js';
 import analyticsService from '../services/analyticsService.js';
 import { db } from '../db/index.js';
-import { subscriptions, payments, subscriptionActions } from '../db/schema/index.js';
+import { subscriptions, payments } from '../db/schema/index.js';
 import { eq, and, desc, gte, lte, count, sum, sql } from 'drizzle-orm';
 import { SubscriptionService } from '../services/subscription-service.js';
 
@@ -572,12 +572,13 @@ fastify.get('/payments', {
       .from(subscriptions)
       .where(eq(subscriptions.plan, 'free'));
 
+    // Trial conversions are now tracked via subscription status changes
     const convertedTrials = await db
       .select({ count: count() })
-      .from(subscriptionActions)
+      .from(subscriptions)
       .where(and(
-        eq(subscriptionActions.actionType, 'upgrade'),
-        eq(subscriptionActions.fromPlan, 'free')
+        eq(subscriptions.plan, 'professional'),
+        eq(subscriptions.hasEverUpgraded, true)
       ));
 
     const conversionRate = totalTrials[0]?.count > 0 
@@ -628,10 +629,10 @@ fastify.get('/payments', {
 
     const convertedLastWeek = await db
       .select({ count: count() })
-      .from(subscriptionActions)
+      .from(subscriptions)
       .where(and(
-        eq(subscriptionActions.actionType, 'upgrade'),
-        gte(subscriptionActions.createdAt, sevenDaysAgo)
+        eq(subscriptions.hasEverUpgraded, true),
+        gte(subscriptions.firstUpgradeAt, sevenDaysAgo)
       ));
 
     // 4. Payment Status Distribution
@@ -828,11 +829,10 @@ fastify.get('/subscription-funnel', async (request, reply) => {
       {
         name: 'Converted to Paid',
         query: db.select({ count: count() })
-          .from(subscriptionActions)
+          .from(subscriptions)
           .where(and(
-            eq(subscriptionActions.actionType, 'upgrade'),
-            eq(subscriptionActions.fromPlan, 'free'),
-            gte(subscriptionActions.createdAt, periodStart)
+            eq(subscriptions.hasEverUpgraded, true),
+            gte(subscriptions.firstUpgradeAt, periodStart)
           ))
       }
     ];

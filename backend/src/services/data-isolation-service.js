@@ -4,8 +4,7 @@
  */
 
 import { db } from '../db/index.js';
-import { organizations } from '../db/schema/organizations.js';
-import { locations, locationAssignments } from '../db/schema/locations.js';
+import { entities } from '../db/schema/unified-entities.js';
 import { tenantUsers } from '../db/schema/users.js';
 import { organizationMemberships } from '../db/schema/organization_memberships.js';
 import { eq, and, or, inArray } from 'drizzle-orm';
@@ -43,18 +42,21 @@ export class DataIsolationService {
       userMemberships = [];
     }
 
-    const directOrgIds = userMemberships.map(m => m.organizationId).filter(id => id != null);
-    console.log('📋 Direct organization IDs:', directOrgIds);
+    const directOrgIds = userMemberships.map(m => m.entityId).filter(id => id != null);
+    console.log('📋 Direct entity IDs:', directOrgIds);
 
     // If user is tenant admin, they can access all organizations
     if (roles && roles.includes && roles.includes('TENANT_ADMIN')) {
       console.log('👑 User is tenant admin, granting access to all organizations');
       const allOrgs = await db
-        .select({ organizationId: organizations.organizationId })
-        .from(organizations)
-        .where(eq(organizations.tenantId, tenantId));
+        .select({ entityId: entities.entityId })
+        .from(entities)
+        .where(and(
+          eq(entities.tenantId, tenantId),
+          eq(entities.entityType, 'organization')
+        ));
 
-      return allOrgs.map(org => org.organizationId);
+      return allOrgs.map(org => org.entityId);
     }
 
     // For regular users, get their accessible orgs based on hierarchy
@@ -66,27 +68,30 @@ export class DataIsolationService {
       return [];
     }
 
-    // Add parent organizations (users can see their org's parent)
-    for (const orgId of directOrgIds) {
-      const org = await db
-        .select({ parentOrganizationId: organizations.parentOrganizationId })
-        .from(organizations)
-        .where(eq(organizations.organizationId, orgId))
+    // Add parent entities (users can see their entity's parent)
+    for (const entityId of directOrgIds) {
+      const entity = await db
+        .select({ parentEntityId: entities.parentEntityId })
+        .from(entities)
+        .where(eq(entities.entityId, entityId))
         .limit(1);
 
-      if (org[0]?.parentOrganizationId) {
-        accessibleOrgs.add(org[0].parentOrganizationId);
+      if (entity[0]?.parentEntityId) {
+        accessibleOrgs.add(entity[0].parentEntityId);
       }
     }
 
-    // Add child organizations (users can see their org's children)
-    for (const orgId of directOrgIds) {
+    // Add child entities (users can see their entity's children)
+    for (const entityId of directOrgIds) {
       const children = await db
-        .select({ organizationId: organizations.organizationId })
-        .from(organizations)
-        .where(eq(organizations.parentOrganizationId, orgId));
+        .select({ entityId: entities.entityId })
+        .from(entities)
+        .where(and(
+          eq(entities.parentEntityId, entityId),
+          eq(entities.entityType, 'organization')
+        ));
 
-      children.forEach(child => accessibleOrgs.add(child.organizationId));
+      children.forEach(child => accessibleOrgs.add(child.entityId));
     }
 
     return Array.from(accessibleOrgs);
@@ -100,18 +105,19 @@ export class DataIsolationService {
       return [];
     }
 
-    // Get locations assigned to accessible organizations
+    // Get locations that belong to the tenant (using unified entities)
+    // Since locations are now entities with entityType = 'location'
     const locationResults = await db
       .select({
-        locationId: locationAssignments.locationId
+        entityId: entities.entityId
       })
-      .from(locationAssignments)
+      .from(entities)
       .where(and(
-        eq(locationAssignments.entityType, 'organization'),
-        inArray(locationAssignments.entityId, accessibleOrgs)
+        eq(entities.tenantId, userContext.tenantId),
+        eq(entities.entityType, 'location')
       ));
 
-    return locationResults.map(result => result.locationId);
+    return locationResults.map(result => result.entityId);
   }
 
   /**
@@ -119,7 +125,7 @@ export class DataIsolationService {
    */
   async filterOrganizationsByAccess(organizations, userContext) {
     const accessibleOrgs = await this.getUserAccessibleOrganizations(userContext);
-    return organizations.filter(org => accessibleOrgs.includes(org.organizationId));
+    return organizations.filter(org => accessibleOrgs.includes(org.entityId));
   }
 
   /**
@@ -129,11 +135,22 @@ export class DataIsolationService {
     const accessibleOrgs = await this.getUserAccessibleOrganizations(userContext);
     const accessibleLocations = await this.getUserAccessibleLocations(userContext, accessibleOrgs);
 
-    return locations.filter(loc => accessibleLocations.includes(loc.locationId));
+    return locations.filter(loc => accessibleLocations.includes(loc.entityId));
+  }
+
+  /**
+   * Check if user has access to specific entity (organization or location)
+   */
+  async canAccessEntity(userContext, entityId) {
+    const accessibleOrgs = await this.getUserAccessibleOrganizations(userContext);
+    const accessibleLocations = await this.getUserAccessibleLocations(userContext, accessibleOrgs);
+
+    return accessibleOrgs.includes(entityId) || accessibleLocations.includes(entityId);
   }
 
   /**
    * Check if user has access to specific organization
+   * @deprecated Use canAccessEntity instead
    */
   async canAccessOrganization(userContext, organizationId) {
     const accessibleOrgs = await this.getUserAccessibleOrganizations(userContext);
@@ -142,6 +159,7 @@ export class DataIsolationService {
 
   /**
    * Check if user has access to specific location
+   * @deprecated Use canAccessEntity instead
    */
   async canAccessLocation(userContext, locationId) {
     const accessibleOrgs = await this.getUserAccessibleOrganizations(userContext);
@@ -177,45 +195,41 @@ export class DataIsolationService {
       let orgDetails = [];
       let locationDetails = [];
 
-      // Get organization details - only query if there are accessible organizations
-      if (cleanOrgIds.length > 0) {
-        console.log('🔍 Querying organization details...');
+      // Get entity details - only query if there are accessible entities
+      if (cleanOrgIds.length > 0 || cleanLocationIds.length > 0) {
+        console.log('🔍 Querying entity details...');
         try {
-          orgDetails = await db
+          const allEntityIds = [...cleanOrgIds, ...cleanLocationIds];
+          const entityDetails = await db
             .select({
-              organizationId: organizations.organizationId,
-              organizationName: organizations.organizationName,
-              organizationType: organizations.organizationType
+              entityId: entities.entityId,
+              entityName: entities.entityName,
+              entityType: entities.entityType,
+              organizationType: entities.organizationType
             })
-            .from(organizations)
-            .where(inArray(organizations.organizationId, cleanOrgIds));
-          console.log('✅ Organization details retrieved:', orgDetails.length);
-        } catch (orgError) {
-          console.error('❌ Organization query failed:', orgError);
-          orgDetails = [];
-        }
-      } else {
-        console.log('ℹ️ No accessible organizations, skipping query');
-      }
+            .from(entities)
+            .where(inArray(entities.entityId, allEntityIds));
 
-      // Get location details - only query if there are accessible locations
-      if (cleanLocationIds.length > 0) {
-        console.log('🔍 Querying location details...');
-        try {
-          locationDetails = await db
-            .select({
-              locationId: locations.locationId,
-              locationName: locations.locationName
-            })
-            .from(locations)
-            .where(inArray(locations.locationId, cleanLocationIds));
-          console.log('✅ Location details retrieved:', locationDetails.length);
-        } catch (locError) {
-          console.error('❌ Location query failed:', locError);
+          // Split back into organizations and locations
+          orgDetails = entityDetails.filter(e => e.entityType === 'organization').map(e => ({
+            organizationId: e.entityId,
+            organizationName: e.entityName,
+            organizationType: e.organizationType
+          }));
+
+          locationDetails = entityDetails.filter(e => e.entityType === 'location').map(e => ({
+            locationId: e.entityId,
+            locationName: e.entityName
+          }));
+
+          console.log('✅ Entity details retrieved:', entityDetails.length, '(orgs:', orgDetails.length, ', locs:', locationDetails.length, ')');
+        } catch (entityError) {
+          console.error('❌ Entity query failed:', entityError);
+          orgDetails = [];
           locationDetails = [];
         }
       } else {
-        console.log('ℹ️ No accessible locations, skipping query');
+        console.log('ℹ️ No accessible entities, skipping query');
       }
 
       const result = {

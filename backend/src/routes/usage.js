@@ -2,7 +2,7 @@ import { TenantService } from '../services/tenant-service.js';
 import { UsageCache } from '../utils/redis.js';
 import { eq, and, gte, lte, desc, count } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { usageMetricsDaily, usageLogs, usageAlerts } from '../db/schema/index.js';
+import { usageMetricsDaily, usageLogs } from '../db/schema/index.js';
 
 export default async function usageRoutes(fastify, options) {
   // Get real-time usage stats
@@ -224,116 +224,9 @@ export default async function usageRoutes(fastify, options) {
     }
   });
 
-  // Get usage alerts
-  fastify.get('/alerts', {
-    schema: {
-      querystring: {
-        type: 'object',
-        properties: {
-          page: { type: 'integer', minimum: 1, default: 1 },
-          limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
-          severity: { type: 'string', enum: ['info', 'warning', 'critical'] },
-          isRead: { type: 'boolean' },
-        },
-      },
-    },
-  }, async (request, reply) => {
-    if (!request.userContext?.isAuthenticated) {
-      return reply.code(401).send({ error: 'Unauthorized' });
-    }
+  // REMOVED: /alerts route - Alert system removed for MVP simplicity
 
-    try {
-      const tenantId = request.userContext.tenantId;
-      const { page, limit, severity, isRead } = request.query;
-      const offset = (page - 1) * limit;
-
-      let whereClause = eq(usageAlerts.tenantId, tenantId);
-      
-      if (severity) {
-        whereClause = and(whereClause, eq(usageAlerts.severity, severity));
-      }
-      
-      if (typeof isRead === 'boolean') {
-        whereClause = and(whereClause, eq(usageAlerts.isRead, isRead));
-      }
-
-      const alerts = await db
-        .select()
-        .from(usageAlerts)
-        .where(whereClause)
-        .orderBy(desc(usageAlerts.createdAt))
-        .limit(limit)
-        .offset(offset);
-
-      const [{ count }] = await db
-        .select({ count: count() })
-        .from(usageAlerts)
-        .where(whereClause);
-
-      return {
-        success: true,
-        data: {
-          alerts,
-          pagination: {
-            page,
-            limit,
-            total: count,
-            pages: Math.ceil(count / limit),
-          },
-        },
-      };
-    } catch (error) {
-      request.log.error('Error fetching usage alerts:', error);
-      return reply.code(500).send({ error: 'Failed to fetch usage alerts' });
-    }
-  });
-
-  // Mark alert as read
-  fastify.put('/alerts/:alertId/read', {
-    schema: {
-      params: {
-        type: 'object',
-        required: ['alertId'],
-        properties: {
-          alertId: { type: 'string' },
-        },
-      },
-    },
-  }, async (request, reply) => {
-    if (!request.userContext?.isAuthenticated) {
-      return reply.code(401).send({ error: 'Unauthorized' });
-    }
-
-    try {
-      const tenantId = request.userContext.tenantId;
-      const { alertId } = request.params;
-
-      const [alert] = await db
-        .update(usageAlerts)
-        .set({
-          isRead: true,
-          readAt: new Date(),
-        })
-        .where(and(
-          eq(usageAlerts.alertId, alertId),
-          eq(usageAlerts.tenantId, tenantId)
-        ))
-        .returning();
-
-      if (!alert) {
-        return reply.code(404).send({ error: 'Alert not found' });
-      }
-
-      return {
-        success: true,
-        data: alert,
-        message: 'Alert marked as read',
-      };
-    } catch (error) {
-      request.log.error('Error marking alert as read:', error);
-      return reply.code(500).send({ error: 'Failed to mark alert as read' });
-    }
-  });
+  // REMOVED: /alerts/:alertId/read route - Alert system removed for MVP simplicity
 
   // Get detailed usage logs
   fastify.get('/logs', {

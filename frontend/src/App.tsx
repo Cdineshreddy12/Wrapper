@@ -2,6 +2,7 @@ import React, { useMemo, useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
+import { Toaster as Sonner } from 'sonner'
 import SimpleOnboarding from './pages/SimpleOnboarding'
 
 import api from '@/lib/api'
@@ -39,7 +40,7 @@ import UserApplicationAccessPage from '@/pages/UserApplicationAccess'
 import UserApplicationManagement from '@/pages/UserApplicationManagement'
 import TestUserSyncAPIs from '@/pages/TestUserSyncAPIs'
 import SuiteDashboard from '@/pages/SuiteDashboard'
-import AdminDashboard from '@/pages/AdminDashboard'
+import AdminDashboardPage from '@/pages/AdminDashboardPage'
 import TestInvitationManager from '@/pages/TestInvitationManager'
 import SimpleTest from '@/pages/SimpleTest'
 
@@ -102,7 +103,6 @@ function App() {
             <SilentAuthGuard>
               <UserContextProvider>
                 <AppContent />
-                <PermissionRefreshNotification />
               </UserContextProvider>
             </SilentAuthGuard>
           </Router>
@@ -110,7 +110,7 @@ function App() {
       </KindeProvider>
       
       {/* Toast notifications */}
-      <Toaster 
+      <Toaster
         position="top-right"
         toastOptions={{
           duration: 4000,
@@ -130,6 +130,7 @@ function App() {
           },
         }}
       />
+      <Sonner />
     </QueryClientProvider>
   )
 }
@@ -167,7 +168,10 @@ function AppContent() {
         {/* Trial Expiry Banner Only */}
         <TrialExpiryBanner />
         <TrialBannerSpacer />
-        
+
+        {/* Permission refresh notification - only show when authenticated */}
+        {authState.isAuthenticated && <PermissionRefreshNotification />}
+
         <Routes>
           {/* Public Routes */}
           <Route 
@@ -268,8 +272,17 @@ function AppContent() {
           <Route path="analytics" element={<Analytics />} />
           <Route path="usage" element={<Usage />} />
           <Route path="permissions" element={<Permissions />} />
-          <Route path="admin" element={<AdminDashboard />} />
         </Route>
+
+        {/* Standalone Admin Dashboard Route */}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminDashboardPage />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Organization-specific routes with onboarding guard */}
         <Route 
@@ -291,7 +304,6 @@ function AppContent() {
           <Route path="billing" element={<Billing />} />
           <Route path="usage" element={<Usage />} />
           <Route path="permissions" element={<Permissions />} />
-          <Route path="admin" element={<AdminDashboard />} />
         </Route>
 
           {/* Catch all - redirect to landing if not authenticated */}
@@ -434,11 +446,24 @@ function RootRedirect() {
   // Check if user needs onboarding based on the actual backend response structure
   // INVITED USERS: Always skip onboarding (they should have onboardingCompleted=true)
   const needsOnboarding = onboardingStatus.authStatus?.needsOnboarding ?? !onboardingStatus.authStatus?.onboardingCompleted
-  
+
   // Check if this is an invited user (they should never need onboarding)
-  const isInvitedUser = onboardingStatus.authStatus?.userType === 'INVITED_USER' || 
+  const isInvitedUser = onboardingStatus.authStatus?.userType === 'INVITED_USER' ||
                         onboardingStatus.authStatus?.isInvitedUser === true ||
                         onboardingStatus.authStatus?.onboardingCompleted === true
+
+  // DEBUG LOGGING: Log the decision-making process
+  console.log('🔍 RootRedirect: Onboarding decision analysis:', {
+    needsOnboarding,
+    isInvitedUser,
+    hasPendingInvitation: !!localStorage.getItem('pendingInvitationToken'),
+    authStatus: {
+      needsOnboarding: onboardingStatus.authStatus?.needsOnboarding,
+      onboardingCompleted: onboardingStatus.authStatus?.onboardingCompleted,
+      userType: onboardingStatus.authStatus?.userType,
+      isInvitedUser: onboardingStatus.authStatus?.isInvitedUser
+    }
+  })
   
   // Check if there's a pending invitation (user should complete invitation flow first)
   const hasPendingInvitation = localStorage.getItem('pendingInvitationToken')

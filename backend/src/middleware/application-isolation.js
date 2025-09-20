@@ -8,6 +8,22 @@ import { ApplicationDataIsolationService } from '../services/application-data-is
 // Create service instance for instance methods
 const applicationDataIsolationService = new ApplicationDataIsolationService();
 
+// Public routes that bypass application isolation
+const PUBLIC_APPLICATION_ROUTES = [
+  'GET /api/organizations/hierarchy',
+  'GET /api/organizations/parent',
+  'POST /api/organizations/parent',
+  'POST /api/organizations/sub',
+  'POST /api/organizations/bulk',
+  'POST /api/locations',
+  // New unified entities routes
+  'GET /api/entities/hierarchy',
+  'GET /api/entities/parent',
+  'GET /api/entities/tenant',
+  'POST /api/entities/organization',
+  'POST /api/entities/location'
+];
+
 export class ApplicationIsolationMiddleware {
 
   /**
@@ -16,6 +32,24 @@ export class ApplicationIsolationMiddleware {
   static enforceApplicationAccess(requiredApps = null) {
     return async (request, reply) => {
       try {
+        // Check if this is a public route that bypasses application isolation
+
+        // Simple check for entity routes - bypass application isolation
+        if (request.url.includes('/api/entities/')) {
+          return; // Skip application isolation for entity routes
+        }
+
+        const isPublicRoute = PUBLIC_APPLICATION_ROUTES.some(route => {
+          const routeParts = route.split(' ');
+          const method = routeParts[0];
+          const path = routeParts[1];
+          return request.method === method && request.url.includes(path);
+        });
+
+        if (isPublicRoute) {
+          return; // Skip application isolation for public routes
+        }
+
         const { userContext } = request;
 
         if (!userContext) {
@@ -261,6 +295,19 @@ export class ApplicationIsolationMiddleware {
   static validateApplicationExists() {
     return async (request, reply) => {
       try {
+        // Check if this is a public route that bypasses application isolation
+        const routeKey = `${request.method} ${request.url}`;
+        const isPublicRoute = PUBLIC_APPLICATION_ROUTES.some(route => {
+          const routeParts = route.split(' ');
+          const method = routeParts[0];
+          const path = routeParts[1];
+          return request.method === method && request.url.includes(path);
+        });
+
+        if (isPublicRoute) {
+          return; // Skip application validation for public routes
+        }
+
         const application = ApplicationIsolationMiddleware.extractApplicationFromRequest(request);
 
         // If application is provided but not in the valid list, return error
@@ -272,7 +319,6 @@ export class ApplicationIsolationMiddleware {
             validApplications: Object.values(ApplicationDataIsolationService.APPLICATIONS)
           });
         }
-
         // If validation passes, continue to next middleware
         return;
       } catch (error) {

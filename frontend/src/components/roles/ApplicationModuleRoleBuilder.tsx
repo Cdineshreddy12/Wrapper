@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { 
-  Building, 
-  Package, 
-  Shield, 
-  Save, 
-  X, 
-  ChevronDown, 
+import {
+  Building,
+  Package,
+  Shield,
+  Save,
+  X,
+  ChevronDown,
   ChevronRight,
   Check,
   AlertCircle,
@@ -16,7 +16,8 @@ import {
   Edit,
   Trash2,
   Plus,
-  Layers
+  Layers,
+  Coins
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -332,9 +333,39 @@ export function ApplicationModuleRoleBuilder({
     const totalApps = roleData.selectedApps.length;
     const totalModules = Object.values(roleData.selectedModules).reduce((sum, modules) => sum + modules.length, 0);
     const totalPermissions = Object.values(roleData.selectedPermissions).reduce((sum, perms) => sum + perms.length, 0);
-    
-    return { totalApps, totalModules, totalPermissions };
-  }, [roleData]);
+
+    // Calculate estimated credit cost for selected permissions
+    let estimatedCredits = 0;
+    const selectedPermDetails: Array<{ code: string; cost: number; unit: string; isGlobal: boolean }> = [];
+
+    roleData.selectedApps.forEach(appCode => {
+      const app = applications.find(a => a.appCode === appCode);
+      if (app) {
+        const selectedModules = roleData.selectedModules[appCode] || [];
+        selectedModules.forEach(moduleCode => {
+          const module = app.modules.find(m => m.moduleCode === moduleCode);
+          if (module) {
+            const selectedPerms = roleData.selectedPermissions[`${appCode}.${moduleCode}`] || [];
+            selectedPerms.forEach(permCode => {
+              const permission = module.permissions.find(p => p.code === permCode);
+              if (permission?.creditCost) {
+                const cost = permission.creditCost.cost * permission.creditCost.unitMultiplier;
+                estimatedCredits += cost;
+                selectedPermDetails.push({
+                  code: `${appCode}.${moduleCode}.${permCode}`,
+                  cost: permission.creditCost.cost,
+                  unit: permission.creditCost.unit,
+                  isGlobal: permission.creditCost.isGlobal
+                });
+              }
+            });
+          }
+        });
+      }
+    });
+
+    return { totalApps, totalModules, totalPermissions, estimatedCredits, selectedPermDetails };
+  }, [roleData, applications]);
 
   // Save role using the backend API
   const handleSave = async () => {
@@ -719,13 +750,13 @@ export function ApplicationModuleRoleBuilder({
                                   <div className="grid grid-cols-1 gap-3 max-h-60 overflow-y-auto">
                                     {module.permissions.map((permission) => {
                                       const isPermSelected = selectedPermissions.includes(permission.code);
-                                      
+
                                       return (
                                         <label
                                           key={permission.code}
                                           className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all duration-150 ${
-                                            isPermSelected 
-                                              ? 'border-purple-300 bg-purple-50 shadow-sm' 
+                                            isPermSelected
+                                              ? 'border-purple-300 bg-purple-50 shadow-sm'
                                               : 'border-gray-200 hover:border-purple-200 hover:bg-purple-25'
                                           }`}
                                         >
@@ -736,9 +767,29 @@ export function ApplicationModuleRoleBuilder({
                                             className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
                                           />
                                           <div className="flex-1">
-                                            <span className={`font-medium text-sm ${isPermSelected ? 'text-purple-800' : 'text-gray-700'}`}>
-                                              {permission.name}
-                                            </span>
+                                            <div className="flex items-center justify-between">
+                                              <span className={`font-medium text-sm ${isPermSelected ? 'text-purple-800' : 'text-gray-700'}`}>
+                                                {permission.name}
+                                              </span>
+                                              {permission.creditCost && (
+                                                <div className="flex items-center gap-2">
+                                                  <Coins className="w-3 h-3 text-yellow-500" />
+                                                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                                    permission.creditCost.isGlobal
+                                                      ? 'bg-blue-100 text-blue-700'
+                                                      : 'bg-green-100 text-green-700'
+                                                  }`}>
+                                                    {permission.creditCost.cost} credits
+                                                  </span>
+                                                  <span className="text-xs text-gray-400">
+                                                    per {permission.creditCost.unit}
+                                                  </span>
+                                                </div>
+                                              )}
+                                              {!permission.creditCost && (
+                                                <span className="text-xs text-gray-400 italic">No credit cost configured</span>
+                                              )}
+                                            </div>
                                             {permission.description && (
                                               <p className={`text-xs mt-1 ${isPermSelected ? 'text-purple-600' : 'text-gray-500'}`}>
                                                 {permission.description}
@@ -767,12 +818,25 @@ export function ApplicationModuleRoleBuilder({
       {/* Action Buttons */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="text-sm">
+          <div className="text-sm space-y-2">
             {summary.totalPermissions > 0 ? (
-              <span className="text-green-600 font-medium flex items-center gap-2">
-                <Check className="w-4 h-4" />
-                Ready to {initialRole?.roleId ? 'update' : 'create'} role with {summary.totalPermissions} permissions
-              </span>
+              <div className="space-y-2">
+                <span className="text-green-600 font-medium flex items-center gap-2">
+                  <Check className="w-4 h-4" />
+                  Ready to {initialRole?.roleId ? 'update' : 'create'} role with {summary.totalPermissions} permissions
+                </span>
+                {summary.estimatedCredits > 0 && (
+                  <div className="flex items-center gap-2 text-blue-600">
+                    <span className="font-medium">Estimated cost:</span>
+                    <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-semibold">
+                      {summary.estimatedCredits.toFixed(2)} credits per operation
+                    </span>
+                    <span className="text-xs text-blue-500">
+                      ({summary.selectedPermDetails.length} operations configured)
+                    </span>
+                  </div>
+                )}
+              </div>
             ) : (
               <span className="text-amber-600 font-medium flex items-center gap-2">
                 <AlertCircle className="w-4 h-4" />
@@ -802,7 +866,7 @@ export function ApplicationModuleRoleBuilder({
                 <>
                   <Save className="w-5 h-5" />
                   <span className="hidden sm:inline">
-                    {initialRole?.roleId ? `Update Role (${summary.totalPermissions} permissions)` : `Create Role (${summary.totalPermissions} permissions)`}
+                    {initialRole?.roleId ? `Update Role (${summary.totalPermissions} permissions${summary.estimatedCredits > 0 ? ` - ${summary.estimatedCredits.toFixed(1)} credits/op` : ''})` : `Create Role (${summary.totalPermissions} permissions${summary.estimatedCredits > 0 ? ` - ${summary.estimatedCredits.toFixed(1)} credits/op` : ''})`}
                   </span>
                   <span className="sm:hidden">
                     {initialRole?.roleId ? 'Update' : 'Create'}

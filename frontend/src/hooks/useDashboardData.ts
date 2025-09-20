@@ -4,6 +4,7 @@ import { useOptimizedQuery, useBatchedQueries } from './useOptimizedQuery';
 import { cacheHelpers, CACHE_KEYS } from '@/lib/cache';
 import toast from 'react-hot-toast';
 import { useTrialStatus } from './useTrialStatus';
+import { useOrganizationAuth } from './useOrganizationAuth';
 
 export interface DashboardMetrics {
   totalUsers: number;
@@ -19,10 +20,20 @@ export interface Application {
   appId: string;
   appCode: string;
   appName: string;
-  description: string;
+  description?: string;
   icon?: string;
-  status: 'active' | 'inactive';
-  userCount: number;
+  status?: 'active' | 'inactive';
+  userCount?: number;
+  // Tenant-specific fields from organization_applications table
+  isEnabled?: boolean;
+  subscriptionTier?: string;
+  enabledModules?: string[];
+  modules?: any[];
+  customPermissions?: Record<string, string[]>;
+  availableModules?: any[];
+  enabledModulesPermissions?: Record<string, string[]>;
+  maxUsers?: number;
+  createdAt?: string;
 }
 
 export interface DashboardUser {
@@ -52,6 +63,15 @@ export interface PaymentStats {
 // Hook for comprehensive dashboard data management
 export function useDashboardData() {
   const { isExpired: isTrialExpired, expiredData } = useTrialStatus();
+  const { tenantId, isAuthenticated, loading: authLoading } = useOrganizationAuth();
+
+  // Debug logging
+  console.log('🔍 useDashboardData debug:', {
+    tenantId,
+    isAuthenticated,
+    authLoading,
+    isTrialExpired
+  });
   
   // Check if we're in trial expiry state - if so, provide graceful degradation
   const isTrialExpiredWithData = useMemo(() => {
@@ -61,34 +81,81 @@ export function useDashboardData() {
   // Dashboard queries with trial-aware error handling
   const dashboardQueries = useBatchedQueries([
     {
-      queryKey: [CACHE_KEYS.APPLICATIONS],
+      queryKey: [CACHE_KEYS.APPLICATIONS, tenantId],
       queryFn: async () => {
         // If trial is expired, return empty/mock data instead of making API call
         if (isTrialExpiredWithData) {
           console.log('🚫 Trial expired - returning empty applications data');
           return [];
         }
-        
-        const response = await api.get('/applications');
-        const data = response.data?.data;
-        
-        // Ensure we always return an array
-        if (Array.isArray(data)) {
-          return data;
-        } else if (data && typeof data === 'object') {
-          // If it's an object with success property, check for nested data
-          if (data.success && Array.isArray(data.data)) {
-            return data.data;
-          }
-          // If it's an object, return empty array
-          console.warn('Applications API returned non-array data:', data);
+
+        // Don't fetch if tenant ID is not available
+        if (!tenantId) {
+          console.log('🚫 No tenant ID available - returning empty applications data');
+          console.log('🔍 Auth state:', { isAuthenticated, authLoading, tenantId });
           return [];
-        } else {
-          console.warn('Applications API returned unexpected data type:', typeof data);
+        }
+
+        // Don't fetch if authentication is still loading
+        if (authLoading) {
+          console.log('🚫 Authentication still loading - returning empty applications data');
+          return [];
+        }
+
+        // CRITICAL FIX: Check onboarding status first
+        try {
+          const onboardingResponse = await api.get('/onboarding/status')
+          const onboardingData = onboardingResponse.data?.data
+
+          if (onboardingData?.needsOnboarding && !onboardingData?.isOnboarded) {
+            console.log('🚫 User needs onboarding - returning empty applications data');
+            return [];
+          }
+        } catch (onboardingError) {
+          console.log('⚠️ Could not check onboarding status, proceeding with applications call');
+        }
+
+        console.log('🔄 Fetching tenant-specific applications for tenant:', tenantId);
+
+        // Use tenant-specific applications endpoint
+        console.log('📡 Making API call to getTenantApplications for tenant:', tenantId);
+
+        try {
+          const response = await api.getTenantApplications(tenantId);
+          console.log('📥 API Response:', response);
+
+          const data = response.data?.data?.applications || response.data?.applications || [];
+          console.log('✅ Fetched tenant-specific applications:', data?.length || 0, 'applications');
+          console.log('📋 Application data:', data);
+
+          // Ensure we always return an array
+          if (Array.isArray(data)) {
+            return data;
+          } else if (data && typeof data === 'object') {
+            // If it's an object with success property, check for nested data
+            if (data.success && Array.isArray(data.data)) {
+              return data.data;
+            }
+            // If it's an object, return empty array
+            console.warn('Tenant applications API returned non-array data:', data);
+            return [];
+          } else {
+            console.warn('Tenant applications API returned unexpected data type:', typeof data);
+            return [];
+          }
+        } catch (apiError: any) {
+          console.error('❌ Failed to fetch tenant applications:', apiError);
+          console.error('❌ Error details:', {
+            message: apiError?.message,
+            status: apiError?.response?.status,
+            data: apiError?.response?.data
+          });
+
+          // Return empty array on error to prevent app from breaking
           return [];
         }
       },
-      enabled: true
+      enabled: !!tenantId && !isTrialExpiredWithData
     },
     {
       queryKey: [CACHE_KEYS.DASHBOARD_USERS],
@@ -194,22 +261,23 @@ export function useDashboardData() {
       });
       return;
     }
-    
+
     try {
       console.log('🔄 Refreshing dashboard data...');
-      
+      console.log('🔍 Current tenant info:', { tenantId, isAuthenticated, authLoading });
+
       // Invalidate dashboard-related cache
       cacheHelpers.invalidateDashboard();
-      
+
       // Refetch all queries
       await dashboardQueries.refetchAll();
-      
+
       toast.success('Dashboard refreshed successfully');
     } catch (error) {
       console.error('❌ Failed to refresh dashboard:', error);
       toast.error('Failed to refresh dashboard');
     }
-  }, [dashboardQueries, isTrialExpiredWithData]);
+  }, [dashboardQueries, isTrialExpiredWithData, tenantId, isAuthenticated, authLoading]);
 
   // Force refresh function - clears all cache and refetches
   const forceRefresh = useCallback(async () => {
@@ -246,7 +314,8 @@ export function useDashboardData() {
 
   const invalidateApplications = useCallback(() => {
     if (isTrialExpiredWithData) return;
-    cacheHelpers.invalidateUsers(); // Users cache includes app usage
+    // Invalidate applications cache with tenant-specific key
+    cacheHelpers.invalidateApplications();
     dashboardQueries.results[0]?.refetch();
   }, [dashboardQueries, isTrialExpiredWithData]);
 

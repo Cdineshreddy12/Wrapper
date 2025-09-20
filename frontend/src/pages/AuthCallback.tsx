@@ -89,11 +89,32 @@ export function AuthCallback() {
         }
         
         // If not CRM flow or failed, proceed with normal flow
+        // Check for onboarding completion with refresh parameter
+        const refreshParam = urlParams.get('refresh')
+        const onboardingParam = urlParams.get('onboarding')
+
         console.log('🔄 AuthCallback: Proceeding with normal authentication flow')
-        
+        console.log('🔍 AuthCallback: Onboarding param:', onboardingParam, 'Refresh param:', refreshParam)
+
         if (isAuthenticated) {
+          // Check if this is onboarding completion with refresh needed
+          if (onboardingParam === 'complete' && refreshParam === 'true') {
+            console.log('🔄 AuthCallback: Onboarding completed with refresh needed')
+
+            // Force a page reload to ensure fresh authentication state
+            setTimeout(() => {
+              console.log('🔄 AuthCallback: Reloading page to refresh authentication state')
+              window.location.href = '/dashboard?onboarding=complete'
+            }, 1000)
+            return
+          }
+
           // Normal flow - redirect to dashboard
-          navigate('/dashboard')
+          if (onboardingParam === 'complete') {
+            navigate('/dashboard?onboarding=complete')
+          } else {
+            navigate('/dashboard')
+          }
         }
         
       } catch (error) {

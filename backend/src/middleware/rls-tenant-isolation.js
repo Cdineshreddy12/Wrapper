@@ -47,6 +47,113 @@ export class RLSTenantIsolationService {
     }
   }
 
+  // ===============================================
+  // MULTI-LEVEL CONTEXT MANAGEMENT
+  // ===============================================
+
+  // Set hierarchical context (tenant, sub_org, location, user_role, user_id)
+  async setMultiLevelContext(context, client = null) {
+    const dbClient = client || this.sql;
+
+    try {
+      const {
+        tenantId,
+        subOrgId,
+        locationId,
+        userRole,
+        userId
+      } = context;
+
+      console.log('🎯 Setting multi-level context:', {
+        tenantId, subOrgId, locationId, userRole, userId
+      });
+
+      await dbClient`SELECT
+        set_config('app.tenant_id', ${tenantId || ''}, false),
+        set_config('app.sub_org_id', ${subOrgId || ''}, false),
+        set_config('app.location_id', ${locationId || ''}, false),
+        set_config('app.user_role', ${userRole || ''}, false),
+        set_config('app.user_id', ${userId || ''}, false)
+      `;
+
+      console.log('✅ Multi-level context set successfully');
+    } catch (error) {
+      console.error('❌ Failed to set multi-level context:', error);
+      throw error;
+    }
+  }
+
+  // Get current multi-level context
+  async getMultiLevelContext(client = null) {
+    const dbClient = client || this.sql;
+
+    try {
+      const result = await dbClient`SELECT
+        current_setting('app.tenant_id', true) as tenant_id,
+        current_setting('app.sub_org_id', true) as sub_org_id,
+        current_setting('app.location_id', true) as location_id,
+        current_setting('app.user_role', true) as user_role,
+        current_setting('app.user_id', true) as user_id
+      `;
+
+      const context = result[0];
+      return {
+        tenantId: context.tenant_id || null,
+        subOrgId: context.sub_org_id || null,
+        locationId: context.location_id || null,
+        userRole: context.user_role || null,
+        userId: context.user_id || null
+      };
+    } catch (error) {
+      console.error('❌ Failed to get multi-level context:', error);
+      return null;
+    }
+  }
+
+  // Clear all multi-level context
+  async clearMultiLevelContext(client = null) {
+    const dbClient = client || this.sql;
+
+    try {
+      await dbClient`SELECT
+        set_config('app.tenant_id', '', false),
+        set_config('app.sub_org_id', '', false),
+        set_config('app.location_id', '', false),
+        set_config('app.user_role', '', false),
+        set_config('app.user_id', '', false)
+      `;
+      console.log('✅ All multi-level context cleared');
+    } catch (error) {
+      console.error('❌ Failed to clear multi-level context:', error);
+    }
+  }
+
+  // Set individual context variables
+  async setContextVariable(key, value, client = null) {
+    const dbClient = client || this.sql;
+
+    try {
+      await dbClient`SELECT set_config(${`app.${key}`}, ${value || ''}, false)`;
+      console.log(`✅ Context variable set: app.${key} = ${value}`);
+    } catch (error) {
+      console.error(`❌ Failed to set context variable ${key}:`, error);
+      throw error;
+    }
+  }
+
+  // Get individual context variables
+  async getContextVariable(key, client = null) {
+    const dbClient = client || this.sql;
+
+    try {
+      const result = await dbClient`SELECT current_setting(${`app.${key}`}, true) as value`;
+      return result[0]?.value || null;
+    } catch (error) {
+      console.error(`❌ Failed to get context variable ${key}:`, error);
+      return null;
+    }
+  }
+
   // Enable RLS on a table
   async enableRLS(tableName, client = null) {
     const dbClient = client || this.sql;
@@ -78,6 +185,142 @@ export class RLSTenantIsolationService {
       console.log(`✅ Tenant policy created: ${policyName}`);
     } catch (error) {
       console.error(`❌ Failed to create policy ${policyName}:`, error);
+    }
+  }
+
+  // ===============================================
+  // HIERARCHICAL RLS POLICIES
+  // ===============================================
+
+  // Create hierarchical access policy (sub-org + location + role based)
+  async createHierarchicalPolicy(tableName, options = {}, client = null) {
+    const dbClient = client || this.sql;
+
+    const {
+      allowSubOrgAccess = true,
+      allowLocationAccess = true,
+      allowRoleBasedAccess = true,
+      allowUserAccess = true
+    } = options;
+
+    const policyName = `${tableName}_hierarchical_access`;
+    let policyConditions = [];
+
+    // Base tenant condition (always required)
+    policyConditions.push(`tenant_id::text = current_setting('app.tenant_id', true)`);
+
+    // Sub-organization access
+    if (allowSubOrgAccess) {
+      policyConditions.push(`
+        (sub_org_id IS NULL OR sub_org_id::text = current_setting('app.sub_org_id', true))
+      `);
+    }
+
+    // Location-based access
+    if (allowLocationAccess) {
+      policyConditions.push(`
+        (location_id IS NULL OR location_id::text = current_setting('app.location_id', true))
+      `);
+    }
+
+    // Role-based access
+    if (allowRoleBasedAccess) {
+      policyConditions.push(`
+        (required_role IS NULL OR current_setting('app.user_role', true) = ANY(required_roles))
+      `);
+    }
+
+    // User-specific access
+    if (allowUserAccess) {
+      policyConditions.push(`
+        (owner_user_id IS NULL OR owner_user_id::text = current_setting('app.user_id', true))
+      `);
+    }
+
+    const policySQL = `
+      CREATE POLICY ${policyName} ON ${tableName}
+      FOR ALL USING (${policyConditions.join(' AND ')})
+    `;
+
+    try {
+      // Drop existing policy if it exists
+      await dbClient`DROP POLICY IF EXISTS ${dbClient(policyName)} ON ${dbClient(tableName)}`;
+
+      // Create new hierarchical policy
+      await dbClient.unsafe(policySQL);
+      console.log(`✅ Hierarchical policy created: ${policyName}`);
+    } catch (error) {
+      console.error(`❌ Failed to create hierarchical policy ${policyName}:`, error);
+    }
+  }
+
+  // Create sub-organization policy
+  async createSubOrgPolicy(tableName, client = null) {
+    const dbClient = client || this.sql;
+
+    const policyName = `${tableName}_sub_org_isolation`;
+    const policySQL = `
+      CREATE POLICY ${policyName} ON ${tableName}
+      FOR ALL USING (
+        tenant_id::text = current_setting('app.tenant_id', true)
+        AND (sub_org_id IS NULL OR sub_org_id::text = current_setting('app.sub_org_id', true))
+      )
+    `;
+
+    try {
+      await dbClient`DROP POLICY IF EXISTS ${dbClient(policyName)} ON ${dbClient(tableName)}`;
+      await dbClient.unsafe(policySQL);
+      console.log(`✅ Sub-org policy created: ${policyName}`);
+    } catch (error) {
+      console.error(`❌ Failed to create sub-org policy ${policyName}:`, error);
+    }
+  }
+
+  // Create location-based policy
+  async createLocationPolicy(tableName, client = null) {
+    const dbClient = client || this.sql;
+
+    const policyName = `${tableName}_location_isolation`;
+    const policySQL = `
+      CREATE POLICY ${policyName} ON ${tableName}
+      FOR ALL USING (
+        tenant_id::text = current_setting('app.tenant_id', true)
+        AND (location_id IS NULL OR location_id::text = current_setting('app.location_id', true))
+      )
+    `;
+
+    try {
+      await dbClient`DROP POLICY IF EXISTS ${dbClient(policyName)} ON ${dbClient(tableName)}`;
+      await dbClient.unsafe(policySQL);
+      console.log(`✅ Location policy created: ${policyName}`);
+    } catch (error) {
+      console.error(`❌ Failed to create location policy ${policyName}:`, error);
+    }
+  }
+
+  // Create role-based access policy
+  async createRoleBasedPolicy(tableName, client = null) {
+    const dbClient = client || this.sql;
+
+    const policyName = `${tableName}_role_based_access`;
+    const policySQL = `
+      CREATE POLICY ${policyName} ON ${tableName}
+      FOR ALL USING (
+        tenant_id::text = current_setting('app.tenant_id', true)
+        AND (
+          required_role IS NULL
+          OR current_setting('app.user_role', true) = ANY(required_roles)
+          OR current_setting('app.user_role', true) IN ('admin', 'super_admin')
+        )
+      )
+    `;
+
+    try {
+      await dbClient`DROP POLICY IF EXISTS ${dbClient(policyName)} ON ${dbClient(tableName)}`;
+      await dbClient.unsafe(policySQL);
+      console.log(`✅ Role-based policy created: ${policyName}`);
+    } catch (error) {
+      console.error(`❌ Failed to create role-based policy ${policyName}:`, error);
     }
   }
 

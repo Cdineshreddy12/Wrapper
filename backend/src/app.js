@@ -23,10 +23,16 @@ import enhancedInternalRoutes from './routes/internal-enhanced.js';
 import webhookRoutes from './routes/webhooks.js';
 import proxyRoutes from './routes/proxy.js';
 import onboardingRoutes from './routes/onboarding-router.js';
-import enhancedOnboardingRoutes from './routes/enhanced-onboarding.js';
-import onboardingAnalyticsRoutes from './routes/onboarding-analytics.js';
 import dnsManagementRoutes from './routes/dns-management.js';
 import adminRoutes from './routes/admin.js';
+import adminCreditConfigurationRoutes from './routes/admin/credit-configuration.js';
+import adminApplicationAssignmentRoutes from './routes/admin/application-assignment.js';
+import adminOperationCostRoutes from './routes/admin/operation-costs.js';
+// New independent admin dashboard routes
+import adminDashboardRoutes from './routes/admin/dashboard.js';
+import adminTenantManagementRoutes from './routes/admin/tenant-management.js';
+import adminEntityManagementRoutes from './routes/admin/entity-management.js';
+import adminCreditOverviewRoutes from './routes/admin/credit-overview.js';
 import invitationRoutes from './routes/invitations.js';
 import suiteRoutes from './routes/suite.js';
 import paymentRoutes from './routes/payments.js';
@@ -42,7 +48,10 @@ import userSyncRoutes from './routes/user-sync.js';
 import userApplicationRoutes from './routes/user-applications.js';
 import organizationRoutes from './routes/organizations.js';
 import locationRoutes from './routes/locations.js';
+import entityRoutes from './routes/entities.js';
 import paymentUpgradeRoutes from './routes/payment-upgrade.js';
+import creditRoutes from './routes/credits.js';
+// import { createRLSRoutes } from './routes/rls-examples.js'; // Temporarily disabled
 
 
 // Import middleware
@@ -51,9 +60,13 @@ import { errorHandler } from './middleware/error-handler.js';
 import { usageTrackingPlugin } from './middleware/usage-tracking.js';
 import { trialRestrictionMiddleware } from './middleware/trial-restriction.js';
 import { fastifyCacheMetrics } from './middleware/cache-metrics.js';
+import { RLSTenantIsolationService } from './middleware/rls-tenant-isolation.js';
 
 // Import utilities
 import trialManager from './utils/trial-manager.js';
+
+// Import database connection manager
+import { dbManager } from './db/connection-manager.js';
 
 const fastify = Fastify({
   logger: {
@@ -67,10 +80,13 @@ const fastify = Fastify({
 // Raw body parser for webhooks
 fastify.addContentTypeParser(['application/json'], { parseAs: 'buffer' }, function (req, body, done) {
   req.rawBody = body;
-  
+
+  console.log('🔍 CONTENT PARSER - URL:', req.url, 'Method:', req.method);
+
   // For webhook endpoints, keep raw body and don't parse JSON
   if (req.url.includes('/webhook')) {
-    console.log('🎣 Webhook detected - preserving raw body for signature verification');
+    console.log('🎣 GLOBAL WEBHOOK DETECTED:', req.url, '- preserving raw body for signature verification');
+    console.log('🎣 WEBHOOK BODY LENGTH:', body.length);
     done(null, body);
     return;
   }
@@ -249,6 +265,33 @@ async function registerPlugins() {
   await fastify.register(fastifyCacheMetrics);
 }
 
+// Initialize RLS service
+let rlsService = null;
+
+async function initializeRLS() {
+  try {
+    console.log('🚀 Initializing RLS Tenant Isolation Service...');
+
+    // Import database connection
+    const { db, connectionString } = await import('./db/index.js');
+
+    // Initialize RLS service
+    rlsService = new RLSTenantIsolationService(db, connectionString);
+
+    // Import and set tenants table reference
+    const { tenants } = await import('./db/schema/index.js');
+    rlsService.setTenantsTable(tenants);
+
+    // Make RLS service globally available for health checks
+    global.rlsService = rlsService;
+
+    console.log('✅ RLS Tenant Isolation Service initialized');
+  } catch (error) {
+    console.error('❌ Failed to initialize RLS service:', error);
+    // Don't exit - continue without RLS for now
+  }
+}
+
 // Register global middleware
 async function registerMiddleware() {
   // Auth middleware (will set userContext if authenticated) - runs on all requests
@@ -331,10 +374,17 @@ async function registerRoutes() {
   await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
   await fastify.register(proxyRoutes, { prefix: '/api/proxy' });
   await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
-  await fastify.register(enhancedOnboardingRoutes, { prefix: '/api/onboarding' });
-  await fastify.register(onboardingAnalyticsRoutes, { prefix: '/api/onboarding/analytics' });
   await fastify.register(dnsManagementRoutes, { prefix: '/api/dns' });
   await fastify.register(adminRoutes, { prefix: '/api/admin' });
+  await fastify.register(adminCreditConfigurationRoutes, { prefix: '/api/admin/credit-configurations' });
+  await fastify.register(adminApplicationAssignmentRoutes, { prefix: '/api/admin/application-assignments' });
+  await fastify.register(adminOperationCostRoutes, { prefix: '/api/admin/operation-costs' });
+
+  // New independent admin dashboard routes
+  await fastify.register(adminDashboardRoutes, { prefix: '/api/admin/dashboard' });
+  await fastify.register(adminTenantManagementRoutes, { prefix: '/api/admin/tenants' });
+  await fastify.register(adminEntityManagementRoutes, { prefix: '/api/admin/entities' });
+  await fastify.register(adminCreditOverviewRoutes, { prefix: '/api/admin/credits' });
   await fastify.register(suiteRoutes, { prefix: '/api/suite' });
   await fastify.register(paymentRoutes, { prefix: '/api/payments' });
   await fastify.register(activityRoutes, { prefix: '/api/activity' });
@@ -347,22 +397,62 @@ async function registerRoutes() {
   await fastify.register(userApplicationRoutes, { prefix: '/api/user-applications' });
   await fastify.register(organizationRoutes, { prefix: '/api/organizations' });
   await fastify.register(locationRoutes, { prefix: '/api/locations' });
+  console.log('📋 Registering entities routes...');
+  await fastify.register(entityRoutes, { prefix: '/api/entities' });
+  console.log('✅ Entities routes registered successfully');
   await fastify.register(paymentUpgradeRoutes, { prefix: '/api/payment-upgrade' });
-await fastify.register(enhancedCrmIntegrationRoutes, { prefix: '/api/enhanced-crm-integration' });
+  await fastify.register(creditRoutes, { prefix: '/api/credits' });
+  await fastify.register(enhancedCrmIntegrationRoutes, { prefix: '/api/enhanced-crm-integration' });
 await fastify.register(healthRoutes, { prefix: '/api' });
-  // Applications endpoint (proxy to suite applications)
+
+  // RLS Example Routes (temporarily disabled - need Fastify compatibility)
+  // TODO: Implement Fastify-compatible RLS routes
+  /*
+  if (rlsService) {
+    await fastify.register(async (fastifyInstance) => {
+      createRLSRoutes(fastifyInstance, rlsService.db, rlsService.sql);
+    });
+  }
+  */
+
+  // Applications endpoint (direct database query)
   fastify.get('/api/applications', async (request, reply) => {
     try {
-      // Proxy to suite applications endpoint
-      const { internalUserId, tenantId } = request.userContext;
-      
-      if (!internalUserId || !tenantId) {
+      // Get organization applications directly from database
+      const { tenantId } = request.userContext;
+
+      if (!tenantId) {
         return reply.code(401).send({ error: 'Authentication required' });
       }
 
-      // Import the SSO service (already instantiated)
-      const ssoService = (await import('./services/sso-service.js')).default;
-      const userApps = await ssoService.getUserApplications(internalUserId, tenantId);
+      console.log('📱 Getting applications for tenant:', { tenantId });
+
+      // Import required schemas
+      const { applications, organizationApplications } = await import('./db/schema/suite-schema.js');
+      const { eq, and } = await import('drizzle-orm');
+
+      // Get applications enabled for this organization
+      const userApps = await db
+        .select({
+          appId: applications.appId,
+          appCode: applications.appCode,
+          appName: applications.appName,
+          description: applications.description,
+          icon: applications.icon,
+          baseUrl: applications.baseUrl,
+          isCore: applications.isCore,
+          sortOrder: applications.sortOrder,
+          isEnabled: organizationApplications.isEnabled,
+          subscriptionTier: organizationApplications.subscriptionTier,
+          enabledModules: organizationApplications.enabledModules
+        })
+        .from(organizationApplications)
+        .innerJoin(applications, eq(organizationApplications.appId, applications.appId))
+        .where(and(
+          eq(organizationApplications.tenantId, tenantId),
+          eq(organizationApplications.isEnabled, true)
+        ))
+        .orderBy(applications.sortOrder, applications.appName);
 
       return {
         success: true,
@@ -415,42 +505,7 @@ await fastify.register(healthRoutes, { prefix: '/api' });
         });
       }
 
-      console.log('✅ Valid CRM auth request, processing...');
-      
-      // Import the auth handler logic
-      const { UnifiedSSOService } = await import('./services/unified-sso-service.js');
-      
-      // Check if user is already authenticated
-      const token = request.headers.authorization?.replace('Bearer ', '') || 
-                    request.cookies?.auth_token ||
-                    request.query.token;
-
-      if (token) {
-        try {
-          console.log('🔍 Checking existing token...');
-          const tokenContext = await UnifiedSSOService.validateUnifiedToken(token);
-          
-          if (tokenContext.isValid) {
-            // User is already authenticated, generate app-specific token and redirect
-            console.log('✅ User already authenticated, generating app token...');
-            const appToken = await UnifiedSSOService.generateUnifiedToken(
-              tokenContext.kindeUserId,
-              tokenContext.kindeOrgId,
-              app_code
-            );
-
-            const targetUrl = new URL(redirect_url);
-            targetUrl.searchParams.set('token', appToken.token);
-            targetUrl.searchParams.set('expires_at', appToken.expiresAt.toISOString());
-            targetUrl.searchParams.set('app_code', app_code);
-
-            console.log('🚀 Redirecting authenticated user to:', targetUrl.toString());
-            return reply.redirect(targetUrl.toString());
-          }
-        } catch (error) {
-          console.log('⚠️ Existing token invalid, proceeding with fresh auth');
-        }
-      }
+      console.log('✅ Valid CRM auth request, processing... (SSO removed)');
 
       // User not authenticated, redirect to Kinde auth with app context
       const kindeService = await import('./services/kinde-service.js');
@@ -621,10 +676,19 @@ async function gracefulShutdown() {
 async function start() {
   try {
     console.log('🚀 Starting Wrapper API Server...');
-    
+
+    // Initialize database connection manager FIRST
+    console.log('🔌 Initializing database connections...');
+    await dbManager.initialize();
+    console.log('✅ Database connections initialized successfully');
+
     // Register everything
     await registerPlugins();
     await registerMiddleware();
+
+    // Initialize RLS before registering routes
+    await initializeRLS();
+
     await registerRoutes();
 
     // Start the server
@@ -637,8 +701,8 @@ async function start() {
     console.log(`📚 API Documentation: http://${host}:${port}/docs`);
     console.log(`🏥 Health Check: http://${host}:${port}/health`);
     
-    // Initialize trial monitoring system after app setup
-    await initializeTrialSystem();
+    // // Initialize trial monitoring system after app setup
+    // await initializeTrialSystem();
     
     // Initialize demo cache data for distributed caching demonstration
     try {
@@ -675,36 +739,36 @@ if (import.meta.url === `file://${process.argv[1]}` || process.env.NODE_ENV !== 
   start();
 }
 
-// Initialize trial monitoring system after app setup
-export async function initializeTrialSystem() {
-  try {
-    console.log('🚀 Initializing trial monitoring system...');
+// // Initialize trial monitoring system after app setup
+// export async function initializeTrialSystem() {
+//   try {
+//     console.log('🚀 Initializing trial monitoring system...');
     
-    // Start trial monitoring
-    trialManager.startTrialMonitoring();
+//     // Start trial monitoring
+//     trialManager.startTrialMonitoring();
     
-    // Verify it's running
-    const status = trialManager.getMonitoringStatus();
-    if (status.isRunning) {
-      console.log('✅ Trial monitoring system initialized successfully');
-      console.log(`📊 Active jobs: ${status.activeJobs}`);
-    } else {
-      console.error('❌ Failed to initialize trial monitoring system');
-    }
+//     // Verify it's running
+//     const status = trialManager.getMonitoringStatus();
+//     if (status.isRunning) {
+//       console.log('✅ Trial monitoring system initialized successfully');
+//       console.log(`📊 Active jobs: ${status.activeJobs}`);
+//     } else {
+//       console.error('❌ Failed to initialize trial monitoring system');
+//     }
     
-  } catch (error) {
-    console.error('❌ Error initializing trial system:', error);
-  }
-}
+//   } catch (error) {
+//     console.error('❌ Error initializing trial system:', error);
+//   }
+// }
 
-// Call initialization after database connection is established
-if (process.env.NODE_ENV !== 'test') {
-  // Delay initialization to ensure database is ready
-  setTimeout(() => {
-    initializeTrialSystem().catch(error => {
-      console.error('Failed to initialize trial system:', error);
-    });
-  }, 2000);
-}
+// // Call initialization after database connection is established
+// if (process.env.NODE_ENV !== 'test') {
+//   // Delay initialization to ensure database is ready
+//   setTimeout(() => {
+//     initializeTrialSystem().catch(error => {
+//       console.error('Failed to initialize trial system:', error);
+//     });
+//   }, 2000);
+// }
 
 export default fastify; 

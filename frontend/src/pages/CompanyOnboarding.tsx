@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CalendarIcon, Building2, MapPin, User, Settings, Globe, DollarSign, Info, CheckCircle, AlertCircle, Save, ArrowRight, ArrowLeft, Home, Mail, Phone, Globe2, CreditCard } from 'lucide-react';
+import { CalendarIcon, Building2, MapPin, User, Settings, Globe, DollarSign, Info, CheckCircle, AlertCircle, Save, ArrowRight, ArrowLeft, Home, Mail, Phone, Globe2, CreditCard, Coins } from 'lucide-react';
 
 // Form sections
 const FORM_SECTIONS = [
@@ -35,6 +35,12 @@ const FORM_SECTIONS = [
     title: 'Localization & Regional',
     icon: Globe,
     description: 'Language, currency, and timezone settings'
+  },
+  {
+    id: 'credit-package',
+    title: 'Credit Package',
+    icon: Coins,
+    description: 'Select your initial credit package to get started'
   },
   {
     id: 'admin-setup',
@@ -82,6 +88,58 @@ const ROLE_OPTIONS = [
   'System Administrator', 'Standard User', 'Read Only', 'Custom Role'
 ];
 
+// Credit package options
+const CREDIT_PACKAGES = [
+  {
+    id: 'starter',
+    name: 'Starter Package',
+    credits: 1000,
+    price: 49,
+    currency: 'USD',
+    description: 'Perfect for small businesses getting started',
+    features: [
+      '1,000 credits',
+      'Basic operations support',
+      'Email support',
+      '1 month validity'
+    ],
+    recommended: false
+  },
+  {
+    id: 'professional',
+    name: 'Professional Package',
+    credits: 5000,
+    price: 199,
+    currency: 'USD',
+    description: 'Ideal for growing businesses with regular operations',
+    features: [
+      '5,000 credits',
+      'Advanced operations support',
+      'Priority email support',
+      '3 months validity',
+      'Basic reporting'
+    ],
+    recommended: true
+  },
+  {
+    id: 'enterprise',
+    name: 'Enterprise Package',
+    credits: 15000,
+    price: 499,
+    currency: 'USD',
+    description: 'For large organizations with high-volume operations',
+    features: [
+      '15,000 credits',
+      'Full operations support',
+      'Phone & email support',
+      '6 months validity',
+      'Advanced reporting',
+      'Custom integrations'
+    ],
+    recommended: false
+  }
+];
+
 interface OnboardingFormData {
   // Company Profile
   companyName: string;
@@ -97,7 +155,7 @@ interface OnboardingFormData {
   website: string;
   description: string;
   foundedDate: string;
-  
+
   // Contact & Address
   billingStreet: string;
   billingCity: string;
@@ -111,7 +169,7 @@ interface OnboardingFormData {
   shippingCountry: string;
   phone: string;
   fax: string;
-  
+
   // Localization
   defaultLanguage: string;
   defaultLocale: string;
@@ -120,7 +178,16 @@ interface OnboardingFormData {
   advancedCurrencyManagement: boolean;
   defaultTimeZone: string;
   firstDayOfWeek: string; // Will be converted to number when sending to backend
-  
+
+  // Credit Package Selection
+  selectedCreditPackage: string;
+  creditPackageDetails: {
+    credits: number;
+    price: number;
+    currency: string;
+    validityMonths: number;
+  };
+
   // Administrator Setup
   adminFirstName: string;
   adminLastName: string;
@@ -155,7 +222,7 @@ const CompanyOnboarding: React.FC = () => {
     website: '',
     description: '',
     foundedDate: '',
-    
+
     // Contact & Address
     billingStreet: '',
     billingCity: '',
@@ -169,7 +236,7 @@ const CompanyOnboarding: React.FC = () => {
     shippingCountry: '',
     phone: '',
     fax: '',
-    
+
     // Localization
     defaultLanguage: 'English',
     defaultLocale: 'en_US',
@@ -178,7 +245,16 @@ const CompanyOnboarding: React.FC = () => {
     advancedCurrencyManagement: false,
     defaultTimeZone: 'UTC',
     firstDayOfWeek: '1',
-    
+
+    // Credit Package Selection
+    selectedCreditPackage: '',
+    creditPackageDetails: {
+      credits: 0,
+      price: 0,
+      currency: 'USD',
+      validityMonths: 1
+    },
+
     // Administrator Setup
     adminFirstName: '',
     adminLastName: '',
@@ -216,9 +292,13 @@ const CompanyOnboarding: React.FC = () => {
   // Calculate progress
   useEffect(() => {
     const totalFields = Object.keys(formData).length;
-    const filledFields = Object.values(formData).filter(value => 
-      value !== '' && value !== false
-    ).length;
+    const filledFields = Object.values(formData).filter(value => {
+      if (typeof value === 'object' && value !== null) {
+        // Handle nested objects like creditPackageDetails
+        return Object.values(value).every(v => v !== '' && v !== 0);
+      }
+      return value !== '' && value !== false;
+    }).length;
     setProgress((filledFields / totalFields) * 100);
   }, [formData]);
 
@@ -368,12 +448,13 @@ const CompanyOnboarding: React.FC = () => {
       // Validate required fields
       const requiredFields = [
         'companyName', 'industry', 'companyType', 'defaultLanguage',
-        'defaultCurrency', 'defaultTimeZone', 'adminFirstName', 'adminLastName',
-        'adminEmail', 'adminUsername', 'adminRole', 'adminProfile'
+        'defaultCurrency', 'defaultTimeZone', 'selectedCreditPackage',
+        'adminFirstName', 'adminLastName', 'adminEmail', 'adminUsername',
+        'adminRole', 'adminProfile'
       ];
 
       const missingFields = requiredFields.filter(field => !formData[field as keyof OnboardingFormData]);
-      
+
       if (missingFields.length > 0) {
         toast.error(`Please fill in required fields: ${missingFields.join(', ')}`);
         return;
@@ -1110,6 +1191,123 @@ const CompanyOnboarding: React.FC = () => {
       </div>
     </div>
   );
+  const renderCreditPackageSection = () => (
+    <div className="space-y-6">
+      <Alert className="border-amber-200 bg-amber-50">
+        <Coins className="h-4 w-4 text-amber-600" />
+        <AlertDescription className="text-amber-800">
+          Choose your initial credit package. You can purchase additional credits anytime after setup.
+        </AlertDescription>
+      </Alert>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {CREDIT_PACKAGES.map((pkg) => (
+          <Card
+            key={pkg.id}
+            className={`relative cursor-pointer transition-all duration-200 hover:shadow-lg ${
+              formData.selectedCreditPackage === pkg.id
+                ? 'ring-2 ring-blue-500 bg-blue-50'
+                : 'hover:shadow-md'
+            }`}
+            onClick={() => {
+              setFormData(prev => ({
+                ...prev,
+                selectedCreditPackage: pkg.id,
+                creditPackageDetails: {
+                  credits: pkg.credits,
+                  price: pkg.price,
+                  currency: pkg.currency,
+                  validityMonths: pkg.id === 'starter' ? 1 : pkg.id === 'professional' ? 3 : 6
+                }
+              }));
+            }}
+          >
+            {pkg.recommended && (
+              <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                <Badge className="bg-green-500 text-white px-3 py-1 text-xs font-semibold">
+                  RECOMMENDED
+                </Badge>
+              </div>
+            )}
+
+            <CardHeader className="text-center pb-4">
+              <CardTitle className="flex items-center justify-center gap-2">
+                <Coins className="h-5 w-5 text-amber-500" />
+                {pkg.name}
+              </CardTitle>
+              <div className="text-3xl font-bold text-gray-900">
+                ${pkg.price}
+                <span className="text-sm font-normal text-gray-500">/{pkg.currency}</span>
+              </div>
+              <CardDescription className="text-center">
+                {pkg.description}
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              <div className="text-center">
+                <div className="text-2xl font-semibold text-blue-600">
+                  {pkg.credits.toLocaleString()}
+                </div>
+                <div className="text-sm text-gray-600">Credits Included</div>
+              </div>
+
+              <Separator />
+
+              <ul className="space-y-2">
+                {pkg.features.map((feature, index) => (
+                  <li key={index} className="flex items-center gap-2 text-sm">
+                    <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+
+              {formData.selectedCreditPackage === pkg.id && (
+                <div className="flex items-center justify-center pt-2">
+                  <CheckCircle className="h-5 w-5 text-blue-500" />
+                  <span className="ml-2 text-sm font-medium text-blue-600">Selected</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {formData.selectedCreditPackage && (
+        <Alert className="border-green-200 bg-green-50">
+          <CheckCircle className="h-4 w-4 text-green-600" />
+          <AlertDescription className="text-green-800">
+            <strong>Selected Package:</strong> {CREDIT_PACKAGES.find(p => p.id === formData.selectedCreditPackage)?.name} -
+            {CREDIT_PACKAGES.find(p => p.id === formData.selectedCreditPackage)?.credits.toLocaleString()} credits for $
+            {CREDIT_PACKAGES.find(p => p.id === formData.selectedCreditPackage)?.price}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="bg-gray-50 p-4 rounded-lg">
+        <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <Info className="h-4 w-4" />
+          How Credits Work
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+          <div>
+            <strong>Usage:</strong> Credits are consumed based on the operations you perform (API calls, data processing, etc.)
+          </div>
+          <div>
+            <strong>Expiry:</strong> Credits expire based on the validity period of your package
+          </div>
+          <div>
+            <strong>Top-up:</strong> You can purchase additional credits anytime from your dashboard
+          </div>
+          <div>
+            <strong>Alerts:</strong> You'll receive notifications when your balance is low
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderCurrentSection = () => {
     switch (currentSection) {
       case 0:
@@ -1119,6 +1317,8 @@ const CompanyOnboarding: React.FC = () => {
       case 2:
         return renderLocalizationSection();
       case 3:
+        return renderCreditPackageSection();
+      case 4:
         return renderAdminSetupSection();
       default:
         return null;
@@ -1171,7 +1371,7 @@ const CompanyOnboarding: React.FC = () => {
 
         {/* Section Navigation */}
         <Tabs value={currentSection.toString()} onValueChange={(value) => setCurrentSection(parseInt(value))} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-8">
+          <TabsList className="grid w-full grid-cols-5 mb-8">
             {FORM_SECTIONS.map((section, index) => (
               <TabsTrigger 
                 key={section.id} 
@@ -1268,6 +1468,16 @@ const CompanyOnboarding: React.FC = () => {
             {FORM_SECTIONS[currentSection].title} • {FORM_SECTIONS[currentSection].description}
           </p>
         </div>
+
+        {/* Credit Package Progress Indicator */}
+        {formData.selectedCreditPackage && (
+          <div className="mt-2 text-center">
+            <Badge variant="outline" className="text-xs px-2 py-1 bg-amber-50 text-amber-700 border-amber-200">
+              <Coins className="h-3 w-3 mr-1" />
+              {CREDIT_PACKAGES.find(p => p.id === formData.selectedCreditPackage)?.credits.toLocaleString()} credits selected
+            </Badge>
+          </div>
+        )}
       </div>
 
       {/* GSTIN Validation Modal */}

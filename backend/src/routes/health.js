@@ -229,4 +229,221 @@ export default async function healthRoutes(fastify, options) {
       });
     }
   });
+
+  // RLS Health Check endpoint
+  fastify.get('/health/rls', async (request, reply) => {
+    try {
+      const rlsHealth = {
+        timestamp: new Date().toISOString(),
+        rls_enabled: false,
+        tenant_context: null,
+        policies_status: {},
+        session_status: 'unknown'
+      };
+
+      // Check if RLS service is available
+      if (global.rlsService) {
+        rlsHealth.rls_enabled = true;
+
+        try {
+          // Check tenant context
+          const tenantContext = await global.rlsService.getTenantContext();
+          rlsHealth.tenant_context = tenantContext;
+
+          // Check multi-level context if available
+          if (global.rlsService.getMultiLevelContext) {
+            try {
+              const multiLevelContext = await global.rlsService.getMultiLevelContext();
+              rlsHealth.multi_level_context = multiLevelContext;
+            } catch (error) {
+              rlsHealth.multi_level_context = { error: error.message };
+            }
+          }
+
+          // Check RLS policies status
+          if (fastify.db) {
+            const policiesCheck = await fastify.db.execute(`
+              SELECT
+                schemaname,
+                tablename,
+                rowsecurity as rls_enabled,
+                (SELECT COUNT(*) FROM pg_policies WHERE schemaname = t.schemaname AND tablename = t.tablename) as policy_count
+              FROM pg_tables t
+              WHERE t.schemaname = 'public'
+                AND t.tablename IN (
+                  'tenant_users', 'organizations', 'custom_roles',
+                  'credits', 'audit_logs', 'usage_logs'
+                )
+              ORDER BY tablename;
+            `);
+
+            policiesCheck.rows.forEach(row => {
+              rlsHealth.policies_status[row.tablename] = {
+                rls_enabled: row.rls_enabled,
+                policies: row.policy_count
+              };
+            });
+          }
+
+          rlsHealth.session_status = 'healthy';
+          reply.code(200).send(rlsHealth);
+
+        } catch (error) {
+          rlsHealth.session_status = 'error';
+          rlsHealth.error = error.message;
+          reply.code(503).send(rlsHealth);
+        }
+      } else {
+        rlsHealth.error = 'RLS service not initialized';
+        reply.code(503).send(rlsHealth);
+      }
+    } catch (error) {
+      reply.code(500).send({
+        timestamp: new Date().toISOString(),
+        rls_enabled: false,
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+  });
+
+  // RLS Test endpoint (requires tenant headers)
+  fastify.get('/health/rls/test', async (request, reply) => {
+    try {
+      const subdomain = request.headers['x-subdomain'] || request.headers['x-tenant'];
+
+      if (!subdomain) {
+        return reply.code(400).send({
+          error: 'Tenant identification required',
+          message: 'Include X-Subdomain or X-Tenant header'
+        });
+      }
+
+      if (!global.rlsService) {
+        return reply.code(503).send({
+          error: 'RLS service not available',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Resolve tenant
+      const tenant = await global.rlsService.resolveTenant(subdomain);
+      if (!tenant) {
+        return reply.code(404).send({
+          error: 'Tenant not found',
+          subdomain
+        });
+      }
+
+      // Set tenant context
+      await global.rlsService.setTenantContext(tenant.id || tenant.tenantId);
+
+      // Test RLS with a query
+      const testResult = {
+        timestamp: new Date().toISOString(),
+        tenant: {
+          id: tenant.id || tenant.tenantId,
+          subdomain: tenant.subdomain,
+          companyName: tenant.companyName
+        },
+        rls_test: {}
+      };
+
+      // Test tenant_users table
+      if (fastify.db) {
+        try {
+          const userCount = await fastify.db.execute('SELECT COUNT(*) as count FROM tenant_users');
+          testResult.rls_test.tenant_users = {
+            status: 'success',
+            count: userCount.rows[0].count
+          };
+        } catch (error) {
+          testResult.rls_test.tenant_users = {
+            status: 'error',
+            error: error.message
+          };
+        }
+      }
+
+      // Clear tenant context
+      await global.rlsService.clearTenantContext();
+
+      reply.code(200).send(testResult);
+
+    } catch (error) {
+      reply.code(500).send({
+        timestamp: new Date().toISOString(),
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+  });
+
+  // Hierarchical RLS Test endpoint
+  fastify.get('/health/rls/hierarchical', async (request, reply) => {
+    try {
+      const hierarchicalTest = {
+        timestamp: new Date().toISOString(),
+        hierarchical_rls_enabled: false,
+        multi_level_context: null,
+        hierarchical_policies: {},
+        test_results: {}
+      };
+
+      if (global.rlsService && global.rlsService.getMultiLevelContext) {
+        hierarchicalTest.hierarchical_rls_enabled = true;
+
+        try {
+          // Get multi-level context
+          const context = await global.rlsService.getMultiLevelContext();
+          hierarchicalTest.multi_level_context = context;
+
+          // Test hierarchical policies if database is available
+          if (fastify.db) {
+            const policiesCheck = await fastify.db.execute(`
+              SELECT
+                schemaname,
+                tablename,
+                rowsecurity as rls_enabled,
+                (SELECT COUNT(*) FROM pg_policies WHERE schemaname = t.schemaname AND tablename = t.tablename AND policyname LIKE '%hierarchical%') as hierarchical_policies
+              FROM pg_tables t
+              WHERE t.schemaname = 'public'
+                AND t.tablename IN (
+                  'tenant_users', 'organizations', 'custom_roles',
+                  'credits', 'audit_logs', 'activity_logs'
+                )
+              ORDER BY tablename;
+            `);
+
+            policiesCheck.rows.forEach(row => {
+              hierarchicalTest.hierarchical_policies[row.tablename] = {
+                rls_enabled: row.rls_enabled,
+                hierarchical_policies: row.hierarchical_policies
+              };
+            });
+
+            // Test hierarchical context function
+            try {
+              const contextTest = await fastify.db.execute('SELECT get_hierarchical_context() as context');
+              hierarchicalTest.test_results.context_function = contextTest.rows[0]?.context || null;
+            } catch (error) {
+              hierarchicalTest.test_results.context_function = { error: error.message };
+            }
+          }
+
+        } catch (error) {
+          hierarchicalTest.error = error.message;
+        }
+      }
+
+      reply.code(200).send(hierarchicalTest);
+
+    } catch (error) {
+      reply.code(500).send({
+        timestamp: new Date().toISOString(),
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+  });
 }

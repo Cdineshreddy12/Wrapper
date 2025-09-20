@@ -5,71 +5,15 @@
     {
       "idx": 0,
       "version": "5",
-      "when": 1748756953326,
-      "tag": "0000_lumpy_gamma_corps",
+      "when": 1758117227922,
+      "tag": "0000_brief_sir_ram",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "5",
-      "when": 1748847224670,
-      "tag": "0001_glamorous_franklin_richards",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "5",
-      "when": 1749144344872,
-      "tag": "0002_supreme_killer_shrike",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "5",
-      "when": 1749312036404,
-      "tag": "0003_flashy_riptide",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "5",
-      "when": 1749388306438,
-      "tag": "0004_purple_christian_walker",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "5",
-      "when": 1755527170313,
-      "tag": "0005_demonic_charles_xavier",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "5",
-      "when": 1756380377518,
-      "tag": "0006_productive_forgotten_one",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "5",
-      "when": 1756714471616,
-      "tag": "0007_tough_vulcan",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "5",
-      "when": 1756753200000,
-      "tag": "0014_enhanced_onboarding_tracking",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "5",
-      "when": 1756962092776,
-      "tag": "0009_bent_ink",
+      "when": 1758272835607,
+      "tag": "0001_bright_raider",
       "breakpoints": true
     }
   ]

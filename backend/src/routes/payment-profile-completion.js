@@ -2,7 +2,7 @@ import { db } from '../db/index.js';
 import { tenants, tenantUsers } from '../db/schema/index.js';
 import { eq, and } from 'drizzle-orm';
 import Stripe from 'stripe';
-import EnhancedOnboardingService from '../services/enhanced-onboarding-service.js';
+import { EnhancedOnboardingService } from '../services/onboarding-service.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 

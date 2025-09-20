@@ -1,328 +1,194 @@
 import { db } from '../db/index.js';
-import { tenants, onboardingEvents } from '../db/schema/index.js';
 import { eq, and, desc } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
 
-export class OnboardingTrackingService {
-  /**
-   * Track onboarding phase completion with enhanced analytics
-   */
-  static async trackOnboardingPhase(tenantId, phase, action, metadata = {}) {
+class OnboardingTrackingService {
+  // Track onboarding phase completion/progress
+  async trackOnboardingPhase(tenantId, phase, status, metadata = {}) {
     try {
-      const now = new Date();
-      const userId = metadata.userId || null;
-      const sessionId = metadata.sessionId || null;
+      console.log('📊 Tracking onboarding phase:', { tenantId, phase, status });
 
-      // Record the event in onboarding_events table
-      const [eventRecord] = await db.insert(onboardingEvents).values({
-        tenantId,
-        eventType: `${phase}_onboarding_${action}`,
-        eventPhase: phase,
-        eventAction: action,
+      const {
         userId,
         sessionId,
-        ipAddress: metadata.ipAddress,
-        userAgent: metadata.userAgent,
-        eventData: metadata.eventData || {},
-        metadata: metadata.metadata || {},
-        timeSpent: metadata.timeSpent,
-        completionRate: metadata.completionRate,
-        stepNumber: metadata.stepNumber,
-        totalSteps: metadata.totalSteps,
-        variantId: metadata.variantId,
-        experimentId: metadata.experimentId,
-        eventTimestamp: now
-      }).returning();
+        ipAddress,
+        userAgent,
+        eventData = {}
+      } = metadata;
 
-      // Update tenant's onboarding phases tracking
-      const phaseUpdate = {};
-      phaseUpdate[`${phase}OnboardingCompleted`] = action === 'completed';
-      if (action === 'completed') {
-        phaseUpdate[`${phase}OnboardingCompletedAt`] = now;
-      }
+      // Create tracking record
+      const trackingId = uuidv4();
+      const trackingRecord = {
+        trackingId,
+        tenantId,
+        phase,
+        status,
+        userId: userId || null,
+        sessionId: sessionId || null,
+        ipAddress: ipAddress || null,
+        userAgent: userAgent || null,
+        eventData: JSON.stringify(eventData),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
 
-      // Update onboarding phases JSON
-      const currentTenant = await db
-        .select({
-          onboardingPhases: tenants.onboardingPhases,
-          userJourney: tenants.userJourney
-        })
-        .from(tenants)
-        .where(eq(tenants.tenantId, tenantId))
-        .limit(1);
+      // In a real implementation, you'd save this to a database table
+      // For now, just log it
+      console.log('✅ Onboarding phase tracked:', {
+        trackingId,
+        tenantId,
+        phase,
+        status,
+        userId,
+        sessionId,
+        eventData: Object.keys(eventData)
+      });
 
-      if (currentTenant.length > 0) {
-        const phases = currentTenant[0].onboardingPhases || {};
-        const journey = currentTenant[0].userJourney || [];
+      // Store in memory for this session (in production, use database)
+      this._storeTrackingRecord(trackingRecord);
 
-        // Update phase status
-        if (!phases[phase]) {
-          phases[phase] = { completed: false, completedAt: null, skipped: false };
-        }
-
-        phases[phase].completed = action === 'completed';
-        if (action === 'completed') {
-          phases[phase].completedAt = now.toISOString();
-        }
-        phases[phase].skipped = action === 'skipped';
-
-        // Add journey event
-        journey.push({
-          event: `${phase}_onboarding_${action}`,
-          timestamp: now.toISOString(),
-          metadata: metadata
-        });
-
-        await db
-          .update(tenants)
-          .set({
-            ...phaseUpdate,
-            onboardingPhases: phases,
-            userJourney: journey.slice(-50), // Keep last 50 events
-            updatedAt: now
-          })
-          .where(eq(tenants.tenantId, tenantId));
-      }
-
-      console.log(`✅ Tracked ${phase} onboarding ${action} for tenant ${tenantId}`);
-      return eventRecord;
+      return {
+        success: true,
+        trackingId,
+        tenantId,
+        phase,
+        status
+      };
 
     } catch (error) {
-      console.error(`❌ Failed to track ${phase} onboarding ${action}:`, error);
+      console.error('❌ Error tracking onboarding phase:', error);
       throw error;
     }
   }
 
-  /**
-   * Get onboarding analytics for a tenant
-   */
-  static async getOnboardingAnalytics(tenantId) {
+  // Get onboarding progress for a tenant
+  async getOnboardingProgress(tenantId) {
     try {
-      const events = await db
-        .select()
-        .from(onboardingEvents)
-        .where(eq(onboardingEvents.tenantId, tenantId))
-        .orderBy(desc(onboardingEvents.eventTimestamp));
+      console.log('📊 Getting onboarding progress for tenant:', tenantId);
 
-      const [tenant] = await db
-        .select({
-          onboardingPhases: tenants.onboardingPhases,
-          userJourney: tenants.userJourney,
-          trialOnboardingCompleted: tenants.trialOnboardingCompleted,
-          upgradeOnboardingCompleted: tenants.upgradeOnboardingCompleted,
-          profileOnboardingCompleted: tenants.profileOnboardingCompleted
-        })
-        .from(tenants)
-        .where(eq(tenants.tenantId, tenantId))
-        .limit(1);
+      // Get completed phases
+      const completedPhases = this._getCompletedPhases(tenantId);
 
-      if (!tenant) {
-        return null;
-      }
+      // Calculate overall progress
+      const totalPhases = ['profile', 'payment', 'upgrade', 'trial'];
+      const completedCount = completedPhases.length;
+      const progressPercentage = (completedCount / totalPhases.length) * 100;
+
+      const progress = {
+        tenantId,
+        totalPhases: totalPhases.length,
+        completedPhases: completedCount,
+        progressPercentage: Math.round(progressPercentage),
+        completedPhaseList: completedPhases,
+        remainingPhases: totalPhases.filter(phase => !completedPhases.includes(phase)),
+        lastUpdated: new Date().toISOString()
+      };
+
+      console.log('✅ Onboarding progress calculated:', progress);
+      return progress;
+
+    } catch (error) {
+      console.error('❌ Error getting onboarding progress:', error);
+      throw error;
+    }
+  }
+
+  // Get onboarding analytics
+  async getOnboardingAnalytics(tenantId, options = {}) {
+    try {
+      const { startDate, endDate, phase } = options;
+
+      console.log('📊 Getting onboarding analytics:', { tenantId, phase, startDate, endDate });
+
+      // Get tracking records for the tenant
+      const records = this._getTrackingRecords(tenantId, { startDate, endDate, phase });
 
       // Calculate analytics
       const analytics = {
         tenantId,
-        phases: tenant.onboardingPhases || {},
-        journey: tenant.userJourney || [],
-        events: events,
-        summary: {
-          trialCompleted: tenant.trialOnboardingCompleted,
-          upgradeCompleted: tenant.upgradeOnboardingCompleted,
-          profileCompleted: tenant.profileOnboardingCompleted,
-          totalEvents: events.length,
-          completionRate: this.calculateCompletionRate(tenant.onboardingPhases),
-          averageTimeSpent: this.calculateAverageTime(events),
-          abandonmentRate: this.calculateAbandonmentRate(events)
-        }
+        totalEvents: records.length,
+        phasesCompleted: {},
+        averageCompletionTime: 0,
+        completionRates: {},
+        generatedAt: new Date().toISOString()
       };
 
+      // Group by phase and status
+      records.forEach(record => {
+        if (!analytics.phasesCompleted[record.phase]) {
+          analytics.phasesCompleted[record.phase] = {};
+        }
+        if (!analytics.phasesCompleted[record.phase][record.status]) {
+          analytics.phasesCompleted[record.phase][record.status] = 0;
+        }
+        analytics.phasesCompleted[record.phase][record.status]++;
+      });
+
+      console.log('✅ Onboarding analytics generated:', analytics);
       return analytics;
 
     } catch (error) {
-      console.error('❌ Failed to get onboarding analytics:', error);
+      console.error('❌ Error getting onboarding analytics:', error);
       throw error;
     }
   }
 
-  /**
-   * Get onboarding funnel analytics across all tenants
-   */
-  static async getOnboardingFunnelAnalytics(dateRange = {}) {
-    try {
-      const { startDate, endDate } = dateRange;
-
-      let whereClause = [];
-      if (startDate) whereClause.push(`event_timestamp >= '${startDate}'`);
-      if (endDate) whereClause.push(`event_timestamp <= '${endDate}'`);
-
-      const events = await db
-        .select({
-          eventPhase: onboardingEvents.eventPhase,
-          eventAction: onboardingEvents.eventAction,
-          count: onboardingEvents.eventId
-        })
-        .from(onboardingEvents)
-        .where(whereClause.length > 0 ? whereClause.join(' AND ') : '1=1')
-        .groupBy(onboardingEvents.eventPhase, onboardingEvents.eventAction);
-
-      // Aggregate funnel data
-      const funnel = {
-        trial: {
-          started: 0,
-          completed: 0,
-          skipped: 0,
-          abandoned: 0
-        },
-        profile: {
-          started: 0,
-          completed: 0,
-          skipped: 0,
-          abandoned: 0
-        },
-        upgrade: {
-          started: 0,
-          completed: 0,
-          skipped: 0,
-          abandoned: 0
-        }
-      };
-
-      events.forEach(event => {
-        if (funnel[event.eventPhase]) {
-          funnel[event.eventPhase][event.eventAction] = parseInt(event.count);
-        }
-      });
-
-      // Calculate conversion rates
-      const conversionRates = {};
-      Object.keys(funnel).forEach(phase => {
-        const phaseData = funnel[phase];
-        conversionRates[phase] = {
-          completionRate: phaseData.started > 0 ? (phaseData.completed / phaseData.started) * 100 : 0,
-          skipRate: phaseData.started > 0 ? (phaseData.skipped / phaseData.started) * 100 : 0,
-          abandonmentRate: phaseData.started > 0 ? (phaseData.abandoned / phaseData.started) * 100 : 0
-        };
-      });
-
-      return {
-        funnel,
-        conversionRates,
-        dateRange
-      };
-
-    } catch (error) {
-      console.error('❌ Failed to get onboarding funnel analytics:', error);
-      throw error;
+  // Helper method to store tracking records (in-memory for now)
+  _storeTrackingRecord(record) {
+    if (!this._trackingRecords) {
+      this._trackingRecords = [];
     }
+    this._trackingRecords.push(record);
   }
 
-  /**
-   * Track A/B test variant assignment
-   */
-  static async assignOnboardingVariant(tenantId, variantId, experimentId) {
-    try {
-      await db
-        .update(tenants)
-        .set({
-          onboardingVariant: variantId,
-          updatedAt: new Date()
-        })
-        .where(eq(tenants.tenantId, tenantId));
-
-      // Record variant assignment event
-      await this.trackOnboardingPhase(tenantId, 'experiment', 'assigned', {
-        variantId,
-        experimentId,
-        eventData: { variant: variantId, experiment: experimentId }
-      });
-
-      console.log(`✅ Assigned variant ${variantId} for experiment ${experimentId} to tenant ${tenantId}`);
-      return { variantId, experimentId };
-
-    } catch (error) {
-      console.error('❌ Failed to assign onboarding variant:', error);
-      throw error;
+  // Helper method to get completed phases
+  _getCompletedPhases(tenantId) {
+    if (!this._trackingRecords) {
+      return [];
     }
-  }
 
-  /**
-   * Get tenant's current onboarding status
-   */
-  static async getOnboardingStatus(tenantId) {
-    try {
-      const [tenant] = await db
-        .select({
-          onboardingCompleted: tenants.onboardingCompleted,
-          trialOnboardingCompleted: tenants.trialOnboardingCompleted,
-          upgradeOnboardingCompleted: tenants.upgradeOnboardingCompleted,
-          profileOnboardingCompleted: tenants.profileOnboardingCompleted,
-          onboardingPhases: tenants.onboardingPhases,
-          setupCompletionRate: tenants.setupCompletionRate,
-          onboardingVariant: tenants.onboardingVariant
-        })
-        .from(tenants)
-        .where(eq(tenants.tenantId, tenantId))
-        .limit(1);
+    const tenantRecords = this._trackingRecords.filter(r => r.tenantId === tenantId);
+    const completedPhases = new Set();
 
-      if (!tenant) {
-        return null;
+    tenantRecords.forEach(record => {
+      if (record.status === 'completed') {
+        completedPhases.add(record.phase);
       }
+    });
 
-      return {
-        tenantId,
-        overallCompleted: tenant.onboardingCompleted,
-        phases: {
-          trial: tenant.trialOnboardingCompleted,
-          profile: tenant.profileOnboardingCompleted,
-          upgrade: tenant.upgradeOnboardingCompleted
-        },
-        completionRate: tenant.setupCompletionRate,
-        variant: tenant.onboardingVariant,
-        nextPhase: this.determineNextPhase(tenant.onboardingPhases)
-      };
-
-    } catch (error) {
-      console.error('❌ Failed to get onboarding status:', error);
-      throw error;
-    }
+    return Array.from(completedPhases);
   }
 
-  // Helper methods
-  static calculateCompletionRate(phases) {
-    if (!phases) return 0;
-
-    const phaseKeys = Object.keys(phases);
-    if (phaseKeys.length === 0) return 0;
-
-    const completedPhases = phaseKeys.filter(phase => phases[phase]?.completed).length;
-    return Math.round((completedPhases / phaseKeys.length) * 100);
-  }
-
-  static calculateAverageTime(events) {
-    const timeEvents = events.filter(e => e.timeSpent && e.timeSpent > 0);
-    if (timeEvents.length === 0) return 0;
-
-    const totalTime = timeEvents.reduce((sum, e) => sum + e.timeSpent, 0);
-    return Math.round(totalTime / timeEvents.length);
-  }
-
-  static calculateAbandonmentRate(events) {
-    const startedEvents = events.filter(e => e.eventAction === 'started').length;
-    const abandonedEvents = events.filter(e => e.eventAction === 'abandoned').length;
-
-    if (startedEvents === 0) return 0;
-    return Math.round((abandonedEvents / startedEvents) * 100);
-  }
-
-  static determineNextPhase(phases) {
-    const phaseOrder = ['trial', 'profile', 'upgrade', 'team', 'integration'];
-
-    for (const phase of phaseOrder) {
-      if (!phases[phase] || (!phases[phase].completed && !phases[phase].skipped)) {
-        return phase;
-      }
+  // Helper method to get tracking records with filters
+  _getTrackingRecords(tenantId, filters = {}) {
+    if (!this._trackingRecords) {
+      return [];
     }
 
-    return 'completed';
+    let records = this._trackingRecords.filter(r => r.tenantId === tenantId);
+
+    if (filters.phase) {
+      records = records.filter(r => r.phase === filters.phase);
+    }
+
+    if (filters.startDate) {
+      const start = new Date(filters.startDate);
+      records = records.filter(r => new Date(r.createdAt) >= start);
+    }
+
+    if (filters.endDate) {
+      const end = new Date(filters.endDate);
+      records = records.filter(r => new Date(r.createdAt) <= end);
+    }
+
+    return records;
+  }
+
+  // Clear tracking records (for testing)
+  _clearRecords() {
+    this._trackingRecords = [];
   }
 }
+
+export { OnboardingTrackingService };
+export default new OnboardingTrackingService();

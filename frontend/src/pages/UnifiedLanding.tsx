@@ -108,7 +108,7 @@ const UnifiedLanding: React.FC = () => {
             {isAuthenticated && user && (
               <div className="mb-8 inline-flex items-center px-4 py-2 rounded-full text-sm bg-gradient-to-r from-green-50 to-emerald-50 text-green-800 border border-green-200">
                 <CheckCircle className="w-4 h-4 mr-2" />
-                Welcome back, {user.given_name || user.email}!
+                Welcome back, {(user as any).given_name || (user as any).givenName || user.email}!
                 <span className="ml-2 text-xs bg-green-100 px-2 py-1 rounded-full">Checking your workspace...</span>
               </div>
             )}

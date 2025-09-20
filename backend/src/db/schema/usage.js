@@ -79,35 +79,5 @@ export const usageLogs = pgTable('usage_logs', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// Usage alerts and notifications
-export const usageAlerts = pgTable('usage_alerts', {
-  alertId: uuid('alert_id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id').references(() => tenants.tenantId).notNull(),
-  
-  // Alert Details
-  alertType: varchar('alert_type', { length: 50 }).notNull(), // 'usage_limit', 'overage', 'quota_exceeded'
-  severity: varchar('severity', { length: 20 }).notNull(), // 'info', 'warning', 'critical'
-  title: varchar('title', { length: 255 }).notNull(),
-  message: text('message').notNull(),
-  
-  // Usage Context
-  metricType: varchar('metric_type', { length: 50 }).notNull(), // 'api_calls', 'storage', 'users'
-  currentValue: decimal('current_value', { precision: 15, scale: 2 }),
-  limitValue: decimal('limit_value', { precision: 15, scale: 2 }),
-  percentage: decimal('percentage', { precision: 5, scale: 2 }),
-  
-  // Alert Status
-  isRead: boolean('is_read').default(false),
-  isSent: boolean('is_sent').default(false),
-  sentAt: timestamp('sent_at'),
-  readAt: timestamp('read_at'),
-  
-  // Actions
-  actionRequired: varchar('action_required', { length: 100 }), // 'upgrade_plan', 'reduce_usage', 'contact_support'
-  actionTaken: varchar('action_taken', { length: 100 }),
-  resolvedAt: timestamp('resolved_at'),
-  
-  createdAt: timestamp('created_at').defaultNow(),
-});
 
  

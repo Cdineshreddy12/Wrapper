@@ -103,38 +103,10 @@ class KindeService {
           };
         }
       } catch (introspectError) {
-        console.log('⚠️ getUserInfo - introspect failed, trying JWT decode...');
+        console.log('⚠️ getUserInfo - introspect failed');
       }
 
-      // Strategy 3: JWT decode fallback
-      try {
-        const tokenParts = accessToken.split('.');
-        if (tokenParts.length === 3) {
-          const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
-          console.log('✅ getUserInfo - Success via JWT decode fallback');
-          return {
-            id: payload.sub || payload.user_id || 'unknown',
-            email: payload.email || payload.preferred_email || 'unknown@example.com',
-            name: payload.name || payload.given_name || 'Unknown User',
-            org_code: payload.org_code || payload.organization_code || null,
-            org_codes: payload.org_codes || []
-          };
-        }
-      } catch (jwtError) {
-        console.log('⚠️ getUserInfo - JWT decode failed');
-      }
 
-      // Strategy 4: Basic token validation (last resort)
-      if (accessToken && accessToken.length > 20) {
-        console.log('✅ getUserInfo - Using basic token validation');
-        return {
-          id: 'token_validated',
-          email: 'user@example.com',
-          name: 'Validated User',
-          org_code: null,
-          org_codes: []
-        };
-      }
 
       throw new Error('All authentication strategies failed');
       
@@ -254,6 +226,64 @@ class KindeService {
       }
 
       throw new Error(`Token validation failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Refresh an expired access token using refresh token
+   */
+  async refreshToken(refreshToken) {
+    try {
+      console.log('🔄 refreshToken - Starting token refresh...');
+
+      if (!this.oauthClientId || !this.oauthClientSecret) {
+        throw new Error('OAuth credentials not configured');
+      }
+
+      if (!refreshToken) {
+        throw new Error('No refresh token provided');
+      }
+
+      const formData = new URLSearchParams();
+      formData.append('grant_type', 'refresh_token');
+      formData.append('client_id', this.oauthClientId);
+      formData.append('client_secret', this.oauthClientSecret);
+      formData.append('refresh_token', refreshToken);
+
+      console.log('🔄 refreshToken - Making refresh request to Kinde...');
+
+      const response = await axios.post(
+        `${this.baseURL}/oauth2/token`,
+        formData.toString(),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          }
+        }
+      );
+
+      if (response.data.access_token) {
+        console.log('✅ refreshToken - Token refresh successful');
+        return {
+          access_token: response.data.access_token,
+          refresh_token: response.data.refresh_token,
+          expires_in: response.data.expires_in,
+          token_type: response.data.token_type
+        };
+      } else {
+        throw new Error('No access token in refresh response');
+      }
+    } catch (error) {
+      console.error('❌ refreshToken - Refresh failed:', error.response?.data || error.message);
+
+      // Handle specific Kinde errors
+      if (error.response?.data?.error === 'invalid_grant') {
+        throw new Error('Refresh token is invalid or expired');
+      } else if (error.response?.data?.error === 'invalid_client') {
+        throw new Error('OAuth client configuration error');
+      }
+
+      throw new Error(`Token refresh failed: ${error.response?.data?.error_description || error.message}`);
     }
   }
 

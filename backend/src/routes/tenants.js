@@ -2,12 +2,41 @@ import { TenantService } from '../services/tenant-service.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { trackUsage } from '../middleware/usage.js';
 import { db } from '../db/index.js';
-import { tenantUsers, userRoleAssignments, customRoles, tenantInvitations } from '../db/schema/index.js';
+import { tenants, tenantUsers, userRoleAssignments, customRoles, tenantInvitations } from '../db/schema/index.js';
 import { and, eq, sql, inArray } from 'drizzle-orm';
 import ErrorResponses from '../utils/error-responses.js';
 import { randomUUID } from 'crypto';
 
 export default async function tenantRoutes(fastify, options) {
+  // List all tenants (Authenticated users only)
+  fastify.get('/', {
+    preHandler: [authenticateToken]
+  }, async (request, reply) => {
+    try {
+      const tenantsList = await db
+        .select({
+          tenantId: tenants.tenantId,
+          companyName: tenants.companyName,
+          subdomain: tenants.subdomain,
+          isActive: tenants.isActive,
+          createdAt: tenants.createdAt,
+          adminEmail: tenants.adminEmail,
+          trialStatus: tenants.trialStatus,
+          subscriptionStatus: tenants.subscriptionStatus
+        })
+        .from(tenants)
+        .orderBy(tenants.createdAt);
+
+      return {
+        success: true,
+        tenants: tenantsList
+      };
+    } catch (error) {
+      request.log.error('Error fetching tenants:', error);
+      return reply.code(500).send({ error: 'Failed to fetch tenants' });
+    }
+  });
+
   // Get current tenant info
   fastify.get('/current', async (request, reply) => {
     if (!request.userContext?.isAuthenticated) {

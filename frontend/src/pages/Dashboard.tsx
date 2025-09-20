@@ -1,6 +1,6 @@
- import React, { useState, useCallback } from 'react'
+ import React, { useState, useCallback, useEffect } from 'react'
 import { useDashboardData } from '../hooks/useDashboardData'
-import api from '../lib/api'
+import api, { applicationAssignmentAPI } from '../lib/api'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { 
   BarChart, 
@@ -14,9 +14,9 @@ import {
   Line,
   PieChart
 } from 'recharts'
-import { 
-  Users, 
-  Activity, 
+import {
+  Users,
+  Activity,
   TrendingUp,
   Clock,
   AlertTriangle,
@@ -31,7 +31,8 @@ import {
   Package,
   CheckCircle,
   RefreshCw,
-  Database
+  Database,
+  Coins
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -43,10 +44,13 @@ import { ActivityDashboard } from '@/components/activity/ActivityDashboard'
 import { UserManagementDashboard } from '@/components/users/UserManagementDashboard'
 import TestUserSyncAPIs from '@/pages/TestUserSyncAPIs'
 import AdminDashboard from '@/pages/AdminDashboard'
-import { OrganizationManagement } from '@/components/OrganizationManagement-Updated'
+import  OrganizationManagement  from '@/components/OrganizationManagement'
+import { useOrganizationAuth } from '@/hooks/useOrganizationAuth'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useTrialStatus } from '@/hooks/useTrialStatus'
 import { formatCurrency } from '@/lib/utils'
+import { CreditBalance } from '@/components/CreditBalance'
+import toast from 'react-hot-toast'
 
 const mockUsageData = [
   { month: 'Jan', apiCalls: 1200, users: 45 },
@@ -67,11 +71,13 @@ const mockRevenueData = [
 ]
 
 export function Dashboard() {
-  const { 
-    user, 
+  const {
+    user,
     isLoading: kindeLoading
   } = useKindeAuth()
-  
+
+  const { tenantId } = useOrganizationAuth()
+
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const location = useLocation()
@@ -285,7 +291,12 @@ export function Dashboard() {
                 <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh Data
               </Button>
-              
+
+              {/* Compact Credit Balance */}
+              <div className="hidden md:block">
+                <CreditBalance compact={true} showPurchaseButton={false} showUsageStats={false} />
+              </div>
+
               {isAdmin && (
                 <Button
                   variant="outline"
@@ -305,6 +316,7 @@ export function Dashboard() {
               <nav className="-mb-px flex space-x-8">
                 {[
                   { id: 'overview', label: 'Overview', icon: BarChart3 },
+                  { id: 'credits', label: 'Credits', icon: Coins },
                   { id: 'organizations', label: 'Organizations', icon: Building },
                   { id: 'applications', label: 'Applications', icon: Package },
                   { id: 'analytics', label: 'Analytics', icon: TrendingUp },
@@ -342,28 +354,115 @@ export function Dashboard() {
             />
           )}
 
+          {selectedTab === 'credits' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Credit Management</h3>
+                  <p className="text-sm text-gray-600">Monitor your credit balance, usage, and purchase history</p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => window.location.href = '/billing?purchase=true'}
+                  className="gap-2"
+                >
+                  <Coins className="w-4 h-4" />
+                  Purchase Credits
+                </Button>
+              </div>
+
+              <CreditBalance
+                showPurchaseButton={true}
+                showUsageStats={true}
+                compact={false}
+                onPurchaseClick={() => {
+                  window.location.href = '/billing?purchase=true';
+                }}
+              />
+
+              {/* Quick Actions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Quick Actions</CardTitle>
+                  <CardDescription>Common credit-related tasks</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Button
+                      variant="outline"
+                      className="h-20 flex flex-col items-center justify-center space-y-2"
+                      onClick={() => window.location.href = '/billing?purchase=true'}
+                    >
+                      <Coins className="h-6 w-6" />
+                      <span>Purchase Credits</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-20 flex flex-col items-center justify-center space-y-2"
+                      onClick={() => window.location.href = '/billing?history=true'}
+                    >
+                      <TrendingUp className="h-6 w-6" />
+                      <span>Usage History</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-20 flex flex-col items-center justify-center space-y-2"
+                      onClick={() => window.location.href = '/billing'}
+                    >
+                      <DollarSign className="h-6 w-6" />
+                      <span>Billing & Plans</span>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           {selectedTab === 'organizations' && (
             <div className="space-y-6">
               <OrganizationManagement
                 employees={employees || []}
                 applications={applications || []}
                 isAdmin={isAdmin || false}
+                tenantId={tenantId}
                 makeRequest={async (endpoint: string, options?: RequestInit) => {
                   // Use enhanced api.ts for proper authentication and error handling
                   try {
                     // Vite proxy handles /api routing, so just ensure proper endpoint format
                     const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+                    // Axios baseURL already includes /api, so don't add it again
+                    const apiPath = normalizedEndpoint;
 
-                    // Configure request with proper headers
-                    const config = {
-                      ...options,
-                      headers: {
-                        'X-Application': 'crm',
-                        ...options?.headers,
-                      },
+                    // Configure request with proper headers and convert body to data for axios
+                    // Build axios-compatible headers object
+                    const headers: Record<string, string> = { 'X-Application': 'crm' };
+                    if (options?.headers) {
+                      const h: any = options.headers as any;
+                      if (typeof Headers !== 'undefined' && h instanceof Headers) {
+                        h.forEach((value: any, key: string) => { headers[key] = String(value); });
+                      } else if (Array.isArray(h)) {
+                        h.forEach(([key, value]: [string, any]) => { headers[key] = String(value); });
+                      } else {
+                        Object.assign(headers, h as Record<string, string>);
+                      }
+                    }
+
+                    const axiosConfig: any = {
+                      method: options?.method,
+                      headers,
+                      withCredentials: true,
                     };
 
-                    const response = await api(normalizedEndpoint, config);
+                    // Convert fetch-style body to axios-style data
+                    if (options?.body) {
+                      try {
+                        axiosConfig.data = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
+                      } catch {
+                        axiosConfig.data = options.body;
+                      }
+                    }
+
+                    const response = await api(apiPath, axiosConfig);
                     return response.data;
                   } catch (error: any) {
                     console.error('API request failed:', error);
@@ -380,11 +479,10 @@ export function Dashboard() {
           )}
 
           {selectedTab === 'applications' && (
-            <ApplicationsTab 
-              applications={applications || []}
-              isLoading={isLoading}
-              onRefresh={refreshDashboard}
-            />
+            <>
+              {console.log('🎯 Rendering ApplicationsTab for selectedTab:', selectedTab)}
+              <ApplicationsTab />
+            </>
           )}
           
           {selectedTab === 'analytics' && (
@@ -521,6 +619,31 @@ function OverviewTab({
         />
       </div>
 
+      {/* Credit Balance Section */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-semibold text-gray-900">Credit Balance</h2>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/dashboard?tab=credits')}
+            className="gap-2"
+          >
+            <Coins className="w-4 h-4" />
+            View Details
+          </Button>
+        </div>
+        <CreditBalance
+          showPurchaseButton={true}
+          showUsageStats={true}
+          compact={false}
+          onPurchaseClick={() => {
+            // Navigate to billing page or open purchase modal
+            window.location.href = '/billing?purchase=true';
+          }}
+        />
+      </div>
+
       {/* Charts and Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
@@ -575,29 +698,29 @@ function OverviewTab({
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
+              className="h-20 flex flex-col items-center justify-center space-y-2"
+              onClick={() => navigate('/dashboard?tab=credits')}
+            >
+              <Coins className="h-6 w-6" />
+              <span>Credit Management</span>
+            </Button>
+            <Button
+              variant="outline"
               className="h-20 flex flex-col items-center justify-center space-y-2"
               onClick={() => navigate('/dashboard?tab=user-apps')}
             >
               <Database className="h-6 w-6" />
               <span>User Application Access</span>
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="h-20 flex flex-col items-center justify-center space-y-2"
               onClick={() => navigate('/dashboard?tab=test-apis')}
             >
               <Settings className="h-6 w-6" />
               <span>Test APIs</span>
-            </Button>
-            <Button 
-              variant="outline" 
-              className="h-20 flex flex-col items-center justify-center space-y-2"
-              onClick={() => navigate('/dashboard?tab=users')}
-            >
-              <Users className="h-6 w-6" />
-              <span>User Management</span>
             </Button>
           </div>
         </CardContent>
@@ -725,17 +848,91 @@ function MetricCard({
   )
 }
 
-function ApplicationsTab({ 
-  applications, 
-  isLoading, 
-  onRefresh 
-}: { 
-  applications: any[]; 
-  isLoading: boolean;
-  onRefresh: () => void;
-}) {
+function ApplicationsTab() {
+  console.log('🎯 ApplicationsTab component rendered');
+
+  const [applications, setApplications] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState<any>(null);
   const [showAppDetails, setShowAppDetails] = useState(false);
+
+  // Get tenant information
+  const { tenantId, isAuthenticated } = useOrganizationAuth();
+
+  console.log('🔑 ApplicationsTab tenant info:', { tenantId, isAuthenticated });
+
+  // Fetch tenant-specific applications
+  const fetchApplications = useCallback(async () => {
+    console.log('🔍 ApplicationsTab debug:', {
+      tenantId,
+      isAuthenticated,
+      isAuthenticatedType: typeof isAuthenticated
+    });
+
+    if (!tenantId) {
+      console.log('🚫 Cannot fetch applications - no tenant ID available');
+      setApplications([]);
+      setIsLoading(false);
+      return;
+    }
+
+    if (isAuthenticated === false) {
+      console.log('🚫 Cannot fetch applications - user not authenticated');
+      setApplications([]);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      console.log('🔄 Fetching tenant applications for:', tenantId);
+
+      console.log('📡 About to call applicationAssignmentAPI.getTenantApplications with tenantId:', tenantId);
+      const response = await applicationAssignmentAPI.getTenantApplications(tenantId);
+      console.log('📥 API Response received:', response);
+      console.log('📥 Response status:', response.status);
+      console.log('📥 Response data:', response.data);
+
+      const data = response.data?.data?.applications || response.data?.applications || [];
+
+      console.log('✅ Fetched tenant applications:', data?.length || 0, 'applications');
+      console.log('📋 Application data structure:', data);
+
+      setApplications(data || []);
+    } catch (error: any) {
+      console.error('❌ Failed to fetch applications:', error);
+      console.error('❌ Error details:', {
+        message: error?.message,
+        status: error?.response?.status,
+        statusText: error?.response?.statusText,
+        data: error?.response?.data
+      });
+      toast.error(`Failed to load applications: ${error?.message || 'Unknown error'}`);
+      setApplications([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [tenantId, isAuthenticated]);
+
+  // Refresh function
+  const handleRefresh = useCallback(async () => {
+    console.log('🔄 Refreshing applications...');
+    await fetchApplications();
+    toast.success('Applications refreshed successfully');
+  }, [fetchApplications]);
+
+  // Load applications on component mount and when tenant changes
+  useEffect(() => {
+    console.log('🔄 ApplicationsTab useEffect triggered');
+    console.log('🔍 Current state:', { tenantId, isAuthenticated });
+
+    if (tenantId && isAuthenticated !== false) {
+      console.log('✅ Conditions met, calling fetchApplications');
+      fetchApplications();
+    } else {
+      console.log('❌ Conditions not met, skipping fetchApplications');
+    }
+  }, [fetchApplications, tenantId, isAuthenticated]);
 
   const getApplicationIcon = (appCode: string) => {
     const icons: Record<string, React.ReactNode> = {
@@ -797,7 +994,7 @@ function ApplicationsTab({
             Your organization has access to {applications.length} applications
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={onRefresh}>
+        <Button variant="outline" size="sm" onClick={handleRefresh}>
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh
         </Button>
@@ -811,7 +1008,7 @@ function ApplicationsTab({
             <p className="text-gray-600 mb-4">
               Contact your administrator to enable applications for your organization.
             </p>
-            <Button variant="outline" onClick={onRefresh}>
+            <Button variant="outline" onClick={handleRefresh}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Check Again
             </Button>
@@ -829,12 +1026,12 @@ function ApplicationsTab({
                         {getApplicationIcon(app.appCode)}
                       </div>
                       <div>
-                        <h4 className="font-semibold text-gray-900">{app.appName}</h4>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">{app.appCode}</p>
+                        <h4 className="font-semibold text-gray-900">{app.appName || 'Unknown App'}</h4>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">{app.appCode || 'N/A'}</p>
                       </div>
                     </div>
-                    <Badge className={getStatusColor(app.status || 'active')}>
-                      {app.status || 'Active'}
+                    <Badge className={getStatusColor(app.isEnabled ? 'active' : 'inactive')}>
+                      {app.isEnabled ? 'Active' : 'Inactive'}
                     </Badge>
                   </div>
 
@@ -846,25 +1043,19 @@ function ApplicationsTab({
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-500">Subscription Tier:</span>
                       <Badge variant="outline" className="capitalize">
-                        {app.subscriptionTier || 'Basic'}
+                        {typeof app.subscriptionTier === 'object' ? 'Basic' : (app.subscriptionTier || 'Basic')}
                       </Badge>
                     </div>
 
                     {app.modules && app.modules.length > 0 && (
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-500">Modules:</span>
-                        <span className="font-medium text-gray-900">{app.modules.length} available</span>
-                      </div>
-                    )}
-
-                    {app.enabledModules && Array.isArray(app.enabledModules) && (
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-500">Enabled:</span>
-                        <span className="font-medium text-green-600">
-                          {app.enabledModules.length} modules
+                        <span className="font-medium text-gray-900">
+                          {app.enabledModules?.length || 0} enabled / {app.modules.length} available
                         </span>
                       </div>
                     )}
+
                   </div>
 
                   <div className="mt-4 pt-4 border-t border-gray-100">
@@ -880,21 +1071,21 @@ function ApplicationsTab({
 
           {/* Application Details Modal */}
           <Dialog open={showAppDetails} onOpenChange={setShowAppDetails}>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
+            <DialogContent className="max-w-2xl max-h-[80vh] min-h-[400px] flex flex-col">
+              <DialogHeader className="flex-shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
                     {selectedApp && getApplicationIcon(selectedApp.appCode)}
                   </div>
                   <div>
-                    <DialogTitle>{selectedApp?.appName}</DialogTitle>
-                    <DialogDescription>{selectedApp?.description}</DialogDescription>
+                    <DialogTitle>{selectedApp?.appName || 'Unknown Application'}</DialogTitle>
+                    <DialogDescription>{selectedApp?.description || 'No description available'}</DialogDescription>
                   </div>
                 </div>
               </DialogHeader>
 
               {selectedApp && (
-                <div className="space-y-6">
+                <div className="flex-1 overflow-y-auto space-y-6 py-2 pr-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
                   {/* Application Info */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-3">
@@ -904,15 +1095,15 @@ function ApplicationsTab({
                       </div>
                       <div>
                         <label className="text-sm font-medium text-gray-500">Status</label>
-                        <Badge className={getStatusColor(selectedApp.status || 'active')}>
-                          {selectedApp.status || 'Active'}
+                        <Badge className={getStatusColor(typeof selectedApp.status === 'object' ? 'active' : selectedApp.status || 'active')}>
+                          {typeof selectedApp.status === 'object' ? 'Active' : (selectedApp.status || 'Active')}
                         </Badge>
                       </div>
                     </div>
                     <div className="space-y-3">
                       <div>
                         <label className="text-sm font-medium text-gray-500">Subscription Tier</label>
-                        <p className="text-sm text-gray-900 capitalize">{selectedApp.subscriptionTier || 'Basic'}</p>
+                        <p className="text-sm text-gray-900 capitalize">{typeof selectedApp.subscriptionTier === 'object' ? 'Basic' : (selectedApp.subscriptionTier || 'Basic')}</p>
                       </div>
                       <div>
                         <label className="text-sm font-medium text-gray-500">Access</label>
@@ -927,23 +1118,85 @@ function ApplicationsTab({
                   {selectedApp.modules && selectedApp.modules.length > 0 && (
                     <div>
                       <h4 className="text-lg font-semibold text-gray-900 mb-4">Available Modules</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {selectedApp.modules.map((module: any) => (
-                          <div key={module.moduleId} className="p-3 border border-gray-200 rounded-lg">
-                            <div className="flex items-center justify-between mb-2">
-                              <h5 className="font-medium text-gray-900">{module.moduleName}</h5>
-                              <Badge variant={module.isCore ? "default" : "outline"}>
-                                {module.isCore ? 'Core' : 'Optional'}
-                              </Badge>
+                      <div className="space-y-4">
+                        {selectedApp.modules.map((module: any) => {
+                          const isModuleEnabled = selectedApp.enabledModules?.includes(module.moduleCode);
+                          const modulePermissions = selectedApp.enabledModulesPermissions?.[module.moduleCode] || [];
+                          const customPermissions = selectedApp.customPermissions?.[module.moduleCode] || [];
+
+                          return (
+                            <div key={module.moduleId} className="p-4 border border-gray-200 rounded-lg">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <h5 className="font-medium text-gray-900">{module.moduleName || 'Unknown Module'}</h5>
+                                  {isModuleEnabled && (
+                                    <Badge className="bg-green-100 text-green-800">
+                                      Enabled
+                                    </Badge>
+                                  )}
+                                </div>
+                                <Badge variant={module.isCore ? "default" : "outline"}>
+                                  {module.isCore ? 'Core' : 'Optional'}
+                                </Badge>
+                              </div>
+
+                              <p className="text-sm text-gray-600 mb-3">{module.description || 'No description available'}</p>
+
+                              {/* Module Permissions */}
+                              {module.permissions && module.permissions.length > 0 && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <h6 className="text-sm font-medium text-gray-700">Available Permissions</h6>
+                                    <span className="text-xs text-gray-500">{module.permissions.length} total</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {module.permissions.map((permission: any, index: number) => {
+                                      const permissionText = typeof permission === 'string' ? permission : permission.code || permission.name || 'Unknown';
+                                      const isEnabled = isModuleEnabled && (modulePermissions.includes(permissionText) || customPermissions.includes(permissionText));
+                                      return (
+                                        <Badge
+                                          key={index}
+                                          variant="outline"
+                                          className={`text-xs ${
+                                            isEnabled
+                                              ? 'bg-green-50 text-green-700 border-green-200'
+                                              : 'bg-gray-50 text-gray-600 border-gray-200'
+                                          }`}
+                                        >
+                                          {permissionText}
+                                        </Badge>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Custom Permissions for this module */}
+                              {customPermissions && customPermissions.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-gray-100">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Shield className="w-4 h-4 text-blue-600" />
+                                    <h6 className="text-sm font-medium text-gray-700">Custom Permissions</h6>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {customPermissions.map((permission: any, index: number) => {
+                                      const permissionText = typeof permission === 'string' ? permission : permission.code || permission.name || 'Unknown';
+                                      return (
+                                        <Badge
+                                          key={index}
+                                          variant="outline"
+                                          className="text-xs bg-blue-50 text-blue-700 border-blue-200"
+                                        >
+                                          {permissionText}
+                                        </Badge>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                            <p className="text-sm text-gray-600 mb-2">{module.description}</p>
-                            {module.permissions && module.permissions.length > 0 && (
-                              <p className="text-xs text-gray-500">
-                                {module.permissions.length} permissions available
-                              </p>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -964,7 +1217,7 @@ function ApplicationsTab({
                 </div>
               )}
 
-              <DialogFooter>
+              <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
                 <Button variant="outline" onClick={() => setShowAppDetails(false)}>
                   Close
                 </Button>

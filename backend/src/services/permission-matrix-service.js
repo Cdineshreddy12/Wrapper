@@ -1,515 +1,427 @@
-// 🎯 **PERMISSION MATRIX SERVICE**
-// Runtime service for permission management using the matrix system
-
 import { db } from '../db/index.js';
-import { 
-  applications, 
-  applicationModules, 
-  organizationApplications,
-  userApplicationPermissions 
-} from '../db/schema/suite-schema.js';
-import { tenantUsers, customRoles, userRoleAssignments } from '../db/schema/index.js';
-import {
-  BUSINESS_SUITE_MATRIX,
-  PLAN_ACCESS_MATRIX,
-  PermissionMatrixUtils
-} from '../data/permission-matrix.js';
-import { eq, and, inArray } from 'drizzle-orm';
+import { customRoles, userRoleAssignments } from '../db/schema/permissions.js';
+import { tenantUsers, auditLogs } from '../db/schema/users.js';
+import { eq, and, or, inArray } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
 
 class PermissionMatrixService {
-  
-  // 🔧 **HELPER: Parse Role Permissions**
-  static parseRolePermissions(rolePermissions) {
-    if (!rolePermissions) return [];
-    
+  // Get user permission context
+  async getUserPermissionContext(userId, tenantId) {
     try {
-      if (typeof rolePermissions === 'string') {
-        // Handle JSON string format
-        const parsed = JSON.parse(rolePermissions);
-        // If it's a nested object, flatten it
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          return this.flattenNestedPermissions(parsed);
-        }
-        return parsed;
-      } else if (Array.isArray(rolePermissions)) {
-        // Handle array format
-        return rolePermissions;
-      } else if (typeof rolePermissions === 'object') {
-        // Handle nested object format - flatten permissions
-        return this.flattenNestedPermissions(rolePermissions);
-      }
-    } catch (error) {
-      console.error('❌ Failed to parse role permissions:', error);
-      console.error('   Raw permissions:', rolePermissions);
-      return [];
-    }
-    
-    return [];
-  }
+      console.log('🔍 getUserPermissionContext called for user:', userId, 'tenant:', tenantId);
 
-  // 🔧 **HELPER: Flatten Nested Permissions Structure**
-  static flattenNestedPermissions(nestedPermissions) {
-    if (!nestedPermissions || typeof nestedPermissions !== 'object') {
-      return [];
-    }
-    
-    const flattenedPermissions = [];
-    
-    // Handle nested structure like: { crm: { leads: ["read", "create"] } }
-    Object.keys(nestedPermissions).forEach(appCode => {
-      const appPermissions = nestedPermissions[appCode];
-      if (appPermissions && typeof appPermissions === 'object') {
-        Object.keys(appPermissions).forEach(moduleCode => {
-          const actions = appPermissions[moduleCode];
-          if (Array.isArray(actions)) {
-            actions.forEach(action => {
-              flattenedPermissions.push(`${appCode}.${moduleCode}.${action}`);
-            });
-          } else if (typeof actions === 'string') {
-            // Handle single action case
-            flattenedPermissions.push(`${appCode}.${moduleCode}.${actions}`);
-          }
-        });
-      }
-    });
-    
-    console.log(`🔧 Flattened ${flattenedPermissions.length} nested permissions:`, {
-      original: nestedPermissions,
-      flattened: flattenedPermissions.slice(0, 5) // Show first 5 for debugging
-    });
-    
-    return flattenedPermissions;
-  }
-
-  // 🔧 **HELPER: Map Kinde ID to Internal UUID**
-  static async mapKindeIdToInternalId(kindeUserId, tenantId) {
-    try {
-      const { tenantUsers } = await import('../db/schema/index.js');
-      
-      const [user] = await db
-        .select({ userId: tenantUsers.userId })
-        .from(tenantUsers)
-        .where(and(
-          eq(tenantUsers.kindeUserId, kindeUserId),
-          eq(tenantUsers.tenantId, tenantId),
-          eq(tenantUsers.isActive, true)
-        ))
-        .limit(1);
-      
-      if (!user) {
-        throw new Error(`User not found: ${kindeUserId} in tenant ${tenantId}`);
-      }
-      
-      console.log(`✅ Mapped Kinde ID ${kindeUserId} to internal UUID ${user.userId}`);
-      return user.userId;
-      
-    } catch (error) {
-      console.error(`❌ Error mapping Kinde ID to internal ID:`, error);
-      throw error;
-    }
-  }
-
-  // 🔍 **GET USER'S COMPLETE PERMISSION CONTEXT**
-  static async getUserPermissionContext(userId, tenantId) {
-    try {
-      console.log(`🔍 Getting permission context for user: ${userId}, tenant: ${tenantId}`);
-      
-      // 🔧 UUID MAPPING: Convert Kinde ID to internal UUID if needed
-      let internalUserId = userId;
-      if (userId.startsWith('kp_')) {
-        console.log(`🔄 Detected Kinde ID, mapping to internal UUID...`);
-        internalUserId = await this.mapKindeIdToInternalId(userId, tenantId);
-      }
-      
-      // 1. Get user's subscription plan
-      const { subscriptions } = await import('../db/schema/subscriptions.js');
-      const [subscription] = await db
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.tenantId, tenantId))
-        .limit(1);
-
-      const plan = subscription?.plan || 'starter';
-      const planAccess = PLAN_ACCESS_MATRIX[plan];
-      
-      // 2. Get organization's enabled applications
-      const orgApps = await db
+      // Get user roles
+      const userRoles = await db
         .select({
-          appId: applications.appId,
-          appCode: applications.appCode,
-          appName: applications.appName,
-          isEnabled: organizationApplications.isEnabled,
-          enabledModules: organizationApplications.enabledModules,
-          subscriptionTier: organizationApplications.subscriptionTier
+          roleId: userRoleAssignments.roleId,
+          isActive: userRoleAssignments.isActive,
+          permissions: customRoles.permissions,
+          restrictions: customRoles.restrictions,
+          roleName: customRoles.roleName
         })
-        .from(applications)
-        .innerJoin(
-          organizationApplications,
+        .from(userRoleAssignments)
+        .innerJoin(customRoles, eq(userRoleAssignments.roleId, customRoles.roleId))
+        .where(
           and(
-            eq(organizationApplications.appId, applications.appId),
-            eq(organizationApplications.tenantId, tenantId),
-            eq(organizationApplications.isEnabled, true)
+            eq(userRoleAssignments.userId, userId),
+            eq(customRoles.tenantId, tenantId),
+            eq(userRoleAssignments.isActive, true)
           )
         );
 
-      // 3. Get user's specific permissions (now using internal UUID)
-      const userPermissions = await db
-        .select({
-          appId: userApplicationPermissions.appId,
-          moduleId: userApplicationPermissions.moduleId,
-          permissions: userApplicationPermissions.permissions,
-          appCode: applications.appCode,
-          moduleCode: applicationModules.moduleCode
-        })
-        .from(userApplicationPermissions)
-        .innerJoin(applications, eq(userApplicationPermissions.appId, applications.appId))
-        .leftJoin(applicationModules, eq(userApplicationPermissions.moduleId, applicationModules.moduleId))
-        .where(and(
-          eq(userApplicationPermissions.userId, internalUserId), // Use internal UUID
-          eq(userApplicationPermissions.isActive, true)
-        ));
+      console.log('📋 Found', userRoles.length, 'active roles for user');
 
-      // 4. Get user's roles and their permissions (now using internal UUID)
-      const userRoles = await db
-        .select({
-          roleId: customRoles.roleId,
-          roleName: customRoles.roleName,
-          permissions: customRoles.permissions,
-          restrictions: customRoles.restrictions
-        })
-        .from(userRoleAssignments)
-        .innerJoin(customRoles, eq(userRoleAssignments.roleId, customRoles.roleId))
-        .where(eq(userRoleAssignments.userId, internalUserId)); // Use internal UUID
+      // Aggregate permissions from all roles
+      const aggregatedPermissions = {};
+      const allRestrictions = [];
 
-      // 5. Compile complete permission set
-      const completePermissions = this.compileUserPermissions({
-        plan,
-        planAccess,
-        orgApps,
-        userPermissions,
-        userRoles
-      });
-
-      return {
-        userId: internalUserId, // Return internal UUID for consistency
-        kindeUserId: userId.startsWith('kp_') ? userId : null, // Include original Kinde ID if it was one
-        tenantId,
-        plan,
-        planLimitations: planAccess?.limitations || {},
-        organizationApps: orgApps,
-        userRoles: userRoles,
-        permissions: completePermissions,
-        accessMatrix: this.generateAccessMatrix(completePermissions)
-      };
-      
-    } catch (error) {
-      console.error('❌ Failed to get user permission context:', error);
-      throw error;
-    }
-  }
-
-  // 🎯 **CHECK SPECIFIC PERMISSION**
-  static async hasPermission(userId, tenantId, permissionCode) {
-    try {
-      const context = await this.getUserPermissionContext(userId, tenantId);
-      return context.permissions.includes(permissionCode);
-    } catch (error) {
-      console.error(`❌ Permission check failed for ${permissionCode}:`, error);
-      return false; // Fail closed
-    }
-  }
-
-  // 🎯 **CHECK MULTIPLE PERMISSIONS (ANY)**
-  static async hasAnyPermission(userId, tenantId, permissionCodes) {
-    try {
-      const context = await this.getUserPermissionContext(userId, tenantId);
-      return permissionCodes.some(code => context.permissions.includes(code));
-    } catch (error) {
-      console.error(`❌ Multiple permission check failed:`, error);
-      return false;
-    }
-  }
-
-  // 🎯 **CHECK MULTIPLE PERMISSIONS (ALL)**
-  static async hasAllPermissions(userId, tenantId, permissionCodes) {
-    try {
-      const context = await this.getUserPermissionContext(userId, tenantId);
-      return permissionCodes.every(code => context.permissions.includes(code));
-    } catch (error) {
-      console.error(`❌ All permissions check failed:`, error);
-      return false;
-    }
-  }
-
-  // 🏢 **GET APPLICATIONS USER CAN ACCESS**
-  static async getUserAccessibleApplications(userId, tenantId) {
-    try {
-      const context = await this.getUserPermissionContext(userId, tenantId);
-      
-      const accessibleApps = context.organizationApps.filter(app => {
-        // Check if user has any permissions for this app
-        const appPermissions = context.permissions.filter(p => p.startsWith(app.appCode));
-        return appPermissions.length > 0;
-      });
-
-      return accessibleApps.map(app => ({
-        ...app,
-        modules: this.getUserAccessibleModules(app.appCode, context),
-        baseUrl: this.getApplicationBaseUrl(app.appCode)
-      }));
-      
-    } catch (error) {
-      console.error('❌ Failed to get user accessible applications:', error);
-      throw error;
-    }
-  }
-
-  // 📦 **GET MODULES USER CAN ACCESS FOR AN APP**
-  static getUserAccessibleModules(appCode, context) {
-    const appModules = PermissionMatrixUtils.getApplicationModules(appCode);
-    
-    return appModules.filter(module => {
-      // Check if user has any permissions for this module
-      const modulePermissions = context.permissions.filter(p => 
-        p.startsWith(`${appCode}.${module.moduleCode}`)
-      );
-      return modulePermissions.length > 0;
-    }).map(module => ({
-      ...module,
-      permissions: this.getUserModulePermissions(appCode, module.moduleCode, context)
-    }));
-  }
-
-  // ⚡ **GET USER'S PERMISSIONS FOR A SPECIFIC MODULE**
-  static getUserModulePermissions(appCode, moduleCode, context) {
-    const prefix = `${appCode}.${moduleCode}.`;
-    return context.permissions
-      .filter(p => p.startsWith(prefix))
-      .map(p => p.replace(prefix, ''));
-  }
-
-  // 🔒 **VALIDATE USER PERMISSIONS (Security Check)**
-  static validateUserPermissions(userPermissions, userRoles) {
-    const validPermissions = new Set();
-    
-    if (!userRoles || userRoles.length === 0) {
-      console.log('⚠️ No user roles found, returning empty permissions for security');
-      return [];
-    }
-    
-    // Get all valid permissions from user's roles
-    userRoles.forEach(role => {
-      const rolePermissions = this.parseRolePermissions(role.permissions);
-      rolePermissions.forEach(permission => {
-        if (permission && typeof permission === 'string') {
-          validPermissions.add(permission);
-        }
-      });
-    });
-    
-    // Filter user permissions to only include valid role permissions
-    const filteredPermissions = userPermissions.filter(permission => 
-      validPermissions.has(permission)
-    );
-    
-    console.log(`🔒 Permission validation:`, {
-      totalUserPermissions: userPermissions.length,
-      validRolePermissions: validPermissions.size,
-      filteredPermissions: filteredPermissions.length,
-      removedPermissions: userPermissions.length - filteredPermissions.length
-    });
-    
-    return filteredPermissions;
-  }
-
-  // 🔧 **COMPILE USER PERMISSIONS FROM ALL SOURCES**
-  static compileUserPermissions({ plan, planAccess, orgApps, userPermissions, userRoles }) {
-    const allPermissions = new Set();
-    
-    // 🚨 CRITICAL FIX: Only add permissions that the user's role actually has
-    // Instead of adding ALL plan permissions, we filter by user's role permissions
-    
-    // 1. Parse and add ONLY the user's role permissions
-    if (userRoles && userRoles.length > 0) {
       userRoles.forEach(role => {
-        if (role.permissions) {
-          // Use the helper method for consistent parsing
-          const rolePermissions = this.parseRolePermissions(role.permissions);
-          
-          // Add only the permissions from the user's role
-          rolePermissions.forEach(permission => {
-            if (permission && typeof permission === 'string') {
-              allPermissions.add(permission);
+        try {
+          const rolePermissions = JSON.parse(role.permissions || '{}');
+          const roleRestrictions = JSON.parse(role.restrictions || 'null');
+
+          // Merge permissions (higher priority roles override lower ones)
+          Object.keys(rolePermissions).forEach(resource => {
+            if (resource !== 'metadata') {
+              aggregatedPermissions[resource] = rolePermissions[resource];
             }
           });
-          
-          console.log(`✅ Added ${rolePermissions.length} permissions from role: ${role.roleName}`);
-        }
-      });
-    }
-    
-    // 2. Add user-specific permissions (if any) - WITH SECURITY VALIDATION
-    if (userPermissions && userPermissions.length > 0) {
-      const userSpecificPermissions = [];
-      
-      userPermissions.forEach(userPerm => {
-        if (userPerm.permissions && Array.isArray(userPerm.permissions)) {
-          userPerm.permissions.forEach(permission => {
-            const fullCode = userPerm.moduleCode 
-              ? `${userPerm.appCode}.${userPerm.moduleCode}.${permission}`
-              : `${userPerm.appCode}.${permission}`;
-            userSpecificPermissions.push(fullCode);
-          });
-        }
-      });
-      
-      // Validate user-specific permissions against role permissions
-      const validatedUserPermissions = this.validateUserPermissions(userSpecificPermissions, userRoles);
-      validatedUserPermissions.forEach(permission => {
-        allPermissions.add(permission);
-      });
-      
-      console.log(`✅ Added ${validatedUserPermissions.length} validated user-specific permissions`);
-    }
-    
-    // 3. Apply restrictions from roles
-    userRoles.forEach(role => {
-      if (role.restrictions) {
-        Object.keys(role.restrictions).forEach(restrictedPermission => {
-          if (role.restrictions[restrictedPermission] === false) {
-            allPermissions.delete(restrictedPermission);
+
+          if (roleRestrictions) {
+            allRestrictions.push(roleRestrictions);
           }
+        } catch (parseError) {
+          console.error('❌ Error parsing permissions for role:', role.roleId, parseError);
+        }
+      });
+
+      // Combine restrictions (most restrictive wins)
+      const combinedRestrictions = this.combineRestrictions(allRestrictions);
+
+      const context = {
+        userId,
+        tenantId,
+        roles: userRoles.map(r => ({ id: r.roleId, name: r.roleName })),
+        permissions: aggregatedPermissions,
+        restrictions: combinedRestrictions,
+        hasRoles: userRoles.length > 0,
+        roleCount: userRoles.length
+      };
+
+      console.log('✅ Permission context built:', {
+        userId,
+        tenantId,
+        roleCount: context.roleCount,
+        permissionCount: Object.keys(aggregatedPermissions).length
+      });
+
+      return context;
+    } catch (error) {
+      console.error('🚨 Error in getUserPermissionContext:', error);
+      throw error;
+    }
+  }
+
+  // Flatten nested permissions
+  flattenNestedPermissions(permissions) {
+    const flat = [];
+
+    Object.entries(permissions).forEach(([resource, config]) => {
+      if (resource === 'metadata') return;
+
+      if (config && config.operations && Array.isArray(config.operations)) {
+        config.operations.forEach(operation => {
+          flat.push(`${resource}.${operation}`);
         });
       }
     });
-    
-    const finalPermissions = Array.from(allPermissions);
-    
-    // Log the permission compilation for debugging
-    console.log(`🔐 Permission compilation summary:`, {
-      totalPermissions: finalPermissions.length,
-      rolePermissions: finalPermissions.filter(p => p.startsWith('crm.')),
-      userSpecificPermissions: finalPermissions.filter(p => !p.startsWith('crm.')),
-      userRoles: userRoles.map(r => r.roleName),
-      // Add detailed debugging for Super Administrator role
-      superAdminPermissions: finalPermissions.filter(p => p.startsWith('crm.')).slice(0, 20), // Show first 20 CRM permissions
-      permissionFormat: 'flat-array'
-    });
-    
-    return finalPermissions;
+
+    return flat;
   }
 
-  // 📊 **GENERATE ACCESS MATRIX FOR QUICK LOOKUPS**
-  static generateAccessMatrix(permissions) {
-    const matrix = {};
-    
-    permissions.forEach(permission => {
-      const parts = permission.split('.');
-      if (parts.length >= 3) {
-        const [appCode, moduleCode, action] = parts;
-        
-        if (!matrix[appCode]) matrix[appCode] = {};
-        if (!matrix[appCode][moduleCode]) matrix[appCode][moduleCode] = [];
-        
-        matrix[appCode][moduleCode].push(action);
-      }
-    });
-    
-    return matrix;
-  }
-
-  // 🌐 **GET APPLICATION BASE URL**
-  static getApplicationBaseUrl(appCode) {
-    const app = BUSINESS_SUITE_MATRIX[appCode];
-    return app?.appInfo?.baseUrl || `http://localhost:3000/${appCode}`;
-  }
-
-  // 👥 **ROLE TEMPLATE METHODS REMOVED**
-  // Templates are no longer used - roles are created directly from applications/modules
-
-  // 🧹 **REVOKE ALL USER PERMISSIONS**
-  static async revokeAllUserPermissions(userId, tenantId) {
+  // Check if user has a specific permission
+  async hasPermission(userId, tenantId, permission) {
     try {
-      console.log(`🧹 Revoking all permissions for user: ${userId}`);
-      
-      // Deactivate user application permissions
-      await db
-        .update(userApplicationPermissions)
-        .set({ isActive: false })
-        .where(eq(userApplicationPermissions.userId, userId));
+      const context = await this.getUserPermissionContext(userId, tenantId);
+      const flatPermissions = this.flattenNestedPermissions(context.permissions);
 
-      // Remove role assignments
-      const { userRoleAssignments } = await import('../db/schema/index.js');
-      await db
-        .delete(userRoleAssignments)
-        .where(eq(userRoleAssignments.userId, userId));
+      const hasPermission = flatPermissions.includes(permission);
 
-      console.log(`✅ All permissions revoked for user: ${userId}`);
-      
+      console.log('🔍 Permission check:', {
+        userId,
+        tenantId,
+        permission,
+        hasPermission,
+        totalPermissions: flatPermissions.length
+      });
+
+      return hasPermission;
     } catch (error) {
-      console.error(`❌ Failed to revoke permissions for user ${userId}:`, error);
+      console.error('🚨 Error checking permission:', error);
+      return false;
+    }
+  }
+
+  // Check if user has all permissions
+  async hasAllPermissions(userId, tenantId, permissions) {
+    try {
+      const context = await this.getUserPermissionContext(userId, tenantId);
+      const flatPermissions = this.flattenNestedPermissions(context.permissions);
+
+      const hasAll = permissions.every(permission => flatPermissions.includes(permission));
+
+      console.log('🔍 Has all permissions check:', {
+        userId,
+        tenantId,
+        required: permissions,
+        hasAll,
+        userPermissions: flatPermissions.length
+      });
+
+      return hasAll;
+    } catch (error) {
+      console.error('🚨 Error checking all permissions:', error);
+      return false;
+    }
+  }
+
+  // Check if user has any of the permissions
+  async hasAnyPermission(userId, tenantId, permissions) {
+    try {
+      const context = await this.getUserPermissionContext(userId, tenantId);
+      const flatPermissions = this.flattenNestedPermissions(context.permissions);
+
+      const hasAny = permissions.some(permission => flatPermissions.includes(permission));
+
+      console.log('🔍 Has any permission check:', {
+        userId,
+        tenantId,
+        required: permissions,
+        hasAny,
+        userPermissions: flatPermissions.length
+      });
+
+      return hasAny;
+    } catch (error) {
+      console.error('🚨 Error checking any permission:', error);
+      return false;
+    }
+  }
+
+  // Get applications user can access
+  async getUserAccessibleApplications(userId, tenantId) {
+    try {
+      const context = await this.getUserPermissionContext(userId, tenantId);
+      const applications = new Set();
+
+      // Extract applications from permissions
+      Object.keys(context.permissions).forEach(resource => {
+        if (resource.includes('.')) {
+          const app = resource.split('.')[0];
+          applications.add(app);
+        }
+      });
+
+      const result = Array.from(applications);
+
+      console.log('📱 User accessible applications:', {
+        userId,
+        tenantId,
+        applications: result
+      });
+
+      return result;
+    } catch (error) {
+      console.error('🚨 Error getting accessible applications:', error);
+      return [];
+    }
+  }
+
+  // Get available role templates
+  getAvailableRoleTemplates() {
+    // Static templates for now - can be moved to database later
+    const templates = [
+      {
+        id: 'admin',
+        name: 'Administrator',
+        description: 'Full access to all system features',
+        category: 'system',
+        permissions: {
+          'crm.*': { level: 'admin', operations: ['*'], scope: 'all' },
+          'admin.*': { level: 'admin', operations: ['*'], scope: 'all' }
+        },
+        color: '#ef4444',
+        isActive: true,
+        sortOrder: 1
+      },
+      {
+        id: 'manager',
+        name: 'Manager',
+        description: 'Management access with reporting capabilities',
+        category: 'management',
+        permissions: {
+          'crm.leads': { level: 'write', operations: ['read', 'create', 'update'], scope: 'team' },
+          'crm.accounts': { level: 'write', operations: ['read', 'create', 'update'], scope: 'team' },
+          'crm.reports': { level: 'read', operations: ['read', 'export'], scope: 'team' }
+        },
+        color: '#f59e0b',
+        isActive: true,
+        sortOrder: 2
+      },
+      {
+        id: 'user',
+        name: 'Standard User',
+        description: 'Basic access for regular operations',
+        category: 'user',
+        permissions: {
+          'crm.leads': { level: 'write', operations: ['read', 'create', 'update'], scope: 'own' },
+          'crm.accounts': { level: 'read', operations: ['read'], scope: 'own' }
+        },
+        color: '#10b981',
+        isActive: true,
+        sortOrder: 3
+      },
+      {
+        id: 'viewer',
+        name: 'Read-Only User',
+        description: 'View-only access to data',
+        category: 'user',
+        permissions: {
+          'crm.*': { level: 'read', operations: ['read'], scope: 'own' }
+        },
+        color: '#6b7280',
+        isActive: true,
+        sortOrder: 4
+      }
+    ];
+
+    console.log('📋 Available role templates:', templates.length);
+    return templates;
+  }
+
+  // Assign role template to user
+  async assignRoleTemplate(userId, tenantId, templateId, customizations = {}) {
+    try {
+      console.log('🔧 Assigning role template:', { userId, tenantId, templateId, customizations });
+
+      const templates = this.getAvailableRoleTemplates();
+      const template = templates.find(t => t.id === templateId);
+
+      if (!template) {
+        throw new Error(`Template '${templateId}' not found`);
+      }
+
+      // Apply customizations
+      let permissions = { ...template.permissions };
+      if (customizations.addPermissions) {
+        permissions = { ...permissions, ...customizations.addPermissions };
+      }
+
+      if (customizations.removePermissions) {
+        customizations.removePermissions.forEach(perm => {
+          delete permissions[perm];
+        });
+      }
+
+      // Create role from template
+      const roleId = uuidv4();
+      const roleName = customizations.name || `${template.name} (${userId.slice(-8)})`;
+
+      await db.insert(customRoles).values({
+        roleId,
+        tenantId,
+        roleName,
+        description: template.description,
+        color: template.color,
+        permissions: JSON.stringify(permissions),
+        restrictions: JSON.stringify({}),
+        isSystemRole: false,
+        isDefault: false,
+        priority: 0,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      // Assign role to user
+      await db.insert(userRoleAssignments).values({
+        assignmentId: uuidv4(),
+        userId,
+        roleId,
+        isActive: true,
+        isTemporary: false,
+        assignedBy: 'system',
+        assignedAt: new Date()
+      });
+
+      console.log('✅ Role template assigned successfully');
+      return { roleId, templateId, userId };
+    } catch (error) {
+      console.error('🚨 Error assigning role template:', error);
       throw error;
     }
   }
 
-  // 📊 **GET PERMISSION ANALYTICS**
-  static async getPermissionAnalytics(tenantId) {
+  // Get permission analytics
+  async getPermissionAnalytics(tenantId) {
     try {
-      const { subscriptions } = await import('../db/schema/subscriptions.js');
-      
-      // Get organization info
-      const [subscription] = await db
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.tenantId, tenantId))
-        .limit(1);
+      console.log('📊 Getting permission analytics for tenant:', tenantId);
 
-      const plan = subscription?.plan || 'starter';
-      
-      // Get user count with permissions
-      const users = await db
-        .select()
+      // Get role counts
+      const roleStats = await db
+        .select({
+          isSystemRole: customRoles.isSystemRole,
+          userCount: count(userRoleAssignments.id)
+        })
+        .from(customRoles)
+        .leftJoin(userRoleAssignments, eq(customRoles.roleId, userRoleAssignments.roleId))
+        .where(eq(customRoles.tenantId, tenantId))
+        .groupBy(customRoles.isSystemRole);
+
+      // Get user counts
+      const userStats = await db
+        .select({
+          totalUsers: count(tenantUsers.id),
+          activeUsers: count(tenantUsers.id).where(eq(tenantUsers.isActive, true))
+        })
         .from(tenantUsers)
         .where(eq(tenantUsers.tenantId, tenantId));
 
-      // Get role usage
-      const roleUsage = await db
-        .select()
-        .from(userRoleAssignments)
-        .innerJoin(customRoles, eq(userRoleAssignments.roleId, customRoles.roleId))
-        .where(eq(customRoles.tenantId, tenantId));
-
-      // Get application usage
-      const appUsage = await db
-        .select()
-        .from(organizationApplications)
-        .innerJoin(applications, eq(organizationApplications.appId, applications.appId))
-        .where(eq(organizationApplications.tenantId, tenantId));
-
-      return {
+      const analytics = {
         tenantId,
-        plan,
-        analytics: {
-          totalUsers: users.length,
-          usersWithRoles: roleUsage.length,
-          activeApplications: appUsage.filter(app => app.isEnabled).length,
-          totalApplications: appUsage.length,
-          planPermissions: PermissionMatrixUtils.getPlanPermissions(plan).length,
-          customRoles: [...new Set(roleUsage.map(r => r.roleId))].length
+        roles: {
+          system: roleStats.find(r => r.isSystemRole)?.userCount || 0,
+          custom: roleStats.find(r => !r.isSystemRole)?.userCount || 0,
+          total: (roleStats.find(r => r.isSystemRole)?.userCount || 0) + (roleStats.find(r => !r.isSystemRole)?.userCount || 0)
         },
-        applications: appUsage.map(app => ({
-          appCode: app.appCode,
-          appName: app.appName,
-          isEnabled: app.isEnabled,
-          enabledModules: app.enabledModules?.length || 0
-        }))
+        users: userStats[0] || { totalUsers: 0, activeUsers: 0 },
+        generatedAt: new Date().toISOString()
       };
-      
+
+      console.log('📊 Permission analytics:', analytics);
+      return analytics;
     } catch (error) {
-      console.error('❌ Failed to get permission analytics:', error);
+      console.error('🚨 Error getting permission analytics:', error);
       throw error;
     }
   }
+
+  // Revoke all user permissions
+  async revokeAllUserPermissions(userId, tenantId) {
+    try {
+      console.log('🚫 Revoking all permissions for user:', userId, 'tenant:', tenantId);
+
+      // Get all active role assignments for user
+      const assignments = await db
+        .select({ assignmentId: userRoleAssignments.assignmentId })
+        .from(userRoleAssignments)
+        .where(
+          and(
+            eq(userRoleAssignments.userId, userId),
+            eq(userRoleAssignments.isActive, true)
+          )
+        );
+
+      // Deactivate all assignments
+      if (assignments.length > 0) {
+        await db
+          .update(userRoleAssignments)
+          .set({
+            isActive: false,
+            updatedAt: new Date()
+          })
+          .where(eq(userRoleAssignments.userId, userId));
+      }
+
+      // Log audit event
+      await db.insert(auditLogs).values({
+        logId: uuidv4(),
+        tenantId,
+        userId: 'system',
+        action: 'permissions_revoked',
+        resourceType: 'user',
+        resourceId: userId,
+        details: JSON.stringify({ assignmentsRevoked: assignments.length }),
+        createdAt: new Date()
+      });
+
+      console.log('✅ All permissions revoked for user:', { userId, assignmentsRevoked: assignments.length });
+      return { userId, assignmentsRevoked: assignments.length };
+    } catch (error) {
+      console.error('🚨 Error revoking user permissions:', error);
+      throw error;
+    }
+  }
+
+  // Helper method to combine restrictions
+  combineRestrictions(restrictionsArray) {
+    if (!restrictionsArray || restrictionsArray.length === 0) {
+      return {};
+    }
+
+    // For now, return the most restrictive set
+    // In a real implementation, you'd merge restrictions intelligently
+    return restrictionsArray[0];
+  }
 }
 
-export default PermissionMatrixService; 
+export default new PermissionMatrixService();

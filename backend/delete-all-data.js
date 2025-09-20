@@ -1,322 +1,323 @@
-import postgres from 'postgres';
-import 'dotenv/config';
+#!/usr/bin/env node
 
-async function deleteAllDatabaseData() {
-  // Create direct postgres connection
-  const sql = postgres(process.env.DATABASE_URL);
+/**
+ * DATABASE CLEANUP SCRIPT - Node.js Version
+ * ========================================
+ * This script deletes all data from all tables while respecting foreign key constraints.
+ * Uses Drizzle ORM to safely delete data in the correct order.
+ *
+ * WARNING: This script will PERMANENTLY DELETE ALL DATA in your database!
+ * Make sure to backup your data before running this script.
+ *
+ * Usage:
+ *   node delete-all-data.js
+ *
+ * Or make it executable:
+ *   chmod +x delete-all-data.js
+ *   ./delete-all-data.js
+ */
 
-  console.log('🆘 DANGER: DELETING ALL DATABASE DATA');
-  console.log('⏳ This will permanently remove ALL data from the database');
-  console.log('⚠️  This action cannot be undone!');
-  console.log('');
+import { config } from 'dotenv';
+config({ path: './.env' });
+import { sql, isNull, isNotNull } from 'drizzle-orm';
+import { db, systemDbConnection } from './src/db/index.js';
+import * as schema from './src/db/schema/index.js';
 
-  // Get confirmation from user
-  const readline = await import('readline');
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
+// =============================================================================
+// DATABASE CONFIGURATION
+// =============================================================================
+// Using the project's database configuration from db/index.js
+// The db connection is already configured and initialized
+
+// =============================================================================
+// CONFIRMATION PROMPT
+// =============================================================================
+function askForConfirmation() {
+  return new Promise((resolve) => {
+    console.log('\n⚠️  WARNING: This will DELETE ALL DATA from your database!');
+    console.log('This action cannot be undone.');
+
+    // Extract database info from DATABASE_URL
+    const dbUrl = process.env.DATABASE_URL;
+    if (dbUrl) {
+      try {
+        const url = new URL(dbUrl);
+        console.log('\nDatabase:', url.pathname.substring(1) || 'postgres');
+        console.log('Host:', url.hostname);
+        console.log('Port:', url.port);
+      } catch (error) {
+        console.log('\nDatabase URL configured');
+      }
+    }
+
+    process.stdout.write('\nAre you sure you want to continue? Type "YES" to confirm: ');
+
+    process.stdin.once('data', (data) => {
+      const input = data.toString().trim();
+      resolve(input === 'YES');
+    });
   });
+}
 
-  const answer = await new Promise((resolve) => {
-    rl.question('🔴 Type "YES, DELETE EVERYTHING" to confirm: ', resolve);
-  });
-
-  rl.close();
-
-  if (answer !== 'YES, DELETE EVERYTHING') {
-    console.log('❌ Deletion cancelled');
-    await sql.end();
-    process.exit(0);
-  }
+// =============================================================================
+// DELETE FUNCTIONS
+// =============================================================================
+async function deleteAllData(db) {
+  console.log('\n🗑️  Starting database cleanup...\n');
 
   try {
-    console.log('🔄 Starting database cleanup...\n');
+    // STEP 1: DELETE CHILD/DEPENDENT RECORDS FIRST
+    console.log('📝 Step 1: Deleting child/dependent records...');
 
-    // Get counts before deletion
-    console.log('📊 Counting records before deletion...');
+    // Delete webhook logs (no dependencies)
+    console.log('  Deleting webhook_logs...');
+    await db.delete(schema.webhookLogs);
 
-    const tables = [
-      'activity_logs',
-      'app_credit_configurations',
-      'application_modules',
-      'applications',
-      'audit_logs',
-      'configuration_change_history',
-      'credit_alerts',
-      'credit_configuration_templates',
-      'credit_configurations',
-      'credit_purchases',
-      'credit_transactions',
-      'credit_transfers',
-      'credit_usage',
-      'credits',
-      'custom_roles',
-      'discount_tiers',
-      'location_assignments',
-      'location_resources',
-      'location_usage',
-      'locations',
-      'membership_bulk_operations',
-      'membership_history',
-      'membership_invitations',
-      'module_credit_configurations',
-      'organization_applications',
-      'organization_locations',
-      'organization_relationships',
-      'organization_memberships',
-      'organizations',
-      'payments',
-      'purchase_history',
-      'purchase_templates',
-      'responsible_persons',
-      'sso_tokens',
-      'subscription_actions',
-      'subscriptions',
-      'tenant_invitations',
-      'tenant_users',
-      'tenants',
-      'transfer_approval_rules',
-      'transfer_history',
-      'transfer_limits',
-      'transfer_notifications',
-      'trial_events',
-      'trial_restrictions',
-      'usage_aggregation',
-      'usage_alerts',
-      'usage_logs',
-      'usage_metrics_daily',
-      'usage_patterns',
-      'usage_quotas',
-      'user_application_permissions',
-      'user_role_assignments',
-      'user_sessions',
-      'webhook_logs'
-    ];
+    // Delete responsibility notifications (depends on responsible_persons)
+    console.log('  Deleting responsibility_notifications...');
+    await db.delete(schema.responsibilityNotifications);
 
-    // Count records in each table
-    const counts = {};
-    for (const table of tables) {
-      try {
-        const result = await sql`SELECT COUNT(*) as count FROM ${sql(table)}`;
-        counts[table] = parseInt(result[0].count);
-      } catch (error) {
-        // Table might not exist, skip it
-        console.log(`⚠️  Table ${table} not found, skipping...`);
-      }
-    }
+    // Delete responsibility history (depends on responsible_persons)
+    console.log('  Deleting responsibility_history...');
+    await db.delete(schema.responsibilityHistory);
 
-    console.log('📈 Current database state:');
-    let totalRecords = 0;
-    Object.entries(counts).forEach(([table, count]) => {
-      console.log(`   ${table}: ${count} records`);
-      totalRecords += count;
-    });
-    console.log(`\n📊 Total records to delete: ${totalRecords}\n`);
+    // Delete membership history (depends on organization_memberships)
+    console.log('  Deleting membership_history...');
+    await db.delete(schema.membershipHistory);
 
-    // Delete in correct order to avoid foreign key constraint violations
-    console.log('🗑️  Deleting data (order matters for foreign key constraints)...\n');
+    // Delete membership invitations (depends on organization_memberships)
+    console.log('  Deleting membership_invitations...');
+    await db.delete(schema.membershipInvitations);
 
-    // Delete in dependency order (children first, then parents)
+    // Delete detailed usage logs (depends on tenants, tenant_users, entities)
+    console.log('  Deleting usage_logs...');
+    await db.delete(schema.usageLogs);
 
-    // 1. Delete webhook and activity logs first (no dependencies)
-    console.log('1. Deleting webhook logs and activity logs...');
-    await sql`DELETE FROM webhook_logs`;
-    await sql`DELETE FROM activity_logs`;
-    console.log('   ✅ Webhook logs and activity logs deleted');
+    // Delete daily usage metrics (depends on tenants, entities)
+    console.log('  Deleting usage_metrics_daily...');
+    await db.delete(schema.usageMetricsDaily);
 
-    // 2. Delete SSO tokens
-    console.log('2. Deleting SSO tokens...');
-    await sql`DELETE FROM sso_tokens`;
-    console.log('   ✅ SSO tokens deleted');
+    // Delete credit usage tracking (depends on tenants, tenant_users, entities)
+    console.log('  Deleting credit_usage...');
+    await db.delete(schema.creditUsage);
 
-    // 3. Delete user sessions
-    console.log('3. Deleting user sessions...');
-    await sql`DELETE FROM user_sessions`;
-    console.log('   ✅ User sessions deleted');
+    // Delete credit configurations
+    console.log('  Deleting credit_configurations...');
+    await db.delete(schema.creditConfigurations);
 
-    // 4. Delete trial events and restrictions
-    console.log('4. Deleting trial events and restrictions...');
-    await sql`DELETE FROM trial_events`;
-    await sql`DELETE FROM trial_restrictions`;
-    console.log('   ✅ Trial events and restrictions deleted');
+    // Delete credit transaction ledger (depends on tenants, tenant_users, entities)
+    console.log('  Deleting credit_transactions...');
+    await db.delete(schema.creditTransactions);
 
-    // 5. Delete transfer related data
-    console.log('5. Deleting transfer data...');
-    await sql`DELETE FROM transfer_notifications`;
-    await sql`DELETE FROM transfer_limits`;
-    await sql`DELETE FROM transfer_history`;
-    await sql`DELETE FROM transfer_approval_rules`;
-    console.log('   ✅ Transfer data deleted');
+    // Delete credit purchases (depends on tenants, tenant_users, entities)
+    console.log('  Deleting credit_purchases...');
+    await db.delete(schema.creditPurchases);
 
-    // 6. Delete credit related data
-    console.log('6. Deleting credit data...');
-    await sql`DELETE FROM credit_alerts`;
-    await sql`DELETE FROM credit_usage`;
-    await sql`DELETE FROM credit_transactions`;
-    await sql`DELETE FROM credit_purchases`;
-    await sql`DELETE FROM credit_transfers`;
-    await sql`DELETE FROM credits`;
-    console.log('   ✅ Credit data deleted');
+    // Delete tenant invitations (depends on tenants, custom_roles, tenant_users)
+    console.log('  Deleting tenant_invitations...');
+    await db.delete(schema.tenantInvitations);
 
-    // 7. Delete usage and metrics data
-    console.log('7. Deleting usage and metrics data...');
-    await sql`DELETE FROM usage_alerts`;
-    await sql`DELETE FROM usage_logs`;
-    await sql`DELETE FROM usage_patterns`;
-    await sql`DELETE FROM usage_quotas`;
-    await sql`DELETE FROM usage_aggregation`;
-    await sql`DELETE FROM usage_metrics_daily`;
-    console.log('   ✅ Usage and metrics data deleted');
+    // Delete payment history (depends on tenants, subscriptions)
+    console.log('  Deleting payments...');
+    await db.delete(schema.payments);
 
-    // 8. Delete application and module data
-    console.log('8. Deleting application and module data...');
-    await sql`DELETE FROM user_application_permissions`;
-    await sql`DELETE FROM organization_applications`;
-    await sql`DELETE FROM module_credit_configurations`;
-    await sql`DELETE FROM app_credit_configurations`;
-    await sql`DELETE FROM application_modules`;
-    await sql`DELETE FROM applications`;
-    console.log('   ✅ Application and module data deleted');
+    // Delete user role assignments (depends on tenant_users, custom_roles)
+    console.log('  Deleting user_role_assignments...');
+    await db.delete(schema.userRoleAssignments);
 
-    // 9. Delete location related data
-    console.log('9. Deleting location data...');
-    await sql`DELETE FROM location_usage`;
-    await sql`DELETE FROM location_resources`;
-    await sql`DELETE FROM location_assignments`;
-    await sql`DELETE FROM organization_locations`;
-    await sql`DELETE FROM locations`;
-    console.log('   ✅ Location data deleted');
+    // Delete user application permissions (depends on applications, tenant_users)
+    console.log('  Deleting user_application_permissions...');
+    await db.delete(schema.userApplicationPermissions);
 
-    // 10. Delete membership and invitation data
-    console.log('10. Deleting membership and invitation data...');
-    await sql`DELETE FROM membership_bulk_operations`;
-    await sql`DELETE FROM membership_history`;
-    await sql`DELETE FROM membership_invitations`;
-    await sql`DELETE FROM organization_memberships`;
-    console.log('   ✅ Membership and invitation data deleted');
+    // Delete user sessions (depends on tenant_users, tenants)
+    console.log('  Deleting user_sessions...');
+    await db.delete(schema.userSessions);
 
-    // 11. Delete organization relationships
-    console.log('11. Deleting organization relationships...');
-    await sql`DELETE FROM organization_relationships`;
-    console.log('   ✅ Organization relationships deleted');
+    // Delete manager relationships (depends on tenant_users, tenants)
+    console.log('  Deleting user_manager_relationships...');
+    await db.delete(schema.userManagerRelationships);
 
-    // 12. Delete responsible persons
-    console.log('12. Deleting responsible persons...');
-    await sql`DELETE FROM responsible_persons`;
-    console.log('   ✅ Responsible persons deleted');
+    // Delete audit logs (depends on tenant_users, tenants)
+    console.log('  Deleting audit_logs...');
+    await db.delete(schema.auditLogs);
 
-    // 13. Delete user role assignments
-    console.log('13. Deleting user role assignments...');
-    await sql`DELETE FROM user_role_assignments`;
-    console.log('   ✅ User role assignments deleted');
+    // Delete onboarding events (depends on tenants)
+    console.log('  Deleting onboarding_events...');
+    await db.delete(schema.onboardingEvents);
 
-    // 14. Delete custom roles
-    console.log('14. Deleting custom roles...');
-    await sql`DELETE FROM custom_roles`;
-    console.log('   ✅ Custom roles deleted');
+    // STEP 2: DELETE INTERMEDIATE RECORDS
+    console.log('\n📋 Step 2: Deleting intermediate records...');
 
-    // 15. Delete discount tiers and purchase templates
-    console.log('15. Deleting discount tiers and purchase templates...');
-    await sql`DELETE FROM discount_tiers`;
-    await sql`DELETE FROM purchase_templates`;
-    await sql`DELETE FROM purchase_history`;
-    console.log('   ✅ Discount tiers and purchase templates deleted');
+    // Delete organization memberships (depends on tenant_users, tenants, custom_roles, entities)
+    console.log('  Deleting organization_memberships...');
+    await db.delete(schema.organizationMemberships);
 
-    // 16. Delete subscription actions and payments
-    console.log('16. Deleting subscription actions and payments...');
-    await sql`DELETE FROM subscription_actions`;
-    await sql`DELETE FROM payments`;
-    console.log('   ✅ Subscription actions and payments deleted');
+    // Delete responsible persons (depends on tenant_users, tenants)
+    console.log('  Deleting responsible_persons...');
+    await db.delete(schema.responsiblePersons);
 
-    // 17. Delete credit configurations
-    console.log('17. Deleting credit configurations...');
-    await sql`DELETE FROM credit_configuration_templates`;
-    await sql`DELETE FROM credit_configurations`;
-    console.log('   ✅ Credit configurations deleted');
+    // Delete custom roles (depends on tenant_users, tenants, entities)
+    console.log('  Deleting custom_roles...');
+    await db.delete(schema.customRoles);
 
-    // 18. Delete configuration change history
-    console.log('18. Deleting configuration change history...');
-    await sql`DELETE FROM configuration_change_history`;
-    console.log('   ✅ Configuration change history deleted');
+    // Delete credit balances (depends on tenants, entities)
+    console.log('  Deleting credits...');
+    await db.delete(schema.credits);
 
-    // 19. Delete tenant invitations
-    console.log('19. Deleting tenant invitations...');
-    await sql`DELETE FROM tenant_invitations`;
-    console.log('   ✅ Tenant invitations deleted');
+    // Delete entities (depends on tenant_users, tenants, entities - self-referencing)
+    // Delete child entities first (those with parent_entity_id)
+    console.log('  Deleting child entities...');
+    await db.delete(schema.entities).where(isNotNull(schema.entities.parentEntityId));
 
-    // 20. Delete audit logs
-    console.log('20. Deleting audit logs...');
-    await sql`DELETE FROM audit_logs`;
-    console.log('   ✅ Audit logs deleted');
+    // Then delete root entities
+    console.log('  Deleting root entities...');
+    await db.delete(schema.entities).where(isNull(schema.entities.parentEntityId));
 
-    // 21. Delete subscriptions
-    console.log('21. Deleting subscriptions...');
-    await sql`DELETE FROM subscriptions`;
-    console.log('   ✅ Subscriptions deleted');
+    // Delete subscriptions (depends on tenants, entities)
+    console.log('  Deleting subscriptions...');
+    await db.delete(schema.subscriptions);
 
-    // 22. Delete organizations (has foreign key to tenant_users)
-    console.log('22. Deleting organizations...');
-    await sql`DELETE FROM organizations`;
-    console.log('   ✅ Organizations deleted');
+    // Delete organization applications (depends on entities, applications)
+    console.log('  Deleting organization_applications...');
+    await db.delete(schema.organizationApplications);
 
-    // 23. Delete tenant users
-    console.log('23. Deleting tenant users...');
-    await sql`DELETE FROM tenant_users`;
-    console.log('   ✅ Tenant users deleted');
+    // Delete application modules (depends on applications)
+    console.log('  Deleting application_modules...');
+    await db.delete(schema.applicationModules);
 
-    // 24. Delete tenants (no dependencies)
-    console.log('24. Deleting tenants...');
-    await sql`DELETE FROM tenants`;
-    console.log('   ✅ Tenants deleted');
+    // Delete applications (top-level)
+    console.log('  Deleting applications...');
+    await db.delete(schema.applications);
 
-    console.log('\n🎉 All database data has been successfully deleted!');
-    console.log('📊 Verifying deletion...\n');
+    // STEP 3: DELETE PARENT RECORDS
+    console.log('\n🏢 Step 3: Deleting parent records...');
 
-    // Verify all tables are empty
-    console.log('📋 Verification results:');
-    let allEmpty = true;
-    let verifiedRecords = 0;
+    // Delete tenant users (depends on tenants)
+    console.log('  Deleting tenant_users...');
+    await db.delete(schema.tenantUsers);
 
-    for (const table of tables) {
-      try {
-        const result = await sql`SELECT COUNT(*) as count FROM ${sql(table)}`;
-        const count = parseInt(result[0].count);
-        verifiedRecords += count;
-        console.log(`   ${table}: ${count} records`);
+    // Delete tenants (top-level table)
+    console.log('  Deleting tenants...');
+    await db.delete(schema.tenants);
 
-        if (count > 0) {
-          allEmpty = false;
-          console.log(`   ⚠️  WARNING: ${table} still has ${count} records!`);
-        }
-      } catch (error) {
-        // Table might not exist, that's fine
-      }
-    }
-
-    console.log(`\n📊 Total records remaining: ${verifiedRecords}`);
-
-    if (allEmpty) {
-      console.log('\n✅ VERIFICATION COMPLETE: All tables are now empty');
-      console.log('🗑️  Database cleanup successful');
-    } else {
-      console.log('\n⚠️  VERIFICATION FAILED: Some tables still contain data');
-      console.log('🔧 You may need to manually delete remaining records');
-    }
+    console.log('\n✅ Database cleanup completed successfully!');
+    console.log('All data has been deleted while preserving table structure and constraints.');
 
   } catch (error) {
-    console.error('❌ Error during database cleanup:', error);
-    console.error('Stack trace:', error.stack);
-  } finally {
-    // Close the connection
-    await sql.end();
+    console.error('\n❌ Error during database cleanup:', error);
+    throw error;
   }
 }
 
-// Run the cleanup
-deleteAllDatabaseData().then(() => {
-  console.log('\n🏁 Database cleanup script completed');
-  process.exit(0);
-}).catch((error) => {
-  console.error('💥 Fatal error:', error);
+// =============================================================================
+// VERIFICATION FUNCTION
+// =============================================================================
+async function verifyCleanup(db) {
+  console.log('\n🔍 Verifying cleanup...');
+
+  const tableSchemas = [
+    { name: 'tenants', schema: schema.tenants },
+    { name: 'tenant_users', schema: schema.tenantUsers },
+    { name: 'entities', schema: schema.entities },
+    { name: 'custom_roles', schema: schema.customRoles },
+    { name: 'subscriptions', schema: schema.subscriptions },
+    { name: 'payments', schema: schema.payments },
+    { name: 'credits', schema: schema.credits },
+    { name: 'credit_transactions', schema: schema.creditTransactions },
+    { name: 'credit_purchases', schema: schema.creditPurchases },
+    { name: 'credit_usage', schema: schema.creditUsage },
+    { name: 'credit_configurations', schema: schema.creditConfigurations },
+    { name: 'usage_logs', schema: schema.usageLogs },
+    { name: 'usage_metrics_daily', schema: schema.usageMetricsDaily },
+    { name: 'audit_logs', schema: schema.auditLogs },
+    { name: 'user_sessions', schema: schema.userSessions },
+    { name: 'user_manager_relationships', schema: schema.userManagerRelationships },
+    { name: 'organization_memberships', schema: schema.organizationMemberships },
+    { name: 'membership_invitations', schema: schema.membershipInvitations },
+    { name: 'membership_history', schema: schema.membershipHistory },
+    { name: 'responsible_persons', schema: schema.responsiblePersons },
+    { name: 'responsibility_history', schema: schema.responsibilityHistory },
+    { name: 'responsibility_notifications', schema: schema.responsibilityNotifications },
+    { name: 'tenant_invitations', schema: schema.tenantInvitations },
+    { name: 'user_role_assignments', schema: schema.userRoleAssignments },
+    { name: 'onboarding_events', schema: schema.onboardingEvents },
+    { name: 'webhook_logs', schema: schema.webhookLogs },
+    { name: 'applications', schema: schema.applications },
+    { name: 'application_modules', schema: schema.applicationModules },
+    { name: 'organization_applications', schema: schema.organizationApplications },
+    { name: 'user_application_permissions', schema: schema.userApplicationPermissions }
+  ];
+
+  let totalRecords = 0;
+
+  for (const { name, schema: tableSchema } of tableSchemas) {
+    try {
+      // Query actual record count
+      const result = await db.select({ count: sql`count(*)` }).from(tableSchema);
+      const count = result[0]?.count || 0;
+      totalRecords += count;
+
+      if (count === 0) {
+        console.log(`  ✓ ${name}: 0 records`);
+      } else {
+        console.log(`  ⚠️  ${name}: ${count} records remaining`);
+      }
+    } catch (error) {
+      console.log(`  ⚠️  ${name}: could not verify (${error.message})`);
+    }
+  }
+
+  console.log(`\n📊 Verification complete. Total records remaining: ${totalRecords}`);
+
+  if (totalRecords === 0) {
+    console.log('✅ All tables are empty!');
+  } else {
+    console.log('⚠️  Some tables still contain data. You may want to investigate.');
+  }
+}
+
+// =============================================================================
+// MAIN EXECUTION
+// =============================================================================
+async function main() {
+  console.log('🗑️  Database Cleanup Script');
+  console.log('========================');
+
+  try {
+    // Test connection using existing db instance
+    await db.execute(sql`SELECT 1`);
+    console.log('✅ Database connection successful');
+
+    // Ask for confirmation
+    const confirmed = await askForConfirmation();
+
+    if (!confirmed) {
+      console.log('\n❌ Operation cancelled by user.');
+      process.exit(0);
+    }
+
+    // Execute cleanup using the project's db instance
+    await deleteAllData(db);
+
+    // Optional verification
+    await verifyCleanup(db);
+
+    console.log('\n🎉 Script completed successfully!');
+
+  } catch (error) {
+    console.error('\n💥 Script failed:', error.message);
+    process.exit(1);
+  }
+}
+
+// Handle script interruption
+process.on('SIGINT', () => {
+  console.log('\n\n⚠️  Script interrupted by user. Changes may have been partially applied.');
+  process.exit(1);
+});
+
+// Run the script
+main().catch((error) => {
+  console.error('💥 Unexpected error:', error);
   process.exit(1);
 });

@@ -1,25 +1,44 @@
 import { db } from '../db/index.js';
-import { 
-  applications, 
-  organizationApplications, 
+import {
+  applications,
+  organizationApplications,
   userApplicationPermissions,
-  applicationModules,
-  activityLogs
+  applicationModules
 } from '../db/schema/suite-schema.js';
 import { tenants, tenantUsers } from '../db/schema/index.js';
 import { eq, and } from 'drizzle-orm';
-import SSOService from '../services/sso-service.js';
 
 export default async function suiteRoutes(fastify, options) {
 
   // Get user's available applications
   fastify.get('/applications', async (request, reply) => {
     try {
-      const { internalUserId, tenantId } = request.userContext;
-      
-      console.log('📱 Getting user applications:', { internalUserId, tenantId });
+      const { tenantId } = request.userContext;
 
-      const userApps = await SSOService.getUserApplications(internalUserId, tenantId);
+      console.log('📱 Getting organization applications:', { tenantId });
+
+      // Get applications enabled for this organization
+      const userApps = await db
+        .select({
+          appId: applications.appId,
+          appCode: applications.appCode,
+          appName: applications.appName,
+          description: applications.description,
+          icon: applications.icon,
+          baseUrl: applications.baseUrl,
+          isCore: applications.isCore,
+          sortOrder: applications.sortOrder,
+          isEnabled: organizationApplications.isEnabled,
+          subscriptionTier: organizationApplications.subscriptionTier,
+          enabledModules: organizationApplications.enabledModules
+        })
+        .from(organizationApplications)
+        .innerJoin(applications, eq(organizationApplications.appId, applications.appId))
+        .where(and(
+          eq(organizationApplications.tenantId, tenantId),
+          eq(organizationApplications.isEnabled, true)
+        ))
+        .orderBy(applications.sortOrder, applications.appName);
 
       return {
         success: true,
@@ -35,7 +54,7 @@ export default async function suiteRoutes(fastify, options) {
     }
   });
 
-  // Get user activity logs
+  // Get user activity logs (simplified without SSO)
   fastify.get('/activity', async (request, reply) => {
     try {
       const { internalUserId } = request.userContext;
@@ -43,11 +62,13 @@ export default async function suiteRoutes(fastify, options) {
 
       console.log('📊 Getting user activity:', { internalUserId, limit });
 
-      const activities = await SSOService.getUserActivity(internalUserId, parseInt(limit));
-
+      // Return basic activity info since SSO activity tracking is not available
       return {
         success: true,
-        activities
+        activities: [],
+        note: 'Activity tracking available through audit logs',
+        userId: internalUserId,
+        limit: parseInt(limit)
       };
 
     } catch (error) {
@@ -59,8 +80,8 @@ export default async function suiteRoutes(fastify, options) {
     }
   });
 
-  // SSO redirect endpoint
-  fastify.post('/sso/redirect', async (request, reply) => {
+  // Application redirect endpoint (simplified without SSO)
+  fastify.post('/app/redirect', async (request, reply) => {
     try {
       const { appCode, returnTo } = request.body;
       const userContext = request.userContext;
@@ -71,90 +92,40 @@ export default async function suiteRoutes(fastify, options) {
         });
       }
 
-      console.log('🔄 Handling SSO redirect:', { appCode, returnTo, userId: userContext.internalUserId });
+      console.log('🔄 Handling app redirect:', { appCode, returnTo, userId: userContext.internalUserId });
 
-      const redirectInfo = await SSOService.handleSSORedirect(
-        appCode,
-        returnTo,
-        userContext,
-        request
-      );
+      // Get application details
+      const [app] = await db
+        .select()
+        .from(applications)
+        .where(eq(applications.appCode, appCode))
+        .limit(1);
 
-      return {
-        success: true,
-        ...redirectInfo
-      };
-
-    } catch (error) {
-      console.error('❌ SSO redirect failed:', error);
-      return reply.code(500).send({
-        error: 'SSO redirect failed',
-        message: error.message
-      });
-    }
-  });
-
-  // Validate SSO token (called by applications)
-  fastify.post('/sso/validate', async (request, reply) => {
-    try {
-      const { token, appCode } = request.body;
-
-      if (!token || !appCode) {
-        return reply.code(400).send({
-          error: 'Missing required fields: token, appCode'
+      if (!app) {
+        return reply.code(404).send({
+          error: 'Application not found'
         });
       }
 
-      console.log('🔍 Validating SSO token:', { appCode });
-
-      const validation = await SSOService.validateSSOToken(token, appCode);
-
-      if (!validation.valid) {
-        return reply.code(401).send({
-          error: 'Invalid token',
-          message: validation.error
-        });
-      }
+      // Build redirect URL
+      const redirectUrl = returnTo
+        ? `${app.baseUrl}${returnTo}`
+        : app.baseUrl;
 
       return {
         success: true,
-        valid: true,
-        user: validation.payload
+        redirectUrl,
+        app: {
+          appCode: app.appCode,
+          appName: app.appName,
+          baseUrl: app.baseUrl
+        }
       };
 
     } catch (error) {
-      console.error('❌ SSO validation failed:', error);
+      console.error('❌ App redirect failed:', error);
       return reply.code(500).send({
-        error: 'SSO validation failed',
-        message: error.message
-      });
-    }
-  });
-
-  // Revoke SSO token (logout from app)
-  fastify.post('/sso/revoke', async (request, reply) => {
-    try {
-      const { token } = request.body;
-
-      if (!token) {
-        return reply.code(400).send({
-          error: 'Missing required field: token'
-        });
-      }
-
-      console.log('🔄 Revoking SSO token');
-
-      await SSOService.revokeSSOToken(token);
-
-      return {
-        success: true,
-        message: 'Token revoked successfully'
-      };
-
-    } catch (error) {
-      console.error('❌ SSO token revocation failed:', error);
-      return reply.code(500).send({
-        error: 'Failed to revoke token',
+        error: 'App redirect failed',
         message: error.message
       });
     }

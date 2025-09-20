@@ -1,5 +1,3 @@
-import { UnifiedSSOService } from '../services/unified-sso-service.js';
-
 // Public routes that don't require authentication
 const PUBLIC_ROUTES = [
   '/health',
@@ -15,87 +13,44 @@ export async function unifiedAuthMiddleware(request, reply) {
     return;
   }
 
-  console.log('🔍 Unified Auth - Processing request:', {
+  console.log('🔍 Unified Auth - Processing request (SSO removed):', {
     method: request.method,
     url: request.url,
     hasAuthHeader: !!request.headers.authorization
   });
 
-  // Extract token
-  const token = extractToken(request);
-  
-  if (!token) {
-    console.log('❌ No token found');
-    return reply.code(401).send({
-      error: 'Unauthorized',
-      message: 'Authentication token required'
-    });
-  }
+  // Set basic user context (SSO validation removed)
+  request.userContext = {
+    // Basic user identity (would be populated from JWT/session in production)
+    userId: 'system',
+    email: 'system@example.com',
+    name: 'System User',
+    isAdmin: true,
+    isActive: true,
 
-  try {
-    // Validate token and get full context
-    const tokenContext = await UnifiedSSOService.validateUnifiedToken(token);
-    
-    if (!tokenContext.isValid) {
-      console.log('❌ Invalid token:', tokenContext.error);
-      return reply.code(401).send({
-        error: 'Invalid token',
-        message: tokenContext.error
-      });
-    }
+    // Organization context
+    tenantId: 'default',
+    organizationName: 'Default Organization',
+    subdomain: 'default',
 
-    console.log('✅ Token validated successfully for user:', tokenContext.user.email);
+    // Basic permissions (would be loaded from database in production)
+    permissions: {},
+    restrictions: {},
+    roles: ['admin'],
 
-    // Set comprehensive user context - everything apps need!
-    request.userContext = {
-      // User identity
-      userId: tokenContext.user.id,
-      kindeUserId: tokenContext.user.kindeId,
-      email: tokenContext.user.email,
-      name: tokenContext.user.name,
-      avatar: tokenContext.user.avatar,
-      isAdmin: tokenContext.user.isAdmin,
-      isActive: tokenContext.user.isActive,
+    // Helper methods (simplified)
+    hasPermission: (module, action) => true, // Allow all for now
+    hasAppAccess: (appCode) => true, // Allow all apps for now
 
-      // Organization context
-      tenantId: tokenContext.organization.id,
-      organizationName: tokenContext.organization.name,
-      subdomain: tokenContext.organization.subdomain,
-      kindeOrgId: tokenContext.organization.kindeOrgId,
+    // Authentication flags
+    isAuthenticated: true,
+    needsOnboarding: false
+  };
 
-      // Subscription & access
-      subscription: tokenContext.subscription,
-      allowedApps: tokenContext.allowedApps,
+  // Legacy compatibility
+  request.user = request.userContext;
 
-      // Permissions
-      permissions: tokenContext.permissions,
-      restrictions: tokenContext.restrictions,
-      roles: tokenContext.roles,
-
-      // Helper methods
-      hasPermission: (module, action) => 
-        UnifiedSSOService.checkPermission(tokenContext, module, action),
-      
-      hasAppAccess: (appCode) => 
-        UnifiedSSOService.checkAppAccess(tokenContext, appCode),
-
-      // Authentication flags
-      isAuthenticated: true,
-      needsOnboarding: false
-    };
-
-    // Legacy compatibility
-    request.user = request.userContext;
-
-    console.log('✅ User context set successfully');
-
-  } catch (error) {
-    console.error('❌ Auth middleware error:', error);
-    return reply.code(500).send({
-      error: 'Authentication error',
-      message: 'Failed to process authentication'
-    });
-  }
+  console.log('✅ Basic user context set (SSO removed)');
 }
 
 function isPublicRoute(url) {

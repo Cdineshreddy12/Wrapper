@@ -1,29 +1,27 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
+import { dbManager, getAppDb, getSystemDb, initializeDrizzleInstances } from './connection-manager.js';
 import * as schema from './schema/index.js';
 import 'dotenv/config';
 
-// Database connection
-const connectionString = process.env.DATABASE_URL;
+// Initialize connection manager and drizzle instances
+await dbManager.initialize();
+const { appDb, systemDb } = initializeDrizzleInstances();
 
-if (!connectionString) {
-  throw new Error('DATABASE_URL environment variable is required');
-}
+// Export connections for backward compatibility
+export const db = appDb;  // Default to app connection (RLS enforced)
+export const systemDbConnection = systemDb;  // System connection (RLS bypassed)
 
-// Create the connection
-export const sql = postgres(connectionString, { 
-  max: parseInt(process.env.DB_POOL_SIZE || '20'),
-  idle_timeout: 20,
-  connect_timeout: 10,
-});
+// Export dbManager for middleware usage
+export { dbManager };
 
-// Create drizzle instance
-export const db = drizzle(sql, { 
-  schema,
-  logger: process.env.NODE_ENV === 'development',
-});
+// Legacy exports for backward compatibility
+export const sql = dbManager.getAppConnection();  // Default connection
+export const systemSql = dbManager.getSystemConnection();  // System connection
+
+// Create drizzle instance for backward compatibility
+export { appDb as drizzle };
 
 // Close connection helper
-export const closeConnection = async () => {
-  await sql.end();
-}; 
+export const closeConnection = () => dbManager.closeAll();
+
+// Health check helper
+export const healthCheck = () => dbManager.healthCheck(); 

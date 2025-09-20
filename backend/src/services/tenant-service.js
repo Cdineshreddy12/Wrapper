@@ -573,7 +573,6 @@ export class TenantService {
           isActive: tenantUsers.isActive,
           isVerified: tenantUsers.isVerified,
           isTenantAdmin: tenantUsers.isTenantAdmin,
-          invitedBy: tenantUsers.invitedBy,
           invitedAt: tenantUsers.invitedAt,
           lastActiveAt: tenantUsers.lastActiveAt,
           lastLoginAt: tenantUsers.lastLoginAt,
@@ -614,7 +613,7 @@ export class TenantService {
         .orderBy(desc(tenantInvitations.createdAt));
 
       // Get user role assignments
-      const userIds = activeUsers.map(u => u.userId);
+      const userIds = activeUsers.map(u => u.userId).filter(Boolean);
       const userRoleData = userIds.length > 0 ? await db
         .select({
           userId: userRoleAssignments.userId,
@@ -629,9 +628,9 @@ export class TenantService {
 
       // Get roles for users and invitations
       const roleIds = [
-        ...userRoleData.map(ur => ur.roleId),
-        ...pendingInvitations.map(i => i.roleId).filter(Boolean)
-      ];
+        ...(userRoleData || []).map(ur => ur.roleId),
+        ...(pendingInvitations || []).map(i => i.roleId).filter(Boolean)
+      ].filter(Boolean);
 
       const roles = roleIds.length > 0 ? await db
         .select({
@@ -643,8 +642,8 @@ export class TenantService {
         .from(customRoles)
         .where(inArray(customRoles.roleId, roleIds)) : [];
 
-      const roleMap = new Map(roles.map(r => [r.roleId, r]));
-      const userRoleMap = new Map(userRoleData.map(ur => [ur.userId, ur.roleId]));
+      const roleMap = new Map((roles || []).map(r => [r.roleId, r]));
+      const userRoleMap = new Map((userRoleData || []).map(ur => [ur.userId, ur.roleId]));
 
       // Format active users
       const formattedUsers = activeUsers.map(user => {
@@ -677,7 +676,6 @@ export class TenantService {
               isActive: user.isActive,
               isVerified: user.isVerified,
               isTenantAdmin: user.isTenantAdmin,
-              invitedBy: user.invitedBy,
               invitedAt: user.invitedAt,
               lastActiveAt: user.lastActiveAt,
               lastLoginAt: user.lastLoginAt,

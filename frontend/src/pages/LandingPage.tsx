@@ -28,17 +28,25 @@ export function LandingPage() {
             // User is fully onboarded - redirect to dashboard silently
             console.log('✅ Authenticated user already onboarded, redirecting to dashboard')
             navigate('/dashboard', { replace: true })
-          } else if (status.authStatus?.onboardingCompleted === true || 
+          } else if (status.authStatus?.onboardingCompleted === true ||
                      status.authStatus?.userType === 'INVITED_USER' ||
-                     status.authStatus?.isInvitedUser === true) {
+                     status.authStatus?.isInvitedUser === true ||
+                     status.data?.user?.userType === 'INVITED_USER') {
             // INVITED USERS: Always go to dashboard (they skip onboarding)
             console.log('✅ Invited user detected, redirecting to dashboard (skipping onboarding)')
             navigate('/dashboard', { replace: true })
           }
           // If not onboarded, let them stay on landing page to choose their path
-        } catch (error) {
-          console.log('ℹ️ Could not check auth status, letting user choose path')
-          // Let user stay on landing page
+        } catch (error: any) {
+          // Handle specific credit API errors gracefully
+          if (error?.response?.status === 404 &&
+              error?.response?.data?.message?.includes('not associated with any organization')) {
+            console.log('ℹ️ User needs organization setup, letting user choose path')
+            // Let user stay on landing page to choose their path
+          } else {
+            console.log('ℹ️ Could not check auth status, letting user choose path:', error?.message)
+            // Let user stay on landing page
+          }
         }
       }
     }

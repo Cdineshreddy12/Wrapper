@@ -4,8 +4,7 @@
  */
 
 import { db } from '../db/index.js';
-import { organizations } from '../db/schema/organizations.js';
-import { locations, locationAssignments } from '../db/schema/locations.js';
+import { entities } from '../db/schema/unified-entities.js';
 import { tenantUsers } from '../db/schema/users.js';
 import { organizationMemberships } from '../db/schema/organization_memberships.js';
 import { eq, and, or, inArray } from 'drizzle-orm';
@@ -49,8 +48,7 @@ export class ApplicationDataIsolationService {
     if (!appPermissions || appPermissions.permissionLevel === ApplicationDataIsolationService.PERMISSION_LEVELS.NONE) {
       return {
         hasAccess: false,
-        organizations: [],
-        locations: [],
+        entities: [],
         permissions: ApplicationDataIsolationService.PERMISSION_LEVELS.NONE
       };
     }
@@ -72,11 +70,11 @@ export class ApplicationDataIsolationService {
 
     return {
       hasAccess: true,
-      organizations: accessibleOrgs,
-      locations: accessibleLocations,
+      entities: [...accessibleOrgs, ...accessibleLocations],
       permissions: appPermissions.permissionLevel,
       application: application,
       scope: {
+        entityCount: accessibleOrgs.length + accessibleLocations.length,
         orgCount: accessibleOrgs.length,
         locationCount: accessibleLocations.length
       }
@@ -125,9 +123,12 @@ export class ApplicationDataIsolationService {
     // If user has super admin permissions for this app, they can access all organizations
     if (appPermissions.permissionLevel >= ApplicationDataIsolationService.PERMISSION_LEVELS.SUPER_ADMIN) {
       const allOrgs = await db
-        .select({ organizationId: organizations.organizationId })
-        .from(organizations)
-        .where(eq(organizations.tenantId, tenantId));
+        .select({ organizationId: entities.entityId })
+        .from(entities)
+        .where(and(
+          eq(entities.tenantId, tenantId),
+          eq(entities.entityType, 'organization')
+        ));
 
       return allOrgs.map(org => org.organizationId);
     }
@@ -156,22 +157,28 @@ export class ApplicationDataIsolationService {
     // Add parent organizations (users can see their org's parent)
     for (const orgId of directOrgIds) {
       const org = await db
-        .select({ parentOrganizationId: organizations.parentOrganizationId })
-        .from(organizations)
-        .where(eq(organizations.organizationId, orgId))
+        .select({ parentEntityId: entities.parentEntityId })
+        .from(entities)
+        .where(and(
+          eq(entities.entityId, orgId),
+          eq(entities.entityType, 'organization')
+        ))
         .limit(1);
 
-      if (org[0]?.parentOrganizationId) {
-        accessibleOrgs.add(org[0].parentOrganizationId);
+      if (org[0]?.parentEntityId) {
+        accessibleOrgs.add(org[0].parentEntityId);
       }
     }
 
     // Add child organizations (users can see their org's children)
     for (const orgId of directOrgIds) {
       const children = await db
-        .select({ organizationId: organizations.organizationId })
-        .from(organizations)
-        .where(eq(organizations.parentOrganizationId, orgId));
+        .select({ organizationId: entities.entityId })
+        .from(entities)
+        .where(and(
+          eq(entities.parentEntityId, orgId),
+          eq(entities.entityType, 'organization')
+        ));
 
       children.forEach(child => accessibleOrgs.add(child.organizationId));
     }
@@ -191,14 +198,15 @@ export class ApplicationDataIsolationService {
     // For example, HR app might have access to all employee locations
     // while Finance app might only have access to HQ locations
 
+    // Get locations for the tenant (simplified without locationAssignments)
     let locationQuery = db
       .select({
-        locationId: locationAssignments.locationId
+        locationId: entities.entityId
       })
-      .from(locationAssignments)
+      .from(entities)
       .where(and(
-        eq(locationAssignments.entityType, 'organization'),
-        inArray(locationAssignments.entityId, accessibleOrgs)
+        eq(entities.tenantId, userContext.tenantId),
+        eq(entities.entityType, 'location')
       ));
 
     // Apply application-specific filtering
@@ -230,9 +238,8 @@ export class ApplicationDataIsolationService {
       // Check data type specific access
       switch (dataType) {
         case 'organization':
-          return appAccess.organizations.includes(dataId);
         case 'location':
-          return appAccess.locations.includes(dataId);
+          return appAccess.entities.includes(dataId);
         case 'user':
           // Users can typically access other users in their accessible organizations
           return true; // This could be more restrictive
@@ -260,15 +267,13 @@ export class ApplicationDataIsolationService {
       if (Array.isArray(data)) {
         return data.filter(item => {
           const itemId = item.organizationId || item.locationId || item.userId;
-          return appAccess.organizations.includes(itemId) ||
-                 appAccess.locations.includes(itemId);
+          return appAccess.entities.includes(itemId);
         });
       }
 
       // For single items
       const itemId = data.organizationId || data.locationId || data.userId;
-      const canAccess = appAccess.organizations.includes(itemId) ||
-                       appAccess.locations.includes(itemId);
+      const canAccess = appAccess.entities.includes(itemId);
 
       return canAccess ? data : null;
     } catch (error) {

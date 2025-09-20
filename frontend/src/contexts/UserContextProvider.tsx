@@ -85,20 +85,42 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = ({
       
       const response = await api.get('/admin/auth-status');
       
-      if (response.data.success && response.data.user) {
-        const { user: userData, tenant: tenantData, permissions: userPermissions, roles: userRoles } = response.data;
-        
+      if (response.data.success && response.data.authStatus) {
+        const authStatus = response.data.authStatus;
+
+        // Create user object from authStatus
+        const userData: UserContextData = {
+          userId: authStatus.userId,
+          kindeUserId: authStatus.userId,
+          email: authStatus.email,
+          name: authStatus.email || 'Unknown', // Use email as fallback for name
+          tenantId: authStatus.tenantId,
+          isTenantAdmin: authStatus.isTenantAdmin || false,
+          isActive: true, // Assume active if authenticated
+          onboardingCompleted: authStatus.onboardingCompleted || false,
+          needsOnboarding: authStatus.needsOnboarding || false
+        };
+
+        // Create tenant object
+        const tenantData: TenantData = {
+          tenantId: authStatus.tenantId,
+          companyName: 'Unknown', // This might need to be fetched separately
+          subdomain: 'unknown',
+          industry: 'Unknown'
+        };
+
         setUser(userData);
         setTenant(tenantData);
-        setPermissions(userPermissions || []);
-        setRoles(userRoles || []);
+        setPermissions(authStatus.userPermissions || authStatus.legacyPermissions || []);
+        setRoles(authStatus.userRoles || []);
         setLastRefreshTime(new Date());
-        
+
         console.log('✅ User context refreshed:', {
           userId: userData.userId,
           email: userData.email,
-          permissions: userPermissions?.length || 0,
-          roles: userRoles?.length || 0
+          tenantId: authStatus.tenantId,
+          permissions: (authStatus.userPermissions || authStatus.legacyPermissions || []).length,
+          roles: (authStatus.userRoles || []).length
         });
         
         if (showToast) {
@@ -237,7 +259,21 @@ export const useUserContext = (): UserContextType => {
 
 // Hook for checking permissions with better TypeScript support
 export const usePermissionCheck = () => {
-  const { checkPermission, hasRole, user } = useUserContext();
+  // Guard against context not being available
+  let contextValue;
+  try {
+    contextValue = useUserContext();
+  } catch (error) {
+    console.log('🔧 usePermissionCheck: Context not available yet');
+    return {
+      hasPermission: () => false,
+      hasRole: () => false,
+      isAdmin: false,
+      isAuthenticated: false
+    };
+  }
+
+  const { checkPermission, hasRole, user } = contextValue;
   
   return {
     hasPermission: checkPermission,

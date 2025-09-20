@@ -1,5 +1,6 @@
 import trialManager from '../utils/trial-manager.js';
 import Logger from '../utils/logger.js';
+import { CreditService } from '../services/credit-service.js';
 
 // Middleware to check if trial is expired and restrict operations
 export async function trialRestrictionMiddleware(request, reply) {
@@ -21,10 +22,11 @@ export async function trialRestrictionMiddleware(request, reply) {
     return;
   }
 
-  // Allow ONLY payment, subscription, and auth operations when expired
+  // Allow ONLY payment, credit, and auth operations when credits are insufficient
   const allowedPathsForExpired = [
     '/api/subscriptions',
-    '/api/payments', 
+    '/api/payments',
+    '/api/credits',
     '/api/billing',
     '/api/webhooks',
     '/api/auth',
@@ -62,7 +64,7 @@ export async function trialRestrictionMiddleware(request, reply) {
   const tenantId = request.userContext.tenantId;
 
   try {
-    console.log(`🔒 [${requestId}] Checking trial expiry for tenant: ${tenantId}`);
+    console.log(`🔒 [${requestId}] Checking credit balance for tenant: ${tenantId}`);
     console.log(`🌐 [${requestId}] Request URL: ${request.url}`);
     console.log(`📝 [${requestId}] Method: ${request.method}`);
 
@@ -74,52 +76,36 @@ export async function trialRestrictionMiddleware(request, reply) {
       isAuthenticated: request.userContext?.isAuthenticated
     });
 
-    const expiryCheck = await trialManager.isTrialExpired(tenantId);
-    
-    console.log(`📊 [${requestId}] Trial status:`, expiryCheck);
+    // Check credit balance instead of trial expiry
+    const creditBalance = await CreditService.getCurrentBalance(tenantId);
 
-    // Check if user has active paid subscription - skip trial expiry if they do
-    const hasActivePaidSubscription = await trialManager.hasActivePaidSubscription(tenantId);
-    console.log(`💳 [${requestId}] Has active paid subscription:`, hasActivePaidSubscription);
+    console.log(`💰 [${requestId}] Credit balance:`, {
+      availableCredits: creditBalance?.availableCredits || 0,
+      totalCredits: creditBalance?.totalCredits || 0,
+      criticalBalanceThreshold: creditBalance?.criticalBalanceThreshold || 10
+    });
 
-    if (expiryCheck.expired && !hasActivePaidSubscription) {
-      console.log(`🚫 [${requestId}] TRIAL/PLAN EXPIRED - Access completely blocked!`);
-      console.log(`📅 [${requestId}] Expired: ${expiryCheck.trialEnd || expiryCheck.currentPeriodEnd}`);
-      console.log(`🔒 [${requestId}] Reason: ${expiryCheck.reason}`);
-      console.log(`💳 [${requestId}] Only payment operations allowed`);
+    // Check if credits are insufficient (below critical threshold)
+    const isCreditInsufficient = !creditBalance || creditBalance.availableCredits <= (creditBalance.criticalBalanceThreshold || 10);
 
-      // Calculate how long ago the trial/plan expired
-      const now = new Date();
-      const expiredDate = new Date(expiryCheck.trialEnd || expiryCheck.currentPeriodEnd);
-      const daysExpired = Math.floor((now - expiredDate) / (1000 * 60 * 60 * 24));
-      const hoursExpired = Math.floor((now - expiredDate) / (1000 * 60 * 60));
-      const minutesExpired = Math.floor((now - expiredDate) / (1000 * 60));
+    if (isCreditInsufficient) {
+      console.log(`🚫 [${requestId}] INSUFFICIENT CREDITS - Access restricted!`);
+      console.log(`💰 [${requestId}] Available credits: ${creditBalance?.availableCredits || 0}`);
+      console.log(`🎯 [${requestId}] Critical threshold: ${creditBalance?.criticalBalanceThreshold || 10}`);
+      console.log(`💳 [${requestId}] Only payment/credit operations allowed`);
 
-      let expiredDuration = '';
-      if (daysExpired > 0) {
-        expiredDuration = `${daysExpired} day${daysExpired > 1 ? 's' : ''} ago`;
-      } else if (hoursExpired > 0) {
-        expiredDuration = `${hoursExpired} hour${hoursExpired > 1 ? 's' : ''} ago`;
-      } else if (minutesExpired > 0) {
-        expiredDuration = `${minutesExpired} minute${minutesExpired > 1 ? 's' : ''} ago`;
-      } else {
-        expiredDuration = 'just now';
-      }
+      // Calculate credit shortage
+      const criticalThreshold = creditBalance?.criticalBalanceThreshold || 10;
+      const availableCredits = creditBalance?.availableCredits || 0;
+      const shortage = Math.max(0, criticalThreshold - availableCredits);
+
+      let restrictionMessage = shortage > 0
+        ? `Your credit balance is insufficient (short by ${shortage} credits). Please purchase more credits to continue using the service.`
+        : 'Your credit balance is insufficient. Please purchase more credits to continue using the service.';
 
       // Determine the type of operation being blocked
       let operationType = 'operation';
-      let specificMessage = '';
-      
-      const isTrialExpired = expiryCheck.reason.includes('trial');
-      const isPaidPlanExpired = expiryCheck.reason.includes('paid_plan');
-
-      if (isTrialExpired) {
-        specificMessage = 'Your trial period has ended and your account is suspended. Upgrade your subscription to restore access to all features and data.';
-      } else if (isPaidPlanExpired) {
-        specificMessage = `Your ${expiryCheck.plan} subscription has expired and your account is suspended. Renew your subscription or choose a new plan to restore access.`;
-      } else {
-        specificMessage = 'Your subscription has expired and access is suspended. Please upgrade or renew to continue using the service.';
-      }
+      let specificMessage = restrictionMessage;
 
       // More specific messages based on what they're trying to access
       if (request.url.includes('/users') || request.url.includes('/admin')) {
@@ -143,22 +129,22 @@ export async function trialRestrictionMiddleware(request, reply) {
       // Show immediate banner in response - return 200 to avoid HTTP errors
       return reply.code(200).send({
         success: false,
-        error: isTrialExpired ? 'Trial Expired' : 'Subscription Expired',
+        error: 'Insufficient Credits',
         message: specificMessage,
-        code: isTrialExpired ? 'TRIAL_EXPIRED' : 'SUBSCRIPTION_EXPIRED',
+        code: 'CREDIT_INSUFFICIENT',
         operationType,
         data: {
-          trialEnd: expiryCheck.trialEnd,
-          currentPeriodEnd: expiryCheck.currentPeriodEnd,
-          expiredDate: expiryCheck.trialEnd || expiryCheck.currentPeriodEnd,
-          expiredDateFormatted: expiredDate.toLocaleDateString() + ' at ' + expiredDate.toLocaleTimeString(),
-          expiredDuration,
-          reason: expiryCheck.reason,
-          plan: expiryCheck.plan,
-          isTrialExpired,
-          isPaidPlanExpired,
-          allowedOperations: ['payments', 'subscriptions', 'billing'],
-          upgradeUrl: '/api/subscriptions/checkout',
+          creditBalance: availableCredits,
+          criticalThreshold: criticalThreshold,
+          shortage: shortage,
+          availableCredits,
+          totalCredits: creditBalance?.totalCredits || 0,
+          creditExpiry: creditBalance?.creditExpiry,
+          reason: 'insufficient_credits',
+          plan: 'credit_based',
+          isCreditInsufficient: true,
+          allowedOperations: ['payments', 'credits', 'billing'],
+          purchaseUrl: '/api/credits/purchase',
           billingUrl: '/billing',
           blockedOperation: {
             url: request.url,
@@ -168,26 +154,21 @@ export async function trialRestrictionMiddleware(request, reply) {
         },
         requestId,
         // For frontend to show immediate banner/modal
-        isTrialExpired: isTrialExpired,
-        isSubscriptionExpired: isPaidPlanExpired,
-        showUpgradePrompt: true,
-        blockAppLoading: true, // Block all app loading until resolved
+        isCreditInsufficient: true,
+        showPurchasePrompt: true,
+        blockAppLoading: false, // Don't block app loading for credit issues
         immediate: true, // Show banner immediately
-        // Add this to indicate the response is for subscription expiry
-        subscriptionExpired: true
+        // Add this to indicate the response is for credit insufficiency
+        creditExpired: true
       });
     }
 
-    console.log(`✅ [${requestId}] Access granted - subscription is active`);
-    if (expiryCheck.trialEnd) {
-      console.log(`📅 [${requestId}] Trial ends: ${expiryCheck.trialEnd}`);
-    }
-    if (expiryCheck.currentPeriodEnd) {
-      console.log(`📅 [${requestId}] Current period ends: ${expiryCheck.currentPeriodEnd}`);
-    }
+    console.log(`✅ [${requestId}] Access granted - sufficient credits available`);
+    console.log(`💰 [${requestId}] Available credits: ${availableCredits}`);
+    console.log(`🎯 [${requestId}] Critical threshold: ${criticalThreshold}`);
 
   } catch (error) {
-    console.error(`❌ [${requestId}] Error checking trial expiry:`, error);
+    console.error(`❌ [${requestId}] Error checking credit balance:`, error);
     console.error(`❌ [${requestId}] Error details:`, {
       message: error.message,
       stack: error.stack,

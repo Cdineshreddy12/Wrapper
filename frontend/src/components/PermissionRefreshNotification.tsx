@@ -10,7 +10,16 @@ interface PermissionRefreshNotificationProps {
 }
 
 export const PermissionRefreshNotification: React.FC<PermissionRefreshNotificationProps> = ({ className }) => {
-  const { refreshUserContext, loading, lastRefreshTime, autoRefresh, setAutoRefresh } = useUserContext();
+  // Guard against context not being available
+  let contextValue;
+  try {
+    contextValue = useUserContext();
+  } catch (error) {
+    console.log('🔧 PermissionRefreshNotification: Context not available yet, skipping render');
+    return null;
+  }
+
+  const { refreshUserContext, loading, lastRefreshTime, autoRefresh, setAutoRefresh } = contextValue;
   const [isVisible, setIsVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastNotificationTime, setLastNotificationTime] = useState<Date | null>(null);
@@ -137,7 +146,15 @@ export const PermissionRefreshNotification: React.FC<PermissionRefreshNotificati
 
 // Component for showing current permission status in header/nav
 export const PermissionStatusIndicator: React.FC<{ className?: string }> = ({ className }) => {
-  const { lastRefreshTime, autoRefresh, refreshUserContext, loading } = useUserContext();
+  // Guard against context not being available
+  let contextValue;
+  try {
+    contextValue = useUserContext();
+  } catch (error) {
+    return null;
+  }
+
+  const { lastRefreshTime, autoRefresh, refreshUserContext, loading } = contextValue;
   const [isStale, setIsStale] = useState(false);
 
   useEffect(() => {

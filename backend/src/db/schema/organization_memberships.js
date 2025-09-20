@@ -2,6 +2,7 @@ import { pgTable, uuid, varchar, timestamp, jsonb, boolean, integer, text } from
 import { tenants } from './tenants.js';
 import { tenantUsers } from './users.js';
 import { customRoles } from './permissions.js';
+import { entities } from './unified-entities.js';
 
 // User membership across organizations and locations
 export const organizationMemberships = pgTable('organization_memberships', {
@@ -9,9 +10,9 @@ export const organizationMemberships = pgTable('organization_memberships', {
   userId: uuid('user_id').references(() => tenantUsers.userId, { onDelete: 'cascade' }).notNull(),
   tenantId: uuid('tenant_id').references(() => tenants.tenantId).notNull(),
 
-  // Entity Membership
-  entityType: varchar('entity_type', { length: 20 }).notNull(), // 'organization', 'location'
-  entityId: uuid('entity_id').notNull(), // organizationId or locationId
+  // Entity Membership - FIXED REFERENCES
+  entityId: uuid('entity_id').references(() => entities.entityId).notNull(), // References unified entities table
+  entityType: varchar('entity_type', { length: 20 }).default('organization'), // For compatibility, derived from entities table
 
   // Role Assignment
   roleId: uuid('role_id').references(() => customRoles.roleId),
@@ -89,9 +90,9 @@ export const membershipInvitations = pgTable('membership_invitations', {
   invitedEmail: varchar('invited_email', { length: 255 }).notNull(),
   invitationToken: varchar('invitation_token', { length: 255 }).notNull().unique(),
 
-  // Entity Context
-  entityType: varchar('entity_type', { length: 20 }).notNull(),
-  entityId: uuid('entity_id').notNull(),
+  // Entity Context - FIXED REFERENCES
+  entityId: uuid('entity_id').references(() => entities.entityId).notNull(), // References unified entities table
+  entityType: varchar('entity_type', { length: 20 }).default('organization'), // For compatibility, derived from entities table
   roleId: uuid('role_id').references(() => customRoles.roleId),
 
   // Invitation Status
@@ -116,6 +117,7 @@ export const membershipInvitations = pgTable('membership_invitations', {
 export const membershipHistory = pgTable('membership_history', {
   historyId: uuid('history_id').primaryKey().defaultRandom(),
   membershipId: uuid('membership_id').references(() => organizationMemberships.membershipId, { onDelete: 'cascade' }).notNull(),
+  entityId: uuid('entity_id').references(() => entities.entityId), // Add entity reference for history
 
   // Change Details
   changeType: varchar('change_type', { length: 50 }).notNull(), // 'created', 'updated', 'deactivated', 'reactivated', 'role_changed'
@@ -132,39 +134,3 @@ export const membershipHistory = pgTable('membership_history', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// Bulk membership operations
-export const membershipBulkOperations = pgTable('membership_bulk_operations', {
-  operationId: uuid('operation_id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id').references(() => tenants.tenantId).notNull(),
-
-  // Operation Details
-  operationType: varchar('operation_type', { length: 50 }).notNull(), // 'import', 'export', 'bulk_update', 'bulk_deactivate'
-  operationName: varchar('operation_name', { length: 255 }),
-  description: text('description'),
-
-  // Target Entity
-  entityType: varchar('entity_type', { length: 20 }),
-  entityId: uuid('entity_id'),
-
-  // Operation Status
-  status: varchar('status', { length: 20 }).default('pending'), // 'pending', 'processing', 'completed', 'failed', 'cancelled'
-  totalRecords: integer('total_records').default(0),
-  processedRecords: integer('processed_records').default(0),
-  failedRecords: integer('failed_records').default(0),
-
-  // Results & Errors
-  results: jsonb('results').default({}),
-  errors: jsonb('errors').default([]),
-  errorSummary: text('error_summary'),
-
-  // File/Data References
-  sourceFile: varchar('source_file', { length: 500 }),
-  resultFile: varchar('result_file', { length: 500 }),
-
-  // Audit
-  initiatedBy: uuid('initiated_by').references(() => tenantUsers.userId).notNull(),
-  startedAt: timestamp('started_at'),
-  completedAt: timestamp('completed_at'),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-});

@@ -1,3 +1,39 @@
+/**
+ * API Usage Guide for Separated Operation Cost Endpoints
+ *
+ * NEW SEPARATED APPROACH (Recommended):
+ * =====================================
+ *
+ * 1. Global Operations Only:
+ *    operationCostAPI.getGlobalOperationCosts({ search: 'crm.leads' })
+ *    → Returns: { data: { operations: [...], type: 'global' } }
+ *
+ * 2. Tenant-Specific Operations Only:
+ *    operationCostAPI.getTenantOperationCosts(tenantId, { search: 'crm.leads' })
+ *    → Returns: { data: { operations: [...], type: 'tenant', tenantId } }
+ *
+ * 3. Smart Auto-Selection (Recommended):
+ *    smartOperationCostAPI.getSmartOperationCosts({ tenantId, includeGlobal: true })
+ *    → Automatically chooses best endpoint based on context
+ *
+ * 4. Get Effective Cost with Hierarchy:
+ *    smartOperationCostAPI.getEffectiveOperationCost('crm.leads.create', tenantId)
+ *    → Returns tenant-specific cost, or global fallback, or null
+ *
+ * LEGACY APPROACH (Deprecated):
+ * ============================
+ *
+ * operationCostAPI.getOperationCosts({ isGlobal: true })
+ * → Still works but mixes concerns - avoid for new code
+ *
+ * COMPREHENSIVE CONFIGURATION (Best for Management UI):
+ * ====================================================
+ *
+ * creditConfigurationAPI.getTenantConfigurations(tenantId)
+ * → Returns both tenant and global configs with proper hierarchy
+ *
+ */
+
 import axios, { AxiosError } from 'axios'
 import toast from 'react-hot-toast'
 
@@ -249,6 +285,7 @@ export const api = axios.create({
     'Content-Type': 'application/json',
   },
 })
+
 
 // Request interceptor - add debugging and ensure cookies are sent
 api.interceptors.request.use(async (config) => {
@@ -580,48 +617,48 @@ export interface AuditLogEntry {
 
 // Auth API
 export const authAPI = {
-  getLoginUrl: (subdomain: string) => api.get(`/auth/login/${subdomain}`),
-  handleCallback: (code: string, state?: string) => 
-    api.get('/auth/callback', { params: { code, state } }),
-  getUserInfo: () => api.get<User>('/auth/me'),
-  logout: () => api.post('/auth/logout'),
-  refreshToken: () => api.post('/auth/refresh'),
-  getProviders: () => api.get('/auth/providers'),
+  getLoginUrl: (subdomain: string) => api.get(`/api/auth/login/${subdomain}`),
+  handleCallback: (code: string, state?: string) =>
+    api.get('/api/auth/callback', { params: { code, state } }),
+  getUserInfo: () => api.get<User>('/api/auth/me'),
+  logout: () => api.post('/api/auth/logout'),
+  refreshToken: () => api.post('/api/auth/refresh'),
+  getProviders: () => api.get('/api/auth/providers'),
 }
 
 // Tenant API
 export const tenantAPI = {
   // Get current tenant details
-  getCurrentTenant: () => api.get<Tenant>('/tenants/current'),
-  
+  getCurrentTenant: () => api.get<Tenant>('/api/tenants/current'),
+
   // Get tenant users
-  getUsers: () => api.get<ApiResponse<UnifiedUser[]>>('/tenants/current/users'),
-  
+  getUsers: () => api.get<ApiResponse<UnifiedUser[]>>('/api/tenants/current/users'),
+
   // Invite user to tenant
   inviteUser: (data: { email: string; roleId: string; message?: string }) =>
-    api.post<ApiResponse<any>>('/tenants/current/users/invite', data),
-  
+    api.post<ApiResponse<any>>('/api/tenants/current/users/invite', data),
+
   // Remove user from tenant
   removeUser: (userId: string) =>
-    api.delete<ApiResponse<any>>(`/tenants/current/users/${userId}`),
-  
+    api.delete<ApiResponse<any>>(`/api/tenants/current/users/${userId}`),
+
   // Update user role
   updateUserRole: (userId: string, roleId: string) =>
-    api.put<ApiResponse<any>>(`/tenants/current/users/${userId}/role`, { roleId }),
-  
+    api.put<ApiResponse<any>>(`/api/tenants/current/users/${userId}/role`, { roleId }),
+
   // Get tenant usage
   getUsage: (params?: { period?: string; startDate?: string; endDate?: string }) =>
-    api.get<ApiResponse<any>>('/tenants/current/usage', { params }),
-  
+    api.get<ApiResponse<any>>('/api/tenants/current/usage', { params }),
+
   // Export users
-  exportUsers: () => api.get('/tenants/current/users/export'),
+  exportUsers: () => api.get('/api/tenants/current/users/export'),
 }
 
 // Subscription API
 export const subscriptionAPI = {
   // Debug endpoint for testing authentication
   debugAuth: () => api.get('/subscriptions/debug-auth'),
-  
+
   getCurrent: () => api.get('/subscriptions/current'),
   getAvailablePlans: () => api.get('/subscriptions/plans'),
   getBillingHistory: () => api.get('/subscriptions/billing-history'),
@@ -632,7 +669,7 @@ export const subscriptionAPI = {
     successUrl: string;
     cancelUrl: string;
   }) => api.post('/subscriptions/checkout', data),
-  checkProfileStatus: () => api.get('/payment-upgrade/profile-status'),
+  checkProfileStatus: () => api.get('/api/payment-upgrade/profile-status'),
   changePlan: (data: {
     planId: string;
     billingCycle?: 'monthly' | 'yearly';
@@ -640,93 +677,93 @@ export const subscriptionAPI = {
   cancelSubscription: () => api.post('/subscriptions/cancel'),
   updatePaymentMethod: () => api.post('/subscriptions/update-payment-method'),
   getUsage: () => api.get('/subscriptions/usage'),
-  
+
   // Enhanced payment management
-  immediateDowngrade: (data: { newPlan: string; reason?: string; refundRequested?: boolean }) => 
+  immediateDowngrade: (data: { newPlan: string; reason?: string; refundRequested?: boolean }) =>
     api.post('/subscriptions/immediate-downgrade', data),
-  processRefund: (data: { paymentId: string; amount?: number; reason?: string }) => 
+  processRefund: (data: { paymentId: string; amount?: number; reason?: string }) =>
     api.post('/subscriptions/refund', data),
-  getPaymentDetails: (paymentId: string) => 
+  getPaymentDetails: (paymentId: string) =>
     api.get(`/subscriptions/payment/${paymentId}`),
-  getSubscriptionActions: () => 
+  getSubscriptionActions: () =>
     api.get('/subscriptions/actions'),
-  getPlanLimits: () => 
+  getPlanLimits: () =>
     api.get('/subscriptions/plan-limits'),
-  cleanupDuplicatePayments: () => 
+  cleanupDuplicatePayments: () =>
     api.post('/subscriptions/cleanup-duplicate-payments'),
-  toggleTrialRestrictions: (disable: boolean) => 
+  toggleTrialRestrictions: (disable: boolean) =>
     api.post('/subscriptions/toggle-trial-restrictions', { disable }),
 }
 
 // Analytics API
 export const analyticsAPI = {
-  getDashboard: () => api.get('/analytics/dashboard'),
-  getMetrics: (period?: string) => 
-    api.get('/analytics/metrics', { params: { period } }),
-  getPerformance: () => api.get('/analytics/performance'),
-  getReports: () => api.get('/analytics/reports'),
-  exportData: (type: string) => api.get(`/analytics/export/${type}`),
+  getDashboard: () => api.get('/api/analytics/dashboard'),
+  getMetrics: (period?: string) =>
+    api.get('/api/analytics/metrics', { params: { period } }),
+  getPerformance: () => api.get('/api/analytics/performance'),
+  getReports: () => api.get('/api/analytics/reports'),
+  exportData: (type: string) => api.get(`/api/analytics/export/${type}`),
 }
 
 // Usage API
 export const usageAPI = {
-  getCurrent: () => api.get<UsageMetrics>('/usage/current'),
-  getMetrics: (period?: string) => 
-    api.get('/usage/metrics', { params: { period } }),
-  getBreakdown: () => api.get('/usage/breakdown'),
-  getAlerts: () => api.get('/usage/alerts'),
-  getLogs: (page = 1, limit = 50) => 
-    api.get('/usage/logs', { params: { page, limit } }),
+  getCurrent: () => api.get<UsageMetrics>('/api/usage/current'),
+  getMetrics: (period?: string) =>
+    api.get('/api/usage/metrics', { params: { period } }),
+  getBreakdown: () => api.get('/api/usage/breakdown'),
+  getAlerts: () => api.get('/api/usage/alerts'),
+  getLogs: (page = 1, limit = 50) =>
+    api.get('/api/usage/logs', { params: { page, limit } }),
 }
 
 // Permissions API
 export const permissionsAPI = {
-  getAvailablePermissions: () => api.get('/permissions/available'),
-  
+  getAvailablePermissions: () => api.get('/api/permissions/available'),
+
   // Applications and modules
-  getApplications: () => api.get('/permissions/applications'),
-  
+  getApplications: () => api.get('/api/permissions/applications'),
+
   // Users
-  getUsers: () => api.get('/permissions/users'),
-  getUserPermissions: (userId: string) => api.get(`/permissions/users/${userId}/permissions`),
-  
+  getUsers: () => api.get('/api/permissions/users'),
+  getUserPermissions: (userId: string) => api.get(`/api/permissions/users/${userId}/permissions`),
+
   // Bulk operations
   bulkAssignPermissions: (assignments: Array<{
     userId: string;
     appId: string;
     moduleId: string;
     permissions: string[];
-  }>) => api.post('/permissions/bulk-assign', { assignments }),
-  
+  }>) => api.post('/api/permissions/bulk-assign', { assignments }),
+
   // Template operations
-  getTemplates: () => api.get('/permissions/templates'),
+  getTemplates: () => api.get('/api/permissions/templates'),
   applyTemplate: (userId: string, data: {
     templateId: string;
     clearExisting?: boolean;
-  }) => api.post(`/permissions/users/${userId}/apply-template`, data),
-  
+  }) => api.post(`/api/permissions/users/${userId}/apply-template`, data),
+
   // Permission removal
   removeUserPermissions: (userId: string, data: {
     appId?: string;
     moduleId?: string;
     permissionIds?: string[];
-  }) => api.delete(`/permissions/users/${userId}/permissions`, { data }),
-  
+  }) => api.delete(`/api/permissions/users/${userId}/permissions`, { data }),
+
   // Roles - Basic operations only (creation moved to builder)
-  getRoles: (params?: { page?: number; limit?: number; search?: string; type?: string }) => 
-    api.get('/permissions/roles', { params }),
-  updateRole: (roleId: string, data: { 
-    name?: string; 
-    description?: string; 
-    permissions?: string[]; 
-    restrictions?: any 
-  }) => api.put(`/permissions/roles/${roleId}`, data),
-  deleteRole: (roleId: string) => api.delete(`/permissions/roles/${roleId}`),
-  
+  getRoles: (params?: { page?: number; limit?: number; search?: string; type?: string }) =>
+    api.get('/api/permissions/roles', { params }),
+  updateRole: (roleId: string, data: {
+    name?: string;
+    description?: string;
+    permissions?: string[];
+    restrictions?: any
+  }) => api.put(`/api/permissions/roles/${roleId}`, data),
+  deleteRole: (roleId: string) => api.delete(`/api/permissions/roles/${roleId}`),
+
   // Role Templates - REMOVED (using application/module builder instead)
-  
+
   // Custom Role Builder (using applications/modules tables)
-  getRoleBuilderOptions: () => api.get('/custom-roles/builder-options'),
+  getRoleBuilderOptions: () => api.get('/api/custom-roles/builder-options'),
   createRoleFromBuilder: (data: {
     roleName: string;
     description?: string;
@@ -898,7 +935,7 @@ export const userApplicationAPI = {
   }) => api.get(`/user-sync/user/${userId}/access`, { params }),
 
   // Get application access summary
-  getApplicationAccessSummary: () => 
+  getApplicationAccessSummary: () =>
     api.get('/user-sync/classification'),
 
   // Sync users to specific application
@@ -918,6 +955,430 @@ export const userApplicationAPI = {
     dryRun?: boolean;
     appCodes?: string[];
   }) => api.post(`/user-sync/sync/user/${userId}`, options)
+}
+
+// Credit Management API
+export const creditAPI = {
+  // Get current credit balance
+  getCurrentBalance: () => api.get('/credits/current'),
+
+  // Get credit transaction history
+  getTransactionHistory: (params?: {
+    page?: number;
+    limit?: number;
+    type?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => api.get('/credits/transactions', { params }),
+
+  // Get active credit alerts
+  getAlerts: () => api.get('/credits/alerts'),
+
+  // Purchase credits
+  purchaseCredits: (data: {
+    creditAmount: number;
+    paymentMethod: 'stripe' | 'bank_transfer' | 'check';
+    currency?: string;
+    notes?: string;
+  }) => api.post('/credits/purchase', data),
+
+  // Consume credits for operation
+  consumeCredits: (data: {
+    operationCode: string;
+    creditCost: number;
+    operationId?: string;
+    description?: string;
+    metadata?: any;
+  }) => api.post('/credits/consume', data),
+
+  // Get credit usage summary
+  getUsageSummary: (params?: {
+    period?: 'day' | 'week' | 'month' | 'year';
+    startDate?: string;
+    endDate?: string;
+  }) => api.get('/credits/usage-summary', { params }),
+
+  // Transfer credits between entities
+  transferCredits: (data: {
+    toEntityType: 'organization' | 'location';
+    toEntityId: string;
+    creditAmount: number;
+    reason?: string;
+  }) => api.post('/credits/transfer', data),
+
+  // Get credit configuration for operation
+  getOperationConfig: (operationCode: string) =>
+    api.get(`/credits/config/${operationCode}`),
+
+  // Mark alert as read
+  markAlertAsRead: (alertId: string) =>
+    api.put(`/credits/alerts/${alertId}/read`),
+
+  // Get available credit packages
+  getAvailablePackages: () => api.get('/credits/packages'),
+
+  // Get credit statistics
+  getCreditStats: () => api.get('/credits/stats')
+}
+
+// Application Assignment Management API
+export const applicationAssignmentAPI = {
+  // Get overview of application assignments
+  getOverview: () => api.get('/admin/application-assignments/overview'),
+
+  // Get all tenants with their application assignments
+  getTenants: (params?: {
+    search?: string;
+    hasApps?: boolean;
+    appCode?: string;
+    limit?: number;
+    offset?: number;
+  }) => api.get('/admin/application-assignments/tenants', { params }),
+
+  // Get application assignments for a specific tenant
+  getTenantAssignments: (tenantId: string) =>
+    api.get(`/admin/application-assignments/tenant/${tenantId}`),
+
+  // Get tenant-specific applications with modules and permissions
+  getTenantApplications: (tenantId: string) =>
+    api.get(`/admin/application-assignments/tenant-apps/${tenantId}`),
+
+  // Assign application to tenant
+  assignApplication: (data: {
+    tenantId: string;
+    appId: string;
+    isEnabled?: boolean;
+    subscriptionTier?: string;
+    enabledModules?: string[];
+    customPermissions?: Record<string, string[]>;
+    licenseCount?: number;
+    maxUsers?: number;
+    expiresAt?: string;
+  }) => api.post('/admin/application-assignments/assign', data),
+
+  // Update application assignment
+  updateAssignment: (assignmentId: string, data: {
+    isEnabled?: boolean;
+    subscriptionTier?: string;
+    enabledModules?: string[];
+    licenseCount?: number;
+    maxUsers?: number;
+    expiresAt?: string;
+  }) => api.put(`/admin/application-assignments/${assignmentId}`, data),
+
+  // Remove application assignment
+  removeAssignment: (assignmentId: string) =>
+    api.delete(`/admin/application-assignments/${assignmentId}`),
+
+  // Bulk assign applications
+  bulkAssign: (data: {
+    tenantIds: string[];
+    appIds: string[];
+    defaultConfig?: {
+      isEnabled?: boolean;
+      subscriptionTier?: string;
+      enabledModules?: string[];
+      customPermissions?: Record<string, string[]>;
+      licenseCount?: number;
+      maxUsers?: number;
+    };
+  }) => api.post('/admin/application-assignments/bulk-assign', data),
+
+  // Get available applications
+  getApplications: (params?: {
+    includeModules?: boolean;
+  }) => api.get('/admin/application-assignments/applications', { params }),
+
+  // Module-level assignment operations
+  assignModule: (data: {
+    tenantId: string;
+    moduleId: string;
+  }) => api.post('/admin/application-assignments/assign-module', data),
+
+  updateModulePermissions: (data: {
+    tenantId: string;
+    moduleId: string;
+    permissions: string[];
+  }) => api.put('/admin/application-assignments/update-module-permissions', data),
+
+  removeModule: (data: {
+    tenantId: string;
+    moduleId: string;
+  }) => api.delete('/admin/application-assignments/remove-module', { data }),
+
+  getTenantModules: (tenantId: string) =>
+    api.get(`/admin/application-assignments/tenant-modules/${tenantId}`)
+}
+
+// Operation Cost Management API (Separated by Concern)
+export const operationCostAPI = {
+  // LEGACY: Get all operation costs (deprecated - use separated APIs)
+  getOperationCosts: (params?: {
+    search?: string;
+    category?: string;
+    isGlobal?: boolean;
+    isActive?: boolean;
+    includeUsage?: boolean;
+  }) => api.get('/admin/operation-costs', { params }),
+
+  // NEW: Get global operation costs only
+  getGlobalOperationCosts: (params?: {
+    search?: string;
+    category?: string;
+    isActive?: boolean;
+    includeUsage?: boolean;
+  }) => api.get('/admin/operation-costs/global', { params }),
+
+  // NEW: Get tenant-specific operation costs only
+  getTenantOperationCosts: (tenantId: string, params?: {
+    search?: string;
+    category?: string;
+    isActive?: boolean;
+    includeUsage?: boolean;
+  }) => api.get(`/admin/operation-costs/tenant/${tenantId}`, { params }),
+
+  // Create operation cost
+  createOperationCost: (data: {
+    operationCode: string;
+    operationName?: string;
+    creditCost: number;
+    unit?: string;
+    unitMultiplier?: number;
+    category?: string;
+    isGlobal?: boolean;
+    isActive?: boolean;
+    priority?: number;
+    tenantId?: string; // Add tenant ID for tenant-specific operations
+  }) => api.post('/admin/operation-costs', data),
+
+  // Update operation cost
+  updateOperationCost: (configId: string, data: {
+    operationCode?: string;
+    creditCost?: number;
+    unit?: string;
+    unitMultiplier?: number;
+    isGlobal?: boolean;
+    isActive?: boolean;
+  }) => api.put(`/admin/operation-costs/${configId}`, data),
+
+  // Delete operation cost
+  deleteOperationCost: (configId: string) =>
+    api.delete(`/admin/operation-costs/${configId}`),
+
+  // Get analytics
+  getAnalytics: () => api.get('/admin/operation-costs/analytics'),
+
+  // Get templates
+  getTemplates: () => api.get('/admin/operation-costs/templates'),
+
+  // Apply template
+  applyTemplate: (data: {
+    templateId: string;
+  }) => api.post('/admin/operation-costs/apply-template', data),
+
+  // Export costs
+  exportCosts: () => api.get('/admin/operation-costs/export', {
+    responseType: 'blob'
+  })
+}
+
+// Smart Operation Cost API (Auto-selects best endpoint based on context)
+export const smartOperationCostAPI = {
+  /**
+   * Smart fetch operation costs - automatically chooses the best endpoint
+   * Use Case: When you need both global and tenant-specific costs with proper hierarchy
+   */
+  getSmartOperationCosts: async (context: {
+    tenantId?: string;
+    includeGlobal?: boolean;
+    params?: {
+      search?: string;
+      category?: string;
+      isActive?: boolean;
+      includeUsage?: boolean;
+    }
+  }) => {
+    const { tenantId, includeGlobal = true, params } = context;
+
+    if (!tenantId) {
+      // No tenant context - use global only
+      return operationCostAPI.getGlobalOperationCosts(params);
+    }
+
+    if (!includeGlobal) {
+      // Tenant-only context
+      return operationCostAPI.getTenantOperationCosts(tenantId, params);
+    }
+
+    // Need both tenant and global - use comprehensive endpoint
+    return creditConfigurationAPI.getTenantConfigurations(tenantId);
+  },
+
+  /**
+   * Get operation cost for specific operation with fallback hierarchy
+   * Use Case: When you need the effective cost for an operation (tenant → global → default)
+   */
+  getEffectiveOperationCost: async (operationCode: string, tenantId?: string) => {
+    if (!tenantId) {
+      // No tenant - get global cost
+      const response = await operationCostAPI.getGlobalOperationCosts({
+        search: operationCode
+      });
+      const operation = response.data.operations.find(op => op.operationCode === operationCode);
+      return operation || null;
+    }
+
+    // Get tenant configurations (includes hierarchy)
+    const response = await creditConfigurationAPI.getTenantConfigurations(tenantId);
+
+    // First try tenant-specific
+    let operation = response.data.configurations.operations.find(op => op.operationCode === operationCode);
+    if (operation) return operation;
+
+    // Fallback to global
+    operation = response.data.globalConfigs.operations.find(op => op.operationCode === operationCode);
+    if (operation) return operation;
+
+    return null; // Not found
+  }
+};
+
+// Credit Configuration Management API
+export const creditConfigurationAPI = {
+  // Get tenant configurations
+  getTenantConfigurations: (tenantId: string) =>
+    api.get(`/admin/credit-configurations/${tenantId}`),
+
+  // Update operation configuration for tenant
+  updateTenantOperationConfig: (tenantId: string, operationCode: string, data: {
+    creditCost?: number;
+    unit?: string;
+    unitMultiplier?: number;
+    freeAllowance?: number;
+    freeAllowancePeriod?: string;
+    volumeTiers?: Array<{
+      minVolume: number;
+      maxVolume: number;
+      creditCost: number;
+      isActive: boolean;
+    }>;
+    allowOverage?: boolean;
+    overageLimit?: number;
+    overagePeriod?: string;
+    overageCost?: number;
+    scope?: string;
+    isActive?: boolean;
+  }) => api.put(`/admin/credit-configurations/${tenantId}/operation/${operationCode}`, data),
+
+  // Update module configuration for tenant
+  updateTenantModuleConfig: (tenantId: string, moduleCode: string, data: {
+    defaultCreditCost?: number;
+    defaultUnit?: string;
+    maxOperationsPerPeriod?: number;
+    periodType?: string;
+    creditBudget?: number;
+    budgetResetPeriod?: string;
+    allowOverBudget?: boolean;
+    scope?: string;
+    isActive?: boolean;
+  }) => api.put(`/admin/credit-configurations/${tenantId}/module/${moduleCode}`, data),
+
+  // Update app configuration for tenant
+  updateTenantAppConfig: (tenantId: string, appCode: string, data: {
+    defaultCreditCost?: number;
+    defaultUnit?: string;
+    maxOperationsPerPeriod?: number;
+    periodType?: string;
+    creditBudget?: number;
+    budgetResetPeriod?: string;
+    allowOverBudget?: boolean;
+    scope?: string;
+    isActive?: boolean;
+  }) => api.put(`/admin/credit-configurations/${tenantId}/app/${appCode}`, data),
+
+  // Reset tenant configuration to global
+  resetTenantConfig: (tenantId: string, configType: 'operation' | 'module' | 'app', configCode: string) =>
+    api.delete(`/admin/credit-configurations/${tenantId}/${configType}/${configCode}`),
+
+  // Get all tenants for credit configuration
+  getTenantsForConfig: () =>
+    api.get('/admin/credit-configurations/tenants'),
+
+  // Bulk update tenant configurations
+  bulkUpdateTenantConfigs: (data: {
+    tenantIds: string[];
+    configType: 'operation' | 'module' | 'app';
+    configCode: string;
+    configData: any;
+  }) => api.post('/admin/credit-configurations/bulk-update', data)
+}
+
+// Application & Module Credit Configuration API
+export const applicationCreditAPI = {
+  // Get all application credit configurations
+  getApplicationCreditConfigs: () =>
+    api.get('/admin/credit-configurations/applications'),
+
+  // Update application credit configuration
+  updateApplicationCreditConfig: (appCode: string, data: {
+    defaultCreditCost?: number;
+    defaultUnit?: string;
+    maxOperationsPerPeriod?: number;
+    periodType?: string;
+    creditBudget?: number;
+    budgetResetPeriod?: string;
+    allowOverBudget?: boolean;
+    scope?: string;
+    isActive?: boolean;
+  }) => api.put(`/admin/credit-configurations/applications/${appCode}`, data),
+
+  // Update module credit configuration
+  updateModuleCreditConfig: (appCode: string, moduleCode: string, data: {
+    defaultCreditCost?: number;
+    defaultUnit?: string;
+    maxOperationsPerPeriod?: number;
+    periodType?: string;
+    creditBudget?: number;
+    budgetResetPeriod?: string;
+    allowOverBudget?: boolean;
+    scope?: string;
+    isActive?: boolean;
+  }) => api.put(`/admin/credit-configurations/applications/${appCode}/modules/${moduleCode}`, data),
+
+  // Bulk update application credit configurations
+  bulkUpdateApplicationConfigs: (data: {
+    appCodes: string[];
+    configData: any;
+  }) => api.post('/admin/credit-configurations/applications/bulk-update', data),
+
+  // Create tenant-specific operation cost
+  createTenantOperationCost: (tenantId: string, data: {
+    operationCode: string;
+    operationName?: string;
+    creditCost: number;
+    unit?: string;
+    unitMultiplier?: number;
+    category?: string;
+    freeAllowance?: number;
+    freeAllowancePeriod?: string;
+    volumeTiers?: Array<{
+      minVolume: number;
+      maxVolume: number;
+      creditCost: number;
+      isActive: boolean;
+    }>;
+    allowOverage?: boolean;
+    overageLimit?: number;
+    overagePeriod?: string;
+    overageCost?: number;
+    scope?: string;
+    isActive?: boolean;
+    priority?: number;
+  }) => api.post(`/admin/credit-configurations/tenant/${tenantId}/operations`, data),
+
+  // Initialize credits for a tenant
+  initializeTenantCredits: (tenantId: string, initialCredits: number = 1000) =>
+    api.post(`/admin/credit-configurations/initialize-credits/${tenantId}`, { initialCredits })
 }
 
 // Invitation Management API

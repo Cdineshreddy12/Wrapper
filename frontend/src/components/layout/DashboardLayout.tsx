@@ -55,7 +55,7 @@ const getDashboardNavigation = () => [
   },
   { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { name: 'Usage', href: '/dashboard/usage', icon: Activity },
-  { name: 'Admin', href: '/dashboard/admin', icon: Crown },
+  { name: 'Admin', href: '/admin', icon: Crown },
 ]
 
 const getOrganizationNavigation = (orgCode: string) => [
@@ -66,7 +66,7 @@ const getOrganizationNavigation = (orgCode: string) => [
   { name: 'Billing', href: `/org/${orgCode}/billing`, icon: CreditCard },
   { name: 'Usage', href: `/org/${orgCode}/usage`, icon: Activity },
   { name: 'Permissions', href: `/org/${orgCode}/permissions`, icon: Shield },
-  { name: 'Admin', href: `/org/${orgCode}/admin`, icon: Crown },
+  { name: 'Admin', href: '/admin', icon: Crown },
 ]
 
 export function DashboardLayout() {

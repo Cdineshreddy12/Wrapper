@@ -21,7 +21,6 @@ export const tenantUsers = pgTable('tenant_users', {
   alias: varchar('alias', { length: 100 }),
   phone: varchar('phone', { length: 50 }),
   mobile: varchar('mobile', { length: 50 }),
-  managerId: uuid('manager_id'), // Removed self-reference to avoid circular dependency
   profileData: jsonb('profile_data').default({}),
   
   // Multi-Entity Support
@@ -35,7 +34,6 @@ export const tenantUsers = pgTable('tenant_users', {
   isTenantAdmin: boolean('is_tenant_admin').default(false),
   
   // User Management (removed duplicate invitation fields)
-  invitedBy: uuid('invited_by'), // Removed self-reference to avoid circular dependency
   invitedAt: timestamp('invited_at'),
   // Note: invitationToken, invitationExpiresAt, invitationAcceptedAt moved to tenant_invitations table
   

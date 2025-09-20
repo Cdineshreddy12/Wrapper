@@ -276,8 +276,18 @@ export const BUSINESS_SUITE_MATRIX = {
           // Tenant Configuration Permissions
           { code: 'tenant_config_read', name: 'View Tenant Config', description: 'View tenant-specific configurations' },
           { code: 'tenant_config_update', name: 'Update Tenant Config', description: 'Update tenant configurations' },
+
+          // Tenant Management Permissions
+          { code: 'admin.tenants.read', name: 'View All Tenants', description: 'View and list all tenants in the system' },
           { code: 'tenant_config_manage', name: 'Manage Tenant Config', description: 'Full control over tenant configurations' },
-          
+
+          // Credit Configuration Permissions
+          { code: 'credit_config.view', name: 'View Credit Configurations', description: 'View tenant credit configuration settings' },
+          { code: 'credit_config.edit', name: 'Edit Credit Configurations', description: 'Edit tenant credit configuration settings' },
+          { code: 'credit_config.reset', name: 'Reset Credit Configurations', description: 'Reset tenant configurations to global defaults' },
+          { code: 'credit_config.bulk_update', name: 'Bulk Update Credit Configurations', description: 'Bulk update multiple credit configuration settings' },
+          { code: 'credit_config.apply_templates', name: 'Apply Credit Configuration Templates', description: 'Apply credit configuration templates to tenants' },
+
           // System Configuration Permissions
           { code: 'system_config_read', name: 'View System Config', description: 'View system-level configurations' },
           { code: 'system_config_update', name: 'Update System Config', description: 'Update system-level configurations' },

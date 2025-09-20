@@ -3,11 +3,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 
-import { 
-  CreditCard, 
-  Download, 
-  Calendar, 
-  Check, 
+import {
+  CreditCard,
+  Download,
+  Calendar,
+  Check,
   X,
   AlertTriangle,
   ExternalLink,
@@ -19,135 +19,83 @@ import {
   Users,
   Database,
   Shield,
-  Clock
+  Clock,
+  Coins
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { subscriptionAPI, setKindeTokenGetter, api } from '@/lib/api'
+import { subscriptionAPI, creditAPI, setKindeTokenGetter, api } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import toast from 'react-hot-toast'
 import { PaymentDetailsModal } from '@/components/PaymentDetailsModal'
 import { PaymentUpgradeModal } from '@/components/PaymentUpgradeModal'
 
-interface Plan {
+interface CreditPackage {
   id: string
   name: string
   description: string
-  monthlyPrice: number
-  yearlyPrice: number
+  credits: number
+  price: number
+  currency: string
   features: string[]
-  limits: {
-    users: number
-    projects: number
-    storage: number
-    apiCalls: number
-  }
-  tools: string[]
-  popular?: boolean
-  badge?: string
+  validityMonths: number
+  recommended?: boolean
 }
 
-const plans: Plan[] = [
-  {
-    id: 'free',
-    name: 'Free',
-    description: 'Perfect for individuals and small projects',
-    monthlyPrice: 0,
-    yearlyPrice: 0,
-    features: [
-      'Up to 3 users',
-      'Basic CRM tools',
-      '3 projects',
-      '1GB storage',
-      'Community support',
-      'Basic analytics'
-    ],
-    limits: {
-      users: 3,
-      projects: 3,
-      storage: 1000000000, // 1GB
-      apiCalls: 1000
-    },
-    tools: ['crm'],
-    badge: 'Free Forever'
-  },
+const creditPackages: CreditPackage[] = [
   {
     id: 'starter',
-    name: 'Starter',
-    description: 'Perfect for small teams getting started',
-    monthlyPrice: 29,
-    yearlyPrice: 290,
+    name: 'Starter Package',
+    description: 'Perfect for small businesses getting started',
+    credits: 1000,
+    price: 49,
+    currency: 'USD',
+    validityMonths: 1,
     features: [
-      'Up to 10 users',
-      'CRM & HR tools',
-      'Unlimited projects',
-      'Basic analytics',
-      '5GB storage',
+      '1,000 credits',
+      'Basic operations support',
       'Email support',
-      '✨ 14-day free trial'
-    ],
-    limits: {
-      users: 10,
-      projects: -1,
-      storage: 5000000000, // 5GB
-      apiCalls: 10000
-    },
-    tools: ['crm', 'hr']
+      '1 month validity'
+    ]
   },
   {
     id: 'professional',
-    name: 'Professional',
-    description: 'Advanced features for growing businesses',
-    monthlyPrice: 99,
-    yearlyPrice: 990,
+    name: 'Professional Package',
+    description: 'Ideal for growing businesses with regular operations',
+    credits: 5000,
+    price: 199,
+    currency: 'USD',
+    validityMonths: 3,
     features: [
-      'Up to 50 users',
-      'All tools included',
-      'Unlimited projects',
-      'Advanced analytics',
-      '100GB storage',
-      'Priority support',
-      'Custom roles',
-      '✨ 14-day free trial'
+      '5,000 credits',
+      'Advanced operations support',
+      'Priority email support',
+      '3 months validity',
+      'Basic reporting'
     ],
-    limits: {
-      users: 50,
-      projects: -1,
-      storage: 100000000000, // 100GB
-      apiCalls: 100000
-    },
-    tools: ['crm', 'hr', 'affiliate', 'accounting'],
-    popular: true
+    recommended: true
   },
   {
     id: 'enterprise',
-    name: 'Enterprise',
-    description: 'Custom solutions for large organizations',
-    monthlyPrice: 299,
-    yearlyPrice: 2990,
+    name: 'Enterprise Package',
+    description: 'For large organizations with high-volume operations',
+    credits: 15000,
+    price: 499,
+    currency: 'USD',
+    validityMonths: 6,
     features: [
-      'Unlimited users',
-      'All tools included',
-      'Unlimited projects',
-      'Custom integrations',
-      'Unlimited storage',
-      'White-label options',
-      'Dedicated support',
-      'SSO integration',
-      '✨ 14-day free trial'
-    ],
-    limits: {
-      users: -1,
-      projects: -1,
-      storage: -1,
-      apiCalls: -1
-    },
-    tools: ['crm', 'hr', 'affiliate', 'accounting', 'inventory']
+      '15,000 credits',
+      'Full operations support',
+      'Phone & email support',
+      '6 months validity',
+      'Advanced reporting',
+      'Custom integrations'
+    ]
   }
-]
+];
 
 export function Billing() {
   const navigate = useNavigate()
@@ -264,19 +212,19 @@ export function Billing() {
     retry: 1
   });
 
-  // Fetch available plans
+  // Fetch available credit packages
   const {
-    data: plansData,
-    isLoading: plansLoading
+    data: packagesData,
+    isLoading: packagesLoading
   } = useQuery({
-    queryKey: ['subscription', 'plans'],
+    queryKey: ['credit', 'packages'],
     queryFn: async () => {
       try {
-        const response = await subscriptionAPI.getAvailablePlans();
-        return response.data.data; // Extract the actual plans array from the wrapper
+        const response = await creditAPI.getAvailablePackages();
+        return response.data.data; // Extract the actual packages array from the wrapper
       } catch (error) {
-        console.warn('Failed to fetch plans from API, using local plans');
-        return plans; // Fallback to local plans
+        console.warn('Failed to fetch credit packages from API, using local packages');
+        return creditPackages; // Fallback to local credit packages
       }
     },
     enabled: !mockMode,
@@ -355,7 +303,7 @@ export function Billing() {
   console.log('Plan limits loaded:', planLimitsData, planLimitsLoading);
 
   // Use API data or fallback to mock data
-  const displayPlans = plansData || plans;
+  const displayPackages = packagesData || creditPackages;
   
   // Ensure subscription data has valid date
   const ensureValidSubscription = (sub: any) => {
@@ -617,6 +565,50 @@ export function Billing() {
       return { profileCompleted: false };
     } finally {
       setIsCheckingProfile(false);
+    }
+  };
+
+  const handleCreditPurchase = async (packageId: string) => {
+    if (!isAuthenticated) {
+      login();
+      return;
+    }
+
+    setSelectedPlan(packageId);
+    setIsUpgrading(true);
+
+    try {
+      // Find the selected package
+      const selectedPackage = displayPackages.find((pkg: any) => pkg.id === packageId);
+      if (!selectedPackage) {
+        throw new Error('Selected package not found');
+      }
+
+      console.log('Purchasing credit package:', selectedPackage);
+
+      // Initiate credit purchase
+      const response = await creditAPI.purchaseCredits({
+        creditAmount: selectedPackage.credits,
+        paymentMethod: 'stripe',
+        currency: selectedPackage.currency,
+        notes: `Purchase of ${selectedPackage.name} package`
+      });
+
+      if (response.data.data.checkoutUrl) {
+        // Redirect to Stripe checkout
+        window.location.href = response.data.data.checkoutUrl;
+      } else {
+        // Handle direct credit addition (for non-Stripe payments)
+        toast.success('Credits purchased successfully!');
+        queryClient.invalidateQueries({ queryKey: ['credit'] });
+        queryClient.invalidateQueries({ queryKey: ['subscription'] });
+      }
+    } catch (error: any) {
+      console.error('Credit purchase error:', error);
+      toast.error(error.response?.data?.message || 'Failed to purchase credits');
+    } finally {
+      setIsUpgrading(false);
+      setSelectedPlan(null);
     }
   };
 
@@ -891,7 +883,7 @@ export function Billing() {
     }
   }
 
-  if (subscriptionLoading || plansLoading) {
+  if (subscriptionLoading) {
     return (
       <div className="space-y-6">
         <div className="animate-pulse">
@@ -1030,20 +1022,20 @@ export function Billing() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList>
-          <TabsTrigger value="subscription">Current Plan</TabsTrigger>
-          <TabsTrigger value="plans">Plans & Pricing</TabsTrigger>
-          <TabsTrigger value="history">Billing History</TabsTrigger>
+          <TabsTrigger value="subscription">Credit Balance</TabsTrigger>
+          <TabsTrigger value="plans">Credit Packages</TabsTrigger>
+          <TabsTrigger value="history">Purchase History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="subscription" className="space-y-6">
-          {/* Current Subscription Card */}
+          {/* Current Credit Balance Card */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Current Subscription</CardTitle>
+                  <CardTitle>Credit Balance</CardTitle>
                   <CardDescription>
-                    Your current plan and billing information
+                    Your current credit balance and usage information
                   </CardDescription>
                 </div>
                 
@@ -1073,55 +1065,63 @@ export function Billing() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Plan</p>
+                    <p className="text-sm font-medium text-gray-600">Available Credits</p>
                     <div className="flex items-center gap-2">
-                      <p className="text-xl font-bold capitalize">{displaySubscription.plan}</p>
-                      <Badge className={getStatusColor(displaySubscription.status)}>
-                        {displaySubscription.status}
+                      <Coins className="h-5 w-5 text-amber-500" />
+                      <p className="text-2xl font-bold">{displaySubscription.availableCredits || 0}</p>
+                      <Badge className={displaySubscription.availableCredits > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                        {displaySubscription.availableCredits > 0 ? 'Active' : 'Insufficient'}
                       </Badge>
-                      {displaySubscription.plan === 'free' && (
-                        <Badge className="bg-green-100 text-green-800">
-                          Free Forever
-                        </Badge>
-                      )}
                     </div>
                   </div>
-                  
+
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Amount</p>
+                    <p className="text-sm font-medium text-gray-600">Total Credits</p>
                     <p className="text-xl font-bold">
-                      {displaySubscription.plan === 'free' ? 'Free' : formatCurrency(displaySubscription.amount)}
-                      {displaySubscription.plan !== 'free' && `/${displaySubscription.currency}`}
+                      {displaySubscription.totalCredits || 0}
                     </p>
                   </div>
 
                   <div>
-                    <p className="text-sm font-medium text-gray-600">
-                      {displaySubscription.plan === 'free' ? 'Account Created' : 'Next Billing'}
-                    </p>
+                    <p className="text-sm font-medium text-gray-600">Credit Expiry</p>
                     <p className="text-sm">
-                      {formatDate(displaySubscription.currentPeriodEnd)}
+                      {displaySubscription.creditExpiry ? formatDate(displaySubscription.creditExpiry) : 'No expiry'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Usage This Period</p>
+                    <p className="text-sm">
+                      {displaySubscription.usageThisPeriod || 0} credits used
                     </p>
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   <div>
-                    <p className="text-sm font-medium text-gray-600 mb-2">Plan Features</p>
-                  <div className="space-y-2">
-                      {plans.find(p => p.id === displaySubscription.plan)?.features.slice(0, 4).map((feature: any, index: number) => (
-                        <div key={index} className="flex items-center space-x-2">
-                          <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                          <span className="text-sm">{feature}</span>
+                    <p className="text-sm font-medium text-gray-600 mb-2">Credit Status</p>
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                        <span className="text-sm">{displaySubscription.availableCredits || 0} credits available</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                        <span className="text-sm">{displaySubscription.reservedCredits || 0} credits reserved</span>
+                      </div>
+                      {(displaySubscription.alerts || []).length > 0 && (
+                        <div className="flex items-center space-x-2">
+                          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                          <span className="text-sm text-amber-600">{displaySubscription.alerts.length} alerts</span>
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
-                  
-                  {displaySubscription.plan === 'free' && (
-                    <Button onClick={() => setSelectedPlan('professional')} className="w-full">
-                      <Crown className="h-4 w-4 mr-2" />
-                      Upgrade Plan
+
+                  {(displaySubscription.availableCredits || 0) < 100 && (
+                    <Button onClick={() => setActiveTab('plans')} className="w-full">
+                      <Coins className="h-4 w-4 mr-2" />
+                      Purchase More Credits
                     </Button>
                   )}
                 </div>
@@ -1293,108 +1293,83 @@ export function Billing() {
 
           {/* Plans Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {displayPlans.map((plan: any) => {
-              const price = billingCycle === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice
-              const yearlyPrice = plan.yearlyPrice
-              const monthlySavings = plan.monthlyPrice * 12 - yearlyPrice
-              
+            {displayPackages.map((pkg: any) => {
               return (
-                <Card 
-                  key={plan.id} 
+                <Card
+                  key={pkg.id}
                   className={`relative ${
-                    displaySubscription.plan === plan.id ? 'ring-2 ring-blue-500' : ''
-                  } ${plan.popular ? 'ring-2 ring-purple-500' : ''}`}
+                    pkg.recommended ? 'ring-2 ring-purple-500' : ''
+                  }`}
                 >
-                  {displaySubscription.plan === plan.id && (
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                    <Badge className="bg-blue-500">Current Plan</Badge>
-                  </div>
-                )}
-                
-                  {plan.popular && displaySubscription.plan !== plan.id && (
+                  {pkg.recommended && (
                     <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                       <Badge className="bg-purple-500">
                         <Star className="h-3 w-3 mr-1" />
-                        Most Popular
+                        Recommended
                       </Badge>
                     </div>
                   )}
 
-                  {plan.badge && plan.id === 'free' && (
-                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                      <Badge className="bg-green-500">{plan.badge}</Badge>
-                    </div>
-                  )}
-                  
                   <CardHeader className="text-center">
-                    <CardTitle className="text-xl">{plan.name}</CardTitle>
+                    <CardTitle className="text-xl flex items-center justify-center gap-2">
+                      <Coins className="h-5 w-5 text-amber-500" />
+                      {pkg.name}
+                    </CardTitle>
                     <div className="space-y-1">
-                      {plan.id === 'free' ? (
-                        <div className="text-3xl font-bold text-green-600">FREE</div>
-                      ) : (
-                        <>
-                          <div className="text-3xl font-bold">
-                            ${price}
-                            <span className="text-lg font-normal text-gray-600">
-                              /{billingCycle === 'yearly' ? 'year' : 'month'}
-                    </span>
-                          </div>
-                          {billingCycle === 'yearly' && monthlySavings > 0 && (
-                            <p className="text-sm text-green-600">
-                              Save ${monthlySavings}/year
-                            </p>
-                          )}
-                        </>
-                      )}
+                      <div className="text-3xl font-bold">
+                        ${pkg.price}
+                        <span className="text-lg font-normal text-gray-600">
+                          /{pkg.currency}
+                        </span>
+                      </div>
                     </div>
-                    <CardDescription>{plan.description}</CardDescription>
-                </CardHeader>
-                
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                      {plan.features.map((feature: any, index: number) => (
+                    <CardDescription>{pkg.description}</CardDescription>
+                  </CardHeader>
+
+                  <CardContent className="space-y-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-semibold text-blue-600">
+                        {pkg.credits.toLocaleString()}
+                      </div>
+                      <div className="text-sm text-gray-600">Credits Included</div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {pkg.features.map((feature: any, index: number) => (
                         <div key={index} className="flex items-center space-x-2">
                           <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                        <span className="text-sm">{feature}</span>
-                      </div>
-                    ))}
-                  </div>
+                          <span className="text-sm">{feature}</span>
+                        </div>
+                      ))}
+                    </div>
 
                     <div className="pt-4">
-                      {displaySubscription.plan === plan.id ? (
-                        <Button variant="outline" className="w-full" disabled>
-                          Current Plan
-                        </Button>
-                      ) : (
-                  <Button
-                    onClick={() => handleUpgrade(plan.id)}
-                          disabled={isUpgrading && selectedPlan === plan.id || isCheckingProfile}
-                    className="w-full"
-                          variant={plan.popular ? "default" : "outline"}
-                        >
-                          {isCheckingProfile ? (
-                            <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                              Checking...
-                            </>
-                          ) : isUpgrading && selectedPlan === plan.id ? (
-                            <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                              Processing...
-                            </>
-                          ) : plan.id === 'free' ? (
-                            'Downgrade to Free'
-                          ) : (
-                            <>
-                              <Crown className="h-4 w-4 mr-2" />
-                              {displaySubscription.plan === 'free' ? 'Upgrade' : 'Change Plan'}
-                            </>
-                          )}
-                  </Button>
-                      )}
-              </div>
-            </CardContent>
-          </Card>
+                      <Button
+                        onClick={() => handleCreditPurchase(pkg.id)}
+                        disabled={isUpgrading && selectedPlan === pkg.id || isCheckingProfile}
+                        className="w-full"
+                        variant={pkg.recommended ? "default" : "outline"}
+                      >
+                        {isCheckingProfile ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                            Checking...
+                          </>
+                        ) : isUpgrading && selectedPlan === pkg.id ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <Coins className="h-4 w-4 mr-2" />
+                            Purchase Credits
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               )
             })}
           </div>

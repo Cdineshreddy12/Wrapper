@@ -1,6 +1,6 @@
 import { db } from '../db/index.js';
 import { auditLogs, tenantUsers } from '../db/schema/users.js';
-import { applications, activityLogs } from '../db/schema/suite-schema.js';
+import { applications } from '../db/schema/suite-schema.js';
 import { eq, and, desc, sql, gte, lte } from 'drizzle-orm';
 import Logger from '../utils/logger.js';
 
@@ -129,7 +129,7 @@ class ActivityLogger {
         userAgent: requestContext.userAgent,
       };
 
-      await db.insert(activityLogs).values(activityData);
+      await db.insert(auditLogs).values(activityData);
 
       console.log(`✅ [${requestId}] Activity logged successfully: ${action} for user ${userId}`);
       return { success: true, requestId };
@@ -226,34 +226,34 @@ class ActivityLogger {
 
       let query = db
         .select({
-          logId: activityLogs.logId,
-          action: activityLogs.action,
+          logId: auditLogs.logId,
+          action: auditLogs.action,
           appCode: applications.appCode,
           appName: applications.appName,
-          metadata: includeMetadata ? activityLogs.metadata : sql`NULL`,
-          ipAddress: activityLogs.ipAddress,
-          createdAt: activityLogs.createdAt
+          metadata: includeMetadata ? auditLogs.metadata : sql`NULL`,
+          ipAddress: auditLogs.ipAddress,
+          createdAt: auditLogs.createdAt
         })
-        .from(activityLogs)
-        .leftJoin(applications, eq(activityLogs.appId, applications.appId))
-        .where(eq(activityLogs.userId, userId))
-        .orderBy(desc(activityLogs.createdAt))
+        .from(auditLogs)
+        .leftJoin(applications, eq(auditLogs.appId, applications.appId))
+        .where(eq(auditLogs.userId, userId))
+        .orderBy(desc(auditLogs.createdAt))
         .limit(limit)
         .offset(offset);
 
       // Apply filters
-      const conditions = [eq(activityLogs.userId, userId)];
+      const conditions = [eq(auditLogs.userId, userId)];
       
       if (startDate) {
-        conditions.push(gte(activityLogs.createdAt, startDate));
+        conditions.push(gte(auditLogs.createdAt, startDate));
       }
       
       if (endDate) {
-        conditions.push(lte(activityLogs.createdAt, endDate));
+        conditions.push(lte(auditLogs.createdAt, endDate));
       }
       
       if (actionFilter) {
-        conditions.push(eq(activityLogs.action, actionFilter));
+        conditions.push(eq(auditLogs.action, actionFilter));
       }
       
       if (appFilter) {
@@ -391,15 +391,15 @@ class ActivityLogger {
       // Get activity counts by type
       const activityStats = await db
         .select({
-          action: activityLogs.action,
+          action: auditLogs.action,
           count: sql`count(*)`.as('count')
         })
-        .from(activityLogs)
+        .from(auditLogs)
         .where(and(
-          eq(activityLogs.tenantId, tenantId),
-          gte(activityLogs.createdAt, startDate)
+          eq(auditLogs.tenantId, tenantId),
+          gte(auditLogs.createdAt, startDate)
         ))
-        .groupBy(activityLogs.action);
+        .groupBy(auditLogs.action);
 
       // Get audit event counts
       const auditStats = await db
@@ -420,10 +420,10 @@ class ActivityLogger {
         .select({
           uniqueUsers: sql`count(distinct user_id)`.as('uniqueUsers')
         })
-        .from(activityLogs)
+        .from(auditLogs)
         .where(and(
-          eq(activityLogs.tenantId, tenantId),
-          gte(activityLogs.createdAt, startDate)
+          eq(auditLogs.tenantId, tenantId),
+          gte(auditLogs.createdAt, startDate)
         ));
 
       const uniqueActiveUsers = parseInt(activeUsersResult[0]?.uniqueUsers || 0);
@@ -479,7 +479,7 @@ class ActivityLogger {
         }
       }));
 
-      await db.insert(activityLogs).values(activityData);
+      await db.insert(auditLogs).values(activityData);
 
       console.log(`📊 Batch activities logged: ${activities.length} entries`);
       return { success: true, count: activities.length };
