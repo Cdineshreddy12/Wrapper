@@ -207,29 +207,29 @@
   /* Dark Mode */
   .dark {
     /* Background & Surface */
-    --background: 0 0% 4%;
-    --background-secondary: 0 0% 6%;
-    --background-tertiary: 0 0% 8%;
-    --surface: 0 0% 4%;
-    --surface-hover: 0 0% 6%;
-    --surface-active: 0 0% 8%;
+    --background: 0 0% 9%;
+    --background-secondary: 0 0% 12%;
+    --background-tertiary: 0 0% 15%;
+    --surface: 0 0% 9%;
+    --surface-hover: 0 0% 12%;
+    --surface-active: 0 0% 15%;
 
     /* Text Colors */
     --text-primary: 0 0% 98%;
-    --text-secondary: 0 0% 70%;
-    --text-tertiary: 0 0% 50%;
+    --text-secondary: 0 0% 80%;
+    --text-tertiary: 0 0% 65%;
     --text-inverse: 0 0% 9%;
-    --text-muted: 0 0% 50%;
+    --text-muted: 0 0% 60%;
 
     /* Border & Divider */
-    --border: 0 0% 15%;
-    --border-hover: 0 0% 20%;
-    --border-focus: 0 0% 40%;
-    --divider: 0 0% 12%;
+    --border: 0 0% 20%;
+    --border-hover: 0 0% 30%;
+    --border-focus: 0 0% 50%;
+    --divider: 0 0% 18%;
 
     /* Interactive States */
-    --ring: 0 0% 40%;
-    --ring-focus: 0 0% 50%;
+    --ring: 0 0% 30%;
+    --ring-focus: 0 0% 60%;
     --ring-error: 0 84% 60%;
 
     /* Shadows (adjusted for dark mode) */

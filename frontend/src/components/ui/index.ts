@@ -24,7 +24,7 @@ export {
   FormCheckbox, 
   FormSwitch 
 } from './form-field'
-export { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './dialog'
+export { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './dialog'
 export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './dropdown-menu'
 export { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select'
 export { Tabs, TabsContent, TabsList, TabsTrigger } from './tabs'
@@ -33,6 +33,6 @@ export { Alert, AlertDescription } from './alert'
 export { Skeleton } from './skeleton'
 export { Separator } from './separator'
 export { Progress } from './progress'
-export { Sheet } from './sheet'
+export { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from './sheet'
 export { Form } from './form'
 export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table' 

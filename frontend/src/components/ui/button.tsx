@@ -15,13 +15,13 @@ const buttonVariants = cva(
         destructive:
           "bg-error-600 text-white shadow-sm hover:bg-error-700 active:bg-error-800 focus-visible:ring-error-500",
         outline:
-          "border border-border bg-background text-text-primary shadow-sm hover:bg-surface-hover hover:text-text-primary active:bg-surface-active focus-visible:ring-ring-focus",
+          "border border-border bg-background text-text-primary shadow-sm hover:bg-surface-hover hover:text-text-primary active:bg-surface-active focus-visible:ring-ring-focus dark:border-gray-600 dark:text-white dark:hover:bg-gray-800 dark:hover:border-gray-500",
         secondary:
-          "bg-secondary-100 text-secondary-900 shadow-sm hover:bg-secondary-200 active:bg-secondary-300 focus-visible:ring-secondary-500",
+          "bg-secondary-100 text-secondary-900 shadow-sm hover:bg-secondary-200 active:bg-secondary-300 focus-visible:ring-secondary-500 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700 dark:active:bg-gray-600",
         ghost: 
-          "text-text-secondary hover:bg-surface-hover hover:text-text-primary active:bg-surface-active focus-visible:ring-ring-focus",
+          "text-text-secondary hover:bg-surface-hover hover:text-text-primary active:bg-surface-active focus-visible:ring-ring-focus dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800",
         link: 
-          "text-primary-600 underline-offset-4 hover:underline hover:text-primary-700 focus-visible:ring-primary-500",
+          "text-primary-600 underline-offset-4 hover:underline hover:text-primary-700 focus-visible:ring-primary-500 dark:text-primary-400 dark:hover:text-primary-300",
         success:
           "bg-success-600 text-white shadow-sm hover:bg-success-700 active:bg-success-800 focus-visible:ring-success-500",
         warning:

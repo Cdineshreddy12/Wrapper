@@ -27,27 +27,27 @@ const statusConfig: Record<StatusType, {
   label: string
 }> = {
   success: {
-    color: 'bg-green-100 text-green-800 hover:bg-green-200',
+    color: 'bg-success-100 text-success-800 hover:bg-success-200',
     label: 'Success'
   },
   warning: {
-    color: 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200',
+    color: 'bg-warning-100 text-warning-800 hover:bg-warning-200',
     label: 'Warning'
   },
   error: {
-    color: 'bg-red-100 text-red-800 hover:bg-red-200',
+    color: 'bg-error-100 text-error-800 hover:bg-error-200',
     label: 'Error'
   },
   info: {
-    color: 'bg-blue-100 text-blue-800 hover:bg-blue-200',
+    color: 'bg-primary-100 text-primary-800 hover:bg-primary-200',
     label: 'Info'
   },
   pending: {
-    color: 'bg-orange-100 text-orange-800 hover:bg-orange-200',
+    color: 'bg-warning-100 text-warning-800 hover:bg-warning-200',
     label: 'Pending'
   },
   active: {
-    color: 'bg-green-100 text-green-800 hover:bg-green-200',
+    color: 'bg-success-100 text-success-800 hover:bg-success-200',
     label: 'Active'
   },
   inactive: {
@@ -59,7 +59,7 @@ const statusConfig: Record<StatusType, {
     label: 'Draft'
   },
   published: {
-    color: 'bg-green-100 text-green-800 hover:bg-green-200',
+    color: 'bg-success-100 text-success-800 hover:bg-success-200',
     label: 'Published'
   }
 }

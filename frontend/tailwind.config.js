@@ -56,7 +56,7 @@ export default {
           DEFAULT: 'rgb(var(--accent-600) / <alpha-value>)',
           foreground: 'rgb(var(--accent-50) / <alpha-value>)',
         },
-        // Semantic Colors
+        // Success Colors - Green
         success: {
           50: 'rgb(var(--success-50) / <alpha-value>)',
           100: 'rgb(var(--success-100) / <alpha-value>)',
@@ -72,6 +72,7 @@ export default {
           DEFAULT: 'rgb(var(--success-600) / <alpha-value>)',
           foreground: 'rgb(var(--success-50) / <alpha-value>)',
         },
+        // Warning Colors - Orange
         warning: {
           50: 'rgb(var(--warning-50) / <alpha-value>)',
           100: 'rgb(var(--warning-100) / <alpha-value>)',
@@ -87,6 +88,7 @@ export default {
           DEFAULT: 'rgb(var(--warning-600) / <alpha-value>)',
           foreground: 'rgb(var(--warning-50) / <alpha-value>)',
         },
+        // Error Colors - Red
         error: {
           50: 'rgb(var(--error-50) / <alpha-value>)',
           100: 'rgb(var(--error-100) / <alpha-value>)',
@@ -102,7 +104,7 @@ export default {
           DEFAULT: 'rgb(var(--error-600) / <alpha-value>)',
           foreground: 'rgb(var(--error-50) / <alpha-value>)',
         },
-        // Neutral Colors
+        // Neutral Colors - Gray
         gray: {
           50: 'rgb(var(--gray-50) / <alpha-value>)',
           100: 'rgb(var(--gray-100) / <alpha-value>)',
@@ -145,8 +147,8 @@ export default {
           foreground: 'hsl(var(--text-primary))',
         },
         muted: {
-          DEFAULT: 'hsl(var(--background-tertiary))',
-          foreground: 'hsl(var(--text-muted))',
+          DEFAULT: 'hsl(var(--text-muted))',
+          foreground: 'hsl(var(--text-secondary))',
         },
         destructive: {
           DEFAULT: 'hsl(var(--error-600))',
@@ -154,45 +156,33 @@ export default {
         },
         input: 'hsl(var(--border))',
         chart: {
-          1: 'hsl(var(--primary-600))',
-          2: 'hsl(var(--accent-600))',
-          3: 'hsl(var(--success-600))',
-          4: 'hsl(var(--warning-600))',
-          5: 'hsl(var(--error-600))',
-        },
+          '1': 'hsl(var(--chart-1))',
+          '2': 'hsl(var(--chart-2))',
+          '3': 'hsl(var(--chart-3))',
+          '4': 'hsl(var(--chart-4))',
+          '5': 'hsl(var(--chart-5))'
+        }
       },
-      // Typography
+      // Font Family
       fontFamily: {
-        sans: [
-          'Inter',
-          'system-ui',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'Segoe UI',
-          'Roboto',
-          'sans-serif'
-        ],
-        mono: [
-          'JetBrains Mono',
-          'Fira Code',
-          'Menlo',
-          'Monaco',
-          'Consolas',
-          'monospace'
-        ],
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        serif: ['ui-serif', 'Georgia', 'serif'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'monospace'],
       },
+      // Font Size
       fontSize: {
-        xs: ['var(--font-size-xs)', { lineHeight: 'var(--line-height-tight)' }],
-        sm: ['var(--font-size-sm)', { lineHeight: 'var(--line-height-snug)' }],
-        base: ['var(--font-size-base)', { lineHeight: 'var(--line-height-normal)' }],
-        lg: ['var(--font-size-lg)', { lineHeight: 'var(--line-height-relaxed)' }],
-        xl: ['var(--font-size-xl)', { lineHeight: 'var(--line-height-snug)' }],
-        '2xl': ['var(--font-size-2xl)', { lineHeight: 'var(--line-height-tight)' }],
-        '3xl': ['var(--font-size-3xl)', { lineHeight: 'var(--line-height-tight)' }],
-        '4xl': ['var(--font-size-4xl)', { lineHeight: 'var(--line-height-tight)' }],
-        '5xl': ['var(--font-size-5xl)', { lineHeight: 'var(--line-height-tight)' }],
-        '6xl': ['var(--font-size-6xl)', { lineHeight: 'var(--line-height-tight)' }],
+        xs: 'var(--font-size-xs)',
+        sm: 'var(--font-size-sm)',
+        base: 'var(--font-size-base)',
+        lg: 'var(--font-size-lg)',
+        xl: 'var(--font-size-xl)',
+        '2xl': 'var(--font-size-2xl)',
+        '3xl': 'var(--font-size-3xl)',
+        '4xl': 'var(--font-size-4xl)',
+        '5xl': 'var(--font-size-5xl)',
+        '6xl': 'var(--font-size-6xl)',
       },
+      // Font Weight
       fontWeight: {
         thin: 'var(--font-weight-thin)',
         light: 'var(--font-weight-light)',
@@ -203,7 +193,7 @@ export default {
         extrabold: 'var(--font-weight-extrabold)',
         black: 'var(--font-weight-black)',
       },
-      // Spacing Scale (4px base)
+      // Spacing (4px grid)
       spacing: {
         0: 'var(--space-0)',
         1: 'var(--space-1)',
@@ -219,10 +209,6 @@ export default {
         20: 'var(--space-20)',
         24: 'var(--space-24)',
         32: 'var(--space-32)',
-        // Additional spacing
-        18: '4.5rem',
-        88: '22rem',
-        128: '32rem',
       },
       // Border Radius
       borderRadius: {
@@ -233,10 +219,8 @@ export default {
         xl: 'var(--radius-xl)',
         '2xl': 'var(--radius-2xl)',
         full: 'var(--radius-full)',
-        // ShadCN compatibility
-        DEFAULT: 'var(--radius-md)',
       },
-      // Box Shadows
+      // Box Shadow
       boxShadow: {
         xs: 'var(--shadow-xs)',
         sm: 'var(--shadow-sm)',
@@ -244,12 +228,8 @@ export default {
         lg: 'var(--shadow-lg)',
         xl: 'var(--shadow-xl)',
         '2xl': 'var(--shadow-2xl)',
-        // Legacy shadows
-        soft: '0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04)',
-        medium: '0 4px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-        large: '0 10px 40px -10px rgba(0, 0, 0, 0.15), 0 20px 25px -5px rgba(0, 0, 0, 0.1)',
       },
-      // Z-Index Scale
+      // Z-Index
       zIndex: {
         dropdown: 'var(--z-dropdown)',
         sticky: 'var(--z-sticky)',
@@ -259,61 +239,6 @@ export default {
         popover: 'var(--z-popover)',
         tooltip: 'var(--z-tooltip)',
         toast: 'var(--z-toast)',
-        // Legacy z-index
-        60: '60',
-        70: '70',
-        80: '80',
-        90: '90',
-        100: '100',
-      },
-      // Max Width
-      maxWidth: {
-        '8xl': '88rem',
-        '9xl': '96rem',
-      },
-      // Backdrop Blur
-      backdropBlur: {
-        xs: '2px',
-      },
-      // Animation & Transitions
-      animation: {
-        'fade-in': 'fadeIn 0.5s ease-in-out',
-        'slide-in': 'slideIn 0.3s ease-out',
-        'slide-up': 'slideUp 0.3s ease-out',
-        'bounce-subtle': 'bounceSubtle 2s infinite',
-        'pulse-slow': 'pulse 3s infinite',
-        'spin-slow': 'spin 3s linear infinite',
-        'blob': 'blob 7s infinite',
-      },
-      keyframes: {
-        fadeIn: {
-          '0%': { opacity: '0' },
-          '100%': { opacity: '1' },
-        },
-        slideIn: {
-          '0%': { transform: 'translateX(-100%)' },
-          '100%': { transform: 'translateX(0)' },
-        },
-        slideUp: {
-          '0%': { 
-            transform: 'translateY(100%)', 
-            opacity: '0' 
-          },
-          '100%': { 
-            transform: 'translateY(0)', 
-            opacity: '1' 
-          },
-        },
-        bounceSubtle: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-5px)' },
-        },
-        blob: {
-          '0%': { transform: 'translate(0px, 0px) scale(1)' },
-          '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
-          '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
-          '100%': { transform: 'translate(0px, 0px) scale(1)' },
-        },
       },
       // Transition Duration
       transitionDuration: {
@@ -329,12 +254,12 @@ export default {
         'ease-out': 'var(--ease-out)',
         'ease-in-out': 'var(--ease-in-out)',
       },
-  	}
+    }
   },
   plugins: [
     require('@tailwindcss/forms'),
     require('@tailwindcss/typography'),
     require('@tailwindcss/aspect-ratio'),
-      require("tailwindcss-animate")
-],
-} 
+    require("tailwindcss-animate")
+  ],
+}
