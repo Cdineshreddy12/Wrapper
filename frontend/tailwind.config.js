@@ -1,15 +1,15 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  darkMode: ["class"],
-  content: [
+    darkMode: ["class"],
+    content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {
-      colors: {
+  	extend: {
+  		colors: {
         // Primary Colors - Blue-based palette
-        primary: {
+  			primary: {
           50: 'rgb(var(--primary-50) / <alpha-value>)',
           100: 'rgb(var(--primary-100) / <alpha-value>)',
           200: 'rgb(var(--primary-200) / <alpha-value>)',
@@ -57,7 +57,7 @@ export default {
           foreground: 'rgb(var(--accent-50) / <alpha-value>)',
         },
         // Success Colors - Green
-        success: {
+  			success: {
           50: 'rgb(var(--success-50) / <alpha-value>)',
           100: 'rgb(var(--success-100) / <alpha-value>)',
           200: 'rgb(var(--success-200) / <alpha-value>)',
@@ -73,7 +73,7 @@ export default {
           foreground: 'rgb(var(--success-50) / <alpha-value>)',
         },
         // Warning Colors - Orange
-        warning: {
+  			warning: {
           50: 'rgb(var(--warning-50) / <alpha-value>)',
           100: 'rgb(var(--warning-100) / <alpha-value>)',
           200: 'rgb(var(--warning-200) / <alpha-value>)',
@@ -89,7 +89,7 @@ export default {
           foreground: 'rgb(var(--warning-50) / <alpha-value>)',
         },
         // Error Colors - Red
-        error: {
+  			error: {
           50: 'rgb(var(--error-50) / <alpha-value>)',
           100: 'rgb(var(--error-100) / <alpha-value>)',
           200: 'rgb(var(--error-200) / <alpha-value>)',
@@ -119,7 +119,7 @@ export default {
           950: 'rgb(var(--gray-950) / <alpha-value>)',
         },
         // Design System Colors
-        background: 'hsl(var(--background))',
+  			background: 'hsl(var(--background))',
         'background-secondary': 'hsl(var(--background-secondary))',
         'background-tertiary': 'hsl(var(--background-tertiary))',
         surface: 'hsl(var(--surface))',
@@ -138,33 +138,33 @@ export default {
         'ring-focus': 'hsl(var(--ring-focus))',
         'ring-error': 'hsl(var(--ring-error))',
         // ShadCN compatibility
-        card: {
+  			card: {
           DEFAULT: 'hsl(var(--surface))',
           foreground: 'hsl(var(--text-primary))',
-        },
-        popover: {
+  			},
+  			popover: {
           DEFAULT: 'hsl(var(--surface))',
           foreground: 'hsl(var(--text-primary))',
-        },
-        muted: {
+  			},
+  			muted: {
           DEFAULT: 'hsl(var(--text-muted))',
           foreground: 'hsl(var(--text-secondary))',
-        },
-        destructive: {
+  			},
+  			destructive: {
           DEFAULT: 'hsl(var(--error-600))',
           foreground: 'hsl(var(--error-50))',
-        },
+  			},
         input: 'hsl(var(--border))',
-        chart: {
-          '1': 'hsl(var(--chart-1))',
-          '2': 'hsl(var(--chart-2))',
-          '3': 'hsl(var(--chart-3))',
-          '4': 'hsl(var(--chart-4))',
-          '5': 'hsl(var(--chart-5))'
-        }
-      },
+  			chart: {
+  				'1': 'hsl(var(--chart-1))',
+  				'2': 'hsl(var(--chart-2))',
+  				'3': 'hsl(var(--chart-3))',
+  				'4': 'hsl(var(--chart-4))',
+  				'5': 'hsl(var(--chart-5))'
+  			}
+  		},
       // Font Family
-      fontFamily: {
+  		fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         serif: ['ui-serif', 'Georgia', 'serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'monospace'],
@@ -221,7 +221,7 @@ export default {
         full: 'var(--radius-full)',
       },
       // Box Shadow
-      boxShadow: {
+  		boxShadow: {
         xs: 'var(--shadow-xs)',
         sm: 'var(--shadow-sm)',
         md: 'var(--shadow-md)',
@@ -254,12 +254,12 @@ export default {
         'ease-out': 'var(--ease-out)',
         'ease-in-out': 'var(--ease-in-out)',
       },
-    }
+  	}
   },
   plugins: [
     require('@tailwindcss/forms'),
     require('@tailwindcss/typography'),
     require('@tailwindcss/aspect-ratio'),
-    require("tailwindcss-animate")
-  ],
-}
+      require("tailwindcss-animate")
+],
+} 

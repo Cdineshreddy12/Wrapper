@@ -174,7 +174,7 @@ function AppContent() {
           <Route 
             path="/landing" 
             element={
-            authState.isAuthenticated ? <Navigate to="/" replace /> : <DesignSystemShowcase />
+            authState.isAuthenticated ? <Navigate to="/" replace /> : <Landing />
             } 
           />
           
@@ -184,7 +184,10 @@ function AppContent() {
             element={<RootRedirect />} 
           />
           
-
+          <Route
+            path="/design-system"
+            element={<DesignSystemShowcase />}
+          />
           
           <Route
             path="/onboarding"
