@@ -248,9 +248,9 @@ export function Login() {
   // Show loading screen when processing CRM redirect
   if (!isLoading && isAuthenticated && user && returnTo && isCrmRequest && !isRedirecting) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-gray-600">Redirecting to CRM...</p>
           <p className="text-sm text-gray-500 mt-2">Please wait while we redirect you back to the CRM application</p>
         </div>
@@ -261,9 +261,9 @@ export function Login() {
   // Show loading screen when processing external redirect
   if (!isLoading && isAuthenticated && user && redirectTo && !isRedirecting && !isCrmRequest) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-gray-600">Redirecting to your application...</p>
           <p className="text-sm text-gray-500 mt-2">Please wait while we redirect you back to {app || 'your application'}</p>
         </div>
@@ -314,9 +314,9 @@ export function Login() {
   // Show loading while handling post-login redirect
   if (!isLoading && isAuthenticated && user && !redirectTo && !returnTo && !isRedirecting) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-gray-600">Setting up your workspace...</p>
         </div>
       </div>
@@ -340,9 +340,9 @@ export function Login() {
   // Show loading while auth is being determined
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
@@ -383,7 +383,7 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-lg w-full space-y-8">
         {/* CRM Mode Header */}
         {isCrmRequest && (

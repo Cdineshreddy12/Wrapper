@@ -146,12 +146,12 @@ export function Dashboard() {
 
   if (kindeLoading || isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your dashboard...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading your dashboard...</p>
           {isCached && cacheAge && (
-            <p className="text-sm text-gray-500 mt-2">
+            <p className="text-sm text-muted-foreground mt-2">
               Using cached data ({Math.round((cacheAge || 0) / 1000)}s old)
             </p>
           )}
@@ -163,7 +163,7 @@ export function Dashboard() {
   // Show graceful trial expiry message instead of generic error
   if (isTrialExpired && expiredData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-orange-50">
+      <div className="min-h-screen bg-background">
         {/* Removed TrialExpiryBanner from here - it's handled at app level */}
         
         <div className="flex items-center justify-center min-h-[60vh]">
@@ -233,11 +233,11 @@ export function Dashboard() {
 
   if (isError) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Unable to Load Dashboard</h2>
-          <p className="text-gray-600 mb-4">There was a temporary issue loading your dashboard data.</p>
+          <AlertTriangle className="w-12 h-12 text-destructive mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-foreground mb-2">Unable to Load Dashboard</h2>
+          <p className="text-muted-foreground mb-4">There was a temporary issue loading your dashboard data.</p>
           <Button onClick={forceRefresh} className="gap-2">
             <RefreshCw className="w-4 h-4" />
             Try Again
@@ -248,7 +248,7 @@ export function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="min-h-screen bg-background">
       <div className="py-6">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {/* Header with Refresh Controls */}

@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { Toaster as Sonner } from 'sonner'
-import { OnboardingApp } from '@/components/onboarding'
+import { OnboardingApp, OnboardingForm } from '@/components/onboarding'
 
 import api from '@/lib/api'
 
@@ -15,6 +15,7 @@ import SilentAuthGuard from '@/components/auth/SilentAuthGuard'
 // User Context and Permission Refresh
 import { UserContextProvider } from './contexts/UserContextProvider'
 import { PermissionRefreshNotification } from './components/PermissionRefreshNotification'
+import { ThemeProvider } from './components/theme/ThemeProvider'
 
 // Trial Management Components
 import { TrialExpiryBanner, TrialBannerSpacer } from './components/trial/TrialExpiryBanner'
@@ -40,6 +41,7 @@ import UserApplicationManagement from '@/pages/UserApplicationManagement'
 import SuiteDashboard from '@/pages/SuiteDashboard'
 import AdminDashboardPage from '@/pages/AdminDashboardPage'
 import { DesignSystemShowcase } from './components/examples/DesignSystemShowcase'
+import SimpleOnboarding from './pages/SimpleOnboarding'
 
 // Create an optimized query client with better caching strategy
 const queryClient = new QueryClient({
@@ -75,10 +77,10 @@ const queryClient = new QueryClient({
 
 // Loading component
 const LoadingScreen = () => (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
         </div>
       </div>
     )
@@ -94,17 +96,19 @@ const AuthInitializer: React.FC<{ children: React.ReactNode }> = ({ children }) 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <KindeProvider>
-        <AuthInitializer>
-          <Router>
-            <SilentAuthGuard>
-              <UserContextProvider>
-                <AppContent />
-              </UserContextProvider>
-            </SilentAuthGuard>
-          </Router>
-        </AuthInitializer>
-      </KindeProvider>
+      <ThemeProvider defaultTheme="system" storageKey="zopkit-theme">
+        <KindeProvider>
+          <AuthInitializer>
+            <Router>
+              <SilentAuthGuard>
+                <UserContextProvider>
+                  <AppContent />
+                </UserContextProvider>
+              </SilentAuthGuard>
+            </Router>
+          </AuthInitializer>
+        </KindeProvider>
+      </ThemeProvider>
       
       {/* Toast notifications */}
       <Toaster
@@ -191,7 +195,7 @@ function AppContent() {
           
           <Route
             path="/onboarding"
-            element={<OnboardingApp />}
+            element={<OnboardingForm />}
           />
           
           <Route 
@@ -411,10 +415,10 @@ function RootRedirect() {
   // Show loading while checking
   if (isLoading || isChecking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-sm text-gray-600">Loading...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-2 text-sm text-muted-foreground">Loading...</p>
         </div>
       </div>
     )

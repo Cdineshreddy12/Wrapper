@@ -288,7 +288,7 @@ export function DashboardLayout() {
         <main className="flex-1">
           {/* Trial Banner */}
           {showTrialBanner && trialInfo && (
-            <div className="bg-gradient-to-r from-blue-600 to-purple-600">
+            <div className="bg-primary">
               <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <Card className="m-4 border-0 bg-white/95 backdrop-blur-sm">
                   <CardContent className="p-4">

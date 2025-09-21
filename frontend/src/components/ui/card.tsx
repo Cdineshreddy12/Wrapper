@@ -1,44 +1,20 @@
 import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
+
 import { cn } from "@/lib/utils"
 
-const cardVariants = cva(
-  "rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-shadow",
-  {
-    variants: {
-      variant: {
-        default: "bg-surface border-border",
-        elevated: "bg-surface shadow-md border-border",
-        outlined: "bg-background border-2 border-border",
-        ghost: "bg-transparent border-transparent shadow-none",
-      },
-      padding: {
-        none: "",
-        sm: "p-4",
-        default: "p-6",
-        lg: "p-8",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-      padding: "default",
-    },
-  }
-)
-
-export interface CardProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof cardVariants> {}
-
-const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ className, variant, padding, ...props }, ref) => (
+const Card = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
   <div
     ref={ref}
-      className={cn(cardVariants({ variant, padding, className }))}
+    className={cn(
+      "rounded-xl border bg-card text-card-foreground shadow",
+      className
+    )}
     {...props}
   />
-  )
-)
+))
 Card.displayName = "Card"
 
 const CardHeader = React.forwardRef<
@@ -54,27 +30,24 @@ const CardHeader = React.forwardRef<
 CardHeader.displayName = "CardHeader"
 
 const CardTitle = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLHeadingElement>
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <h3
+  <div
     ref={ref}
-    className={cn(
-      "text-lg font-semibold leading-none tracking-tight text-text-primary",
-      className
-    )}
+    className={cn("font-semibold leading-none tracking-tight", className)}
     {...props}
   />
 ))
 CardTitle.displayName = "CardTitle"
 
 const CardDescription = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLParagraphElement>
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <p
+  <div
     ref={ref}
-    className={cn("text-sm text-text-muted", className)}
+    className={cn("text-sm text-muted-foreground", className)}
     {...props}
   />
 ))
@@ -100,4 +73,4 @@ const CardFooter = React.forwardRef<
 ))
 CardFooter.displayName = "CardFooter"
 
-export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent, cardVariants } 
+export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }

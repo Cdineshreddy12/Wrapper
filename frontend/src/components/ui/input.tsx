@@ -1,44 +1,16 @@
 import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
+
 import { cn } from "@/lib/utils"
 
-const inputVariants = cva(
-  "flex w-full rounded-md border border-border bg-surface px-3 py-2 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-focus focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-  {
-    variants: {
-      size: {
-        sm: "h-8 px-2 text-xs",
-        default: "h-9 px-3 text-sm",
-        lg: "h-10 px-4 text-base",
-      },
-      variant: {
-        default: "border-border focus-visible:ring-ring-focus",
-        error: "border-error-500 focus-visible:ring-error-500",
-        success: "border-success-500 focus-visible:ring-success-500",
-      },
-    },
-    defaultVariants: {
-      size: "default",
-      variant: "default",
-    },
-  }
-)
-
-export interface InputProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'>,
-    VariantProps<typeof inputVariants> {
-  error?: boolean
-  success?: boolean
-}
-
-const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, size, variant, error, success, ...props }, ref) => {
-    const inputVariant = error ? "error" : success ? "success" : variant
-
+const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
+  ({ className, type, ...props }, ref) => {
     return (
       <input
         type={type}
-        className={cn(inputVariants({ size, variant: inputVariant, className }))}
+        className={cn(
+          "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+          className
+        )}
         ref={ref}
         {...props}
       />
@@ -47,4 +19,4 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
 )
 Input.displayName = "Input"
 
-export { Input, inputVariants } 
+export { Input }

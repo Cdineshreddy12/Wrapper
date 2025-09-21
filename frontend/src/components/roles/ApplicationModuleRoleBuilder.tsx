@@ -468,7 +468,7 @@ export function ApplicationModuleRoleBuilder({
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl shadow-lg p-6 md:p-8">
+      <div className="bg-primary text-primary-foreground rounded-xl shadow-lg p-6 md:p-8">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
           <div className="flex-1">
             <h2 className="text-2xl md:text-3xl font-bold flex items-center gap-3 mb-3">
