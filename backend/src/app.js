@@ -51,6 +51,7 @@ import locationRoutes from './routes/locations.js';
 import entityRoutes from './routes/entities.js';
 import paymentUpgradeRoutes from './routes/payment-upgrade.js';
 import creditRoutes from './routes/credits.js';
+import demoRoutes from './routes/demo.js';
 // import { createRLSRoutes } from './routes/rls-examples.js'; // Temporarily disabled
 
 
@@ -402,6 +403,7 @@ async function registerRoutes() {
   console.log('✅ Entities routes registered successfully');
   await fastify.register(paymentUpgradeRoutes, { prefix: '/api/payment-upgrade' });
   await fastify.register(creditRoutes, { prefix: '/api/credits' });
+  await fastify.register(demoRoutes, { prefix: '/api/demo' });
   await fastify.register(enhancedCrmIntegrationRoutes, { prefix: '/api/enhanced-crm-integration' });
 await fastify.register(healthRoutes, { prefix: '/api' });
 

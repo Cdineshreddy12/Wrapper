@@ -1,0 +1,5 @@
+export { default as HeroSection } from './HeroSection'
+export { default as StackedCardsSection } from './StackedCardsSection'
+export { default as DemoSection } from './DemoSection'
+export { default as TrustIndicators } from './TrustIndicators'
+export { default as CostSavingsSection } from './CostSavingsSection'

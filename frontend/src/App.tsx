@@ -16,8 +16,6 @@ import SilentAuthGuard from '@/components/auth/SilentAuthGuard'
 import { UserContextProvider } from './contexts/UserContextProvider'
 import { PermissionRefreshNotification } from './components/PermissionRefreshNotification'
 
-// Trial Management Components
-import { TrialExpiryBanner, TrialBannerSpacer } from './components/trial/TrialExpiryBanner'
 
 // Layout Components
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
@@ -39,6 +37,10 @@ import UserApplicationAccessPage from '@/pages/UserApplicationAccess'
 import UserApplicationManagement from '@/pages/UserApplicationManagement'
 import SuiteDashboard from '@/pages/SuiteDashboard'
 import AdminDashboardPage from '@/pages/AdminDashboardPage'
+import MacbookTest from '@/pages/MacbookTest'
+import EcosystemDemo from '@/pages/EcosystemDemo'
+import TextEffectDemo from '@/pages/TextEffectDemo'
+import CompareDemo from '@/pages/CompareDemo'
 
 // Create an optimized query client with better caching strategy
 const queryClient = new QueryClient({
@@ -161,20 +163,22 @@ function AppContent() {
 
   return (
       <div className="App">
-        {/* Trial Expiry Banner Only */}
-        <TrialExpiryBanner />
-        <TrialBannerSpacer />
 
         {/* Permission refresh notification - only show when authenticated */}
         {authState.isAuthenticated && <PermissionRefreshNotification />}
 
         <Routes>
           {/* Public Routes */}
-          <Route 
-            path="/landing" 
+          <Route
+            path="/landing"
             element={
             authState.isAuthenticated ? <Navigate to="/" replace /> : <Landing />
-            } 
+            }
+          />
+
+          <Route
+            path="/macbook-test"
+            element={<MacbookTest />}
           />
           
           {/* Root redirect based on auth status */}
@@ -258,6 +262,8 @@ function AppContent() {
           <Route path="analytics" element={<Analytics />} />
           <Route path="usage" element={<Usage />} />
           <Route path="permissions" element={<Permissions />} />
+          <Route path="text-effect-demo" element={<TextEffectDemo />} />
+          <Route path="compare-demo" element={<CompareDemo />} />
         </Route>
 
         {/* Standalone Admin Dashboard Route */}

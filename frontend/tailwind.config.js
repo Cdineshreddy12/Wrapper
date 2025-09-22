@@ -128,7 +128,8 @@ export default {
   			'slide-up': 'slideUp 0.3s ease-out',
   			'bounce-subtle': 'bounceSubtle 2s infinite',
   			'pulse-slow': 'pulse 3s infinite',
-  			'spin-slow': 'spin 3s linear infinite'
+  			'spin-slow': 'spin 3s linear infinite',
+  			'aurora': 'aurora 120s linear infinite'
   		},
   		keyframes: {
   			fadeIn: {
@@ -163,6 +164,14 @@ export default {
   				},
   				'50%': {
   					transform: 'translateY(-5px)'
+  				}
+  			},
+  			aurora: {
+  				from: {
+  					backgroundPosition: '50% 50%, 50% 50%'
+  				},
+  				to: {
+  					backgroundPosition: '350% 50%, 350% 50%'
   				}
   			}
   		},

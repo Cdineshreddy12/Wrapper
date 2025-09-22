@@ -64,7 +64,7 @@ async function findUserInDatabase(kindeUserId) {
     } catch (selectError) {
       console.log('⚠️ Falling back to raw SQL query');
 
-      const result = await db.execute(
+      const result = await dbManager.getAppConnection().unsafe(
         `SELECT user_id as "userId", tenant_id as "tenantId", email, name,
                 onboarding_completed as "onboardingCompleted", is_active as "isActive",
                 is_tenant_admin as "isTenantAdmin"
@@ -73,7 +73,7 @@ async function findUserInDatabase(kindeUserId) {
         [kindeUserId]
       );
 
-      userRecords = result.rows || [];
+      userRecords = result || [];
     }
 
     if (!Array.isArray(userRecords) || userRecords.length === 0) {

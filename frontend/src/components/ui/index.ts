@@ -25,4 +25,12 @@ export { Separator } from './separator'
 export { Progress } from './progress'
 export { Sheet } from './sheet'
 export { Form } from './form'
-export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table' 
+export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table'
+
+// Animation and visual effects
+export { GoogleGeminiEffect } from './google-gemini-effect'
+export { TextGenerateEffect } from './text-generate-effect'
+export { BusinessTextEffect } from './business-text-effect'
+export { Compare } from './compare'
+export { SparklesCore } from './sparkles'
+export { default as CostComparison } from './cost-comparison'
