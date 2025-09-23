@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { Toaster as Sonner } from 'sonner'
-import { OnboardingApp, OnboardingForm } from '@/components/onboarding'
 
 import api from '@/lib/api'
 
@@ -41,7 +40,12 @@ import UserApplicationManagement from '@/pages/UserApplicationManagement'
 import SuiteDashboard from '@/pages/SuiteDashboard'
 import AdminDashboardPage from '@/pages/AdminDashboardPage'
 import { DesignSystemShowcase } from './components/examples/DesignSystemShowcase'
-import SimpleOnboarding from './pages/SimpleOnboarding'
+import { OnboardingFormExample } from './components/forms/examples/OnboardingFormExample'
+import FormComponentsDemo from './pages/FormComponentsDemo'
+import ContextDemo from './pages/ContextDemo'
+import PerfectFormDemo from './pages/PerfectFormDemo'
+import FormLayoutTest from './pages/FormLayoutTest'
+import FormErrorTest from './pages/FormErrorTest'
 
 // Create an optimized query client with better caching strategy
 const queryClient = new QueryClient({
@@ -195,7 +199,33 @@ function AppContent() {
           
           <Route
             path="/onboarding"
-            element={<OnboardingForm />}
+            // element={<SimpleOnboarding />}
+            element={<OnboardingFormExample />}
+          />
+          
+          <Route
+            path="/form-demo"
+            element={<FormComponentsDemo />}
+          />
+          
+          <Route
+            path="/context-demo"
+            element={<ContextDemo />}
+          />
+          
+          <Route
+            path="/perfect-form"
+            element={<PerfectFormDemo />}
+          />
+          
+          <Route
+            path="/form-layout-test"
+            element={<FormLayoutTest />}
+          />
+          
+          <Route
+            path="/form-error-test"
+            element={<FormErrorTest />}
           />
           
           <Route 
