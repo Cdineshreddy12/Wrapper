@@ -2,7 +2,7 @@
 import React from 'react';
 import { Button } from "@/components/ui/button";
 import GoogleGeminiEffectDemo from "@/components/ui/google-gemini-effect-demo";
-
+import { CostComparison } from '@/components/ui';
 const EcosystemDemo = () => {
   const ref = React.useRef(null);
 
@@ -12,7 +12,8 @@ const EcosystemDemo = () => {
 
       {/* Google Gemini Effect Section */}
       <GoogleGeminiEffectDemo />
-
+      
+      <CostComparison />
   
       {/* Integration Benefits Section */}
       <div className="min-h-screen  flex flex-col items-center justify-center px-4">

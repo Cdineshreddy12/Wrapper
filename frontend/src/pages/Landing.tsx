@@ -7,7 +7,8 @@ import { ZopkitNavbar } from '@/components/ui/zopkit-navbar'
 import { AuroraBackground } from '@/components/ui/aurora-background'
 import api from '@/lib/api'
 import EcosystemDemo from './EcosystemDemo'
-import { CostSavingsSection } from '@/components/landing'
+import { CostSavingsSection } from '@/components/landing'   
+import { CostComparison } from '@/components/ui'
 const Landing: React.FC = () => {
   const navigate = useNavigate()
   const { login, isAuthenticated } = useKindeAuth()
@@ -138,7 +139,8 @@ const Landing: React.FC = () => {
             setActiveApp={handleAppSelect}
           />
            <EcosystemDemo/>
-          <CostSavingsSection />
+          {/* <CostSavingsSection /> */}
+      
           <DemoSection
             showDemo={showDemo}
             setShowDemo={setShowDemo}
