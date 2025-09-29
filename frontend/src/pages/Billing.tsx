@@ -1192,7 +1192,7 @@ export function Billing() {
                   <div className="space-y-3">
                     <p className="text-sm font-medium">Available Applications</p>
                     <div className="flex flex-wrap gap-2">
-                      {planLimitsData.allowedApplications?.map((app: string) => (
+                      {planLimitsData?.allowedApplications?.map((app: string) => (
                         <Badge key={app} variant="default" className="text-xs">
                           {app.toUpperCase()}
                         </Badge>

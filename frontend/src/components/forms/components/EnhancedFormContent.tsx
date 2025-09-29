@@ -1,7 +1,5 @@
 import React, { useEffect } from 'react';
-import { useFormContext } from '../contexts/FormContext';
 import { useFormAccessibility } from '../hooks/useFormAccessibility';
-import { useFormPersistence } from '../hooks/useFormPersistence';
 import { useFormPerformance } from '../hooks/useFormPerformance';
 import { MotionAnimatedTransition } from './MotionAnimatedTransition';
 
@@ -37,7 +35,7 @@ export const EnhancedFormContent: React.FC<EnhancedFormContentProps> = ({
 }) => {
   // Enhanced features using context
   const { focusFirstField } = useFormAccessibility();
-  const { saveFormData, handleSubmit: persistentHandleSubmit } = useFormPersistence(persistence);
+  // const { saveFormData, handleSubmit: persistentHandleSubmit } = useFormPersistence(persistence);
   const { formValues, validationState } = useFormPerformance();
 
   // Focus first field on step change (accessibility)
@@ -62,11 +60,13 @@ export const EnhancedFormContent: React.FC<EnhancedFormContentProps> = ({
           {animations ? (
             <MotionAnimatedTransition direction={transitionDirection}>
               <div className="space-y-6">
-                {currentStepConfig.fields.map((field, index) => (
-                  <div key={field.id} data-animate>
-                    {renderField(field)}
-                  </div>
-                ))}
+                {currentStepConfig.fields.map(
+                  (field: { id: string }, index: number) => (
+                    <div key={field.id} data-animate>
+                      {renderField(field)}
+                    </div>
+                  )
+                )}
               </div>
             </MotionAnimatedTransition>
           ) : (
@@ -77,9 +77,9 @@ export const EnhancedFormContent: React.FC<EnhancedFormContentProps> = ({
 
           {/* Debug Information */}
           {debug && (
-            <div className="mt-8 p-4 bg-gray-100 rounded-lg">
-              <h4 className="font-medium mb-2 text-gray-900">Enhanced Debug Information</h4>
-              <div className="space-y-2 text-sm text-gray-600">
+            <div className="mt-8 p-4 rounded-lg">
+              <h4 className="font-medium mb-2">Enhanced Debug Information</h4>
+              <div className="space-y-2 text-sm">
                 <div>Current Step: {currentStep + 1}</div>
                 <div>Values: {JSON.stringify(methods.getValues(), null, 2)}</div>
                 <div>Is Valid: {isCurrentStepValid ? 'Yes' : 'No'}</div>

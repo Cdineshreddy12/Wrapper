@@ -19,11 +19,11 @@ import {
 import {
   OrganizationTreeManagement,
   OrganizationUserManagement,
-  OrganizationPermissionManagement
 } from '@/components/OrganizationManagement';
 import LocationManagement from '@/components/LocationManagement';
 import { useOrganizationAuth } from '@/hooks/useOrganizationAuth';
 import toast from 'react-hot-toast';
+import { OrganizationPermissionManagement } from '@/components/OrganizationManagement-Updated';
 
 interface TenantInfo {
   tenantId: string;

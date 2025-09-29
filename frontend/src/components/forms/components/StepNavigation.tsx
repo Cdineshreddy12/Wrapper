@@ -26,14 +26,15 @@ export const StepNavigation: React.FC<StepNavigationProps> = ({
       {/* Back button */}
       <div>
         {!isFirstStep && allowBack && (
-          <button
+          <Button
             type="button"
             onClick={onPrev}
             disabled={isSubmitting}
-            className="text-gray-600 hover:text-gray-800 font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            variant="ghost"
           >
-            PREVIOUS STEP
-          </button>
+            <ChevronLeft className="w-4 h-4" />
+            <span>PREVIOUS</span>
+          </Button>
         )}
       </div>
 
@@ -44,11 +45,6 @@ export const StepNavigation: React.FC<StepNavigationProps> = ({
             type="button"
             onClick={onSubmit}
             disabled={!isCurrentStepValid || isSubmitting}
-            className={cn(
-              'bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-medium text-sm transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-              'flex items-center space-x-2'
-            )}
           >
             {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
             <span>{isSubmitting ? 'Submitting...' : 'Submit'}</span>
@@ -58,11 +54,6 @@ export const StepNavigation: React.FC<StepNavigationProps> = ({
             type="button"
             onClick={onNext}
             disabled={!isCurrentStepValid || isSubmitting}
-            className={cn(
-              'bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-medium text-sm transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-              'flex items-center space-x-2'
-            )}
           >
             <span>NEXT</span>
             <ChevronRight className="w-4 h-4" />

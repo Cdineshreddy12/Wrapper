@@ -1,4 +1,4 @@
-"use client"
+""
 
 import type { Table } from "@tanstack/react-table"
 import { SlidersHorizontal } from "lucide-react"

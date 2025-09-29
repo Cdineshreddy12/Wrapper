@@ -27,32 +27,32 @@ export const TextField: React.FC<FieldComponentProps> = ({
           )}>
             {field.label}
           </FormLabel>
-          
-              <FormControl>
-                <Input
-                  {...formField}
-                  type={field.type}
-                  value={typeof value === 'string' ? value : ''}
-                  onChange={(e) => {
-                    formField.onChange(e);
-                    onChange(e.target.value);
-                  }}
-                  onBlur={() => {
-                    formField.onBlur();
-                    if (onBlur) {
-                      onBlur();
-                    }
-                  }}
-                  placeholder={field.placeholder}
-                  disabled={disabled || field.disabled}
-                  minLength={field.type === 'text' ? (field as TextFieldType).minLength : undefined}
-                  maxLength={field.type === 'text' ? (field as TextFieldType).maxLength : undefined}
-                  pattern={field.type === 'text' ? (field as TextFieldType).pattern : undefined}
-                  required={field.required}
-                  className="h-12 px-4 py-3 text-sm border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                />
-              </FormControl>
-          
+
+          <FormControl>
+            <Input
+              {...formField}
+              type={field.type}
+              value={typeof value === 'string' ? value : ''}
+              onChange={(e) => {
+                formField.onChange(e);
+                onChange(e.target.value);
+              }}
+              onBlur={() => {
+                formField.onBlur();
+                if (onBlur) {
+                  onBlur();
+                }
+              }}
+              placeholder={field.placeholder}
+              disabled={disabled || field.disabled}
+              minLength={field.type === 'text' ? (field as TextFieldType).minLength : undefined}
+              maxLength={field.type === 'text' ? (field as TextFieldType).maxLength : undefined}
+              pattern={field.type === 'text' ? (field as TextFieldType).pattern : undefined}
+              required={field.required}
+              className="h-12 px-4 py-3 text-sm border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+            />
+          </FormControl>
+
           {field.helpText && (
             <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5">ℹ</div>

@@ -29,6 +29,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { analyticsAPI } from '@/lib/api'
 import { formatNumber, formatDate } from '@/lib/utils'
+import { Typography } from '@/components/common/Typography'
+import { IconButton } from '@/components/common/LoadingButton'
 
 export function Analytics() {
   const [selectedPeriod, setSelectedPeriod] = useState('30d')
@@ -89,18 +91,16 @@ export function Analytics() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Analytics</h1>
-          <p className="text-gray-600">Detailed insights into your platform performance</p>
+          <Typography variant="h1">Analytics</Typography>
+          <Typography variant="muted">Detailed insights into your platform performance</Typography>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">
-            <Filter className="h-4 w-4 mr-2" />
+          <IconButton variant="outline" size="sm" startIcon={Filter}>
             Filter
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => handleExport('all')}>
-            <Download className="h-4 w-4 mr-2" />
+          </IconButton>
+          <IconButton variant="outline" size="sm" startIcon={Download} onClick={() => handleExport('all')}>
             Export
-          </Button>
+          </IconButton>
         </div>
       </div>
 
@@ -125,12 +125,12 @@ export function Analytics() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total API Calls</p>
-                <p className="text-2xl font-bold">{formatNumber(apiMetrics.total || 0)}</p>
-                <p className="text-xs text-green-600 flex items-center mt-1">
+                <Typography variant="muted">Total API Calls</Typography>
+                <Typography variant="h2">{formatNumber(apiMetrics.total || 0)}</Typography>
+                <Typography variant="muted">
                   <TrendingUp className="h-3 w-3 mr-1" />
                   +{apiMetrics.growth || 0}% vs last period
-                </p>
+                </Typography>
               </div>
               <div className="p-2 bg-blue-100 rounded-lg">
                 <Activity className="h-6 w-6 text-blue-600" />
@@ -143,12 +143,12 @@ export function Analytics() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Active Users</p>
-                <p className="text-2xl font-bold">{formatNumber(userMetrics.active || 0)}</p>
-                <p className="text-xs text-green-600 flex items-center mt-1">
+                <Typography variant="muted">Active Users</Typography>
+                <Typography variant="h2">{formatNumber(userMetrics.active || 0)}</Typography>
+                <Typography variant="muted">
                   <TrendingUp className="h-3 w-3 mr-1" />
                   +{userMetrics.growth || 0}% vs last period
-                </p>
+                </Typography>
               </div>
               <div className="p-2 bg-green-100 rounded-lg">
                 <Users className="h-6 w-6 text-green-600" />
@@ -161,12 +161,12 @@ export function Analytics() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Avg Response Time</p>
-                <p className="text-2xl font-bold">{performanceMetrics.avgResponseTime || 0}ms</p>
-                <p className="text-xs text-red-600 flex items-center mt-1">
+                <Typography variant="muted">Avg Response Time</Typography>
+                <Typography variant="h2">{performanceMetrics.avgResponseTime || 0}ms</Typography>
+                <Typography variant="muted">
                   <TrendingDown className="h-3 w-3 mr-1" />
                   -{performanceMetrics.improvement || 0}% improvement
-                </p>
+                </Typography>
               </div>
               <div className="p-2 bg-purple-100 rounded-lg">
                 <Clock className="h-6 w-6 text-purple-600" />

@@ -1,27 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Coins, AlertTriangle, TrendingUp, Calendar, RefreshCw } from 'lucide-react';
-import { creditAPI, setKindeTokenGetter, api } from '@/lib/api';
-import { formatDate } from '@/lib/utils';
+import { creditAPI } from '@/lib/api';
+import { cn, formatDate } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import LoadingButton from './common/LoadingButton';
+import { ThemeBadge, ThemeBadgeProps } from './common/ThemeBadge';
 
 interface CreditBalanceProps {
   showPurchaseButton?: boolean;
   showUsageStats?: boolean;
   compact?: boolean;
   onPurchaseClick?: () => void;
+  className?: string;
 }
 
 export function CreditBalance({
   showPurchaseButton = true,
   showUsageStats = true,
   compact = false,
-  onPurchaseClick
+  onPurchaseClick,
+  className
 }: CreditBalanceProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -65,11 +68,12 @@ export function CreditBalance({
     }
   };
 
-  const getStatusColor = (availableCredits: number, lowBalanceThreshold: number) => {
-    if (availableCredits <= lowBalanceThreshold * 0.1) return 'bg-red-100 text-red-800';
-    if (availableCredits <= lowBalanceThreshold) return 'bg-yellow-100 text-yellow-800';
-    return 'bg-green-100 text-green-800';
+  const getStatusVariant = (availableCredits: number, lowBalanceThreshold: number): ThemeBadgeProps['variant'] => {
+    if (availableCredits <= lowBalanceThreshold * 0.1) return 'critical';
+    if (availableCredits <= lowBalanceThreshold) return 'low';
+    return 'success';
   };
+
 
   const getStatusText = (availableCredits: number, lowBalanceThreshold: number) => {
     if (availableCredits <= lowBalanceThreshold * 0.1) return 'Critical';
@@ -79,7 +83,7 @@ export function CreditBalance({
 
   if (isLoading) {
     return (
-      <Card className={compact ? 'p-4' : ''}>
+      <Card className={cn(compact ? 'p-4' : '', className)}>
         <CardContent className="flex items-center justify-center py-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </CardContent>
@@ -89,7 +93,7 @@ export function CreditBalance({
 
   if (error || !creditData) {
     return (
-      <Card className={compact ? 'p-4' : ''}>
+      <Card className={cn(compact ? 'p-4' : '', className)}>
         <CardContent className="flex items-center justify-center py-8">
           <div className="text-center">
             <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-2" />
@@ -128,7 +132,7 @@ export function CreditBalance({
 
   if (compact) {
     return (
-      <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+      <div className="flex items-center justify-between p-4 bg-white rounded-lg border gap-4">
         <div className="flex items-center gap-3">
           <Coins className="h-6 w-6 text-amber-500" />
           <div>
@@ -140,9 +144,9 @@ export function CreditBalance({
             </p>
           </div>
         </div>
-        <Badge className={getStatusColor(availableCredits, lowBalanceThreshold)}>
+        <ThemeBadge variant={getStatusVariant(availableCredits, lowBalanceThreshold)}>
           {getStatusText(availableCredits, lowBalanceThreshold)}
-        </Badge>
+        </ThemeBadge>
       </div>
     );
   }
@@ -160,14 +164,13 @@ export function CreditBalance({
                 <CardDescription>Your available credits and usage</CardDescription>
               </div>
             </div>
-            <Button
+            <LoadingButton
               variant="outline"
-              size="sm"
+              size="icon"
               onClick={handleRefresh}
               disabled={isRefreshing}
-            >
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            </Button>
+              isLoading={isRefreshing}
+            />
           </div>
         </CardHeader>
         <CardContent>
@@ -178,9 +181,9 @@ export function CreditBalance({
                 {availableCredits.toLocaleString()}
               </div>
               <div className="text-sm text-gray-600 mb-2">Available Credits</div>
-              <Badge className={getStatusColor(availableCredits, lowBalanceThreshold)}>
+              <ThemeBadge variant={getStatusVariant(availableCredits, lowBalanceThreshold)}>
                 {getStatusText(availableCredits, lowBalanceThreshold)}
-              </Badge>
+              </ThemeBadge>
             </div>
 
             {/* Total Credits */}

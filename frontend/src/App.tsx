@@ -1,6 +1,5 @@
 import React, { useMemo, useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { Toaster as Sonner } from 'sonner'
 
@@ -39,67 +38,31 @@ import UserApplicationAccessPage from '@/pages/UserApplicationAccess'
 import UserApplicationManagement from '@/pages/UserApplicationManagement'
 import SuiteDashboard from '@/pages/SuiteDashboard'
 import AdminDashboardPage from '@/pages/AdminDashboardPage'
-import { DesignSystemShowcase } from './components/examples/DesignSystemShowcase'
-import { OnboardingFormExample } from './components/forms/examples/OnboardingFormExample'
-import FormComponentsDemo from './pages/FormComponentsDemo'
-import ContextDemo from './pages/ContextDemo'
-import PerfectFormDemo from './pages/PerfectFormDemo'
-import FormLayoutTest from './pages/FormLayoutTest'
-import FormErrorTest from './pages/FormErrorTest'
+import OnboardingPage from '@/pages/Onboarding'
+import SimpleOnboarding from '@/pages/SimpleOnboarding'
 
-// Create an optimized query client with better caching strategy
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: (failureCount, error: any) => {
-        // Don't retry on 4xx errors except 429 (rate limit)
-        if (error?.response?.status >= 400 && error?.response?.status < 500 && error?.response?.status !== 429) {
-          return false;
-        }
-        return failureCount < 2;
-      },
-      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: true,
-      staleTime: 1 * 60 * 1000, // 2 minutes
-      gcTime: 1 * 60 * 1000, // 10 minutes (formerly cacheTime)
-      // Enable background refetching for better UX
-      refetchInterval: false, // Disable automatic polling by default
-      refetchIntervalInBackground: false,
-    },
-    mutations: {
-      retry: (failureCount, error: any) => {
-        // Don't retry mutations on client errors
-        if (error?.response?.status >= 400 && error?.response?.status < 500) {
-          return false;
-        }
-        return failureCount < 1;
-      },
-    },
-  },
-})
 
 // Loading component
 const LoadingScreen = () => (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    )
+  <div className="min-h-screen bg-background flex items-center justify-center">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+      <p className="text-muted-foreground">Loading...</p>
+    </div>
+  </div>
+)
 
 // Auth initializer component
 const AuthInitializer: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Token getter is now handled by KindeProvider.tsx to avoid conflicts
   // The enhanced api.ts will automatically get tokens from the configured getter
-  
+
   return <>{children}</>;
 };
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <>
       <ThemeProvider defaultTheme="system" storageKey="zopkit-theme">
         <KindeProvider>
           <AuthInitializer>
@@ -113,7 +76,7 @@ function App() {
           </AuthInitializer>
         </KindeProvider>
       </ThemeProvider>
-      
+
       {/* Toast notifications */}
       <Toaster
         position="top-right"
@@ -136,7 +99,7 @@ function App() {
         }}
       />
       <Sonner />
-    </QueryClientProvider>
+    </>
   )
 }
 
@@ -169,117 +132,92 @@ function AppContent() {
   console.log('🚀 App.tsx - Rendering routes with auth state:', authState)
 
   return (
-      <div className="App">
-        {/* Trial Expiry Banner Only */}
-        <TrialExpiryBanner />
-        <TrialBannerSpacer />
+    <div className="App">
+      {/* Trial Expiry Banner Only */}
+      <TrialExpiryBanner />
+      <TrialBannerSpacer />
 
-        {/* Permission refresh notification - only show when authenticated */}
-        {authState.isAuthenticated && <PermissionRefreshNotification />}
+      {/* Permission refresh notification - only show when authenticated */}
+      {authState.isAuthenticated && <PermissionRefreshNotification />}
 
-        <Routes>
-          {/* Public Routes */}
-          <Route 
-            path="/landing" 
-            element={
+      <Routes>
+        {/* Public Routes */}
+        <Route
+          path="/landing"
+          element={
             authState.isAuthenticated ? <Navigate to="/" replace /> : <Landing />
-            } 
-          />
-          
-          {/* Root redirect based on auth status */}
-          <Route 
-            path="/" 
-            element={<RootRedirect />} 
-          />
-          
-          <Route
-            path="/design-system"
-            element={<DesignSystemShowcase />}
-          />
-          
-          <Route
-            path="/onboarding"
-            // element={<SimpleOnboarding />}
-            element={<OnboardingFormExample />}
-          />
-          
-          <Route
-            path="/form-demo"
-            element={<FormComponentsDemo />}
-          />
-          
-          <Route
-            path="/context-demo"
-            element={<ContextDemo />}
-          />
-          
-          <Route
-            path="/perfect-form"
-            element={<PerfectFormDemo />}
-          />
-          
-          <Route
-            path="/form-layout-test"
-            element={<FormLayoutTest />}
-          />
-          
-          <Route
-            path="/form-error-test"
-            element={<FormErrorTest />}
-          />
-          
-          <Route 
-            path="/login" 
-            element={<Login />} 
-          />
-          
-          <Route 
-            path="/auth/callback" 
-            element={<AuthCallback />} 
-          />
+          }
+        />
 
+        {/* Root redirect based on auth status */}
+        <Route
+          path="/"
+          element={<RootRedirect />}
+        />
 
-          {/* Invitation Accept Route - Public (handles auth internally) */}
-          <Route 
-            path="/invite/accept" 
-            element={<InviteAccept />} 
-          />
+       
 
+        <Route
+          path="/onboarding"
+          element={<SimpleOnboarding />}
+        // element={<OnboardingPage />}
+        // element={<FlowSelectorMultiStepExample />}
+        />
 
-        
+        {/* <Route
+          path="/form-demo"
+          element={<FormComponentsDemo />}
+        />
+
+        <Route
+          path="/context-demo"
+          element={<ContextDemo />}
+        />
+
+        <Route
+          path="/perfect-form"
+          element={<PerfectFormDemo />}
+        />
+
+        <Route
+          path="/form-layout-test"
+          element={<FormLayoutTest />}
+        />
+
+        <Route
+          path="/form-error-test"
+          element={<FormErrorTest />}
+        /> */}
+
+        <Route
+          path="/login"
+          element={<Login />}
+        />
+
+        <Route
+          path="/auth/callback"
+          element={<AuthCallback />}
+        />
+
+        {/* Invitation Accept Route - Public (handles auth internally) */}
+        <Route
+          path="/invite/accept"
+          element={<InviteAccept />}
+        />
+
         {/* Business Suite Dashboard Route */}
-        <Route 
-          path="/suite" 
+        <Route
+          path="/suite"
           element={
             <ProtectedRoute>
               <SuiteDashboard />
             </ProtectedRoute>
-          } 
+          }
         />
-        
 
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
-
-        
         {/* Protected dashboard routes with onboarding guard */}
-        <Route 
-          path="/dashboard/*" 
+        <Route
+          path="/dashboard/*"
           element={
             <ProtectedRoute>
               <OnboardingGuard>
@@ -309,8 +247,8 @@ function AppContent() {
         />
 
         {/* Organization-specific routes with onboarding guard */}
-        <Route 
-          path="/org/:orgCode" 
+        <Route
+          path="/org/:orgCode"
           element={
             <ProtectedRoute>
               <OnboardingGuard>
@@ -329,19 +267,19 @@ function AppContent() {
           <Route path="permissions" element={<Permissions />} />
         </Route>
 
-          {/* Catch all - redirect to landing if not authenticated */}
-          <Route 
-            path="*" 
-            element={
+        {/* Catch all - redirect to landing if not authenticated */}
+        <Route
+          path="*"
+          element={
             authState.isLoading ? (
               <LoadingScreen />
             ) : (
               <Navigate to={authState.isAuthenticated ? "/dashboard" : "/landing"} replace />
             )
-            } 
-          />
-        </Routes>
-      </div>
+          }
+        />
+      </Routes>
+    </div>
   )
 }
 
@@ -364,19 +302,19 @@ function RootRedirect() {
       // Check if this is a CRM authentication flow (from Kinde callback)
       const urlParams = new URLSearchParams(window.location.search);
       const stateParam = urlParams.get('state');
-      
+
       if (stateParam && isAuthenticated) {
         try {
           const stateData = JSON.parse(stateParam);
           console.log('🔍 RootRedirect: Detected CRM authentication flow:', stateData);
-          
+
           if (stateData.app_code && stateData.redirect_url) {
             console.log('🔄 RootRedirect: Processing CRM authentication flow');
-            
+
             // Get the token from Kinde
             const { getToken } = useKindeAuth();
             const token = await getToken();
-            
+
             if (token) {
               // Generate app-specific token using backend
               const backendUrl = 'https://wrapper.zopkit.com';
@@ -388,7 +326,7 @@ function RootRedirect() {
 
               if (response.ok) {
                 const validation = await response.json();
-                
+
                 if (validation.success) {
                   // Generate app-specific token
                   const appTokenResponse = await fetch(`${backendUrl}/auth/generate-app-token`, {
@@ -399,13 +337,13 @@ function RootRedirect() {
 
                   if (appTokenResponse.ok) {
                     const appTokenData = await appTokenResponse.json();
-                    
+
                     // Redirect to CRM with token
                     const redirectUrl = new URL(stateData.redirect_url);
                     redirectUrl.searchParams.set('token', appTokenData.token);
                     redirectUrl.searchParams.set('expires_at', appTokenData.expiresAt);
                     redirectUrl.searchParams.set('app_code', stateData.app_code);
-                    
+
                     console.log('🚀 RootRedirect: Redirecting to CRM:', redirectUrl.toString());
                     window.location.href = redirectUrl.toString();
                     return;
@@ -472,8 +410,8 @@ function RootRedirect() {
 
   // Check if this is an invited user (they should never need onboarding)
   const isInvitedUser = onboardingStatus.authStatus?.userType === 'INVITED_USER' ||
-                        onboardingStatus.authStatus?.isInvitedUser === true ||
-                        onboardingStatus.authStatus?.onboardingCompleted === true
+    onboardingStatus.authStatus?.isInvitedUser === true ||
+    onboardingStatus.authStatus?.onboardingCompleted === true
 
   // DEBUG LOGGING: Log the decision-making process
   console.log('🔍 RootRedirect: Onboarding decision analysis:', {
@@ -487,21 +425,21 @@ function RootRedirect() {
       isInvitedUser: onboardingStatus.authStatus?.isInvitedUser
     }
   })
-  
+
   // Check if there's a pending invitation (user should complete invitation flow first)
   const hasPendingInvitation = localStorage.getItem('pendingInvitationToken')
-  
+
   if (needsOnboarding && !isInvitedUser && !hasPendingInvitation) {
     console.log('🔄 RootRedirect: User needs onboarding, redirecting to /onboarding')
     return <Navigate to="/onboarding" replace />
   }
-  
+
   // INVITED USERS: Always go to dashboard (they skip onboarding)
   if (isInvitedUser) {
     console.log('🔄 RootRedirect: Invited user detected, redirecting to dashboard (skipping onboarding)')
     return <Navigate to="/dashboard" replace />
   }
-  
+
   // If there's a pending invitation, redirect to invitation acceptance
   if (hasPendingInvitation) {
     console.log('🔄 RootRedirect: Pending invitation detected, redirecting to invitation acceptance')

@@ -602,7 +602,7 @@ export function UserApplicationAccess() {
                       
                       <div className="flex items-center gap-2">
                         <div className="flex gap-1">
-                          {user.allowedApplications.map(app => (
+                          {user?.allowedApplications?.map(app => (
                             <Badge key={app} variant="outline" className="text-xs">
                               {app.toUpperCase()}
                             </Badge>
@@ -614,7 +614,7 @@ export function UserApplicationAccess() {
                           variant="ghost"
                           onClick={() => handleSyncUser(user.userId)}
                           disabled={syncUserMutation.isPending}
-                          title={`Sync ${user.name} to ${user.allowedApplications.length} applications`}
+                          title={`Sync ${user.name} to ${user?.allowedApplications?.length} applications`}
                         >
                           <RefreshCw className={`h-3 w-3 ${syncUserMutation.isPending ? 'animate-spin' : ''}`} />
                         </Button>
@@ -732,11 +732,11 @@ export function UserApplicationAccess() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge className={getAccessMethodColor(user.classificationReason.accessMethod)}>
-                          {user.classificationReason.accessMethod.replace('_', ' ')}
+                        <Badge className={getAccessMethodColor(user.classificationReason?.accessMethod)}>
+                          {user.classificationReason?.accessMethod.replace('_', ' ')}
                         </Badge>
                         <Badge variant="outline">
-                          {user.allowedApplications.length} apps
+                          {user?.allowedApplications?.length} apps
                         </Badge>
                       </div>
                     </div>
@@ -770,19 +770,19 @@ export function UserApplicationAccess() {
                     <div>
                       <h4 className="font-medium">{user.name}</h4>
                       <p className="text-sm text-gray-600">{user.email}</p>
-                      <p className="text-xs text-gray-500">{user.classificationReason.primary}</p>
+                      <p className="text-xs text-gray-500">{user.classificationReason?.primary}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Badge className={getAccessMethodColor(user.classificationReason.accessMethod)}>
-                      {user.classificationReason.accessMethod.replace('_', ' ')}
+                    <Badge className={getAccessMethodColor(user.classificationReason?.accessMethod)}>
+                      {user.classificationReason?.accessMethod?.replace('_', ' ')}
                     </Badge>
-                    {user.allowedApplications.map(app => (
+                    {user?.allowedApplications?.map(app => (
                       <Badge key={app} variant="outline" className="text-xs">
                         {app.toUpperCase()}
                       </Badge>
                     ))}
-                    {user.roles.map(role => (
+                    {user?.roles?.map(role => (
                       <Badge key={role.roleId} variant="secondary" className="text-xs">
                         {role.roleName}
                       </Badge>

@@ -313,7 +313,6 @@ const PermissionMatrix: React.FC = () => {
                                           <Switch
                                             checked={hasPermission(user.userId, app.appId, module.moduleId, permission)}
                                             onCheckedChange={() => togglePermission(user.userId, app.appId, module.moduleId, permission)}
-                                            size="sm"
                                           />
                                         </td>
                                       ))}

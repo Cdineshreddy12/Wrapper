@@ -85,7 +85,7 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
   // Handle field value changes
   const handleFieldChange = (fieldId: string, value: FormValue) => {
     methods.setValue(fieldId, value, { shouldValidate: false, shouldDirty: true });
-    
+
     // Debug logging for field changes
     if (debug) {
       console.log('Field changed:', { fieldId, value, errors: methods.formState.errors });
@@ -96,7 +96,7 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
   const handleFieldBlur = (fieldId: string) => {
     // Trigger validation for this field when user blurs
     methods.trigger(fieldId);
-    
+
     // Debug logging for field blur
     if (debug) {
       console.log('Field blurred:', { fieldId, errors: methods.formState.errors });
@@ -149,15 +149,15 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
     const isDirty = methods.formState.isDirty;
     const isSubmitted = methods.formState.isSubmitted;
     const touchedFields = Object.keys(methods.formState.touchedFields).length;
-    
+
     // If form hasn't been touched and not submitted, consider it valid
     if (!isDirty && !isSubmitted && touchedFields === 0) {
       return true;
     }
-    
+
     // Use react-hook-form's built-in validation state
     const isValid = methods.formState.isValid;
-    
+
     // Debug logging
     if (debug) {
       console.log('Validation Debug:', {
@@ -170,14 +170,14 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
         values: methods.getValues()
       });
     }
-    
+
     return isValid;
   }, [methods.formState.isValid, methods.formState.isDirty, methods.formState.isSubmitted, methods.formState.touchedFields, methods.formState.errors, currentStep, debug]);
 
   // Render field component
   const renderField = (field: FormField) => {
     const FieldComponent = fieldComponents[field.type] || (FIELD_COMPONENTS as any)[field.type];
-    
+
     if (!FieldComponent) {
       console.warn(`No component found for field type: ${field.type}`);
       return null;
@@ -207,7 +207,7 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
   // Evaluate conditional logic
   const evaluateCondition = (value: FormValue, conditional: { operator?: string; value: FormValue | FormValue[] }): boolean => {
     const { operator = 'equals', value: expectedValue } = conditional;
-    
+
     switch (operator) {
       case 'equals':
         return value === expectedValue;
@@ -228,11 +228,11 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
 
   // Get step titles for progress indicator
   const stepTitles = config.steps.map(step => step.title);
-  
+
   // Define sub-steps for each step based on actual step content
   const stepSubSteps: Record<number, string[]> = useMemo(() => {
     const subSteps: Record<number, string[]> = {};
-    
+
     config.steps.forEach((step, index) => {
       // Generate sub-steps based on field types or step content
       if (step.fields.some(field => field.type === 'select')) {
@@ -245,7 +245,7 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
         subSteps[index] = ['Basic Info', 'Details'];
       }
     });
-    
+
     return subSteps;
   }, [config.steps]);
 
@@ -293,11 +293,11 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
     <FormErrorBoundary>
       <FormProvider value={formContextValue}>
         <PersistenceWrapper persistence={persistence}>
-          <div className={cn('min-h-screen bg-gray-50 flex', className)} data-form-container>
-          {/* Sidebar Progress Indicator */}
-          {currentStepConfig.showProgress && (
-            <div className="flex-shrink-0">
-              {CustomProgressIndicator ? (
+          <div className={cn('min-h-screen flex', className)} data-form-container>
+            {/* Sidebar Progress Indicator */}
+            {currentStepConfig.showProgress && (
+              <div className="w-80 flex-shrink-0 border-r border-gray-200">
+                {CustomProgressIndicator ? (
                   <CustomProgressIndicator
                     currentStep={currentStep}
                     totalSteps={config.steps.length}
@@ -305,57 +305,60 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
                     stepSubSteps={stepSubSteps}
                     showStepNumbers={config.showStepNumbers}
                   />
-              ) : (
-                <ProgressIndicator />
-              )}
-            </div>
-          )}
+                ) : (
+                  <ProgressIndicator />
+                )}
+              </div>
+            )}
 
-          {/* Main Form Content */}
-          <div className="flex-1 flex flex-col">
-            <RHFProvider {...methods}>
-              <div className="flex-1 bg-white">
-                {/* Header */}
-                <div className="border-b border-gray-200 px-8 py-6">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                        {currentStepConfig.title}
-                      </h1>
-                      {currentStepConfig.description && (
-                        <p className="text-lg text-gray-600">
-                          {currentStepConfig.description}
-                        </p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-500">Having troubles?</p>
-                      <a href="#" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
-                        Get Help
-                      </a>
+            {/* Main Form Content */}
+            <div className="flex-1 flex flex-col relative">
+              <RHFProvider {...methods}>
+                <div className="flex-1 pb-20">
+                  {/* Header */}
+                  <div className="border-b border-gray-200 px-8 py-6">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h1 className="text-3xl font-bold mb-2">
+                          {currentStepConfig.title}
+                        </h1>
+                        {currentStepConfig.description && (
+                          <p className="text-lg">
+                            {currentStepConfig.description}
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm ">Having troubles?</p>
+                        <a href="#" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                          Get Help
+                        </a>
+                      </div>
                     </div>
                   </div>
+
+                  {/* Enhanced Form Content */}
+                  <EnhancedFormContent
+                    animations={animations}
+                    accessibility={accessibility}
+                    persistence={persistence}
+                    debug={debug}
+                    currentStep={currentStep}
+                    transitionDirection={transitionDirection}
+                    renderField={renderField}
+                    currentStepConfig={currentStepConfig}
+                    methods={methods}
+                    isCurrentStepValid={isCurrentStepValid}
+                  >
+                    {children}
+                  </EnhancedFormContent>
                 </div>
-
-                {/* Enhanced Form Content */}
-                <EnhancedFormContent
-                  animations={animations}
-                  accessibility={accessibility}
-                  persistence={persistence}
-                  debug={debug}
-                  currentStep={currentStep}
-                  transitionDirection={transitionDirection}
-                  renderField={renderField}
-                  currentStepConfig={currentStepConfig}
-                  methods={methods}
-                  isCurrentStepValid={isCurrentStepValid}
-                >
-                  {children}
-                </EnhancedFormContent>
-
-                {/* Step Navigation */}
-                <div className="border-t border-gray-200 px-8 py-6 bg-gray-50">
-                  <div className="max-w-2xl">
+              </RHFProvider>
+              
+              {/* Fixed Bottom Navigation */}
+              <div className="absolute bottom-0 left-0 right-0  border-t border-gray-200 shadow-lg z-50">
+                <div className="px-8 py-6">
+                  <div className="max-w-2xl mx-auto">
                     {CustomStepNavigation ? (
                       <CustomStepNavigation
                         currentStep={currentStep}
@@ -382,9 +385,8 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
                   </div>
                 </div>
               </div>
-            </RHFProvider>
+            </div>
           </div>
-        </div>
         </PersistenceWrapper>
       </FormProvider>
     </FormErrorBoundary>

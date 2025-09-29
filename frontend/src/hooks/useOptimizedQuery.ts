@@ -152,6 +152,7 @@ export function useOptimizedQuery<T>(options: UseOptimizedQueryOptions<T>) {
 }
 
 // Hook for batch operations to minimize API calls
+// TODO: We can use useQueries
 export function useBatchedQueries<T>(
   queries: Array<{
     queryKey: (string | number | object)[];

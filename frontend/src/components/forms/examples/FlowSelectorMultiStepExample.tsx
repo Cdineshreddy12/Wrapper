@@ -429,11 +429,11 @@ export const FlowSelectorMultiStepExample: React.FC = () => {
 
   if (currentStep === 'flow-selection') {
     return (
-      <div className="min-h-screen bg-gray-50 py-8">
+      <div className="min-h-screen py-8">
         <div className="container mx-auto px-4 max-w-4xl">
           <div className="mb-8 text-center">
             <h1 className="text-3xl font-bold tracking-tight mb-4">Choose Your Account Type</h1>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+            <p className="text-lg max-w-2xl mx-auto">
               Select the type of account that best fits your needs. Each option comes with different features and capabilities.
             </p>
           </div>
@@ -455,12 +455,11 @@ export const FlowSelectorMultiStepExample: React.FC = () => {
     const formConfig = getFormConfigForFlow(selectedFlow.id);
 
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="container mx-auto px-4">
+      <div className="min-h-screen">
+        <div className="container mx-auto">
           {/* Header with flow info and back button */}
-          <div className="py-6 border-b border-gray-200 bg-white">
-            <div className="max-w-4xl mx-auto">
-              <div className="flex items-center justify-between">
+          <div className="border-b border-gray-200">
+              <div className="flex items-center justify-between p-4">
                 <div className="flex items-center gap-4">
                   <Button
                     variant="outline"
@@ -483,19 +482,16 @@ export const FlowSelectorMultiStepExample: React.FC = () => {
                   <Shield className="w-3 h-3" />
                   {selectedFlow.data?.type?.toUpperCase()}
                 </Badge>
-              </div>
             </div>
           </div>
 
           {/* Form */}
-          <div className="py-8">
-            <MultiStepForm
-              config={formConfig}
-              onSubmit={handleFormSubmit}
-              initialValues={formData}
-              debug={false}
-            />
-          </div>
+              <MultiStepForm
+                config={formConfig}
+                onSubmit={handleFormSubmit}
+                initialValues={formData}
+                debug={false}
+              />
         </div>
       </div>
     );

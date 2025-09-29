@@ -147,7 +147,7 @@ const Landing: React.FC = () => {
                 </div>
 
                 <div className="flex items-center space-x-4">
-                  <Badge className="animate-pulse bg-destructive text-destructive-foreground border-0 px-3 py-1">
+                  <Badge className="animate-pulse bg-destructive-foreground border-0 px-3 py-1">
                     <CheckCircle className="w-3 h-3 mr-1" />
                     <AnimatedCounter 
                       value={stats.users} 
@@ -274,7 +274,7 @@ const Landing: React.FC = () => {
                   </div>
                 </div>
                 <div className="text-center">
-                  <div className="text-4xl font-bold text-destructive mb-2">
+                  <div className="text-4xl font-bold mb-2">
                     <AnimatedPercentage 
                       value={stats.satisfaction} 
                       duration={3000}
@@ -283,7 +283,7 @@ const Landing: React.FC = () => {
                     />
                   </div>
                   <div className="text-muted-foreground flex items-center justify-center gap-2">
-                    <Star className="w-5 h-5 text-destructive" />
+                    <Star className="w-5 h-5" />
                     Customer Satisfaction
                   </div>
                 </div>
@@ -316,7 +316,7 @@ const Landing: React.FC = () => {
                     <div className="space-y-2">
                       {feature.benefits.map((benefit, idx) => (
                         <div key={idx} className="text-sm text-muted-foreground flex items-center justify-center">
-                          <CheckCircle className="w-4 h-4 mr-2 text-destructive" />
+                          <CheckCircle className="w-4 h-4 mr-2" />
                           {benefit}
                         </div>
                       ))}
@@ -347,19 +347,19 @@ const Landing: React.FC = () => {
                   <div className="space-y-4">
                     <div className="flex items-center space-x-4">
                       <div className="w-10 h-10 bg-destructive/10 rounded-xl flex items-center justify-center">
-                        <Shield className="h-5 w-5 text-destructive" />
+                        <Shield className="h-5 w-5" />
                       </div>
                       <span className="font-medium">Secure authentication with Kinde SSO</span>
                     </div>
                     <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-destructive/10 rounded-xl flex items-center justify-center">
-                        <Users className="h-5 w-5 text-destructive" />
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center">
+                        <Users className="h-5 w-5" />
                       </div>
                       <span className="font-medium">Instant access to team workspace</span>
                     </div>
                     <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-destructive/10 rounded-xl flex items-center justify-center">
-                        <Clock className="h-5 w-5 text-destructive" />
+                      <div className="w-10 h-10  rounded-xl flex items-center justify-center">
+                        <Clock className="h-5 w-5" />
                       </div>
                       <span className="font-medium">All your projects and data ready</span>
                     </div>
@@ -367,8 +367,10 @@ const Landing: React.FC = () => {
 
                   <Button 
                     onClick={handleJoinExistingOrg} 
-                    className="w-full h-12 text-lg font-bold bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                     disabled={isLoading}
+                    variant="outline"
+                    className='w-full'
+                    size="lg"
                   >
                     {isLoading ? 'Signing In...' : 'Sign In to My Organization'}
                     <ArrowRight className="ml-3 h-5 w-5" />
@@ -411,8 +413,9 @@ const Landing: React.FC = () => {
 
                   <Button 
                     onClick={handleCreateNewOrg} 
-                    className="w-full h-12 text-lg font-bold bg-primary hover:bg-primary/90 text-primary-foreground"
                     disabled={isLoading}
+                    className='w-full'
+                    size="lg"
                   >
                     {isLoading ? 'Getting Started...' : 'Create New Organization'}
                     <ArrowRight className="ml-3 h-5 w-5" />
@@ -448,7 +451,7 @@ const Landing: React.FC = () => {
                     </div>
                     <div className="flex mb-4">
                       {[...Array(testimonial.rating)].map((_, i) => (
-                        <Star key={i} className="w-5 h-5 text-destructive fill-current" />
+                        <Star key={i} className="w-5 h-5 fill-current" />
                       ))}
                     </div>
                     <p className="text-muted-foreground italic">"{testimonial.content}"</p>

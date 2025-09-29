@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 import { Alert, AlertDescription } from './ui/alert';
 import { useUserContext } from '../contexts/UserContextProvider';
 import toast from 'react-hot-toast';
+import ActionableAlert from './common/ActionableAlert';
 
 interface PermissionRefreshNotificationProps {
   className?: string;
@@ -89,7 +90,18 @@ export const PermissionRefreshNotification: React.FC<PermissionRefreshNotificati
 
   return (
     <div className={`fixed top-4 right-4 z-50 max-w-md ${className}`}>
-      <Alert className="border-yellow-200 bg-yellow-50 text-yellow-800">
+      <ActionableAlert title="Your permissions may have changed" subTitle={lastNotificationTime ? `Last detected: ${lastNotificationTime.toLocaleTimeString()}` : lastRefreshTime ? `Last refreshed: ${lastRefreshTime.toLocaleTimeString()}` : undefined}
+               actions={<div className="flex gap-2 mt-2">
+        <Button size="sm" variant="outline" className="border-yellow-300 text-yellow-800 hover:bg-yellow-100" onClick={handleRefresh} disabled={isRefreshing || loading}>
+          {isRefreshing || loading ? <RefreshCw className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+          Refresh Now
+        </Button>
+        <Button size="sm" variant="outline" className="border-yellow-300 text-yellow-800 hover:bg-yellow-100" onClick={handleEnableAutoRefresh}>
+          <Check className="h-3 w-3 mr-1" />
+          Enable Auto-refresh
+        </Button>
+      </div>} severity="warning" onClose={handleDismiss} />
+      {/* <Alert className="border-yellow-200 bg-yellow-50 text-yellow-800">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription className="pr-8">
           <div className="flex flex-col gap-2">
@@ -139,7 +151,7 @@ export const PermissionRefreshNotification: React.FC<PermissionRefreshNotificati
         >
           <X className="h-3 w-3" />
         </Button>
-      </Alert>
+      </Alert> */}
     </div>
   );
 };
