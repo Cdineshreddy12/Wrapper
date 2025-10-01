@@ -1,491 +1,325 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { useTheme } from '@/components/theme/ThemeProvider'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { AnimatedCounter, AnimatedPercentage } from '@/components/ui/animated-number'
-import {
-  Building2, Plus, ArrowRight, LogIn, Shield, Users, Zap,
-  BarChart, Clock, CheckCircle, Star, Play,
-  Globe, Award,
-  Download, Phone, Menu, X, ArrowUpRight,
-  Sun, Moon
-} from 'lucide-react'
-import toast from 'react-hot-toast'
+import { motion, AnimatePresence } from 'framer-motion'
+import { HeroSection, StackedCardsSection, DemoSection, TrustIndicators } from '@/components/landing'
+import { ZopkitNavbar } from '@/components/common/zopkit-navbar'
+import { AuroraBackground } from '@/components/ui/aurora-background'
+import api from '@/lib/api'
+import EcosystemDemo from '@/components/landing/EcosystemDemo'
 
 const Landing: React.FC = () => {
-  const { login } = useKindeAuth()
-  const { actualTheme, setTheme } = useTheme()
+  const navigate = useNavigate()
+  const { login, isAuthenticated } = useKindeAuth()
   const [isLoading, setIsLoading] = useState(false)
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [stats, setStats] = useState({
-    users: 0,
-    projects: 0,
-    satisfaction: 0
-  })
+  const [showDemo, setShowDemo] = useState(false)
 
-  // Load stats - use default values for public landing page
+  // Check authentication status quietly in background
   useEffect(() => {
-    // Set default stats for landing page since this is a public page
-    setStats({
-      users: 1000,
-      projects: 250,
-      satisfaction: 98
-    })
-  }, [])
+    const checkAuthenticatedUser = async () => {
+      if (isAuthenticated) {
+        try {
+          // Quietly check if user is already fully onboarded
+          const response = await api.get('/admin/auth-status')
+          const status = response.data
 
-  const toggleDarkMode = () => {
-    setTheme(actualTheme === 'light' ? 'dark' : 'light')
-  }
+          if (status.hasUser && status.hasTenant) {
+            // User is fully onboarded - redirect to dashboard silently
+            console.log('✅ Authenticated user already onboarded, redirecting to dashboard')
+            navigate('/dashboard', { replace: true })
+          }
+        } catch (error) {
+          console.log('ℹ️ Could not check auth status, letting user choose path')
+        }
+      }
+    }
 
-  const handleJoinExistingOrg = async () => {
+    const timer = setTimeout(checkAuthenticatedUser, 100)
+    return () => clearTimeout(timer)
+  }, [isAuthenticated, navigate])
+
+  const handleLogin = async () => {
     setIsLoading(true)
     try {
-      await login()
+        await login()
     } catch (error) {
-      toast.error('Failed to sign in. Please try again.')
+      console.error('Login error:', error)
     } finally {
       setIsLoading(false)
+      }
+  }
+
+  const handleAppSelect = (appId: number | null) => {
+    // For now, just open demo modal. In production, this could navigate to specific app pages
+    if (appId) {
+      setShowDemo(true)
     }
   }
 
-  const handleCreateNewOrg = async () => {
-    setIsLoading(true)
-    try {
-      await login()
-    } catch (error) {
-      toast.error('Failed to create organization. Please try again.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const features = [
+  // Business Suite Applications
+  const businessApps = [
     {
-      title: 'Advanced Analytics',
-      description: 'Get insights into your business performance with real-time analytics and reporting.',
-      icon: BarChart,
-      benefits: ['Real-time dashboards', 'Custom reports', 'Data visualization']
+      id: 1,
+      name: 'CRM',
+      description: 'Customer Relationship Management',
+      icon: null,
+      image: '/crm-dashboard.svg',
+      color: 'from-blue-500 to-cyan-500',
+      features: ['Leads Management', 'Contact Database', 'Opportunities Tracking', 'AI Agent Assistant', 'Product Orders', 'Invoice Management', 'Sales Orders', 'Advanced Reports']
     },
     {
-      title: 'Team Collaboration',
-      description: 'Work together seamlessly with your team using our collaboration tools.',
-      icon: Users,
-      benefits: ['Team workspaces', 'Shared projects', 'Communication tools']
+      id: 2,
+      name: 'HRMS',
+      description: 'Human Resource Management System',
+      icon: null,
+      image: '/hrms.svg',
+      color: 'from-green-500 to-emerald-500',
+      features: ['Employee Management', 'Payroll Processing', 'Performance Tracking', 'Recruitment']
     },
     {
-      title: 'Security First',
-      description: 'Enterprise-grade security to keep your data safe and compliant.',
-      icon: Shield,
-      benefits: ['End-to-end encryption', 'SSO integration', 'Audit logs']
+      id: 3,
+      name: 'Project Management',
+      description: 'Advanced Project Tracking',
+      icon: null,
+      image: '/project-management.svg',
+      color: 'from-purple-500 to-pink-500',
+      features: ['Kanban Boards', 'Gantt Charts', 'Time Tracking', 'Resource Management']
     },
     {
-      title: 'Lightning Fast',
-      description: 'Built for speed and performance to handle your growing business needs.',
-      icon: Zap,
-      benefits: ['Fast loading', 'Optimized performance', 'Scalable infrastructure']
-    }
-  ]
-
-  const testimonials = [
-    {
-      name: 'Sarah Johnson',
-      role: 'CEO, TechCorp',
-      avatar: 'SJ',
-      rating: 5,
-      content: 'Zopkit has transformed how we manage our business operations. The analytics are incredible!'
+      id: 4,
+      name: 'Operations Management',
+      description: 'Streamline Operations',
+      icon: null,
+      image: '/operations-management.svg',
+      color: 'from-orange-500 to-red-500',
+      features: ['Process Automation', 'Workflow Designer', 'Task Management', 'Performance Metrics']
     },
     {
-      name: 'Mike Chen',
-      role: 'CTO, StartupXYZ',
-      avatar: 'MC',
-      rating: 5,
-      content: 'The team collaboration features are outstanding. Our productivity has increased by 40%.'
+      id: 5,
+      name: 'Finance Management',
+      description: 'Financial Operations Suite',
+      icon: null,
+      image: '/finance-management.svg',
+      color: 'from-indigo-500 to-purple-500',
+      features: ['Accounting', 'Budgeting', 'Financial Reporting', 'Expense Tracking']
     },
     {
-      name: 'Emily Davis',
-      role: 'Operations Manager, GlobalCorp',
-      avatar: 'ED',
-      rating: 5,
-      content: 'Security and compliance features give us peace of mind. Highly recommended!'
+      id: 6,
+      name: 'Zopkit Academy',
+      description: 'Learning & Development',
+      icon: null,
+      image: '/zopkit-academy.svg',
+      color: 'from-teal-500 to-green-500',
+      features: ['Course Management', 'Employee Training', 'Certifications', 'Learning Analytics']
     }
   ]
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-        {/* Background Elements */}
-        <div className="absolute inset-0 bg-muted/30 -z-10" />
-        
-        {/* Floating Elements */}
-        <div className="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full mix-blend-multiply filter blur-xl opacity-70"></div>
-        <div className="absolute top-20 right-10 w-72 h-72 bg-accent/10 rounded-full mix-blend-multiply filter blur-xl opacity-70"></div>
-        <div className="absolute -bottom-8 left-20 w-72 h-72 bg-destructive/10 rounded-full mix-blend-multiply filter blur-xl opacity-70"></div>
+    <div className="relative">
+      <AuroraBackground className="min-h-screen">
+          {/* Navigation */}
+          <ZopkitNavbar
+            isAuthenticated={isAuthenticated}
+            isLoading={isLoading}
+            onLogin={handleLogin}
+            onShowDemo={() => setShowDemo(true)}
+          />
 
-      <div className="relative z-10">
-        {/* Navigation */}
-        <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl bg-background/80 border-b border-border/50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex items-center justify-between">
-              {/* Logo */}
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
-                  <Building2 className="w-6 h-6" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-foreground">Zopkit</h1>
-                  <p className="text-sm text-muted-foreground">Business Management Suite</p>
+        {/* Main Content */}
+        <main className="pt-20 w-full">
+          <HeroSection
+            isAuthenticated={isAuthenticated}
+            isLoading={isLoading}
+            onLogin={handleLogin}
+          />
+      
+          <StackedCardsSection
+            businessApps={businessApps}
+            setActiveApp={handleAppSelect}
+          />
+           <EcosystemDemo/>
+          {/* <CostSavingsSection /> */}
+      
+          <DemoSection
+            showDemo={showDemo}
+            setShowDemo={setShowDemo}
+          />
+          <TrustIndicators />
+        </main>
+      </AuroraBackground>
+
+      {/* Demo Modal - Outside Aurora Background */}
+      <AnimatePresence>
+        {showDemo && (
+          <motion.div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            >
+              <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
+                      <span className="text-white text-lg">📅</span>
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">Schedule a Demo</h3>
+                      <p className="text-sm text-gray-600">See Zopkit in action with a personalized demo</p>
+                    </div>
+                  </div>
+                  <motion.button
+                    onClick={() => setShowDemo(false)}
+                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                  >
+                    <span className="text-gray-500">✕</span>
+                  </motion.button>
                 </div>
               </div>
 
-              {/* Desktop Navigation */}
-              <div className="hidden md:flex items-center space-x-8">
-                <div className="flex items-center space-x-6">
-                  <a href="#features" className="text-muted-foreground hover:text-primary-600 transition-colors font-medium">Features</a>
-                  <a href="#testimonials" className="text-muted-foreground hover:text-primary-600 transition-colors font-medium">Testimonials</a>
-                  <a href="#pricing" className="text-muted-foreground hover:text-primary-600 transition-colors font-medium">Pricing</a>
-                </div>
+              <div className="p-6">
+                <form className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Full Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        placeholder="John Smith"
+                      />
+                    </div>
 
-                <div className="flex items-center space-x-4">
-                  <Badge className="animate-pulse bg-destructive-foreground border-0 px-3 py-1">
-                    <CheckCircle className="w-3 h-3 mr-1" />
-                    <AnimatedCounter 
-                      value={stats.users} 
-                      suffix="+ teams"
-                      duration={2500}
-                      easing="easeOut"
-                    />
-                  </Badge>
-
-                  <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                    <Phone className="w-4 h-4" />
-                    <span className="font-medium">+1 (555) 123-4567</span>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Email Address *
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        placeholder="john@company.com"
+                      />
+                    </div>
                   </div>
 
-                  <button
-                    onClick={toggleDarkMode}
-                    className="p-2 rounded-xl bg-card hover:bg-accent transition-colors group"
-                    aria-label="Toggle dark mode"
-                  >
-                    {actualTheme === 'dark' ? (
-                      <Sun className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                    ) : (
-                      <Moon className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                    )}
-                  </button>
-                </div>
-              </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Company Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        placeholder="Acme Corporation"
+                      />
+                    </div>
 
-              {/* Mobile Menu Button */}
-              <button
-                className="md:hidden p-2 rounded-xl bg-card hover:bg-accent transition-colors"
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              >
-                {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-              </button>
-            </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Phone Number
+                      </label>
+                      <input
+                        type="tel"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        placeholder="+1 (555) 123-4567"
+                      />
+                    </div>
+                  </div>
 
-            {/* Mobile Menu */}
-            {isMobileMenuOpen && (
-              <div className="md:hidden mt-4 p-6 bg-card/50 backdrop-blur-xl rounded-2xl border border-border/50">
-                <div className="space-y-4">
-                  <a href="#features" className="block text-muted-foreground hover:text-primary-600 transition-colors font-medium">Features</a>
-                  <a href="#testimonials" className="block text-muted-foreground hover:text-primary-600 transition-colors font-medium">Testimonials</a>
-                  <a href="#pricing" className="block text-muted-foreground hover:text-primary-600 transition-colors font-medium">Pricing</a>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Job Title *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        placeholder="CEO, CTO, Manager..."
+                      />
+                    </div>
 
-                  <div className="pt-4 border-t border-border/50">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Company Size
+                      </label>
+                      <select className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white">
+                        <option value="">Select company size</option>
+                        <option value="1-10">1-10 employees</option>
+                        <option value="11-50">11-50 employees</option>
+                        <option value="51-200">51-200 employees</option>
+                        <option value="201-1000">201-1000 employees</option>
+                        <option value="1000+">1000+ employees</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Preferred Demo Time
+                    </label>
+                    <select className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white">
+                      <option value="">Select preferred time</option>
+                      <option value="morning">Morning (9 AM - 12 PM)</option>
+                      <option value="afternoon">Afternoon (12 PM - 5 PM)</option>
+                      <option value="evening">Evening (5 PM - 8 PM)</option>
+                      <option value="flexible">Flexible</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Additional Comments
+                    </label>
+                    <textarea
+                      rows={3}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-none"
+                      placeholder="Tell us about your specific needs or questions..."
+                    />
+                  </div>
+
+                  <div className="flex space-x-4 pt-4">
                     <button
-                      onClick={toggleDarkMode}
-                      className="flex items-center space-x-3 text-muted-foreground hover:text-primary transition-colors font-medium w-full"
-                      aria-label="Toggle dark mode"
+                      type="button"
+                      onClick={() => setShowDemo(false)}
+                      className="flex-1 px-6 py-3 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
                     >
-                      {actualTheme === 'dark' ? (
-                        <>
-                          <Sun className="w-5 h-5" />
-                          <span>Light Mode</span>
-                        </>
-                      ) : (
-                        <>
-                          <Moon className="w-5 h-5" />
-                          <span>Dark Mode</span>
-                        </>
-                      )}
+                      Cancel
                     </button>
-                  </div>
+
+                    <button
+                      type="submit"
+                      className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                    >
+                      Schedule Demo
+                    </button>
                 </div>
+
+                  <p className="text-xs text-gray-500 text-center mt-4">
+                    By submitting this form, you agree to receive communication about Zopkit's services.
+                    We respect your privacy and will never share your information.
+                  </p>
+                </form>
               </div>
-            )}
-          </div>
-        </nav>
-
-        {/* Hero Section */}
-        <div className="pt-32 pb-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-4xl mx-auto mb-16">
-              <h1 className="text-6xl md:text-7xl font-black text-foreground mb-8 leading-tight">
-                Transform Your
-                <span className="text-primary"> Business</span>
-                Operations
-              </h1>
-              <p className="text-xl md:text-2xl text-muted-foreground mb-12 leading-relaxed">
-                The all-in-one platform for modern businesses. Manage, analyze, and grow with powerful tools designed for success.
-              </p>
-              
-              <div className="flex flex-col sm:flex-row gap-6 justify-center mb-16">
-                <Button size="lg" className="text-xl px-12 py-6 font-bold">
-                  Get Started Free
-                  <ArrowRight className="ml-3 h-6 w-6" />
-                </Button>
-                <Button variant="outline" size="lg" className="text-xl px-12 py-6 font-bold">
-                  <Play className="mr-3 h-6 w-6" />
-                  Watch Demo
-                </Button>
-              </div>
-
-              {/* Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-2xl mx-auto">
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-primary mb-2">
-                    <AnimatedCounter 
-                      value={stats.users} 
-                      suffix="+"
-                      duration={3000}
-                      easing="easeOut"
-                    />
-                  </div>
-                  <div className="text-muted-foreground flex items-center justify-center gap-2">
-                    <Users className="w-5 h-5 text-primary" />
-                    Active Users
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-accent mb-2">
-                    <AnimatedCounter 
-                      value={stats.projects} 
-                      suffix="+"
-                      duration={3000}
-                      delay={200}
-                      easing="easeOut"
-                    />
-                  </div>
-                  <div className="text-muted-foreground flex items-center justify-center gap-2">
-                    <BarChart className="w-5 h-5 text-accent" />
-                    Projects Completed
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-4xl font-bold mb-2">
-                    <AnimatedPercentage 
-                      value={stats.satisfaction} 
-                      duration={3000}
-                      delay={400}
-                      easing="easeOut"
-                    />
-                  </div>
-                  <div className="text-muted-foreground flex items-center justify-center gap-2">
-                    <Star className="w-5 h-5" />
-                    Customer Satisfaction
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Features Section */}
-        <div className="py-20" id="features">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
-              <h2 className="text-5xl font-black text-foreground mb-6">Powerful Features</h2>
-              <p className="text-2xl text-muted-foreground max-w-3xl mx-auto">
-                Everything you need to manage and grow your business in one place
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-              {features.map((feature, index) => (
-                <Card key={index} className="text-center group hover:shadow-lg transition-all duration-300">
-                  <CardHeader>
-                    <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
-                      <feature.icon className="h-8 w-8 text-white" />
-                    </div>
-                    <CardTitle className="text-xl">{feature.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <CardDescription className="text-base mb-4">{feature.description}</CardDescription>
-                    <div className="space-y-2">
-                      {feature.benefits.map((benefit, idx) => (
-                        <div key={idx} className="text-sm text-muted-foreground flex items-center justify-center">
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          {benefit}
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* CTA Section */}
-        <div className="py-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid lg:grid-cols-2 gap-12">
-              {/* Join Existing Organization */}
-              <Card className="relative overflow-hidden group hover:shadow-lg transition-all duration-300">
-                <CardHeader className="text-center pb-8">
-                  <div className="w-20 h-20 bg-destructive rounded-2xl flex items-center justify-center mx-auto mb-6">
-                    <LogIn className="h-10 w-10 text-white" />
-                  </div>
-                  <CardTitle className="text-3xl mb-4">Join Your Team</CardTitle>
-                  <CardDescription className="text-lg">
-                    Access your organization's workspace instantly
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-destructive/10 rounded-xl flex items-center justify-center">
-                        <Shield className="h-5 w-5" />
-                      </div>
-                      <span className="font-medium">Secure authentication with Kinde SSO</span>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center">
-                        <Users className="h-5 w-5" />
-                      </div>
-                      <span className="font-medium">Instant access to team workspace</span>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10  rounded-xl flex items-center justify-center">
-                        <Clock className="h-5 w-5" />
-                      </div>
-                      <span className="font-medium">All your projects and data ready</span>
-                    </div>
-                  </div>
-
-                  <Button 
-                    onClick={handleJoinExistingOrg} 
-                    disabled={isLoading}
-                    variant="outline"
-                    className='w-full'
-                    size="lg"
-                  >
-                    {isLoading ? 'Signing In...' : 'Sign In to My Organization'}
-                    <ArrowRight className="ml-3 h-5 w-5" />
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Create New Organization */}
-              <Card className="relative overflow-hidden group hover:shadow-lg transition-all duration-300">
-                <CardHeader className="text-center pb-8">
-                  <div className="w-20 h-20 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-6">
-                    <Plus className="h-10 w-10 text-white" />
-                  </div>
-                  <CardTitle className="text-3xl mb-4">Start Your Journey</CardTitle>
-                  <CardDescription className="text-lg">
-                    Create your organization and lead your team
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                        <Award className="h-5 w-5 text-primary" />
-                      </div>
-                      <span className="font-medium">Full administrator privileges</span>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                        <Globe className="h-5 w-5 text-primary" />
-                      </div>
-                      <span className="font-medium">Custom subdomain and branding</span>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                        <Star className="h-5 w-5 text-primary" />
-                      </div>
-                      <span className="font-medium">14-day premium trial included</span>
-                    </div>
-                  </div>
-
-                  <Button 
-                    onClick={handleCreateNewOrg} 
-                    disabled={isLoading}
-                    className='w-full'
-                    size="lg"
-                  >
-                    {isLoading ? 'Getting Started...' : 'Create New Organization'}
-                    <ArrowRight className="ml-3 h-5 w-5" />
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </div>
-
-        {/* Testimonials Section */}
-        <div className="py-20 bg-muted/50" id="testimonials">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
-              <h2 className="text-5xl font-black text-foreground mb-6">Loved by Teams Worldwide</h2>
-              <p className="text-2xl text-muted-foreground max-w-4xl mx-auto">
-                Join thousands of teams who trust Zopkit to power their business operations
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-8">
-              {testimonials.map((testimonial, index) => (
-                <Card key={index} className="group hover:shadow-lg transition-all duration-300">
-                  <CardContent className="p-6">
-                    <div className="flex items-center mb-6">
-                      <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center mr-4">
-                        <span className="text-white font-bold">{testimonial.avatar}</span>
-                      </div>
-                      <div>
-                        <div className="font-bold text-foreground">{testimonial.name}</div>
-                        <div className="text-muted-foreground text-sm">{testimonial.role}</div>
-                      </div>
-                    </div>
-                    <div className="flex mb-4">
-                      {[...Array(testimonial.rating)].map((_, i) => (
-                        <Star key={i} className="w-5 h-5 fill-current" />
-                      ))}
-                    </div>
-                    <p className="text-muted-foreground italic">"{testimonial.content}"</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Footer CTA */}
-        <div className="py-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center">
-              <h3 className="text-5xl font-black text-foreground mb-6">Ready to Transform Your Business?</h3>
-              <p className="text-2xl text-muted-foreground mb-12">
-                Join thousands of teams already using Zopkit to streamline their operations
-              </p>
-              <div className="flex flex-col sm:flex-row gap-6 justify-center">
-                <Button size="lg" className="text-xl px-12 py-6 font-bold bg-primary hover:bg-primary/90 text-primary-foreground">
-                  Start Free Trial
-                  <ArrowUpRight className="ml-3 h-6 w-6" />
-                </Button>
-                <Button variant="outline" size="lg" className="text-xl px-12 py-6 font-bold border-primary text-primary hover:bg-primary/10">
-                  <Download className="mr-3 h-6 w-6" />
-                  Download Brochure
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
 
-export default Landing
+export default Landing 

@@ -1,4 +1,6 @@
-import { Card, CardContent } from "../ui"
+import { Card, CardContent, Skeleton } from "../ui"
+import { Flex } from "./Page"
+import { Typography } from "./Typography"
 
 export function MetricCard({
     title,
@@ -25,12 +27,10 @@ export function MetricCard({
     if (isLoading) {
       return (
         <Card>
-          <CardContent className="p-6">
-            <div className="animate-pulse">
-              <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
-              <div className="h-8 bg-gray-200 rounded w-3/4 mb-2"></div>
-              <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-            </div>
+          <CardContent className="p-6 space-y-4">
+            <Skeleton className="h-4 w-1/2 mb-2" />
+            <Skeleton className="h-8 w-3/4 mb-2" />
+            <Skeleton className="h-3 w-1/3" />
           </CardContent>
         </Card>
       )
@@ -39,16 +39,16 @@ export function MetricCard({
     return (
       <Card>
         <CardContent className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">{title}</p>
-              <p className="text-2xl font-bold text-gray-900">{value}</p>
-              <p className="text-xs text-gray-500">{trend} from last month</p>
+          <Flex align="center" justify="between">
+            <div className="space-y-2">
+              <Typography variant='lead'>{title}</Typography>
+              <Typography variant='h3'>{value}</Typography>
+              <Typography variant='muted'>{trend} from last month</Typography>
             </div>
             <div className={`p-3 rounded-full ${colorClasses[color as keyof typeof colorClasses]}`}>
               <Icon className="w-6 h-6" />
             </div>
-          </div>
+          </Flex>
         </CardContent>
       </Card>
     )

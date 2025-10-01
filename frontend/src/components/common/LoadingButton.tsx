@@ -26,7 +26,7 @@ interface LoadingButtonProps extends IconButtonProps {
     isLoading: boolean
 }
 
-export default function LoadingButton({
+export  function LoadingButton({
     isLoading,
     variant = 'outline',
     children,
@@ -44,3 +44,4 @@ export default function LoadingButton({
     )
 }
 
+export default LoadingButton

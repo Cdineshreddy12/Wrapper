@@ -34,6 +34,7 @@ import OrganizationManagement from './OrganizationManagement'
 import { RoleManagementDashboard } from './roles/RoleManagementDashboard'
 import { UserApplicationAccess } from './users/UserApplicationAccess'
 import { UserManagementDashboard } from './users/UserManagementDashboard'
+import { Grid } from './common/Page/Grid'
 
 // Mock data for charts and analytics
 const mockUsageData = [
@@ -348,7 +349,7 @@ function OverviewTab({
     return (
         <div className="space-y-8">
             {/* Key Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Grid columns={{ sm: 1, md: 2, lg: 4 }} gap={6}>
                 <MetricCard
                     title="Total Users"
                     value={metrics.totalUsers}
@@ -381,7 +382,7 @@ function OverviewTab({
                     color={metrics.systemHealth === 'good' ? 'green' : 'yellow'}
                     isLoading={isLoading}
                 />
-            </div>
+            </Grid>
 
             {/* Credit Balance Section */}
             <div className="mt-8">

@@ -24,6 +24,7 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar"
+import { Separator } from "./ui"
 
 // This is sample data.
 const data = {
@@ -49,48 +50,80 @@ const data = {
       plan: "Free",
     },
   ],
-  navMain: [
-    {
-      title: "Dashboard",
-      url: "/dashboard",
-      icon: LayoutDashboard,
-      isActive: true,
-      items: [
-        {
-          title: "Overview",
-          url: "/dashboard?tab=overview",
-          icon: BarChart3,
-        },
-        {
-          title: "Applications",
-          url: "/dashboard?tab=applications",
-          icon: Building2,
-        },
-        {
-          title: "Team",
-          url: "/dashboard?tab=users",
-          icon: Users,
-        },
-        {
-          title: "Roles",
-          url: "/dashboard?tab=roles",
-          icon: Crown,
-        },
-        {
-          title: "App Management",
-          url: "/dashboard/user-application-management",
-          icon: Shield,
-        },
-        {
-          title: "Analytics",
-          url: "/dashboard?tab=analytics",
-          icon: Activity,
-        },
-      ],
-    },
+  navMain: [  
+          {
+            title: "Overview",
+            url: "/dashboard/overview",
+            icon: BarChart3,
+          },
+          {
+            title: "Applications",
+            url: "/applications",
+            icon: Building2,
+          },
+          {
+            title: "Team",
+            url: "/users",
+            icon: Users,
+          },
+          {
+            title: "Roles",
+            url: "/roles",
+            icon: Crown,
+          },
+          {
+            title: "App Management",
+            url: "/user-application-management",
+            icon: Shield,
+          },
+          {
+            title: "Analytics",
+            url: "/analytics",
+            icon: Activity,
+          },
+    ],
+  // navMain: [
+  //   {
+  //     title: "Dashboard",
+  //     url: "/dashboard",
+  //     icon: LayoutDashboard,
+  //     isActive: true,
+  //     items: [
+  //       {
+  //         title: "Overview",
+  //         url: "/dashboard?tab=overview",
+  //         icon: BarChart3,
+  //       },
+  //       {
+  //         title: "Applications",
+  //         url: "/dashboard?tab=applications",
+  //         icon: Building2,
+  //       },
+  //       {
+  //         title: "Team",
+  //         url: "/dashboard?tab=users",
+  //         icon: Users,
+  //       },
+  //       {
+  //         title: "Roles",
+  //         url: "/dashboard?tab=roles",
+  //         icon: Crown,
+  //       },
+  //       {
+  //         title: "App Management",
+  //         url: "/dashboard/user-application-management",
+  //         icon: Shield,
+  //       },
+  //       {
+  //         title: "Analytics",
+  //         url: "/dashboard?tab=analytics",
+  //         icon: Activity,
+  //       },
+  //     ],
+  //   },
     
    
-  ],
+  // ],
   projects: [
     {
       name: "Billing",
@@ -118,7 +151,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
+        <Separator className="mt-auto"/>
         <NavProjects projects={data.projects} />
+        <Separator />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={data.user} />

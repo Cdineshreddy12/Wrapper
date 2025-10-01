@@ -40,6 +40,7 @@ import SuiteDashboard from '@/pages/SuiteDashboard'
 import AdminDashboardPage from '@/pages/AdminDashboardPage'
 import OnboardingPage from '@/pages/Onboarding'
 import SimpleOnboarding from '@/pages/SimpleOnboarding'
+import { OverviewPage } from './pages/OverviewPage'
 
 
 // Loading component
@@ -226,7 +227,7 @@ function AppContent() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Dashboard />} />
+          <Route index element={<OverviewPage />} />
           <Route path="users" element={<UserManagementDashboard />} />
           <Route path="user-apps" element={<UserApplicationAccessPage />} />
           <Route path="user-application-management" element={<UserApplicationManagement />} />
@@ -257,7 +258,8 @@ function AppContent() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Dashboard />} />
+          <Route index element={<OverviewPage />} />
+          <Route path="overview" element={<OverviewPage />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="users" element={<UserManagementDashboard />} />
           <Route path="user-apps" element={<UserApplicationAccessPage />} />

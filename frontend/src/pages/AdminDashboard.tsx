@@ -1,16 +1,18 @@
+import { Container, Flex } from '@/components/common/Page';
+import { Typography } from '@/components/common/Typography';
 import { CreditConfigurationScreen } from '../components/admin/credit-configuration';
 
 export default function AdminDashboard() {
   return (
-    <div className="container mx-auto p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight">Credit Configuration</h1>
-        <p className="text-muted-foreground">
+    <Container>
+      <Flex direction="col" gap={2}>
+        <Typography variant="h3">Credit Configuration</Typography>
+        <Typography variant="muted">
           Manage credit configurations for all tenants
-        </p>
-      </div>
+        </Typography>
+      </Flex>
 
       <CreditConfigurationScreen />
-    </div>
+    </Container>
   );
 }

@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   Filter,
   Search,
   Download,
+  Calendar,
   Clock,
   User,
   Shield,
+  Eye,
   AlertTriangle,
   RefreshCw,
   TrendingUp,
@@ -38,8 +40,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { formatDistanceToNow } from 'date-fns';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import LoadingButton, { IconButton } from '../common/LoadingButton';
-import { Typography } from '../common/Typography';
 
 interface ActivityLog {
   logId: string;
@@ -66,6 +66,12 @@ interface AuditLog {
   createdAt: string;
 }
 
+interface ActivityStats {
+  period: string;
+  uniqueActiveUsers: number;
+  activityBreakdown: Array<{ action: string; count: number }>;
+  auditBreakdown: Array<{ resourceType: string; action: string; count: number }>;
+}
 
 export function ActivityDashboard() {
   const [activeTab, setActiveTab] = useState<'activities' | 'audit' | 'stats'>('activities');
@@ -237,50 +243,58 @@ export function ActivityDashboard() {
         </div>
         
         <div className="flex items-center gap-3">
-          <LoadingButton
+          <Button
             variant="outline"
             size="sm"
             onClick={() => {
               refetchActivities();
               refetchAudit();
             }}
-            isLoading={loading}
-            startIcon={RefreshCw}
           >
+            <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
-          </LoadingButton>
+          </Button>
         </div>
       </div>
 
       {/* Tab Navigation */}
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
-          <IconButton
+          <button
             onClick={() => setActiveTab('activities')}
-            startIcon={User}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'activities'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
           >
+            <User className="w-4 h-4 inline mr-2" />
             My Activities
-          </IconButton>
+          </button>
           
-          <IconButton
+          <button
             onClick={() => setActiveTab('audit')}
-            startIcon={Shield}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'audit'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
           >
+            <Shield className="w-4 h-4 inline mr-2" />
             Audit Logs
-          </IconButton>
-            
-          <IconButton
+          </button>
+          
+          <button
             onClick={() => setActiveTab('stats')}
-            startIcon={BarChart3}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'stats'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
           >
+            <BarChart3 className="w-4 h-4 inline mr-2" />
             Statistics
-          </IconButton>
-          <IconButton
-            onClick={() => setActiveTab('stats')}
-            startIcon={BarChart3}
-          >
-            Statistics
-          </IconButton>
+          </button>
         </nav>
       </div>
 
@@ -355,10 +369,10 @@ export function ActivityDashboard() {
             )}
             
             <div className="flex items-end">
-              <IconButton variant="outline" onClick={clearFilters} className="w-full"
-                startIcon={X}>
+              <Button variant="outline" onClick={clearFilters} className="w-full">
+                <X className="w-4 h-4 mr-2" />
                 Clear Filters
-              </IconButton>
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -372,15 +386,15 @@ export function ActivityDashboard() {
               <CardTitle>Your Activities</CardTitle>
               <CardDescription>Your recent actions and system interactions</CardDescription>
             </div>
-            <IconButton
+            <Button
               variant="outline"
               size="sm"
               onClick={() => handleExport('user', 'json')}
               disabled={loading}
-              startIcon={Download}
             >
+              <Download className="w-4 h-4 mr-2" />
               Export
-            </IconButton>
+            </Button>
           </CardHeader>
           <CardContent>
             {activitiesLoading ? (
@@ -464,9 +478,9 @@ export function ActivityDashboard() {
                 })}
                 
                 {!userActivities?.data?.activities?.length && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Activity className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-                    <Typography variant="muted">No activities found</Typography>
+                  <div className="text-center py-8 text-gray-500">
+                    <Activity className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p>No activities found</p>
                   </div>
                 )}
               </div>
@@ -483,26 +497,24 @@ export function ActivityDashboard() {
               <CardDescription>System changes and administrative actions</CardDescription>
             </div>
             <div className="flex gap-2">
-              <LoadingButton
+              <Button
                 variant="outline"
                 size="sm"
                 onClick={() => handleExport('audit', 'csv')}
-                isLoading={loading}
                 disabled={loading}
-                startIcon={Download}
               >
+                <Download className="w-4 h-4 mr-2" />
                 CSV
-              </LoadingButton>
-              <LoadingButton
-                isLoading={loading}
+              </Button>
+              <Button
                 variant="outline"
                 size="sm"
                 onClick={() => handleExport('audit', 'json')}
                 disabled={loading}
-                startIcon={Download}
               >
+                <Download className="w-4 h-4 mr-2" />
                 JSON
-              </LoadingButton>
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -569,14 +581,17 @@ export function ActivityDashboard() {
                         </div>
                         
                         {(log.oldValues || log.newValues || log.details) && (
-                          <IconButton
+                          <Button
                             variant="ghost"
-                            size="icon"
+                            size="sm"
                             onClick={() => toggleExpanded(log.logId)}
-                            startIcon={isExpanded ? ChevronDown : ChevronRight}
-                          />
-                           
-                          
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </Button>
                         )}
                       </div>
                       
@@ -584,7 +599,7 @@ export function ActivityDashboard() {
                         <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
                           {log.oldValues && (
                             <div>
-                              <Typography variant="h4">Before</Typography>
+                              <h4 className="text-sm font-medium text-gray-700 mb-2">Before</h4>
                               <pre className="text-xs bg-red-50 p-3 rounded overflow-x-auto">
                                 {JSON.stringify(log.oldValues, null, 2)}
                               </pre>
@@ -593,7 +608,7 @@ export function ActivityDashboard() {
                           
                           {log.newValues && (
                             <div>
-                              <Typography variant="h4">After</Typography>
+                              <h4 className="text-sm font-medium text-gray-700 mb-2">After</h4>
                               <pre className="text-xs bg-green-50 p-3 rounded overflow-x-auto">
                                 {JSON.stringify(log.newValues, null, 2)}
                               </pre>
@@ -602,7 +617,7 @@ export function ActivityDashboard() {
                           
                           {log.details && (
                             <div>
-                              <Typography variant="h4">Details</Typography>
+                              <h4 className="text-sm font-medium text-gray-700 mb-2">Details</h4>
                               <pre className="text-xs bg-gray-100 p-3 rounded overflow-x-auto">
                                 {JSON.stringify(log.details, null, 2)}
                               </pre>
@@ -615,9 +630,9 @@ export function ActivityDashboard() {
                 })}
                 
                 {!auditLogs?.data?.logs?.length && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <FileText className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-                    <Typography variant="muted">No audit logs found</Typography>
+                  <div className="text-center py-8 text-gray-500">
+                    <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p>No audit logs found</p>
                   </div>
                 )}
               </div>
@@ -672,7 +687,7 @@ export function ActivityDashboard() {
                       <div className="space-y-2">
                         {activityStats?.data?.activityBreakdown?.map((item: any) => (
                           <div key={item.action} className="flex items-center justify-between">
-                            <Typography>{formatActionName(item.action)}</Typography>
+                            <span className="text-sm text-gray-600">{formatActionName(item.action)}</span>
                             <Badge variant="secondary">{item.count}</Badge>
                           </div>
                         ))}
@@ -696,7 +711,7 @@ export function ActivityDashboard() {
                 <CardContent>
                   <div className="space-y-4">
                     <div>
-                      <Typography variant="h4">Resource Changes</Typography>
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">Resource Changes</h4>
                       <div className="space-y-2">
                         {activityStats?.data?.auditBreakdown?.map((item: any) => (
                           <div key={`${item.resourceType}-${item.action}`} className="flex items-center justify-between">
