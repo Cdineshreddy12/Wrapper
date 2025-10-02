@@ -154,10 +154,7 @@ export const KindeProvider: React.FC<KindeProviderProps> = ({
       redirectUri={redirectUri}
       logoutUri={logoutUri}
       scope="openid profile email offline"
-      isDangerouslyUseLocalStorage={false} // Use cookies instead of localStorage
-      onRedirectCallback={(user, appState) => {
-        console.log('🔄 Kinde redirect callback:', { user: !!user, appState });
-      }}
+      useInsecureForRefreshToken={process.env.NODE_ENV === 'development'}
     >
       <TokenSetupComponent />
       <SilentAuthInitializer />

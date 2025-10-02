@@ -15,6 +15,9 @@ import { CreditManagement } from './CreditManagement';
 import ApplicationAssignmentManager from './ApplicationAssignmentManager';
 import CreditOperationCostManager from './credit-configuration/CreditOperationCostManager';
 
+// Import the new component we'll create
+import ApplicationCreditAllocations from './ApplicationCreditAllocations';
+
 interface DashboardStats {
   tenantStats: {
     total: number;
@@ -32,6 +35,19 @@ interface DashboardStats {
     totalCredits: number;
     totalReserved: number;
     lowBalanceAlerts: number;
+  };
+  applicationCreditStats?: {
+    totalAllocations: number;
+    totalAllocatedCredits: number;
+    totalUsedCredits: number;
+    totalAvailableCredits: number;
+    allocationsByApplication: Array<{
+      application: string;
+      allocationCount: number;
+      totalAllocated: number;
+      totalUsed: number;
+      totalAvailable: number;
+    }>;
   };
 }
 
@@ -54,9 +70,10 @@ const AdminDashboard: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const [overviewResponse, activityResponse] = await Promise.all([
+      const [overviewResponse, activityResponse, appCreditResponse] = await Promise.all([
         api.get('/admin/dashboard/overview'),
-        api.get('/admin/dashboard/recent-activity')
+        api.get('/admin/dashboard/recent-activity'),
+        api.get('/admin/credits/application-allocations')
       ]);
 
       if (overviewResponse.data.success) {
@@ -65,6 +82,14 @@ const AdminDashboard: React.FC = () => {
 
       if (activityResponse.data.success) {
         setRecentActivity(activityResponse.data.data.activities || []);
+      }
+
+      // Update stats with application credit data
+      if (appCreditResponse.data.success && appCreditResponse.data.data) {
+        setStats(prevStats => ({
+          ...prevStats,
+          applicationCreditStats: appCreditResponse.data.data.summary
+        }));
       }
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err);
@@ -155,18 +180,19 @@ const AdminDashboard: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="tenants">Tenants</TabsTrigger>
           <TabsTrigger value="entities">Entities</TabsTrigger>
           <TabsTrigger value="credits">Credits</TabsTrigger>
+          <TabsTrigger value="app-credits">App Credits</TabsTrigger>
           <TabsTrigger value="applications">Applications</TabsTrigger>
           <TabsTrigger value="operation-costs">Operation Costs</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
           {/* Stats Cards */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Tenants</CardTitle>
@@ -195,13 +221,26 @@ const AdminDashboard: React.FC = () => {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Credits</CardTitle>
+                <CardTitle className="text-sm font-medium">Org Credits</CardTitle>
                 <CreditCard className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{stats?.creditStats.totalCredits.toFixed(2) || '0.00'}</div>
                 <p className="text-xs text-muted-foreground">
                   {stats?.creditStats.totalReserved.toFixed(2) || '0.00'} reserved
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">App Credits</CardTitle>
+                <CreditCard className="h-4 w-4 text-blue-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats?.applicationCreditStats?.totalAllocatedCredits.toFixed(2) || '0.00'}</div>
+                <p className="text-xs text-muted-foreground">
+                  {stats?.applicationCreditStats?.totalAllocations || 0} allocations
                 </p>
               </CardContent>
             </Card>
@@ -258,6 +297,10 @@ const AdminDashboard: React.FC = () => {
 
         <TabsContent value="credits">
           <CreditManagement />
+        </TabsContent>
+
+        <TabsContent value="app-credits">
+          <ApplicationCreditAllocations />
         </TabsContent>
 
         <TabsContent value="applications">

@@ -446,14 +446,29 @@ export default async function adminEntityManagementRoutes(fastify, options) {
       params: {
         type: 'object',
         properties: {
-          tenantId: { type: 'string' }
+          tenantId: {
+            type: 'string',
+            description: 'Tenant ID or "current" for authenticated user\'s tenant'
+          }
         },
         required: ['tenantId']
       }
     }
   }, async (request, reply) => {
     try {
-      const { tenantId } = request.params;
+      let { tenantId } = request.params;
+
+      // Handle special case where tenantId is "current" - use the authenticated user's tenant
+      if (tenantId === 'current') {
+        if (!request.userContext?.tenantId) {
+          return reply.code(400).send({
+            success: false,
+            error: 'Invalid tenant',
+            message: 'Cannot determine current tenant from user context'
+          });
+        }
+        tenantId = request.userContext.tenantId;
+      }
 
       // Get entities with their credit information using LEFT JOIN approach
       const entitiesList = await db
@@ -513,6 +528,107 @@ export default async function adminEntityManagementRoutes(fastify, options) {
       };
     } catch (error) {
       console.error('Error fetching entity hierarchy:', error);
+      return reply.code(500).send({ error: 'Failed to fetch entity hierarchy' });
+    }
+  });
+
+  // Get entity hierarchy for current tenant
+  fastify.get('/hierarchy/current', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Get entity hierarchy for current tenant',
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                hierarchy: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      entityId: { type: 'string' },
+                      entityName: { type: 'string' },
+                      entityType: { type: 'string' },
+                      parentEntityId: { type: 'string' },
+                      entityLevel: { type: 'number' },
+                      children: { type: 'array' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const tenantId = request.userContext.tenantId;
+
+      if (!tenantId) {
+        return reply.code(400).send({ error: 'No tenant ID found in user context' });
+      }
+
+      console.log('🔍 Getting entity hierarchy for current tenant:', tenantId);
+
+      // Get all active entities for this tenant
+      const allEntities = await db
+        .select({
+          entityId: entities.entityId,
+          entityName: entities.entityName,
+          entityType: entities.entityType,
+          entityCode: entities.entityCode,
+          parentEntityId: entities.parentEntityId,
+          entityLevel: entities.entityLevel,
+          hierarchyPath: entities.hierarchyPath,
+          fullHierarchyPath: entities.fullHierarchyPath,
+          isActive: entities.isActive
+        })
+        .from(entities)
+        .where(and(
+          eq(entities.tenantId, tenantId),
+          eq(entities.isActive, true)
+        ))
+        .orderBy(entities.entityLevel, entities.entityName);
+
+      console.log(`📊 Found ${allEntities.length} entities for tenant ${tenantId}`);
+
+      // Build hierarchy tree
+      const entityMap = new Map();
+      const rootEntities = [];
+
+      // First pass: create map of all entities
+      allEntities.forEach(entity => {
+        entityMap.set(entity.entityId, { ...entity, children: [] });
+      });
+
+      // Second pass: build hierarchy
+      allEntities.forEach(entity => {
+        const entityWithChildren = entityMap.get(entity.entityId);
+
+        if (entity.parentEntityId && entityMap.has(entity.parentEntityId)) {
+          // Has parent, add to parent's children
+          const parent = entityMap.get(entity.parentEntityId);
+          if (!parent.children) parent.children = [];
+          parent.children.push(entityWithChildren);
+        } else {
+          // No parent, it's a root entity
+          rootEntities.push(entityWithChildren);
+        }
+      });
+
+      return {
+        success: true,
+        data: {
+          hierarchy: rootEntities
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching current tenant entity hierarchy:', error);
       return reply.code(500).send({ error: 'Failed to fetch entity hierarchy' });
     }
   });

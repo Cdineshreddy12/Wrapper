@@ -78,10 +78,35 @@ import { EnhancedPermissionSummary } from './EnhancedPermissionSummary';
 type DashboardRole = Role;
 
 // Utility function to handle both permission formats and provide consistent summaries
-const getPermissionSummary = (permissions: Record<string, any> | string[]) => {
+const getPermissionSummary = (permissions: Record<string, any> | string[] | string) => {
+  let processedPermissions = permissions;
+
+  // Handle JSON string format (from database) - check this first
+  if (typeof permissions === 'string') {
+    try {
+      processedPermissions = JSON.parse(permissions);
+      console.log('🔄 Parsed permissions from string format:', processedPermissions);
+    } catch (error) {
+      console.error('❌ Failed to parse permissions string:', error);
+      return {
+        total: 0,
+        admin: 0,
+        write: 0,
+        read: 0,
+        modules: 0,
+        mainModules: 0,
+        moduleDetails: {},
+        moduleNames: [],
+        mainModuleNames: [],
+        applicationCount: 0,
+        moduleCount: 0
+      };
+    }
+  }
+
   // Handle new hierarchical permissions (like Super Administrator)
-  if (permissions && typeof permissions === 'object' && !Array.isArray(permissions)) {
-    const hierarchicalPerms = permissions as Record<string, any>;
+  if (processedPermissions && typeof processedPermissions === 'object' && !Array.isArray(processedPermissions)) {
+    const hierarchicalPerms = processedPermissions as Record<string, any>;
     let totalOperations = 0;
     let adminCount = 0;
     let writeCount = 0;
@@ -129,10 +154,10 @@ const getPermissionSummary = (permissions: Record<string, any> | string[]) => {
       admin: adminCount,
       write: writeCount,
       read: readCount,
-      modules: subModules.length, // Count sub-modules, not main modules
+      modules: subModules.length,
       mainModules: mainModules.length,
       moduleDetails,
-      moduleNames: subModules, // Show sub-module names
+      moduleNames: subModules,
       mainModuleNames: mainModules,
       applicationCount: mainModules.length,
       moduleCount: subModules.length
@@ -255,9 +280,41 @@ export function RoleManagementDashboard() {
     const cachedData = cache.get<any>(cacheKey);
     if (cachedData) {
       console.log('📦 Loading roles from cache');
-      setRoles(cachedData.roles || []);
+      // Ensure cached data has parsed permissions
+      const cachedRoles = (cachedData.data || []).map((role: any) => {
+        let parsedPermissions = role.permissions;
+        let parsedRestrictions = role.restrictions;
+
+        // Handle JSON string permissions
+        if (typeof role.permissions === 'string') {
+          try {
+            parsedPermissions = JSON.parse(role.permissions);
+          } catch (error) {
+            console.error(`❌ Failed to parse cached permissions for role ${role.roleName}:`, error);
+            parsedPermissions = {};
+          }
+        }
+
+        // Handle restrictions from JSON strings if needed
+        if (typeof role.restrictions === 'string') {
+          try {
+            parsedRestrictions = JSON.parse(role.restrictions);
+          } catch (error) {
+            console.error(`❌ Failed to parse cached restrictions for role ${role.roleName}:`, error);
+            parsedRestrictions = {};
+          }
+        }
+
+        return {
+          ...role,
+          permissions: parsedPermissions,
+          restrictions: parsedRestrictions
+        };
+      });
+
+      setRoles(cachedRoles);
       setTotalCount(cachedData.total || 0);
-      setTotalPages(cachedData.pagination?.totalPages || 1);
+      setTotalPages(cachedData.totalPages || 1);
       setLoading(false);
       return;
     }
@@ -276,13 +333,63 @@ export function RoleManagementDashboard() {
       });
       
       if (response.data.success) {
-        const data = response.data.data || {};
-        setRoles(data.roles || []);
-        setTotalCount(data.total || 0);
-        setTotalPages(data.pagination?.totalPages || 1);
-        
-        // Cache the data for 5 minutes
-        cache.set(cacheKey, data, 5 * 60 * 1000);
+        const apiData = response.data.data || {};
+        const rolesData = apiData.data || []; // The actual roles array
+        const total = apiData.total || 0;
+        const totalPages = Math.ceil(total / pageSize); // Calculate total pages
+
+        // Parse permissions from JSON strings if needed
+        const parsedRolesData = rolesData.map((role: any) => {
+          let parsedPermissions = role.permissions;
+
+          // Handle JSON string permissions
+          if (typeof role.permissions === 'string') {
+            try {
+              parsedPermissions = JSON.parse(role.permissions);
+              console.log(`🔄 Parsed permissions for role: ${role.roleName}`);
+            } catch (error) {
+              console.error(`❌ Failed to parse permissions for role ${role.roleName}:`, error);
+              parsedPermissions = {};
+            }
+          }
+
+          // Handle restrictions from JSON strings if needed
+          let parsedRestrictions = role.restrictions;
+          if (typeof role.restrictions === 'string') {
+            try {
+              parsedRestrictions = JSON.parse(role.restrictions);
+            } catch (error) {
+              console.error(`❌ Failed to parse restrictions for role ${role.roleName}:`, error);
+              parsedRestrictions = {};
+            }
+          }
+
+          return {
+            ...role,
+            permissions: parsedPermissions,
+            restrictions: parsedRestrictions
+          };
+        });
+
+        console.log('📊 Roles API response:', {
+          rolesCount: parsedRolesData.length,
+          total,
+          currentPage,
+          totalPages
+        });
+
+        setRoles(parsedRolesData);
+        setTotalCount(total);
+        setTotalPages(totalPages);
+
+        // Cache the parsed data for 5 minutes
+        cache.set(cacheKey, {
+          data: parsedRolesData,
+          total,
+          page: currentPage,
+          limit: pageSize,
+          totalPages
+        }, 5 * 60 * 1000);
       } else {
         toast.error('Failed to load roles');
       }

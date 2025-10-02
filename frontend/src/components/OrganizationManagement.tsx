@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { OrganizationHierarchyChart } from './OrganizationHierarchyChart'
+import { Application } from '@/hooks/useDashboardData'
 
 // Import Entity type from the hierarchy chart component
 type Entity = {
@@ -31,6 +32,15 @@ type Entity = {
   children: Entity[];
   createdAt?: string;
   updatedAt?: string;
+  // Application credit allocations for organizations
+  applicationAllocations?: Array<{
+    application: string;
+    allocatedCredits: number;
+    usedCredits: number;
+    availableCredits: number;
+    hasAllocation: boolean;
+    autoReplenish: boolean;
+  }>;
 };
 import {
   Users,
@@ -101,18 +111,6 @@ interface Employee {
   title?: string;
 }
 
-interface Application {
-  appId: string;
-  appCode: string;
-  appName: string;
-  description: string;
-  icon: string;
-  baseUrl: string;
-  isEnabled: boolean;
-  subscriptionTier: string;
-  enabledModules: string[];
-  maxUsers: number;
-}
 
 interface Organization {
   entityId: string;
@@ -301,7 +299,7 @@ export function OrganizationUserManagement({
           </Button>
           <Button onClick={inviteEmployee} className="bg-blue-600 hover:bg-blue-700">
             <Plus className="h-4 w-4 mr-2" />
-            Invite User
+            Invite to Organization
           </Button>
         </div>
       </div>
@@ -477,7 +475,7 @@ export function OrganizationUserManagement({
                 <p className="text-gray-600 mb-4">Start building your team by inviting users</p>
                 <Button onClick={inviteEmployee}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Invite First User
+                  Invite First User to Organization
                 </Button>
               </div>
             )}
@@ -521,16 +519,18 @@ export function OrganizationUserManagement({
 export function OrganizationTreeManagement({
   tenantId,
   isAdmin,
-  makeRequest
+  makeRequest,
+  applications
 }: {
   tenantId: string;
   isAdmin: boolean;
   makeRequest: (endpoint: string, options?: RequestInit) => Promise<any>;
+  applications: Application[];
 }) {
-  console.log('🌳 OrganizationTreeManagement received tenantId:', tenantId);
 
   const [hierarchy, setHierarchy] = useState<OrganizationHierarchy | null>(null);
   const [parentOrg, setParentOrg] = useState<Organization | null>(null);
+  const [tenantHierarchy, setTenantHierarchy] = useState<Entity[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [credits, setCredits] = useState<any[]>([]);
@@ -570,7 +570,10 @@ export function OrganizationTreeManagement({
   const [showEdit, setShowEdit] = useState(false);
   const [showCreateLocation, setShowCreateLocation] = useState(false);
   const [showCreditTransfer, setShowCreditTransfer] = useState(false);
+  const [showAllocationDialog, setShowAllocationDialog] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
+  const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
+  const [allocating, setAllocating] = useState(false);
 
   const [subForm, setSubForm] = useState({
     name: '',
@@ -599,13 +602,20 @@ export function OrganizationTreeManagement({
   const [creditTransferForm, setCreditTransferForm] = useState({
     sourceEntityType: 'organization',
     sourceEntityId: '',
-    destinationEntityType: 'organization', 
+    destinationEntityType: 'organization',
     destinationEntityId: '',
     amount: '',
     transferType: 'direct',
     isTemporary: false,
     recallDeadline: '',
     description: ''
+  });
+
+  const [allocationForm, setAllocationForm] = useState({
+    targetApplication: '',
+    creditAmount: 0,
+    allocationPurpose: '',
+    autoReplenish: false
   });
 
   // Load data
@@ -792,6 +802,7 @@ export function OrganizationTreeManagement({
   useEffect(() => {
     loadData();
   }, [tenantId]);
+
 
   // CRUD Operations
 
@@ -1068,8 +1079,8 @@ export function OrganizationTreeManagement({
       responsiblePersonId: org.responsiblePersonId,
       isActive: org.isActive,
       description: org.description,
-      availableCredits: org.availableCredits,
-      reservedCredits: org.reservedCredits,
+      availableCredits: org.availableCredits ? Number(org.availableCredits) : undefined,
+      reservedCredits: org.reservedCredits ? Number(org.reservedCredits) : undefined,
       address: org.address,
       children: org.children ? org.children.map(transformToEntity) : [],
       createdAt: org.createdAt,
@@ -1078,7 +1089,7 @@ export function OrganizationTreeManagement({
   };
 
   // Build proper tenant hierarchy: Tenant -> Parent Org -> Sub Orgs/Locations
-  const buildTenantHierarchy = (orgHierarchy: Organization[], parentOrg: Organization | null, tenantId?: string): Entity[] => {
+  const buildTenantHierarchy = async (orgHierarchy: Organization[], parentOrg: Organization | null, tenantId?: string): Promise<Entity[]> => {
     console.log('🏗️ Building tenant hierarchy with:', { 
       orgHierarchy: orgHierarchy.length, 
       parentOrg: parentOrg?.entityName,
@@ -1105,30 +1116,54 @@ export function OrganizationTreeManagement({
     };
 
     // Recursively transform organization hierarchy to entity hierarchy
-    const transformOrgToEntity = (org: Organization, level: number = 1): Entity => {
+    const transformOrgToEntity = async (org: Organization, level: number = 1): Promise<Entity> => {
       const entity = transformToEntity(org);
       entity.entityLevel = level;
-      
+
+      // Fetch application allocations for this organization
+      if (org.entityType === 'organization') {
+        try {
+          // Use the API utility instead of direct fetch for proper authentication
+          const allocationsResponse = await makeRequest(`admin/credits/entity/${org.entityId}/application-allocations`);
+
+          if (allocationsResponse.success && allocationsResponse.data.allocations.length > 0) {
+            entity.applicationAllocations = allocationsResponse.data.allocations.map((alloc: any) => ({
+              application: alloc.targetApplication,
+              allocatedCredits: parseFloat(alloc.allocatedCredits || 0),
+              usedCredits: parseFloat(alloc.usedCredits || 0),
+              availableCredits: parseFloat(alloc.availableCredits || 0),
+              hasAllocation: true,
+              autoReplenish: alloc.autoReplenish || false
+            }));
+            console.log(`✅ Loaded ${entity.applicationAllocations?.length || 0} application allocations for ${org.entityName}:`, entity.applicationAllocations);
+          } else {
+            console.log(`ℹ️ No application allocations found for ${org.entityName} (response: ${allocationsResponse.success}, allocations: ${allocationsResponse.data?.allocations?.length || 0})`);
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch application allocations for ${org.entityName}:`, error);
+        }
+      }
+
       // Transform children recursively and preserve hierarchy
       if (org.children && Array.isArray(org.children) && org.children.length > 0) {
-        entity.children = org.children.map(child => {
-          const childEntity = transformOrgToEntity(child as Organization, level + 1);
+        entity.children = await Promise.all(org.children.map(async (child) => {
+          const childEntity = await transformOrgToEntity(child as Organization, level + 1);
           console.log(`🔗 Child ${child.entityName} added to parent ${org.entityName}`);
           return childEntity;
-        });
+        }));
       } else {
         entity.children = [];
       }
-      
+
       return entity;
     };
 
     // Use the processed hierarchy directly, which already includes proper nesting
-    tenantEntity.children = orgHierarchy.map(org => {
-      const transformedOrg = transformOrgToEntity(org, 1);
+    tenantEntity.children = await Promise.all(orgHierarchy.map(async (org) => {
+      const transformedOrg = await transformOrgToEntity(org, 1);
       console.log(`🏗️ Transformed org: ${org.entityName} with ${transformedOrg.children.length} children`);
       return transformedOrg;
-    });
+    }));
 
     console.log('✅ Built tenant hierarchy:', tenantEntity);
     console.log('🏗️ Tenant hierarchy children count:', tenantEntity.children.length);
@@ -1145,7 +1180,7 @@ export function OrganizationTreeManagement({
       }
 
       console.log('🔄 Processing hierarchy data:', hierarchy.hierarchy.length, 'organizations');
-      console.log('🔍 Raw hierarchy data:', hierarchy.hierarchy);
+      console.log('🔍 Raw hierarchy data sample:', hierarchy.hierarchy.slice(0, 2));
 
       // Convert entities to organizations format
       const convertedOrgs = hierarchy.hierarchy.map((entity: any) => ({
@@ -1270,6 +1305,28 @@ export function OrganizationTreeManagement({
       return [];
     }
   }, [hierarchy?.hierarchy, locations, searchTerm, filterType]);
+
+  // Build tenant hierarchy when processedHierarchy changes
+  useEffect(() => {
+    const buildHierarchy = async () => {
+      if (processedHierarchy && processedHierarchy.length > 0) {
+        try {
+          console.log('🏗️ Building tenant hierarchy for organizations:', processedHierarchy.map(org => org.entityName));
+          const hierarchy = await buildTenantHierarchy(processedHierarchy, parentOrg, tenantId);
+          console.log('✅ Built tenant hierarchy:', hierarchy);
+          setTenantHierarchy(hierarchy);
+        } catch (error) {
+          console.error('Failed to build tenant hierarchy:', error);
+          setTenantHierarchy([]);
+        }
+      } else {
+        console.log('ℹ️ No processed hierarchy, setting empty tenant hierarchy');
+        setTenantHierarchy([]);
+      }
+    };
+
+    buildHierarchy();
+  }, [processedHierarchy, parentOrg, tenantId]);
 
   // Get unassigned locations (locations without parentEntityId)
   const unassignedLocations = React.useMemo(() => {
@@ -1504,6 +1561,72 @@ export function OrganizationTreeManagement({
     );
   };
 
+  const handleAllocateCredits = async () => {
+    if (!selectedEntity || !allocationForm.creditAmount) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    // Check if applications are loaded
+    if (!Array.isArray(applications) || applications.length === 0) {
+      toast.error('No applications available. Please configure applications first.');
+      return;
+    }
+
+    if (!allocationForm.targetApplication) {
+      toast.error('Please select an application');
+      return;
+    }
+
+    // Check if entity has enough credits
+    const entityCredits = Number(selectedEntity.availableCredits || 0);
+    if (allocationForm.creditAmount > entityCredits) {
+      toast.error(`Entity only has ${entityCredits.toFixed(2)} credits available`);
+      return;
+    }
+
+    setAllocating(true);
+    try {
+      const response = await makeRequest('/credits/allocate/application', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Application': 'crm'
+        },
+        body: JSON.stringify({
+          sourceEntityId: selectedEntity.entityId,
+          targetApplication: allocationForm.targetApplication,
+          creditAmount: allocationForm.creditAmount,
+          allocationPurpose: allocationForm.allocationPurpose,
+          autoReplenish: allocationForm.autoReplenish
+        })
+      });
+
+      if (response.success) {
+        toast.success(`Successfully allocated ${allocationForm.creditAmount} credits to ${allocationForm.targetApplication}`);
+
+        // Reset form
+        setAllocationForm({
+          targetApplication: '',
+          creditAmount: 0,
+          allocationPurpose: '',
+          autoReplenish: false
+        });
+        setShowAllocationDialog(false);
+
+        // Refresh data to show updated allocations
+        loadData();
+      } else {
+        toast.error(response.message || 'Failed to allocate credits');
+      }
+    } catch (error: any) {
+      console.error('Failed to allocate credits:', error);
+      toast.error(error.response?.data?.message || 'Failed to allocate credits');
+    } finally {
+      setAllocating(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Enhanced Header */}
@@ -1519,12 +1642,23 @@ export function OrganizationTreeManagement({
           <div className="flex items-center gap-3">
             {/* Hierarchy Chart Button - Show even with empty hierarchy to display tenant */}
             {tenantId && (
-              <OrganizationHierarchyChart 
-                hierarchy={buildTenantHierarchy(processedHierarchy || [], parentOrg, tenantId)} 
+              <OrganizationHierarchyChart
+                hierarchy={tenantHierarchy}
                 isLoading={loading}
                 onSelectEntity={(entity) => {
-                  console.log('Selected entity:', entity);
-                  toast.success(`Selected: ${entity.entityName}`);
+                  console.log('🎯 Selected entity:', entity.entityName, {
+                    hasApplicationAllocations: !!entity.applicationAllocations,
+                    allocationCount: entity.applicationAllocations?.length || 0,
+                    availableCredits: entity.availableCredits
+                  });
+
+                  // Open credit allocation dialog for organizations
+                  if (entity.entityType === 'organization') {
+                    setSelectedEntity(entity);
+                    setShowAllocationDialog(true);
+                  } else {
+                    toast.success(`${entity.entityName} is a ${entity.entityType}. Credit allocation is only available for organizations.`);
+                  }
                 }}
                 onEditEntity={(entity) => {
                   console.log('Edit entity:', entity);
@@ -1539,7 +1673,7 @@ export function OrganizationTreeManagement({
                     }
                     return null;
                   };
-                  
+
                   const orgToEdit = findOrgById(processedHierarchy || [], entity.entityId);
                   if (orgToEdit) {
                     setSelectedOrg(orgToEdit);
@@ -2251,6 +2385,7 @@ export function OrganizationTreeManagement({
               onClick={async () => {
                 try {
                   const transferData = {
+                    fromEntityId: selectedOrg?.entityId, // Add source entity
                     toEntityType: creditTransferForm.destinationEntityType,
                     toEntityId: creditTransferForm.destinationEntityId,
                     creditAmount: parseFloat(creditTransferForm.amount),
@@ -2298,6 +2433,119 @@ export function OrganizationTreeManagement({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+
+      {/* Credit Allocation Dialog */}
+      <Dialog open={showAllocationDialog} onOpenChange={setShowAllocationDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Allocate Credits to Application</DialogTitle>
+            <DialogDescription>
+              Allocate credits from <strong>{selectedEntity?.entityName}</strong> to an application
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Available Credits Info */}
+            <div className="bg-blue-50 p-3 rounded-lg">
+              <div className="text-sm text-blue-800">
+                <strong>Available Credits:</strong> {Number(selectedEntity?.availableCredits || 0).toFixed(2)}
+              </div>
+            </div>
+
+            {/* Application Selection */}
+            <div>
+              <label className="text-sm font-medium">Target Application</label>
+              <Select
+                value={allocationForm.targetApplication}
+                onValueChange={(value) => setAllocationForm({...allocationForm, targetApplication: value})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select application" />
+                </SelectTrigger>
+                <SelectContent>
+                  {applications && applications.length > 0 ? (
+                    applications.map((app) => (
+                      <SelectItem key={app.appCode} value={app.appCode}>
+                        {app.appName} - {app.description || app.appCode}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <div className="p-2 text-sm text-gray-500">
+                      {Array.isArray(applications) && applications.length === 0
+                        ? 'No applications configured for this tenant'
+                        : 'Loading applications from database...'}
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Credit Amount */}
+            <div>
+              <label className="text-sm font-medium">Credit Amount</label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={allocationForm.creditAmount}
+                onChange={(e) => setAllocationForm({...allocationForm, creditAmount: parseFloat(e.target.value) || 0})}
+                placeholder="Enter credit amount"
+              />
+            </div>
+
+            {/* Allocation Purpose */}
+            <div>
+              <label className="text-sm font-medium">Purpose (Optional)</label>
+              <Input
+                value={allocationForm.allocationPurpose}
+                onChange={(e) => setAllocationForm({...allocationForm, allocationPurpose: e.target.value})}
+                placeholder="e.g., Monthly quota, Project allocation"
+              />
+            </div>
+
+            {/* Auto Replenish */}
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="autoReplenish"
+                checked={allocationForm.autoReplenish}
+                onChange={(e) => setAllocationForm({...allocationForm, autoReplenish: e.target.checked})}
+                className="rounded"
+              />
+              <label htmlFor="autoReplenish" className="text-sm">
+                Auto-replenish when credits are low
+              </label>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowAllocationDialog(false)}
+              disabled={allocating}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAllocateCredits}
+              disabled={allocating || !allocationForm.creditAmount || !allocationForm.targetApplication || !Array.isArray(applications) || applications.length === 0}
+            >
+              {allocating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Allocating...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Allocate Credits
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2341,6 +2589,7 @@ export function OrganizationManagement({
               tenantId={tenantId}
               isAdmin={isAdmin}
               makeRequest={makeRequest}
+              applications={applications}
             />
           ) : (
             <Card>

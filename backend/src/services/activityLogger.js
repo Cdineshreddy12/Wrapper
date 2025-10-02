@@ -76,6 +76,109 @@ class ActivityLogger {
     SECURITY_BREACH_ATTEMPT: 'security.breach_attempt',
     SECURITY_ACCESS_DENIED: 'security.access_denied',
     SECURITY_SUSPICIOUS_ACTIVITY: 'security.suspicious_activity',
+
+    // Tenant Activities
+    TENANT_VIEWED: 'tenant.viewed',
+    TENANT_SETTINGS_UPDATED: 'tenant.settings_updated',
+    TENANT_USERS_VIEWED: 'tenant.users_viewed',
+    TENANT_USER_INVITED: 'tenant.user_invited',
+    TENANT_USER_ACTIVATED: 'tenant.user_activated',
+    TENANT_USER_DEACTIVATED: 'tenant.user_deactivated',
+
+    // User Profile Activities
+    USER_PROFILE_VIEWED: 'user.profile_viewed',
+    USER_PROFILE_UPDATED: 'user.profile_updated',
+
+    // Subscription Activities
+    SUBSCRIPTION_VIEWED: 'subscription.viewed',
+    SUBSCRIPTION_CREATED: 'subscription.created',
+    SUBSCRIPTION_UPDATED: 'subscription.updated',
+    SUBSCRIPTION_CANCELLED: 'subscription.cancelled',
+
+    // Payment Activities
+    PAYMENT_VIEWED: 'payment.viewed',
+    PAYMENT_CREATED: 'payment.created',
+    PAYMENT_UPGRADED: 'payment.upgraded',
+
+    // Organization Activities
+    ORGANIZATION_VIEWED: 'organization.viewed',
+    ORGANIZATION_CREATED: 'organization.created',
+    ORGANIZATION_UPDATED: 'organization.updated',
+
+    // Entity Activities
+    ENTITY_VIEWED: 'entity.viewed',
+    ENTITY_CREATED: 'entity.created',
+    ENTITY_UPDATED: 'entity.updated',
+    ENTITY_DELETED: 'entity.deleted',
+
+    // Invitation Activities
+    INVITATION_VIEWED: 'invitation.viewed',
+    INVITATION_SENT: 'invitation.sent',
+    INVITATION_CANCELLED: 'invitation.cancelled',
+
+    // Location Activities
+    LOCATION_VIEWED: 'location.viewed',
+    LOCATION_CREATED: 'location.created',
+    LOCATION_UPDATED: 'location.updated',
+    LOCATION_DELETED: 'location.deleted',
+
+    // Credit Activities
+    CREDIT_VIEWED: 'credit.viewed',
+    CREDIT_ALLOCATED: 'credit.allocated',
+
+    // Analytics Activities
+    ANALYTICS_VIEWED: 'analytics.viewed',
+
+    // Demo Activities
+    DEMO_VIEWED: 'demo.viewed',
+    DEMO_REQUESTED: 'demo.requested',
+
+    // DNS Management Activities
+    DNS_VIEWED: 'dns.viewed',
+    DNS_UPDATED: 'dns.updated',
+
+    // Trial Activities
+    TRIAL_VIEWED: 'trial.viewed',
+    TRIAL_EXTENDED: 'trial.extended',
+
+    // Admin Activities
+    ADMIN_PANEL_VIEWED: 'admin.panel_viewed',
+    ADMIN_TENANT_VIEWED: 'admin.tenant_viewed',
+    ADMIN_TENANT_CREATED: 'admin.tenant_created',
+    ADMIN_TENANT_UPDATED: 'admin.tenant_updated',
+    ADMIN_TENANT_ACTIVATED: 'admin.tenant_activated',
+    ADMIN_TENANT_DEACTIVATED: 'admin.tenant_deactivated',
+
+    // Webhook Activities
+    WEBHOOK_VIEWED: 'webhook.viewed',
+    WEBHOOK_CREATED: 'webhook.created',
+    WEBHOOK_UPDATED: 'webhook.updated',
+    WEBHOOK_DELETED: 'webhook.deleted',
+
+    // Custom Role Activities
+    CUSTOM_ROLE_VIEWED: 'custom_role.viewed',
+    CUSTOM_ROLE_CREATED: 'custom_role.created',
+    CUSTOM_ROLE_UPDATED: 'custom_role.updated',
+    CUSTOM_ROLE_DELETED: 'custom_role.deleted',
+
+    // Permission Matrix Activities
+    PERMISSION_MATRIX_VIEWED: 'permission_matrix.viewed',
+    PERMISSION_MATRIX_UPDATED: 'permission_matrix.updated',
+
+    // User Sync Activities
+    USER_SYNC_VIEWED: 'user_sync.viewed',
+    USER_SYNC_TRIGGERED: 'user_sync.triggered',
+
+    // User Application Activities
+    USER_APPLICATION_VIEWED: 'user_application.viewed',
+    USER_APPLICATION_UPDATED: 'user_application.updated',
+
+    // Activity Log Activities
+    ACTIVITY_LOG_VIEWED: 'activity_log.viewed',
+
+    // CRM Integration Activities
+    CRM_INTEGRATION_VIEWED: 'crm_integration.viewed',
+    CRM_INTEGRATION_UPDATED: 'crm_integration.updated',
   };
 
   /**
@@ -119,6 +222,7 @@ class ActivityLogger {
         tenantId,
         appId,
         action,
+        resourceType: 'activity', // General activities don't have a specific resource type
         metadata: {
           ...metadata,
           timestamp: new Date().toISOString(),
@@ -224,50 +328,138 @@ class ActivityLogger {
         includeMetadata = true
       } = options;
 
+      // Define meaningful actions (no view activities)
+      const meaningfulActions = [
+        // Only create, update, delete operations
+        'user.profile_updated',
+        'tenant.settings_updated',
+        'subscription.created',
+        'subscription.updated',
+        'subscription.cancelled',
+        'payment.created',
+        'organization.created',
+        'organization.updated',
+        'entity.created',
+        'entity.updated',
+        'entity.deleted',
+        'location.created',
+        'location.updated',
+        'location.deleted',
+        'webhook.created',
+        'webhook.updated',
+        'webhook.deleted',
+        'role.created',
+        'role.updated',
+        'role.deleted',
+        'custom_role.created',
+        'custom_role.updated',
+        'custom_role.deleted',
+        'permission_matrix.updated',
+        'user_application.updated',
+        'crm_integration.updated',
+        'dns.updated'
+      ];
+
       let query = db
         .select({
           logId: auditLogs.logId,
           action: auditLogs.action,
-          appCode: applications.appCode,
-          appName: applications.appName,
-          metadata: includeMetadata ? auditLogs.metadata : sql`NULL`,
+          userId: auditLogs.userId,
+          userName: tenantUsers.name,
+          userEmail: tenantUsers.email,
+          metadata: includeMetadata ? auditLogs.details : sql`NULL`,
           ipAddress: auditLogs.ipAddress,
           createdAt: auditLogs.createdAt
         })
         .from(auditLogs)
-        .leftJoin(applications, eq(auditLogs.appId, applications.appId))
-        .where(eq(auditLogs.userId, userId))
+        .leftJoin(tenantUsers, and(
+          eq(auditLogs.userId, tenantUsers.userId),
+          eq(auditLogs.tenantId, tenantUsers.tenantId)
+        ))
+        .where(and(
+          eq(auditLogs.userId, userId),
+          sql`${auditLogs.action} IN (${meaningfulActions.map(action => `'${action}'`).join(', ')})`
+        ))
         .orderBy(desc(auditLogs.createdAt))
         .limit(limit)
         .offset(offset);
 
-      // Apply filters
-      const conditions = [eq(auditLogs.userId, userId)];
-      
+      // Apply additional filters
       if (startDate) {
-        conditions.push(gte(auditLogs.createdAt, startDate));
-      }
-      
-      if (endDate) {
-        conditions.push(lte(auditLogs.createdAt, endDate));
-      }
-      
-      if (actionFilter) {
-        conditions.push(eq(auditLogs.action, actionFilter));
-      }
-      
-      if (appFilter) {
-        conditions.push(eq(applications.appCode, appFilter));
+        query = query.where(gte(auditLogs.createdAt, startDate));
       }
 
-      if (conditions.length > 1) {
-        query = query.where(and(...conditions));
+      if (endDate) {
+        query = query.where(lte(auditLogs.createdAt, endDate));
+      }
+
+      if (actionFilter) {
+        query = query.where(eq(auditLogs.action, actionFilter));
       }
 
       const activities = await query;
-      
+
+      // Map actions to applications and add user info
+      const enrichedActivities = activities.map(activity => {
+        // Map action to application
+        let appCode = 'system';
+        let appName = 'System';
+
+        if (activity.action.includes('tenant.') || activity.action.includes('admin.tenant')) {
+          appCode = 'admin';
+          appName = 'Admin Panel';
+        } else if (activity.action.includes('user.')) {
+          appCode = 'users';
+          appName = 'User Management';
+        } else if (activity.action.includes('role.') || activity.action.includes('custom_role.') || activity.action.includes('permission.')) {
+          appCode = 'permissions';
+          appName = 'Permissions';
+        } else if (activity.action.includes('subscription.') || activity.action.includes('payment.')) {
+          appCode = 'billing';
+          appName = 'Billing';
+        } else if (activity.action.includes('organization.') || activity.action.includes('entity.') || activity.action.includes('location.')) {
+          appCode = 'organization';
+          appName = 'Organization';
+        } else if (activity.action.includes('invitation.')) {
+          appCode = 'invitations';
+          appName = 'Invitations';
+        } else if (activity.action.includes('webhook.')) {
+          appCode = 'webhooks';
+          appName = 'Webhooks';
+        } else if (activity.action.includes('credit.')) {
+          appCode = 'credits';
+          appName = 'Credits';
+        } else if (activity.action.includes('demo.')) {
+          appCode = 'demo';
+          appName = 'Demo';
+        } else if (activity.action.includes('dns.')) {
+          appCode = 'dns';
+          appName = 'DNS Management';
+        } else if (activity.action.includes('trial.')) {
+          appCode = 'trial';
+          appName = 'Trial Management';
+        } else if (activity.action.includes('user_sync.')) {
+          appCode = 'sync';
+          appName = 'User Sync';
+        } else if (activity.action.includes('crm_integration.')) {
+          appCode = 'crm';
+          appName = 'CRM Integration';
+        }
+
+        return {
+          ...activity,
+          appCode,
+          appName,
+          userInfo: {
+            id: activity.userId,
+            name: activity.userName || 'Unknown User',
+            email: activity.userEmail || 'unknown@example.com'
+          }
+        };
+      });
+
       return {
-        activities,
+        activities: enrichedActivities,
         pagination: {
           limit,
           offset,
@@ -296,24 +488,37 @@ class ActivityLogger {
         includeDetails = true
       } = options;
 
-      const conditions = [eq(auditLogs.tenantId, tenantId)];
-      
+      // Define meaningful actions (no view activities)
+      const meaningfulActions = [
+        // Only create, update, delete operations for audit logs
+        'user.created', 'user.updated', 'user.deleted',
+        'role.created', 'role.updated', 'role.deleted',
+        'custom_role.created', 'custom_role.updated', 'custom_role.deleted',
+        'tenant.created', 'tenant.updated', 'tenant.settings_updated',
+        'subscription.created', 'subscription.updated', 'subscription.cancelled'
+      ];
+
+      const conditions = [
+        eq(auditLogs.tenantId, tenantId),
+        sql`${auditLogs.action} IN (${meaningfulActions.map(action => `'${action}'`).join(', ')})`
+      ];
+
       if (startDate) {
         conditions.push(gte(auditLogs.createdAt, startDate));
       }
-      
+
       if (endDate) {
         conditions.push(lte(auditLogs.createdAt, endDate));
       }
-      
+
       if (actionFilter) {
         conditions.push(eq(auditLogs.action, actionFilter));
       }
-      
+
       if (resourceTypeFilter) {
         conditions.push(eq(auditLogs.resourceType, resourceTypeFilter));
       }
-      
+
       if (userFilter) {
         conditions.push(eq(auditLogs.userId, userFilter));
       }

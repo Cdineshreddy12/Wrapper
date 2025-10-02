@@ -29,11 +29,28 @@ export function AuthCallback() {
             // Check if this is a CRM authentication flow
             if (stateData.app_code && stateData.redirect_url) {
               console.log('🔄 AuthCallback: Processing CRM authentication flow')
+
+              // Check if there are errors in the state data
+              if (stateData.error) {
+                console.log('❌ AuthCallback: Error in CRM authentication flow:', stateData.error)
+                setProcessing(true)
+
+                // Redirect to CRM with error
+                const errorUrl = new URL(stateData.redirect_url)
+                errorUrl.searchParams.set('error', stateData.error)
+                errorUrl.searchParams.set('error_description', stateData.error_description || 'Authentication failed')
+                errorUrl.searchParams.set('app_code', stateData.app_code)
+
+                console.log('🚀 AuthCallback: Redirecting to CRM with error:', errorUrl.toString())
+                window.location.href = errorUrl.toString()
+                return
+              }
+
               setProcessing(true)
-              
+
               // Get the token from Kinde
               const token = await getToken()
-              
+
                              if (token) {
                  // Validate token and get user context using backend
                  const backendUrl = 'https://wrapper.zopkit.com'
@@ -42,7 +59,7 @@ export function AuthCallback() {
                    headers: {
                      'Content-Type': 'application/json',
                    },
-                   body: JSON.stringify({ 
+                   body: JSON.stringify({
                      token,
                      app_code: stateData.app_code
                    }),
@@ -50,7 +67,7 @@ export function AuthCallback() {
 
                  if (response.ok) {
                    const validation = await response.json()
-                   
+
                    if (validation.success) {
                      // Generate app-specific token
                      const appTokenResponse = await fetch(`${backendUrl}/auth/generate-app-token`, {
@@ -58,7 +75,7 @@ export function AuthCallback() {
                        headers: {
                          'Content-Type': 'application/json',
                        },
-                       body: JSON.stringify({ 
+                       body: JSON.stringify({
                          token,
                          app_code: stateData.app_code
                        }),
@@ -66,20 +83,20 @@ export function AuthCallback() {
 
                      if (appTokenResponse.ok) {
                        const appTokenData = await appTokenResponse.json()
-                       
+
                        // Redirect to CRM with token
                        const redirectUrl = new URL(stateData.redirect_url)
                        redirectUrl.searchParams.set('token', appTokenData.token)
                        redirectUrl.searchParams.set('expires_at', appTokenData.expiresAt)
                        redirectUrl.searchParams.set('app_code', stateData.app_code)
-                       
+
                        console.log('🚀 AuthCallback: Redirecting to CRM:', redirectUrl.toString())
                        window.location.href = redirectUrl.toString()
                        return
                      }
                    }
                  }
-                 
+
                  console.error('❌ AuthCallback: Failed to validate or generate app token')
                }
             }

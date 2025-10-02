@@ -6,6 +6,7 @@ import { tenants, tenantUsers, userRoleAssignments, customRoles, tenantInvitatio
 import { and, eq, sql, inArray } from 'drizzle-orm';
 import ErrorResponses from '../utils/error-responses.js';
 import { randomUUID } from 'crypto';
+import ActivityLogger, { ACTIVITY_TYPES, RESOURCE_TYPES } from '../services/activityLogger.js';
 
 export default async function tenantRoutes(fastify, options) {
   // List all tenants (Authenticated users only)
@@ -94,7 +95,21 @@ export default async function tenantRoutes(fastify, options) {
         tenantId,
         request.body
       );
-      
+
+      // Log tenant settings update activity
+      await ActivityLogger.logActivity(
+        request.userContext.internalUserId,
+        tenantId,
+        null,
+        ACTIVITY_TYPES.TENANT_SETTINGS_UPDATED,
+        {
+          updatedFields: Object.keys(request.body),
+          tenantId: tenantId,
+          userEmail: request.userContext.email
+        },
+        ActivityLogger.createRequestContext(request)
+      );
+
       return {
         success: true,
         data: updatedTenant,
@@ -115,16 +130,22 @@ export default async function tenantRoutes(fastify, options) {
     try {
       // Use tenantId directly from userContext since auth middleware already resolved it
       const tenantId = request.userContext.tenantId;
-      
+      const { entityId } = request.query;
+
       if (!tenantId) {
         return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       }
 
-      const users = await TenantService.getTenantUsers(tenantId);
-      
+      // If entityId is provided, filter users by entity
+      const users = entityId
+        ? await TenantService.getTenantUsersByEntity(tenantId, entityId)
+        : await TenantService.getTenantUsers(tenantId);
+
       return {
         success: true,
-        data: users
+        data: users,
+        filteredByEntity: !!entityId,
+        entityId: entityId || null
       };
     } catch (error) {
       request.log.error('Error fetching tenant users:', error);
@@ -166,7 +187,23 @@ export default async function tenantRoutes(fastify, options) {
         invitedBy: request.userContext.internalUserId,
         message
       });
-      
+
+      // Log user invitation activity
+      await ActivityLogger.logActivity(
+        request.userContext.internalUserId,
+        tenantId,
+        null,
+        ACTIVITY_TYPES.TENANT_USER_INVITED,
+        {
+          invitedEmail: email,
+          roleId: roleId,
+          invitationId: invitation?.invitationId,
+          tenantId: tenantId,
+          userEmail: request.userContext.email
+        },
+        ActivityLogger.createRequestContext(request)
+      );
+
       return {
         success: true,
         data: invitation,
@@ -375,7 +412,23 @@ export default async function tenantRoutes(fastify, options) {
       }
 
       const result = await TenantService.updateUserRole(userId, roleRecord.roleId, tenantId);
-      
+
+      // Log user role update activity
+      await ActivityLogger.logActivity(
+        request.userContext.internalUserId,
+        tenantId,
+        null,
+        ACTIVITY_TYPES.USER_PROMOTED,
+        {
+          targetUserId: userId,
+          newRoleId: roleRecord.roleId,
+          newRoleName: role,
+          tenantId: tenantId,
+          userEmail: request.userContext.email
+        },
+        ActivityLogger.createRequestContext(request)
+      );
+
       return {
         success: true,
         message: result.message,
@@ -387,6 +440,109 @@ export default async function tenantRoutes(fastify, options) {
         return reply.code(404).send({ error: error.message });
       }
       return reply.code(500).send({ error: 'Failed to update user role' });
+    }
+  });
+
+  // Test Kinde organization assignment
+  fastify.post('/test/kinde-organization', {
+    preHandler: [authenticateToken, requirePermission('users:read'), trackUsage]
+  }, async (request, reply) => {
+    try {
+      const tenantId = request.userContext.tenantId;
+
+      console.log('🧪 Testing Kinde organization assignment for tenant:', tenantId);
+
+      // Get a test user
+      const [testUser] = await db
+        .select()
+        .from(tenantUsers)
+        .where(and(
+          eq(tenantUsers.tenantId, tenantId),
+          eq(tenantUsers.isActive, true)
+        ))
+        .limit(1);
+
+      if (!testUser) {
+        return reply.code(404).send({
+          success: false,
+          message: 'No active users found for testing'
+        });
+      }
+
+      // Get tenant info
+      const [tenant] = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.tenantId, tenantId))
+        .limit(1);
+
+      if (!tenant) {
+        return reply.code(404).send({
+          success: false,
+          message: 'Tenant not found'
+        });
+      }
+
+      // Test M2M token
+      let m2mTokenTest = { success: false, error: 'Not tested' };
+      try {
+        const kindeService = require('../services/kinde-service.js').default;
+        const token = await kindeService.getM2MToken();
+        m2mTokenTest = { success: true, tokenLength: token.length };
+      } catch (error) {
+        m2mTokenTest = { success: false, error: error.message };
+      }
+
+      // Test organization assignment
+      let orgAssignmentTest = { success: false, error: 'Not tested' };
+      try {
+        const kindeService = require('../services/kinde-service.js').default;
+        const result = await kindeService.addUserToOrganization(
+          testUser.kindeUserId || testUser.userId,
+          tenant.kindeOrgId,
+          { exclusive: false }
+        );
+        orgAssignmentTest = result;
+      } catch (error) {
+        orgAssignmentTest = { success: false, error: error.message };
+      }
+
+      return {
+        success: true,
+        message: 'Kinde organization assignment test completed',
+        data: {
+          tenant: {
+            tenantId: tenant.tenantId,
+            companyName: tenant.companyName,
+            kindeOrgId: tenant.kindeOrgId
+          },
+          testUser: {
+            userId: testUser.userId,
+            email: testUser.email,
+            kindeUserId: testUser.kindeUserId
+          },
+          m2mTokenTest,
+          orgAssignmentTest,
+          recommendations: {
+            m2mConfigured: m2mTokenTest.success,
+            orgAssignmentWorking: orgAssignmentTest.success,
+            nextSteps: m2mTokenTest.success && orgAssignmentTest.success
+              ? ['✅ All tests passed! Kinde organization assignment is working correctly.']
+              : [
+                  m2mTokenTest.success ? null : 'Configure M2M client with proper scopes (admin, organizations:read, organizations:write)',
+                  orgAssignmentTest.success ? null : 'Ensure organization allows M2M management and M2M client has Organization Admin role'
+                ].filter(Boolean)
+          }
+        }
+      };
+
+    } catch (error) {
+      console.error('Error testing Kinde organization:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'Test failed',
+        error: error.message
+      });
     }
   });
 

@@ -55,6 +55,7 @@ const getDashboardNavigation = () => [
   },
   { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { name: 'Usage', href: '/dashboard/usage', icon: Activity },
+  { name: 'Activity Logs', href: '/dashboard/activity-logs', icon: Clock },
   { name: 'Admin', href: '/admin', icon: Crown },
 ]
 
@@ -66,6 +67,7 @@ const getOrganizationNavigation = (orgCode: string) => [
   { name: 'Billing', href: `/org/${orgCode}/billing`, icon: CreditCard },
   { name: 'Usage', href: `/org/${orgCode}/usage`, icon: Activity },
   { name: 'Permissions', href: `/org/${orgCode}/permissions`, icon: Shield },
+  { name: 'Activity Logs', href: `/org/${orgCode}/activity-logs`, icon: Clock },
   { name: 'Admin', href: '/admin', icon: Crown },
 ]
 

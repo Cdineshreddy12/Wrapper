@@ -6,8 +6,7 @@ import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
-import { Alert, AlertDescription } from '../ui/alert';
-import { Loader2, Search, Building2, MapPin, Users, CreditCard, Eye, Power, PowerOff, TreePine, Plus, CheckSquare, Square } from 'lucide-react';
+import { Loader2, Search, Building2, MapPin, Users, CreditCard, Eye, Power, PowerOff, TreePine, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../../lib/api';
 import { Checkbox } from '../ui/checkbox';
@@ -67,17 +66,64 @@ interface EntityDetails {
   };
 }
 
+interface ApplicationAllocation {
+  allocationId: string;
+  tenantId: string;
+  sourceEntityId: string;
+  targetApplication: string;
+  allocatedCredits: number;
+  usedCredits: number;
+  availableCredits: number;
+  allocationType: string;
+  allocationPurpose?: string;
+  allocatedAt: string;
+  expiresAt?: string;
+  autoReplenish: boolean;
+}
+
+interface EntityApplicationAllocations {
+  entity: {
+    entityId: string;
+    entityName: string;
+    entityType: string;
+    tenantId: string;
+  };
+  allocations: ApplicationAllocation[];
+  summary: {
+    totalAllocations: number;
+    totalAllocatedCredits: number;
+    totalUsedCredits: number;
+    totalAvailableCredits: number;
+    allocationsByApplication: Array<{
+      application: string;
+      allocationCount: number;
+      totalAllocated: number;
+      totalUsed: number;
+      totalAvailable: number;
+    }>;
+  };
+}
+
 export const EntityManagement: React.FC = () => {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [entityTypeFilter, setEntityTypeFilter] = useState<string>('all');
   const [selectedEntity, setSelectedEntity] = useState<EntityDetails | null>(null);
+  const [entityAllocations, setEntityAllocations] = useState<EntityApplicationAllocations | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [showAllocationDialog, setShowAllocationDialog] = useState(false);
   const [showBulkAllocation, setShowBulkAllocation] = useState(false);
   const [selectedEntities, setSelectedEntities] = useState<Set<string>>(new Set());
   const [bulkAllocationAmount, setBulkAllocationAmount] = useState('');
   const [bulkAllocating, setBulkAllocating] = useState(false);
+  const [allocationForm, setAllocationForm] = useState({
+    targetApplication: '',
+    creditAmount: 0,
+    allocationPurpose: '',
+    autoReplenish: false
+  });
+  const [allocating, setAllocating] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -115,14 +161,73 @@ export const EntityManagement: React.FC = () => {
 
   const handleViewDetails = async (entity: Entity) => {
     try {
-      const response = await api.get(`/admin/entities/${entity.entityId}/details`);
-      if (response.data.success) {
-        setSelectedEntity(response.data.data);
-        setShowDetails(true);
+      // Fetch entity details
+      const detailsResponse = await api.get(`/admin/entities/${entity.entityId}/details`);
+      if (detailsResponse.data.success) {
+        setSelectedEntity(detailsResponse.data.data);
       }
+
+      // Fetch application allocations for this entity
+      try {
+        const allocationsResponse = await api.get(`/admin/credits/entity/${entity.entityId}/application-allocations`);
+        if (allocationsResponse.data.success) {
+          setEntityAllocations(allocationsResponse.data.data);
+        }
+      } catch (allocationsError) {
+        console.warn('Failed to fetch entity application allocations:', allocationsError);
+        setEntityAllocations(null);
+      }
+
+      setShowDetails(true);
     } catch (error) {
       console.error('Failed to fetch entity details:', error);
       toast.error('Failed to load entity details');
+    }
+  };
+
+  const handleAllocateCredits = async () => {
+    if (!selectedEntity || !allocationForm.targetApplication || !allocationForm.creditAmount) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    // Check if entity has enough credits
+    const entityCredits = parseFloat(String(selectedEntity.credit.availableCredits || 0));
+    if (allocationForm.creditAmount > entityCredits) {
+      toast.error(`Entity only has ${entityCredits.toFixed(2)} credits available`);
+      return;
+    }
+
+    setAllocating(true);
+    try {
+      const response = await api.post('/credits/allocate/application', {
+        sourceEntityId: selectedEntity.entity.entityId,
+        targetApplication: allocationForm.targetApplication,
+        creditAmount: allocationForm.creditAmount,
+        allocationPurpose: allocationForm.allocationPurpose,
+        autoReplenish: allocationForm.autoReplenish
+      });
+
+      if (response.data.success) {
+        toast.success(`Successfully allocated ${allocationForm.creditAmount} credits to ${allocationForm.targetApplication}`);
+
+        // Reset form
+        setAllocationForm({
+          targetApplication: '',
+          creditAmount: 0,
+          allocationPurpose: '',
+          autoReplenish: false
+        });
+        setShowAllocationDialog(false);
+
+        // Refresh data
+        await handleViewDetails(selectedEntity.entity);
+      }
+    } catch (error: any) {
+      console.error('Failed to allocate credits:', error);
+      toast.error(error.response?.data?.message || 'Failed to allocate credits');
+    } finally {
+      setAllocating(false);
     }
   };
 
@@ -363,8 +468,8 @@ export const EntityManagement: React.FC = () => {
                     <TableCell>
                       <div className="flex items-center">
                         <CreditCard className="h-4 w-4 mr-1 text-muted-foreground" />
-                        <span className={(parseFloat(entity.availableCredits) || 0) < 100 ? 'text-red-600' : ''}>
-                          {(parseFloat(entity.availableCredits) || 0).toFixed(2)}
+                        <span className={(parseFloat(String(entity.availableCredits || 0)) || 0) < 100 ? 'text-red-600' : ''}>
+                          {(parseFloat(String(entity.availableCredits || 0)) || 0).toFixed(2)}
                         </span>
                       </div>
                     </TableCell>
@@ -499,7 +604,12 @@ export const EntityManagement: React.FC = () => {
       </Card>
 
       {/* Entity Details Dialog */}
-      <Dialog open={showDetails} onOpenChange={setShowDetails}>
+      <Dialog open={showDetails} onOpenChange={(open) => {
+        setShowDetails(open);
+        if (!open) {
+          setEntityAllocations(null); // Clear allocations when dialog closes
+        }
+      }}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selectedEntity?.entity.entityName} Details</DialogTitle>
@@ -547,11 +657,11 @@ export const EntityManagement: React.FC = () => {
                   <CardContent className="space-y-2">
                     <div className="flex justify-between">
                       <span className="text-sm font-medium">Available:</span>
-                      <span className="font-bold">{(parseFloat(selectedEntity.credit.availableCredits) || 0).toFixed(2)}</span>
+                      <span className="font-bold">{(parseFloat(String(selectedEntity.credit.availableCredits || 0)) || 0).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm font-medium">Reserved:</span>
-                      <span>{(parseFloat(selectedEntity.credit.reservedCredits) || 0).toFixed(2)}</span>
+                      <span>{(parseFloat(String(selectedEntity.credit.reservedCredits || 0)) || 0).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm font-medium">Status:</span>
@@ -592,7 +702,7 @@ export const EntityManagement: React.FC = () => {
                             <div>
                               <div className="font-medium">{child.entityName}</div>
                               <div className="text-sm text-muted-foreground">
-                                {child.entityType} • {(parseFloat(child.availableCredits) || 0).toFixed(2)} credits
+                                {child.entityType} • {(parseFloat(String(child.availableCredits || 0)) || 0).toFixed(2)} credits
                               </div>
                             </div>
                           </div>
@@ -601,6 +711,139 @@ export const EntityManagement: React.FC = () => {
                           </Badge>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Application Credit Allocations */}
+              <Card>
+                <CardHeader>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle className="text-lg">Application Credit Allocations</CardTitle>
+                      <CardDescription>
+                        Credits allocated to applications by this entity
+                      </CardDescription>
+                    </div>
+                    <Button
+                      onClick={() => setShowAllocationDialog(true)}
+                      className="flex items-center gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Allocate Credits
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {entityAllocations ? (
+                    <>
+                      {/* Summary */}
+                      {entityAllocations.summary.totalAllocations > 0 && (
+                        <div className="grid gap-4 md:grid-cols-4 mb-6">
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-blue-600">
+                              {entityAllocations.summary.totalAllocations}
+                            </div>
+                            <div className="text-sm text-gray-600">Active Allocations</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-purple-600">
+                              {(entityAllocations.summary.totalAllocatedCredits || 0).toFixed(2)}
+                            </div>
+                            <div className="text-sm text-gray-600">Total Allocated</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-red-600">
+                              {(entityAllocations.summary.totalUsedCredits || 0).toFixed(2)}
+                            </div>
+                            <div className="text-sm text-gray-600">Total Used</div>
+                          </div>
+                          <div className="text-center">
+                      <div className="text-2xl font-bold text-green-600">
+                        {(entityAllocations.summary.totalAvailableCredits || 0).toFixed(2)}
+                      </div>
+                            <div className="text-sm text-gray-600">Available</div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* By Application */}
+                      {entityAllocations.summary.allocationsByApplication.length > 0 ? (
+                        <div>
+                          <h4 className="font-medium mb-3">By Application</h4>
+                          <div className="grid gap-3">
+                            {entityAllocations.summary.allocationsByApplication.map((app) => (
+                              <div key={app.application} className="flex items-center justify-between p-3 border rounded-lg">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                                  <div>
+                                    <div className="font-medium capitalize">{app.application}</div>
+                                    <div className="text-sm text-gray-500">
+                                      {app.allocationCount} allocation{app.allocationCount !== 1 ? 's' : ''}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-medium">
+                                    <span className="text-green-600">{(app.totalAvailable || 0).toFixed(2)}</span>
+                                    <span className="text-gray-400"> / </span>
+                                    <span className="text-purple-600">{(app.totalAllocated || 0).toFixed(2)}</span>
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {(app.totalUsed || 0).toFixed(2)} used
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <div className="text-sm text-muted-foreground">
+                            No application credit allocations found for this entity
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Detailed Allocations */}
+                      {entityAllocations.allocations.length > 0 && (
+                        <div className="mt-6">
+                          <h4 className="font-medium mb-3">Detailed Allocations</h4>
+                          <div className="space-y-2">
+                            {entityAllocations.allocations.map((allocation) => (
+                              <div key={allocation.allocationId} className="flex items-center justify-between py-2 border-b last:border-b-0">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                  <div>
+                                    <div className="font-medium capitalize">{allocation.targetApplication}</div>
+                                    <div className="text-sm text-gray-500">
+                                      {allocation.allocationPurpose || 'No purpose specified'} •
+                                      {new Date(allocation.allocatedAt).toLocaleDateString()}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-medium">
+                                    <span className="text-green-600">{(allocation.availableCredits || 0).toFixed(2)}</span>
+                                    <span className="text-gray-400"> / </span>
+                                    <span className="text-purple-600">{(allocation.allocatedCredits || 0).toFixed(2)}</span>
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {(allocation.usedCredits || 0).toFixed(2)} used
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-8">
+                      <div className="text-sm text-muted-foreground">
+                        Loading application allocations...
+                      </div>
                     </div>
                   )}
                 </CardContent>
@@ -622,7 +865,7 @@ export const EntityManagement: React.FC = () => {
                       <div className="text-sm text-muted-foreground">Child Entities</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-2xl font-bold">{(parseFloat(selectedEntity.stats?.recentUsage) || 0).toFixed(2)}</div>
+                      <div className="text-2xl font-bold">{(parseFloat(String(selectedEntity.stats?.recentUsage || 0)) || 0).toFixed(2)}</div>
                       <div className="text-sm text-muted-foreground">Recent Usage</div>
                     </div>
                   </div>
@@ -630,6 +873,106 @@ export const EntityManagement: React.FC = () => {
               </Card>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Allocation Dialog */}
+      <Dialog open={showAllocationDialog} onOpenChange={setShowAllocationDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Allocate Credits to Application</DialogTitle>
+            <DialogDescription>
+              Allocate credits from <strong>{selectedEntity?.entity.entityName}</strong> to an application
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Available Credits Info */}
+            <div className="bg-blue-50 p-3 rounded-lg">
+              <div className="text-sm text-blue-800">
+                <strong>Available Credits:</strong> {(parseFloat(String(selectedEntity?.credit.availableCredits || 0)) || 0).toFixed(2)}
+              </div>
+            </div>
+
+            {/* Application Selection */}
+            <div>
+              <label className="text-sm font-medium">Target Application</label>
+              <Select
+                value={allocationForm.targetApplication}
+                onValueChange={(value) => setAllocationForm({...allocationForm, targetApplication: value})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select application" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="crm">CRM - Customer Relationship Management</SelectItem>
+                  <SelectItem value="hr">HR - Human Resources</SelectItem>
+                  <SelectItem value="affiliate">Affiliate - Affiliate Management</SelectItem>
+                  <SelectItem value="system">System - System Administration</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Credit Amount */}
+            <div>
+              <label className="text-sm font-medium">Credit Amount</label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={allocationForm.creditAmount}
+                onChange={(e) => setAllocationForm({...allocationForm, creditAmount: parseFloat(e.target.value) || 0})}
+                placeholder="Enter credit amount"
+              />
+            </div>
+
+            {/* Allocation Purpose */}
+            <div>
+              <label className="text-sm font-medium">Purpose (Optional)</label>
+              <Input
+                value={allocationForm.allocationPurpose}
+                onChange={(e) => setAllocationForm({...allocationForm, allocationPurpose: e.target.value})}
+                placeholder="e.g., Monthly quota, Project allocation"
+              />
+            </div>
+
+            {/* Auto Replenish */}
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="autoReplenish"
+                checked={allocationForm.autoReplenish}
+                onChange={(e) => setAllocationForm({...allocationForm, autoReplenish: e.target.checked})}
+                className="rounded"
+              />
+              <label htmlFor="autoReplenish" className="text-sm">
+                Auto-replenish when credits are low
+              </label>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowAllocationDialog(false)}
+              disabled={allocating}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAllocateCredits}
+              disabled={allocating || !allocationForm.targetApplication || !allocationForm.creditAmount}
+            >
+              {allocating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Allocating...
+                </>
+              ) : (
+                'Allocate Credits'
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

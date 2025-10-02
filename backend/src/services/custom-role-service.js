@@ -7,6 +7,38 @@ import { PERMISSION_TIERS, getAccessibleModules, isModuleAccessible } from '../c
 import { BUSINESS_SUITE_MATRIX } from '../data/permission-matrix.js';
 
 /**
+ * Convert flat permission array to hierarchical object format
+ * @param {string[]} permissionsArray - Array of permission strings like ['crm.leads.read', 'crm.leads.create']
+ * @returns {object} Hierarchical permission object like { crm: { leads: ['read', 'create'] } }
+ */
+function convertPermissionsToHierarchical(permissionsArray) {
+  if (!Array.isArray(permissionsArray)) {
+    return permissionsArray; // Return as-is if already in correct format
+  }
+
+  const hierarchical = {};
+
+  permissionsArray.forEach(permission => {
+    const parts = permission.split('.');
+    if (parts.length >= 3) {
+      const [app, module, operation] = parts;
+
+      if (!hierarchical[app]) {
+        hierarchical[app] = {};
+      }
+      if (!hierarchical[app][module]) {
+        hierarchical[app][module] = [];
+      }
+      if (!hierarchical[app][module].includes(operation)) {
+        hierarchical[app][module].push(operation);
+      }
+    }
+  });
+
+  return hierarchical;
+}
+
+/**
  * 🏗️ **CUSTOM ROLE SERVICE**
  * Demonstrates how to use applications/modules tables to create custom roles
  * and why we need organization_applications and user_application_permissions
@@ -228,6 +260,9 @@ export class CustomRoleService {
       isObject: typeof restrictions === 'object'
     });
     
+    // Convert permissions to hierarchical format (consistent with Super Administrator)
+    const hierarchicalPermissions = convertPermissionsToHierarchical(permissions);
+
     // Handle restrictions properly - avoid double-stringification
     let processedRestrictions;
     if (typeof restrictions === 'string') {
@@ -237,19 +272,19 @@ export class CustomRoleService {
       console.log('📦 Restrictions is object, stringifying');
       processedRestrictions = JSON.stringify(restrictions);
     }
-    
+
     const [role] = await db.insert(customRoles).values({
       tenantId,
       roleName,
       description,
-      permissions: JSON.stringify(permissions), // Convert array to JSON string
+      permissions: JSON.stringify(hierarchicalPermissions), // Store in hierarchical format
       restrictions: processedRestrictions, // Handle restrictions properly
       isSystemRole: false, // This is a custom role
       createdBy,
       lastModifiedBy: createdBy
     }).returning();
-    
-    console.log(`🎉 Created role "${roleName}" with ${permissions.length} permissions`);
+
+    console.log(`🎉 Created role "${roleName}" with hierarchical permissions structure`);
     return role;
   }
   
@@ -369,7 +404,10 @@ export class CustomRoleService {
       isString: typeof restrictions === 'string',
       isObject: typeof restrictions === 'object'
     });
-    
+
+    // Convert permissions to hierarchical format (consistent with Super Administrator)
+    const hierarchicalPermissions = convertPermissionsToHierarchical(permissions);
+
     // Handle restrictions properly - avoid double-stringification
     let processedRestrictions;
     if (typeof restrictions === 'string') {
@@ -379,13 +417,13 @@ export class CustomRoleService {
       console.log('📦 Restrictions is object, stringifying');
       processedRestrictions = JSON.stringify(restrictions);
     }
-    
+
     const [updatedRole] = await db
       .update(customRoles)
       .set({
         roleName,
         description,
-        permissions: JSON.stringify(permissions), // Convert array to JSON string
+        permissions: JSON.stringify(hierarchicalPermissions), // Store in hierarchical format
         restrictions: processedRestrictions, // Handle restrictions properly
         lastModifiedBy: updatedBy,
         updatedAt: new Date()
@@ -395,8 +433,8 @@ export class CustomRoleService {
         eq(customRoles.tenantId, tenantId)
       ))
       .returning();
-    
-    console.log(`🎉 Updated role "${roleName}" with ${permissions.length} permissions`);
+
+    console.log(`🎉 Updated role "${roleName}" with hierarchical permissions structure`);
     return updatedRole;
   }
   

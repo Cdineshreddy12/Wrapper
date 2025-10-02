@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useUserContext } from '@/contexts/UserContextProvider';
+import api from '@/lib/api';
 
 interface UserContext {
   userId: string;
@@ -24,56 +25,56 @@ export function useOrganizationAuth() {
     finalTenantId: tenantId
   });
 
-  // Enhanced request function with proper headers
-  const makeRequest = async (endpoint: string, options: RequestInit = {}) => {
-    const baseURL = import.meta.env.VITE_API_URL || '';
-
+  // Enhanced request function with proper headers using the api object
+  const makeRequest = async (endpoint: string, options: { method?: string; headers?: Record<string, string>; body?: any } = {}) => {
     // Ensure endpoint starts with /
     const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
     const defaultHeaders = {
-      'Content-Type': 'application/json',
       'X-Tenant-ID': tenantId,
       ...(userContext?.userId && { 'X-User-ID': userContext.userId }),
       ...(userContext?.internalUserId && { 'X-Internal-User-ID': userContext.internalUserId }),
     };
 
-    // If baseURL is empty (using Vite proxy), add /api prefix
-    const fullURL = baseURL ? `${baseURL}${normalizedEndpoint}` : `/api${normalizedEndpoint}`;
+    // Combine default headers with any additional headers
+    const allHeaders = { ...defaultHeaders, ...options.headers };
 
     console.log('🔍 Making request:', {
-      url: fullURL,
+      endpoint: normalizedEndpoint,
       method: options.method || 'GET',
-      headers: { ...defaultHeaders, ...options.headers },
+      headers: allHeaders,
       tenantId
     });
 
-    const response = await fetch(fullURL, {
-      ...options,
-      headers: {
-        ...defaultHeaders,
-        ...options.headers,
-      },
-      credentials: 'include',
-    });
+    try {
+      const config = {
+        method: options.method || 'GET',
+        headers: allHeaders,
+        ...(options.body && { data: options.body }),
+      };
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: 'Request failed' }));
-      console.error('❌ Request failed:', {
-        url: fullURL,
-        status: response.status,
-        error: errorData
+      const response = await api.request({
+        url: normalizedEndpoint,
+        ...config,
       });
-      throw new Error(errorData.message || `HTTP ${response.status}`);
+
+      console.log('✅ Request successful:', {
+        endpoint: normalizedEndpoint,
+        result: response.data
+      });
+
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Request failed:', {
+        endpoint: normalizedEndpoint,
+        status: error.response?.status,
+        error: error.response?.data || error.message
+      });
+
+      // Throw a more descriptive error
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Request failed';
+      throw new Error(errorMessage);
     }
-
-    const result = await response.json();
-    console.log('✅ Request successful:', {
-      url: fullURL,
-      result
-    });
-
-    return result;
   };
 
   // Load user context
@@ -130,7 +131,7 @@ export function useOrganizationAuth() {
     loading: contextLoading || loading,
     makeRequest,
     isAdmin: user?.isTenantAdmin || false,
-    hasPermission: (permission: string) => false // TODO: implement permission checking
+    hasPermission: (_permission: string) => false // TODO: implement permission checking
   };
 }
 

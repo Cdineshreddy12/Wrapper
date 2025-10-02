@@ -10,6 +10,7 @@ import { PersonalDetailsStep } from '../steps/PersonalDetailsStep';
 import { TaxDetailsStep } from '../steps/TaxDetailsStep';
 import { AdminDetailsStep } from '../steps/AdminDetailsStep';
 import { ReviewStep } from '../steps/ReviewStep';
+import { UserClassification } from './FlowSelector';
 
 interface StepRendererProps {
   currentStep: number;
@@ -21,6 +22,7 @@ interface StepRendererProps {
   onUpdateTeamMember: (id: number, field: keyof import('../schemas').TeamMember, value: string) => void;
   onRemoveTeamMember: (id: number) => void;
   onEditStep?: (stepNumber: number) => void;
+  userClassification?: UserClassification;
 }
 
 export const StepRenderer = memo(({
@@ -32,7 +34,8 @@ export const StepRenderer = memo(({
   onAddTeamMember,
   onUpdateTeamMember,
   onRemoveTeamMember,
-  onEditStep
+  onEditStep,
+  userClassification
 }: StepRendererProps) => {
   const currentStepConfig = stepsConfig.find(step => step.number === currentStep);
   
@@ -48,6 +51,7 @@ export const StepRenderer = memo(({
         <CompanyTypeStep
           selectedType={form.watch('companyType')}
           onSelect={onCompanyTypeSelect}
+          userClassification={userClassification}
         />
       );
     case 'state':
@@ -55,10 +59,11 @@ export const StepRenderer = memo(({
         <StateStep
           selectedState={form.watch('state')}
           onSelect={onStateSelect}
+          userClassification={userClassification}
         />
       );
     case 'businessDetails':
-      return <BusinessDetailsStep form={form} />;
+      return <BusinessDetailsStep form={form} userClassification={userClassification} />;
     case 'team':
       return (
         <TeamStep
@@ -66,16 +71,17 @@ export const StepRenderer = memo(({
           onAddMember={onAddTeamMember}
           onUpdateMember={onUpdateTeamMember}
           onRemoveMember={onRemoveTeamMember}
+          userClassification={userClassification}
         />
       );
     case 'personalDetails':
-      return <PersonalDetailsStep form={form} />;
+      return <PersonalDetailsStep form={form} userClassification={userClassification} />;
     case 'taxDetails':
-      return <TaxDetailsStep form={form} />;
+      return <TaxDetailsStep form={form} userClassification={userClassification} />;
     case 'adminDetails':
-      return <AdminDetailsStep form={form} />;
+      return <AdminDetailsStep form={form} userClassification={userClassification} />;
     case 'review':
-      return <ReviewStep form={form} onEditStep={onEditStep} />;
+      return <ReviewStep form={form} onEditStep={onEditStep} userClassification={userClassification} />;
     default:
       return <div>Unknown step: {currentStepConfig.id}</div>;
   }

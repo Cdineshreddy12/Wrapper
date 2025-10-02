@@ -4,6 +4,7 @@ import { StepRenderer } from './StepRenderer';
 import { UseFormReturn } from 'react-hook-form';
 import { newBusinessData, existingBusinessData } from '../schemas';
 import { StepConfig } from '../config/flowConfigs';
+import { UserClassification } from './FlowSelector';
 
 interface OnboardingLayoutProps {
   form: UseFormReturn<newBusinessData | existingBusinessData>;
@@ -21,6 +22,7 @@ interface OnboardingLayoutProps {
   onRemoveTeamMember: (id: number) => void;
   onEditStep?: (stepNumber: number) => void;
   onStepClick?: (stepNumber: number) => void;
+  userClassification?: UserClassification;
 }
 
 export const OnboardingLayout = ({
@@ -38,7 +40,8 @@ export const OnboardingLayout = ({
   onUpdateTeamMember,
   onRemoveTeamMember,
   onEditStep,
-  onStepClick
+  onStepClick,
+  userClassification
 }: OnboardingLayoutProps) => {
   return (
     <div className="h-screen bg-gray-50 flex flex-col lg:flex-row overflow-hidden">
@@ -94,6 +97,7 @@ export const OnboardingLayout = ({
             onUpdateTeamMember={onUpdateTeamMember}
             onRemoveTeamMember={onRemoveTeamMember}
             onEditStep={onEditStep}
+            userClassification={userClassification}
           />
         </div>
 

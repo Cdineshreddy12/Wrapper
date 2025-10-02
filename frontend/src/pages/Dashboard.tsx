@@ -114,14 +114,48 @@ export function Dashboard() {
     isCached,
     cacheAge
   } = useDashboardData()
-  
+
   const { expiredData } = useTrialStatus()
+
+  // Shared applications state for all tabs
+  const [tenantApplications, setTenantApplications] = useState<any[]>(applications || [])
+
+  // Load tenant applications when component mounts (for organizations tab)
+  useEffect(() => {
+    const loadTenantApplications = async () => {
+      if (!tenantId) return;
+
+      // If we already have applications, no need to reload
+      if (tenantApplications && tenantApplications.length > 0) return;
+
+      try {
+        console.log('🏢 Loading tenant applications for dashboard:', tenantId);
+        const response = await fetch('http://localhsot:3000/api/admin/application-assignments/tenant-apps/' + tenantId, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data?.applications) {
+            const apps = data.data.applications;
+            console.log('✅ Loaded tenant applications for dashboard:', apps.length, 'apps');
+            setTenantApplications(apps);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Failed to load tenant applications for dashboard:', error);
+      }
+    };
+
+    loadTenantApplications();
+  }, [tenantId]); // Remove selectedTab dependency, load when component mounts
   
   // Check if user is admin
   const isAdmin = user?.email && (
-    user.email.includes('admin') || 
-    user.email === 'hellobrother9959@gmail.com' ||
-    user.email === 'growthcrm7@gmail.com'
+    user.email.includes('admin') 
   )
 
   // Handle tab navigation
@@ -419,7 +453,7 @@ export function Dashboard() {
             <div className="space-y-6">
               <OrganizationManagement
                 employees={employees || []}
-                applications={applications || []}
+                applications={tenantApplications}
                 isAdmin={isAdmin || false}
                 tenantId={tenantId}
                 makeRequest={async (endpoint: string, options?: RequestInit) => {
@@ -468,8 +502,9 @@ export function Dashboard() {
                 }}
                 loadDashboardData={refreshDashboard}
                 inviteEmployee={() => {
-                  // Implement invite employee function
-                  console.log('Invite employee clicked');
+                  // Navigate to users tab to open invitation modal
+                  setSelectedTab('users');
+                  // The UserManagementDashboard component will handle the invitation
                 }}
               />
             </div>
@@ -478,7 +513,7 @@ export function Dashboard() {
           {selectedTab === 'applications' && (
             <>
               {console.log('🎯 Rendering ApplicationsTab for selectedTab:', selectedTab)}
-              <ApplicationsTab />
+              <ApplicationsTab onApplicationsLoaded={setTenantApplications} />
             </>
           )}
           
@@ -820,7 +855,7 @@ function MetricCard({
   )
 }
 
-function ApplicationsTab() {
+function ApplicationsTab({ onApplicationsLoaded }: { onApplicationsLoaded?: (apps: any[]) => void }) {
   console.log('🎯 ApplicationsTab component rendered');
 
   const [applications, setApplications] = useState<any[]>([]);
@@ -871,6 +906,7 @@ function ApplicationsTab() {
       console.log('📋 Application data structure:', data);
 
       setApplications(data || []);
+      onApplicationsLoaded?.(data || []);
     } catch (error: any) {
       console.error('❌ Failed to fetch applications:', error);
       console.error('❌ Error details:', {

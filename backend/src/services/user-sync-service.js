@@ -188,6 +188,7 @@ export class UserSyncService {
     }
   }
 
+
   /**
    * Sync users to a specific application
    * @param {string} appCode - Application code

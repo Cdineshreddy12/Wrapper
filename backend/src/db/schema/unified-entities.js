@@ -6,7 +6,6 @@
 
 import { pgTable, uuid, varchar, timestamp, jsonb, boolean, integer, text, decimal } from 'drizzle-orm/pg-core';
 import { tenants } from './tenants.js';
-import { tenantUsers } from './users.js';
 
 // Unified entity table (handles organizations, locations, departments, etc.)
 export const entities = pgTable('entities', {
@@ -17,7 +16,7 @@ export const entities = pgTable('entities', {
   entityType: varchar('entity_type', { length: 20 }).notNull(), // 'organization', 'location', 'department', 'team'
 
   // Hierarchy Structure (ANY entity can have children)
-  parentEntityId: uuid('parent_entity_id').references(() => entities.entityId),
+  parentEntityId: uuid('parent_entity_id'),
   entityLevel: integer('entity_level').default(1),
 
   // Basic Entity Info
@@ -48,7 +47,7 @@ export const entities = pgTable('entities', {
   brandingConfig: jsonb('branding_config').default({}),
 
   // Responsible person
-  responsiblePersonId: uuid('responsible_person_id').references(() => tenantUsers.userId),
+  responsiblePersonId: uuid('responsible_person_id'),
 
   // Credit system (hierarchical)
   creditAllocation: decimal('credit_allocation', { precision: 15, scale: 4 }).default('0'),
@@ -87,8 +86,8 @@ export const entities = pgTable('entities', {
   fullHierarchyPath: text('full_hierarchy_path'),
 
   // Metadata
-  createdBy: uuid('created_by').references(() => tenantUsers.userId),
-  updatedBy: uuid('updated_by').references(() => tenantUsers.userId),
+  createdBy: uuid('created_by'),
+  updatedBy: uuid('updated_by'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });

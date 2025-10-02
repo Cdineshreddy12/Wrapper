@@ -5,6 +5,7 @@ import { newBusinessData, existingBusinessData } from '../schemas';
 import { StepConfig } from '../config/flowConfigs';
 import { useStepNavigation, useTeamManagement } from '../hooks';
 import { OnboardingLayout } from './OnboardingLayout';
+import { UserClassification } from './FlowSelector';
 
 interface MultiStepFormProps {
   form: UseFormReturn<newBusinessData | existingBusinessData>;
@@ -17,6 +18,7 @@ interface MultiStepFormProps {
   currentStep?: number;
   onStepChange?: (step: number) => void;
   className?: string;
+  userClassification?: UserClassification;
 }
 
 export const MultiStepForm: React.FC<MultiStepFormProps> = ({
@@ -29,7 +31,8 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
   onStepClick,
   currentStep: externalCurrentStep,
   onStepChange,
-  className
+  className,
+  userClassification
 }) => {
   const { 
     currentStep: internalCurrentStep, 
@@ -103,6 +106,7 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
             onRemoveTeamMember={removeTeamMember}
             onEditStep={handleEditStep}
             onStepClick={handleStepClick}
+            userClassification={userClassification}
           />
         </form>
       </Form>

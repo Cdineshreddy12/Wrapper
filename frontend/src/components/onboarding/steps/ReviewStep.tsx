@@ -21,11 +21,62 @@ import { newBusinessData, existingBusinessData } from '../schemas';
 interface ReviewStepProps {
   form: UseFormReturn<newBusinessData | existingBusinessData>;
   onEditStep?: (stepNumber: number) => void;
+  userClassification?: UserClassification;
 }
 
-export const ReviewStep: React.FC<ReviewStepProps> = ({ form, onEditStep }) => {
+export const ReviewStep: React.FC<ReviewStepProps> = ({ form, onEditStep, userClassification }) => {
   const values = form.getValues();
   const isExistingBusiness = 'gstin' in values;
+
+  // Get personalized content based on user classification
+  const getPersonalizedContent = () => {
+    switch (userClassification) {
+      case 'aspiringFounder':
+        return {
+          title: 'Review Your Startup Profile',
+          description: 'Confirm your founder information and business vision.',
+          badge: 'Startup Founder',
+          badgeColor: 'bg-blue-100 text-blue-800'
+        };
+      case 'corporateEmployee':
+        return {
+          title: 'Review Your Corporate Profile',
+          description: 'Verify your professional information and company setup.',
+          badge: 'Corporate Professional',
+          badgeColor: 'bg-purple-100 text-purple-800'
+        };
+      case 'withGST':
+        return {
+          title: 'Review Your GST-Registered Business',
+          description: 'Confirm your tax-compliant business information.',
+          badge: 'GST Registered',
+          badgeColor: 'bg-green-100 text-green-800'
+        };
+      case 'withDomainMail':
+        return {
+          title: 'Review Your Professional Setup',
+          description: 'Verify your domain-integrated business profile.',
+          badge: 'Professional Domain',
+          badgeColor: 'bg-blue-100 text-blue-800'
+        };
+      case 'enterprise':
+        return {
+          title: 'Review Your Enterprise Profile',
+          description: 'Confirm your comprehensive enterprise business setup.',
+          badge: 'Enterprise',
+          badgeColor: 'bg-purple-100 text-purple-800'
+        };
+      default:
+        return {
+          title: 'Review Your Information',
+          description: 'Please review all the information you\'ve provided.',
+          badge: 'Standard',
+          badgeColor: 'bg-gray-100 text-gray-800'
+        };
+    }
+  };
+
+  const personalizedContent = getPersonalizedContent();
 
   const handleEditStep = (stepNumber: number) => {
     if (onEditStep) {
@@ -67,12 +118,22 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ form, onEditStep }) => {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="text-center mb-8">
+        <div className="mb-4">
+          {userClassification && (
+            <Badge
+              variant="secondary"
+              className={`mb-4 px-4 py-2 text-sm font-medium ${personalizedContent.badgeColor}`}
+            >
+              {personalizedContent.badge}
+            </Badge>
+          )}
+        </div>
         <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <CheckCircle className="w-8 h-8 text-green-600" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Review Your Information</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">{personalizedContent.title}</h2>
         <p className="text-gray-600">
-          Please review all the information you've provided. You can edit any section by clicking the "Edit" button.
+          {personalizedContent.description} You can edit any section by clicking the "Edit" button.
         </p>
       </div>
 
@@ -231,14 +292,52 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ form, onEditStep }) => {
           isExistingBusiness ? 7 : 5
         )}
 
-        {/* Summary Badge */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+        {/* Personalized Summary Badge */}
+        <div className={`border rounded-lg p-6 text-center ${
+          userClassification === 'aspiringFounder' ? 'bg-blue-50 border-blue-200' :
+          userClassification === 'corporateEmployee' ? 'bg-purple-50 border-purple-200' :
+          userClassification === 'withGST' ? 'bg-green-50 border-green-200' :
+          userClassification === 'enterprise' ? 'bg-purple-50 border-purple-200' :
+          'bg-blue-50 border-blue-200'
+        }`}>
           <div className="flex items-center justify-center space-x-2 mb-2">
-            <CheckCircle className="w-5 h-5 text-blue-600" />
-            <h3 className="text-lg font-semibold text-blue-900">Ready to Submit</h3>
+            <CheckCircle className={`w-5 h-5 ${
+              userClassification === 'aspiringFounder' ? 'text-blue-600' :
+              userClassification === 'corporateEmployee' ? 'text-purple-600' :
+              userClassification === 'withGST' ? 'text-green-600' :
+              userClassification === 'enterprise' ? 'text-purple-600' :
+              'text-blue-600'
+            }`} />
+            <h3 className={`text-lg font-semibold ${
+              userClassification === 'aspiringFounder' ? 'text-blue-900' :
+              userClassification === 'corporateEmployee' ? 'text-purple-900' :
+              userClassification === 'withGST' ? 'text-green-900' :
+              userClassification === 'enterprise' ? 'text-purple-900' :
+              'text-blue-900'
+            }`}>
+              {userClassification === 'aspiringFounder' ? 'Ready to Launch Your Startup' :
+               userClassification === 'corporateEmployee' ? 'Corporate Setup Complete' :
+               userClassification === 'withGST' ? 'GST-Compliant Business Ready' :
+               userClassification === 'enterprise' ? 'Enterprise Profile Complete' :
+               'Ready to Submit'}
+            </h3>
           </div>
-          <p className="text-blue-700 text-sm">
-            All required information has been provided. Click "Submit" to complete your {isExistingBusiness ? 'existing business' : 'new business'} onboarding.
+          <p className={`text-sm ${
+            userClassification === 'aspiringFounder' ? 'text-blue-700' :
+            userClassification === 'corporateEmployee' ? 'text-purple-700' :
+            userClassification === 'withGST' ? 'text-green-700' :
+            userClassification === 'enterprise' ? 'text-purple-700' :
+            'text-blue-700'
+          }`}>
+            {userClassification === 'aspiringFounder' ?
+              'Your startup profile is complete. Click "Submit" to begin your entrepreneurial journey!' :
+             userClassification === 'corporateEmployee' ?
+              'Your corporate profile is ready. Click "Submit" to activate your business account.' :
+             userClassification === 'withGST' ?
+              'Your GST-compliant business setup is complete. Click "Submit" to finalize registration.' :
+             userClassification === 'enterprise' ?
+              'Your enterprise profile is configured. Click "Submit" to activate premium features.' :
+              'All required information has been provided. Click "Submit" to complete your onboarding.'}
           </p>
         </div>
       </div>

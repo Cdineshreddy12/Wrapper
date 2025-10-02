@@ -2,15 +2,16 @@ import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { trackUsage } from '../middleware/usage.js';
 import permissionService from '../services/permissionService.js';
 import { db } from '../db/index.js';
-import { 
-  applications, 
-  applicationModules, 
-  organizationApplications, 
+import {
+  applications,
+  applicationModules,
+  organizationApplications,
   userApplicationPermissions
 } from '../db/schema/suite-schema.js';
 import { tenantUsers } from '../db/schema/users.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import CacheInvalidationService from '../middleware/cache-invalidation.js';
+import ActivityLogger, { ACTIVITY_TYPES, RESOURCE_TYPES } from '../services/activityLogger.js';
 
 export default async function permissionRoutes(fastify, options) {
   
@@ -686,7 +687,24 @@ export default async function permissionRoutes(fastify, options) {
           assignedBy: request.userContext?.kindeUserId || request.user?.id
         }
       );
-      
+
+      // Log role assignment activity
+      await ActivityLogger.logActivity(
+        request.userContext?.internalUserId || request.user?.id,
+        tenantId,
+        null,
+        ACTIVITY_TYPES.PERMISSION_GRANTED,
+        {
+          targetUserId: userId,
+          roleId: roleId,
+          expiresAt: expiresAt,
+          hasConditions: !!conditions,
+          tenantId: tenantId,
+          userEmail: request.userContext?.email || request.user?.email
+        },
+        ActivityLogger.createRequestContext(request)
+      );
+
       return {
         success: true,
         data: assignment,
@@ -722,7 +740,21 @@ export default async function permissionRoutes(fastify, options) {
         assignmentId,
         request.userContext?.kindeUserId || request.user?.id
       );
-      
+
+      // Log role removal activity
+      await ActivityLogger.logActivity(
+        request.userContext?.internalUserId || request.user?.id,
+        getTenantId(request),
+        null,
+        ACTIVITY_TYPES.PERMISSION_REVOKED,
+        {
+          assignmentId: assignmentId,
+          tenantId: getTenantId(request),
+          userEmail: request.userContext?.email || request.user?.email
+        },
+        ActivityLogger.createRequestContext(request)
+      );
+
       return {
         success: true,
         message: 'Role assignment removed successfully'
@@ -880,13 +912,163 @@ export default async function permissionRoutes(fastify, options) {
     }
   });
 
+  // Migrate role permissions to hierarchical format
+  fastify.post('/migrate-role-permissions', {
+    preHandler: [authenticateToken, requirePermission('roles:update'), trackUsage]
+  }, async (request, reply) => {
+    try {
+      const tenantId = getTenantId(request);
+
+      console.log(`🚀 Starting role permissions migration for tenant: ${tenantId}`);
+
+      // Get all custom roles for this tenant
+      const roles = await db
+        .select({
+          roleId: customRoles.roleId,
+          roleName: customRoles.roleName,
+          permissions: customRoles.permissions,
+          isSystemRole: customRoles.isSystemRole
+        })
+        .from(customRoles)
+        .where(and(
+          eq(customRoles.tenantId, tenantId),
+          eq(customRoles.isSystemRole, false),
+          not(eq(customRoles.permissions, null))
+        ));
+
+      console.log(`📊 Found ${roles.length} custom roles to check`);
+
+      let updatedCount = 0;
+      let skippedCount = 0;
+      const results = [];
+
+      for (const role of roles) {
+        try {
+          let permissionsData;
+
+          // Parse permissions if it's a string
+          if (typeof role.permissions === 'string') {
+            try {
+              permissionsData = JSON.parse(role.permissions);
+            } catch (parseError) {
+              console.warn(`⚠️ Failed to parse permissions for role ${role.roleName}:`, parseError.message);
+              skippedCount++;
+              continue;
+            }
+          } else {
+            permissionsData = role.permissions;
+          }
+
+          // Check if already in hierarchical format
+          if (permissionsData && typeof permissionsData === 'object' && !Array.isArray(permissionsData)) {
+            console.log(`⏭️ Skipping role "${role.roleName}" - already in hierarchical format`);
+            skippedCount++;
+            results.push({
+              roleId: role.roleId,
+              roleName: role.roleName,
+              status: 'skipped',
+              reason: 'Already in hierarchical format'
+            });
+            continue;
+          }
+
+          // Check if it's in flat array format
+          if (Array.isArray(permissionsData) && permissionsData.length > 0 && typeof permissionsData[0] === 'string') {
+            console.log(`🔄 Converting role "${role.roleName}" from flat array to hierarchical format`);
+
+            // Convert to hierarchical format
+            const hierarchicalPermissions = {};
+            permissionsData.forEach(permission => {
+              const parts = permission.split('.');
+              if (parts.length >= 3) {
+                const [app, module, operation] = parts;
+
+                if (!hierarchicalPermissions[app]) {
+                  hierarchicalPermissions[app] = {};
+                }
+                if (!hierarchicalPermissions[app][module]) {
+                  hierarchicalPermissions[app][module] = [];
+                }
+                if (!hierarchicalPermissions[app][module].includes(operation)) {
+                  hierarchicalPermissions[app][module].push(operation);
+                }
+              }
+            });
+
+            // Update the role
+            await db
+              .update(customRoles)
+              .set({
+                permissions: JSON.stringify(hierarchicalPermissions),
+                updatedAt: new Date()
+              })
+              .where(eq(customRoles.roleId, role.roleId));
+
+            console.log(`✅ Updated role "${role.roleName}" with hierarchical permissions`);
+            updatedCount++;
+            results.push({
+              roleId: role.roleId,
+              roleName: role.roleName,
+              status: 'updated',
+              oldFormat: 'flat_array',
+              newFormat: 'hierarchical'
+            });
+          } else {
+            console.warn(`⚠️ Unknown permissions format for role "${role.roleName}":`, typeof permissionsData);
+            skippedCount++;
+            results.push({
+              roleId: role.roleId,
+              roleName: role.roleName,
+              status: 'skipped',
+              reason: 'Unknown permissions format'
+            });
+          }
+
+        } catch (error) {
+          console.error(`❌ Error processing role "${role.roleName}":`, error.message);
+          skippedCount++;
+          results.push({
+            roleId: role.roleId,
+            roleName: role.roleName,
+            status: 'error',
+            error: error.message
+          });
+        }
+      }
+
+      console.log(`\n🎉 Migration completed!`);
+      console.log(`✅ Updated: ${updatedCount} roles`);
+      console.log(`⏭️ Skipped: ${skippedCount} roles`);
+      console.log(`📊 Total processed: ${roles.length} roles`);
+
+      return {
+        success: true,
+        message: `Migration completed. Updated ${updatedCount} roles, skipped ${skippedCount} roles.`,
+        data: {
+          totalProcessed: roles.length,
+          updated: updatedCount,
+          skipped: skippedCount,
+          results: results
+        }
+      };
+
+    } catch (error) {
+      console.error('❌ Migration failed:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'Failed to migrate role permissions',
+        error: error.message
+      });
+    }
+  });
+
   // Get permission summary
   fastify.get('/summary', {
     preHandler: [authenticateToken, requirePermission('permissions:read'), trackUsage]
   }, async (request, reply) => {
     try {
       const permissionData = await permissionService.getAvailablePermissions();
-      
+
       return {
         success: true,
         data: {

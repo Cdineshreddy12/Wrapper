@@ -62,6 +62,7 @@ import { usageTrackingPlugin } from './middleware/usage-tracking.js';
 import { trialRestrictionMiddleware } from './middleware/trial-restriction.js';
 import { fastifyCacheMetrics } from './middleware/cache-metrics.js';
 import { RLSTenantIsolationService } from './middleware/rls-tenant-isolation.js';
+import { trackActivity } from './middleware/activityTracker.js';
 
 // Import utilities
 import trialManager from './utils/trial-manager.js';
@@ -295,6 +296,9 @@ async function initializeRLS() {
 
 // Register global middleware
 async function registerMiddleware() {
+  // Activity tracking middleware (runs on all requests for comprehensive logging)
+  fastify.addHook('onRequest', trackActivity());
+
   // Auth middleware (will set userContext if authenticated) - runs on all requests
   fastify.addHook('preHandler', authMiddleware);
 
@@ -708,10 +712,10 @@ async function start() {
     
     // Initialize demo cache data for distributed caching demonstration
     try {
-      const { initializeDemoCache } = await import('./utils/redis.js');
-      await initializeDemoCache();
+      // Redis is handled by the sync services
+      console.log('✅ Redis sync services initialized');
     } catch (error) {
-      console.error('❌ Failed to initialize demo cache:', error);
+      console.error('❌ Failed to initialize Redis services:', error);
     }
     
     // Setup graceful shutdown

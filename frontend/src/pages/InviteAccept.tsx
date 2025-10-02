@@ -315,141 +315,65 @@ export function InviteAccept() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center py-12 px-4">
-      <div className="max-w-lg w-full space-y-6">
-        {/* Header */}
-        <div className="text-center">
-          <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Users className="h-10 w-10 text-white" />
-            </div>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">You're Invited!</h1>
-          <p className="text-lg text-gray-600">Join your team on Wrapper</p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center py-12 px-4">
+      <div className="max-w-md w-full">
+        {/* Simplified Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Join Your Team</h1>
+          <p className="text-gray-600">Sign in to accept your invitation</p>
         </div>
 
-        {/* Invitation Details */}
-        <Card className="shadow-xl">
-          <CardHeader className="text-center">
-            <div className="flex justify-center mb-4">
-              <Building2 className="h-8 w-8 text-blue-600" />
-            </div>
-            <CardTitle className="text-xl">{invitation?.organizationName}</CardTitle>
-            <CardDescription>
-              {invitation?.inviterName} has invited you to join their team
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Invitation Details */}
-            <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h3 className="font-medium text-blue-900 mb-2">Invitation Details</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-blue-700">Email:</span>
-                    <span className="text-blue-900 font-medium">{invitation?.email}</span>
-                  </div>
-                  {invitation?.roles && invitation.roles.length > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-blue-700">Role:</span>
-                      <span className="text-blue-900 font-medium">{invitation.roles.join(', ')}</span>
-                    </div>
-                  )}
-                </div>
+        {/* Authentication Only */}
+        {!isAuthenticated ? (
+          <Card className="shadow-lg border-0">
+            <CardContent className="p-8">
+              <SocialLogin
+                orgCode={invitation?.orgCode}
+                title=""
+                subtitle=""
+                onSuccess={() => {
+                  toast.success('Welcome! Setting up your account...')
+                  // handleAcceptInvitation will be called automatically via useEffect
+                }}
+                onError={(error) => {
+                  toast.error(error)
+                }}
+              />
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="shadow-lg border-0">
+            <CardContent className="p-8 text-center">
+              <div className="flex items-center justify-center space-x-2 mb-4">
+                <CheckCircle className="h-6 w-6 text-green-600" />
+                <span className="text-green-600 font-medium">Welcome back!</span>
               </div>
+              <p className="text-sm text-gray-600 mb-6">
+                You're signed in as <strong>{user?.email}</strong>
+              </p>
+              <Button
+                onClick={handleAcceptInvitation}
+                className="w-full"
+                disabled={accepting}
+                size="lg"
+              >
+                {accepting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Joining your team...
+                  </>
+                ) : (
+                  'Join Team'
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
-              {invitation?.message && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                  <h3 className="font-medium text-amber-900 mb-2">Personal Message</h3>
-                  <p className="text-sm text-amber-800 italic">"{invitation.message}"</p>
-                </div>
-              )}
-            </div>
-
-            {/* Authentication */}
-            {!isAuthenticated ? (
-              <div className="space-y-4">
-                <div className="text-center">
-                  <p className="text-sm text-gray-600 mb-4">
-                    Sign in to accept this invitation
-                  </p>
-                </div>
-                
-                <SocialLogin
-                  orgCode={invitation?.orgCode}
-                  title="Accept Invitation"
-                  subtitle="Sign in to join the team"
-                  onSuccess={() => {
-                    toast.success('Authentication successful!')
-                    // handleAcceptInvitation will be called automatically via useEffect
-                  }}
-                  onError={(error) => {
-                    toast.error(error)
-                  }}
-                />
-              </div>
-            ) : (
-              <div className="text-center space-y-4">
-                <div className="flex items-center justify-center space-x-2">
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                  <span className="text-green-600 font-medium">You're signed in as {user?.email}</span>
-                </div>
-                
-                <div className="flex space-x-3">
-                  <Button 
-                    onClick={handleAcceptInvitation}
-                    className="flex-1"
-                    disabled={accepting}
-                  >
-                    {accepting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        Joining...
-                      </>
-                    ) : (
-                      'Accept Invitation'
-                    )}
-                  </Button>
-                  <Button 
-                    onClick={handleDecline}
-                    variant="outline"
-                    disabled={accepting}
-                  >
-                    Decline
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Features Preview */}
-            <div className="border-t pt-6">
-              <h3 className="font-medium text-gray-900 mb-3">What you'll get access to:</h3>
-              <div className="grid grid-cols-1 gap-2 text-sm text-gray-600">
-                <div className="flex items-center space-x-2">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                  <span>Integrated CRM and business tools</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                  <span>Team collaboration features</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                  <span>Analytics and reporting</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                  <span>Secure workspace access</span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Help */}
-        <div className="text-center">
-          <p className="text-sm text-gray-500">
-            Having trouble? Contact {invitation?.inviterName || 'your team administrator'} for help.
+        {/* Minimal Footer */}
+        <div className="text-center mt-8">
+          <p className="text-xs text-gray-500">
+            Secure access powered by Google
           </p>
         </div>
       </div>

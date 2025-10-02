@@ -17,7 +17,11 @@ const PUBLIC_ROUTES = [
   '/api/subscriptions/debug-stripe-config',
   '/api/payments/webhook',
   '/api/credits/webhook',
-  '/api/invitations',
+  // Specific invitation routes that are public
+  '/api/invitations/details',
+  '/api/invitations/accept',
+  '/api/invitations/accept-by-token',
+  '/api/invitations/details-by-token',
   '/api/locations',
   '/docs',
   '/api/metrics/',
@@ -27,7 +31,7 @@ const PUBLIC_ROUTES = [
   '/api/organizations/parent',
   '/api/organizations/sub',
   '/api/organizations/bulk',
-  '/api/organizations/hierarchy',
+  // Removed: '/api/organizations/hierarchy' - now requires authentication
   'POST /api/organizations/sub',
   // Location routes with fallback authentication
   '/api/locations',

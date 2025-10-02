@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { Toaster as Sonner } from 'sonner'
-import { OnboardingApp } from '@/components/onboarding'
+import { OnboardingApp, OnboardingForm } from '@/components/onboarding'
 
 import api from '@/lib/api'
 
@@ -41,6 +41,7 @@ import MacbookTest from '@/pages/MacbookTest'
 import EcosystemDemo from '@/pages/EcosystemDemo'
 import TextEffectDemo from '@/pages/TextEffectDemo'
 import CompareDemo from '@/pages/CompareDemo'
+import ActivityLogs from '@/pages/ActivityLogs'
 
 // Create an optimized query client with better caching strategy
 const queryClient = new QueryClient({
@@ -262,6 +263,7 @@ function AppContent() {
           <Route path="analytics" element={<Analytics />} />
           <Route path="usage" element={<Usage />} />
           <Route path="permissions" element={<Permissions />} />
+          <Route path="activity-logs" element={<ActivityLogs />} />
           <Route path="text-effect-demo" element={<TextEffectDemo />} />
           <Route path="compare-demo" element={<CompareDemo />} />
         </Route>
@@ -295,6 +297,7 @@ function AppContent() {
           <Route path="billing" element={<Billing />} />
           <Route path="usage" element={<Usage />} />
           <Route path="permissions" element={<Permissions />} />
+          <Route path="activity-logs" element={<ActivityLogs />} />
         </Route>
 
           {/* Catch all - redirect to landing if not authenticated */}

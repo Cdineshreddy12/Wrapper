@@ -6,6 +6,7 @@ import { db } from '../db/index.js';
 import { userRoleAssignments, tenantUsers } from '../db/schema/index.js';
 import { eq } from 'drizzle-orm';
 import Logger from '../utils/logger.js';
+import ActivityLogger, { ACTIVITY_TYPES, RESOURCE_TYPES } from '../services/activityLogger.js';
 
 export default async function roleRoutes(fastify, options) {
   
@@ -489,12 +490,28 @@ export default async function roleRoutes(fastify, options) {
       });
       
       const role = await permissionService.createAdvancedRole(roleData);
-      
+
       Logger.role.create.step(requestId, 'Success', 'Role created successfully', {
         roleId: role.roleId,
         roleName: role.roleName,
         tenantId: role.tenantId
       });
+
+      // Log role creation activity
+      await ActivityLogger.logActivity(
+        request.userContext.internalUserId,
+        request.userContext.tenantId,
+        null,
+        ACTIVITY_TYPES.ROLE_CREATED,
+        {
+          roleId: role.roleId,
+          roleName: role.roleName,
+          permissionsCount: Object.keys(request.body.permissions || {}).length,
+          tenantId: request.userContext.tenantId,
+          userEmail: request.userContext.email
+        },
+        ActivityLogger.createRequestContext(request)
+      );
       
       // Parse JSON fields for frontend consumption with error handling
       let permissions = {};
@@ -632,6 +649,21 @@ export default async function roleRoutes(fastify, options) {
       const updatedRole = await permissionService.updateAdvancedRole(tenantId, roleId, updateData);
 
       console.log('✅ Role updated successfully:', updatedRole);
+
+      // Log role update activity
+      await ActivityLogger.logActivity(
+        request.userContext.internalUserId,
+        request.userContext.tenantId,
+        null,
+        ACTIVITY_TYPES.ROLE_UPDATED,
+        {
+          roleId: roleId,
+          updatedFields: Object.keys(updateData),
+          tenantId: request.userContext.tenantId,
+          userEmail: request.userContext.email
+        },
+        ActivityLogger.createRequestContext(request)
+      );
 
       // Get users affected by this role change
       const affectedUsers = await db
@@ -849,13 +881,29 @@ export default async function roleRoutes(fastify, options) {
       const result = await permissionService.deleteRole(
         request.userContext.tenantId,
         roleId,
-        { 
-          force, 
+        {
+          force,
           transferUsersTo,
-          deletedBy: request.userContext.internalUserId 
+          deletedBy: request.userContext.internalUserId
         }
       );
-      
+
+      // Log role deletion activity
+      await ActivityLogger.logActivity(
+        request.userContext.internalUserId,
+        request.userContext.tenantId,
+        null,
+        ACTIVITY_TYPES.ROLE_DELETED,
+        {
+          roleId: roleId,
+          force: force,
+          transferUsersTo: transferUsersTo,
+          tenantId: request.userContext.tenantId,
+          userEmail: request.userContext.email
+        },
+        ActivityLogger.createRequestContext(request)
+      );
+
       return {
         success: true,
         data: result,

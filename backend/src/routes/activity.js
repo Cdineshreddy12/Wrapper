@@ -50,7 +50,8 @@ export default async function activityRoutes(fastify, opts) {
     try {
       // Use the internal user ID, not the Kinde user ID
       const userId = request.user.internalUserId || request.user.userId;
-      
+      console.log('Activity API - User context:', { userId, internalUserId: request.user.internalUserId, userId: request.user.userId });
+
       if (!userId) {
         return reply.code(400).send({
           success: false,
@@ -83,6 +84,7 @@ export default async function activityRoutes(fastify, opts) {
       }
 
       const result = await ActivityLogger.getUserActivity(userId, options);
+      console.log('Activity API - Result for user', userId, ':', result.activities.length, 'activities found');
 
       return reply.send({
         success: true,
@@ -160,6 +162,7 @@ export default async function activityRoutes(fastify, opts) {
       }
 
       const result = await ActivityLogger.getTenantAuditLogs(tenantId, options);
+      console.log('Audit API - Result for tenant', tenantId, ':', result.logs.length, 'logs found');
 
       return reply.send({
         success: true,

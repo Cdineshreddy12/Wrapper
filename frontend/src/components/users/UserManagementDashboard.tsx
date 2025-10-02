@@ -77,6 +77,18 @@ interface Role {
   permissions: Record<string, any>;
 }
 
+interface Entity {
+  entityId: string;
+  entityName: string;
+  entityType: string;
+  hierarchyPath?: string;
+  fullHierarchyPath?: string;
+  parentEntityId?: string | null;
+  displayName?: string;
+  hierarchyLevel?: number;
+  children?: Entity[];
+}
+
 export function UserManagementDashboard() {
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -88,6 +100,12 @@ export function UserManagementDashboard() {
   const [showRoleAssignModal, setShowRoleAssignModal] = useState(false);
   const [assigningUser, setAssigningUser] = useState<User | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+
+  // Entity filtering
+  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const [availableEntities, setAvailableEntities] = useState<Entity[]>([]);
+  const [entitiesLoading, setEntitiesLoading] = useState(false);
+  const [entityHierarchy, setEntityHierarchy] = useState<Entity[]>([]);
   
   // Edit user modal states
   const [showEditModal, setShowEditModal] = useState(false);
@@ -112,30 +130,50 @@ export function UserManagementDashboard() {
   const [sortBy, setSortBy] = useState<'name' | 'email' | 'created' | 'lastLogin'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
-  // Invitation form
+  // Invitation form - Enhanced for multi-entity support
   const [inviteForm, setInviteForm] = useState({
     email: '',
     name: '',
-    roleIds: [] as string[],
-    message: ''
+    entities: [] as Array<{
+      entityId: string;
+      roleId: string;
+      entityType: string;
+      membershipType: string;
+    }>,
+    primaryEntityId: '',
+    message: '',
+    invitationType: 'multi-entity' as 'single-entity' | 'multi-entity'
   });
 
-  // Load users and roles
+  const [entityUserCounts, setEntityUserCounts] = useState<Record<string, number>>({});
+
+  // Entity management state is already declared above
+
+  // Load users, roles, and entities
   useEffect(() => {
     loadRoles();
+    loadEntities();
   }, []);
 
   // Load users after roles are loaded
   useEffect(() => {
     if (roles.length > 0) {
-      loadUsers();
+      loadUsers(selectedEntityId);
     }
-  }, [roles]);
+  }, [roles, selectedEntityId]);
 
-  const loadUsers = async () => {
+  // Load entities when invite modal opens (fallback, entities are now loaded on mount)
+  useEffect(() => {
+    if (showInviteModal && availableEntities.length === 0) {
+      loadEntities();
+    }
+  }, [showInviteModal, availableEntities.length]);
+
+  const loadUsers = async (entityId?: string | null) => {
     setLoading(true);
     try {
-      const response = await api.get('/tenants/current/users');
+      const params = entityId ? { entityId } : {};
+      const response = await api.get('/tenants/current/users', { params });
       if (response.data.success) {
         const userData = response.data.data || [];
         console.log('📊 Raw user data from API:', userData);
@@ -163,13 +201,13 @@ export function UserManagementDashboard() {
           
           // Find the matching role object from the roles array
           let matchedRole = null;
-          if (roleString && roles.length > 0) {
-            matchedRole = roles.find(role => 
-              role.roleName === roleString || 
+          if (roleString && roleString.trim() !== '' && roles.length > 0) {
+            matchedRole = roles.find(role =>
+              role.roleName === roleString ||
               role.roleId === roleString ||
               role.description?.toLowerCase().includes(roleString.toLowerCase())
             );
-            
+
             // Debug role matching
             console.log(`🔍 Role matching for user ${user.email}:`, {
               roleString,
@@ -193,16 +231,16 @@ export function UserManagementDashboard() {
             invitationAcceptedAt: user.invitationAcceptedAt,
             lastLoginAt: user.lastActiveAt || user.lastLoginAt,
             avatar: user.avatar,
-            roles: matchedRole ? [{ 
+            roles: matchedRole ? [{
               roleId: matchedRole.roleId,
               roleName: matchedRole.roleName,
               description: matchedRole.description || '',
               color: matchedRole.color || '#6b7280',
               icon: matchedRole.icon || '👤',
               permissions: matchedRole.permissions || {}
-            }] : roleString ? [{ 
-              // Only create a fallback role if we have a valid roleString and it's not empty
-              roleId: roleString.trim() !== '' ? roleString : null,
+            }] : (roleString && roleString.trim() !== '' && roleString !== 'No role assigned') ? [{
+              // Only create a fallback role if we have a valid roleString and it's not empty or 'No role assigned'
+              roleId: roleString.trim() !== '' && roleString !== 'No role assigned' ? roleString : null,
               roleName: roleString,
               description: 'Role details not available',
               color: '#6b7280',
@@ -244,6 +282,42 @@ export function UserManagementDashboard() {
         })));
         
         setUsers(validUsers);
+
+        // Maintain per-entity user counts to annotate hierarchy options
+        if (!entityId) {
+          const entityCounts: Record<string, number> = {};
+
+          userData.forEach((item: any) => {
+            const membershipIds = new Set<string>();
+
+            if (Array.isArray(item.memberships)) {
+              item.memberships.forEach((membership: any) => {
+                if (membership?.entityId) {
+                  membershipIds.add(String(membership.entityId));
+                }
+              });
+            }
+
+            if (Array.isArray(item.entityMemberships)) {
+              item.entityMemberships.forEach((membership: any) => {
+                if (membership?.entityId) {
+                  membershipIds.add(String(membership.entityId));
+                }
+              });
+            }
+
+            const primaryEntity = item.primaryEntityId || item.primaryOrganizationId || item.user?.primaryOrganizationId;
+            if (primaryEntity) {
+              membershipIds.add(String(primaryEntity));
+            }
+
+            membershipIds.forEach((entityId: string) => {
+              entityCounts[entityId] = (entityCounts[entityId] || 0) + 1;
+            });
+          });
+
+          setEntityUserCounts(entityCounts);
+        }
       } else {
         console.log('❌ API response not successful:', response.data);
         setUsers([]);
@@ -262,7 +336,7 @@ export function UserManagementDashboard() {
       console.log('🔄 Loading roles...');
       const response = await api.get('/permissions/roles');
       console.log('📊 Roles API response:', response.data);
-      
+
       if (response.data.success) {
         // The backend returns: {success: true, data: {data: roleResults, total: ..., page: ..., limit: ...}}
         // So we need to access response.data.data.data (not response.data.data.roles)
@@ -279,29 +353,190 @@ export function UserManagementDashboard() {
     }
   };
 
+  // Helper function to build hierarchical tree
+  const buildEntityTree = (entities: Entity[]): Entity[] => {
+    const entityMap = new Map<string, Entity>();
+    const rootEntities: Entity[] = [];
+
+    // First pass: create map of all entities
+    entities.forEach(entity => {
+      entityMap.set(entity.entityId, { ...entity, children: [] });
+    });
+
+    // Second pass: build hierarchy
+    entities.forEach(entity => {
+      const entityWithChildren = entityMap.get(entity.entityId)!;
+
+      if (entity.parentEntityId && entityMap.has(entity.parentEntityId)) {
+        // Has parent, add to parent's children
+        const parent = entityMap.get(entity.parentEntityId)!;
+        if (!parent.children) parent.children = [];
+        parent.children.push(entityWithChildren);
+      } else {
+        // No parent, it's a root entity
+        rootEntities.push(entityWithChildren);
+      }
+    });
+
+    return rootEntities;
+  };
+
+  // Helper function to flatten hierarchy for dropdown (with indentation)
+  const flattenEntityHierarchy = (entities: Entity[], prefix: string[] = []): Entity[] => {
+    const result: Entity[] = [];
+
+    entities.forEach((entity, index) => {
+      const isLastChild = index === entities.length - 1;
+      const branchPrefix = prefix.join('');
+      const connector = prefix.length === 0 ? '' : isLastChild ? '└─ ' : '├─ ';
+      const indentation = `${branchPrefix}${connector}`;
+
+      result.push({
+        ...entity,
+        displayName: `${indentation}${entity.entityName}`,
+        hierarchyLevel: prefix.length
+      });
+
+      if (entity.children && entity.children.length > 0) {
+        const childPrefix = [...prefix, isLastChild ? '   ' : '│  '];
+        result.push(...flattenEntityHierarchy(entity.children, childPrefix));
+      }
+    });
+
+    return result;
+  };
+
+  const loadEntities = async () => {
+    setEntitiesLoading(true);
+    try {
+      console.log('🔄 Loading organizations for filtering...');
+      // Use organizations hierarchy endpoint which includes both organizations and locations
+      const response = await api.get('/organizations/hierarchy/current');
+      console.log('📊 Organizations API response:', response.data);
+
+      if (response.data.success) {
+        // Handle organizations hierarchy data structure
+        const rawOrganizations = response.data.hierarchy || [];
+        console.log('✅ Raw organizations loaded successfully:', rawOrganizations.length);
+
+        // Flatten the nested hierarchy into a flat array that includes all descendants
+        const flattenOrganizations = (
+          orgs: Array<Record<string, any>>,
+          parentId: string | null = null
+        ): Entity[] => {
+          const result: Entity[] = [];
+
+          orgs.forEach((org) => {
+            const entityId = String(org.organizationId || org.entityId);
+            const mappedOrg: Entity = {
+              entityId,
+              entityName: org.organizationName || org.entityName,
+              entityType: org.entityType || (org.locationType ? 'location' : 'organization'),
+              hierarchyPath: org.hierarchyPath,
+              fullHierarchyPath: org.fullHierarchyPath,
+              parentEntityId: parentId,
+              children: []
+            };
+
+            result.push(mappedOrg);
+
+            if (org.children && Array.isArray(org.children) && org.children.length > 0) {
+              result.push(...flattenOrganizations(org.children, entityId));
+            }
+          });
+
+          return result;
+        };
+
+        const flattenedHierarchy = flattenOrganizations(rawOrganizations);
+
+        // Build hierarchical tree in a single pass
+        const tree = buildEntityTree(flattenedHierarchy);
+        setEntityHierarchy(tree);
+
+        // Flatten for dropdown display
+        const flattened = flattenEntityHierarchy(tree);
+        if (flattened.length === 0) {
+          console.warn('⚠️ No entities available after hierarchy processing');
+          setAvailableEntities([]);
+        } else {
+          setAvailableEntities(flattened);
+        }
+
+        // If an entity is selected but no longer exists in hierarchy, reset filter
+        if (selectedEntityId && !flattenedHierarchy.some((entity) => entity.entityId === selectedEntityId)) {
+          console.warn('⚠️ Selected entity not found in hierarchy, resetting filter');
+          setSelectedEntityId(null);
+        }
+      } else {
+        console.error('❌ Organizations API not successful:', response.data);
+        setAvailableEntities([]);
+        setEntityHierarchy([]);
+      }
+    } catch (error) {
+      console.error('❌ Failed to load organizations:', error);
+      setAvailableEntities([]);
+      setEntityHierarchy([]);
+    } finally {
+      setEntitiesLoading(false);
+    }
+  };
+
   const handleInviteUser = async () => {
     if (!inviteForm.email || !inviteForm.name) {
       toast.error('Email and name are required');
       return;
     }
 
-    try {
-      const response = await api.post('/admin/organizations/current/invite-user', {
-        email: inviteForm.email,
-        name: inviteForm.name,
-        roleIds: inviteForm.roleIds,
-        message: inviteForm.message
-      });
-
-      if (response.data.success) {
-        toast.success(`Invitation sent to ${inviteForm.email}!`);
-        setShowInviteModal(false);
-        setInviteForm({ email: '', name: '', roleIds: [], message: '' });
-        await loadUsers();
+    if (inviteForm.invitationType === 'multi-entity') {
+      // Multi-entity invitation validation
+      if (!inviteForm.entities || inviteForm.entities.length === 0) {
+        toast.error('Please select at least one organization or location');
+        return;
       }
-    } catch (error: any) {
-      console.error('Failed to invite user:', error);
-      toast.error(error.response?.data?.message || 'Failed to send invitation');
+
+      // Validate that each entity has a role assigned
+      const invalidEntities = inviteForm.entities.filter(entity => !entity.roleId);
+      if (invalidEntities.length > 0) {
+        toast.error('Please assign a role to all selected entities');
+        return;
+      }
+
+      // Validate primary entity
+      if (inviteForm.primaryEntityId && !inviteForm.entities.some(e => e.entityId === inviteForm.primaryEntityId)) {
+        toast.error('Primary entity must be one of the selected entities');
+        return;
+      }
+
+      try {
+        const response = await api.post('/invitations/create-multi-entity', {
+          email: inviteForm.email,
+          entities: inviteForm.entities,
+          primaryEntityId: inviteForm.primaryEntityId || inviteForm.entities[0]?.entityId,
+          message: inviteForm.message,
+          name: inviteForm.name || inviteForm.email.split('@')[0]
+        });
+
+        if (response.data.success) {
+          toast.success(`Multi-entity invitation sent to ${inviteForm.email}!`);
+          setShowInviteModal(false);
+          setInviteForm({
+            email: '',
+            name: '',
+            entities: [],
+            primaryEntityId: '',
+            message: '',
+            invitationType: 'multi-entity'
+          });
+          await loadUsers();
+        }
+      } catch (error: any) {
+        console.error('Failed to send multi-entity invitation:', error);
+        toast.error(error.response?.data?.message || 'Failed to send invitation');
+      }
+    } else {
+      // Legacy single-entity invitation (backward compatibility)
+      toast.error('Single-entity invitations are deprecated. Please use multi-entity invitations.');
     }
   };
 
@@ -406,9 +641,9 @@ export function UserManagementDashboard() {
     
     setAssigningUser(user);
     
-    // Filter out invalid role IDs (like 'unknown') and only include valid roles
+    // Filter out invalid role IDs (like 'unknown', 'No role assigned') and only include valid roles
     const validRoleIds = user.roles
-      ?.filter(role => role.roleId && role.roleId !== 'unknown' && typeof role.roleId === 'string')
+      ?.filter(role => role.roleId && role.roleId !== 'unknown' && role.roleId !== 'No role assigned' && typeof role.roleId === 'string')
       ?.map(r => r.roleId) || [];
     
     console.log('🔧 Setting selected roles:', {
@@ -425,10 +660,11 @@ export function UserManagementDashboard() {
     if (!assigningUser) return;
 
     // Filter out any invalid role IDs before sending to backend
-    const validRoleIds = selectedRoles.filter(roleId => 
-      roleId && 
-      roleId !== 'unknown' && 
-      typeof roleId === 'string' && 
+    const validRoleIds = selectedRoles.filter(roleId =>
+      roleId &&
+      roleId !== 'unknown' &&
+      roleId !== 'No role assigned' &&
+      typeof roleId === 'string' &&
       roleId.trim() !== ''
     );
 
@@ -846,12 +1082,81 @@ export function UserManagementDashboard() {
         </div>
       </div>
 
+      {/* Entity Filter */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Building className="w-4 h-4 text-gray-600" />
+            <span className="text-sm font-medium text-gray-700">Filter by Organization:</span>
+          </div>
+          <Select value={selectedEntityId || "all"} onValueChange={(value) => setSelectedEntityId(value === "all" ? null : value)}>
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="All Organizations" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Organizations</SelectItem>
+              {availableEntities.map((entity) => (
+                <SelectItem key={entity.entityId} value={entity.entityId}>
+                  <div className="flex items-center gap-2 w-full">
+                    <div className="flex-1 text-left">
+                      <div className="flex items-center gap-2">
+                        <Building className="w-3 h-3 flex-shrink-0" />
+                        <span className="font-mono">
+                          {entity.displayName || entity.entityName}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                        <Badge variant="outline" className="flex-shrink-0">
+                          {entity.entityType}
+                        </Badge>
+                        {entityUserCounts[entity.entityId] !== undefined && (
+                          <span>
+                            {entityUserCounts[entity.entityId]} user
+                            {entityUserCounts[entity.entityId] === 1 ? '' : 's'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectedEntityId && (
+            <button
+              onClick={() => setSelectedEntityId(null)}
+              className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+            >
+              <X className="w-3 h-3" />
+              Clear filter
+            </button>
+          )}
+          <button
+            onClick={() => loadEntities()}
+            disabled={entitiesLoading}
+            className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3 h-3 ${entitiesLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
+        {selectedEntityId && (
+          <div className="mt-2 text-sm text-gray-600">
+            Showing users for: <span className="font-medium">
+              {availableEntities.find(e => e.entityId === selectedEntityId)?.entityName || 'Unknown Organization'}
+            </span>
+          </div>
+        )}
+      </div>
+
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-6 rounded-xl border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Users</p>
+              <p className="text-sm font-medium text-gray-600">
+                Total Users {selectedEntityId ? '(Filtered)' : ''}
+              </p>
               <p className="text-2xl font-bold text-gray-900">{users.length}</p>
             </div>
             <Users className="w-8 h-8 text-blue-600" />
@@ -1028,7 +1333,7 @@ export function UserManagementDashboard() {
         emptyMessage="No users found matching your filters"
       />
 
-      {/* Invite User Modal */}
+      {/* Enhanced Invite User Modal */}
       <InviteUserModal
         isOpen={showInviteModal}
         onClose={() => setShowInviteModal(false)}
@@ -1036,6 +1341,8 @@ export function UserManagementDashboard() {
         inviteForm={inviteForm}
         setInviteForm={setInviteForm}
         onInvite={handleInviteUser}
+        availableEntities={availableEntities}
+        entitiesLoading={entitiesLoading}
       />
 
       {/* User Details Modal */}
@@ -1393,14 +1700,16 @@ const UserRow = ({
   );
 };
 
-// Invite User Modal Component
-const InviteUserModal = ({ 
-  isOpen, 
-  onClose, 
-  roles, 
-  inviteForm, 
-  setInviteForm, 
-  onInvite 
+// Enhanced Invite User Modal Component with Multi-Entity Support
+const InviteUserModal = ({
+  isOpen,
+  onClose,
+  roles,
+  inviteForm,
+  setInviteForm,
+  onInvite,
+  availableEntities,
+  entitiesLoading
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -1408,14 +1717,72 @@ const InviteUserModal = ({
   inviteForm: any;
   setInviteForm: (form: any) => void;
   onInvite: () => void;
+  availableEntities: any[];
+  entitiesLoading: boolean;
 }) => {
   if (!isOpen) return null;
 
+  // Flatten entities for easier selection (recursive function)
+  const flattenEntities = (entities: any[], level = 0): any[] => {
+    let result: any[] = [];
+    entities.forEach(entity => {
+      result.push({ ...entity, displayLevel: level });
+      if (entity.children && entity.children.length > 0) {
+        result = result.concat(flattenEntities(entity.children, level + 1));
+      }
+    });
+    return result;
+  };
+
+  const flattenedEntities = flattenEntities(availableEntities);
+
+  const handleEntityToggle = (entityId: string, entityType: string) => {
+    const isSelected = inviteForm.entities.some((e: any) => e.entityId === entityId);
+
+    if (isSelected) {
+      // Remove entity
+      setInviteForm((prev: any) => ({
+        ...prev,
+        entities: prev.entities.filter((e: any) => e.entityId !== entityId),
+        primaryEntityId: prev.primaryEntityId === entityId ? '' : prev.primaryEntityId
+      }));
+    } else {
+      // Add entity
+      setInviteForm((prev: any) => ({
+        ...prev,
+        entities: [...prev.entities, {
+          entityId,
+          roleId: '',
+          entityType,
+          membershipType: 'direct'
+        }]
+      }));
+    }
+  };
+
+  const handleEntityRoleChange = (entityId: string, roleId: string) => {
+    setInviteForm((prev: any) => ({
+      ...prev,
+      entities: prev.entities.map((e: any) =>
+        e.entityId === entityId ? { ...e, roleId } : e
+      )
+    }));
+  };
+
+  const isEntitySelected = (entityId: string) => {
+    return inviteForm.entities.some((e: any) => e.entityId === entityId);
+  };
+
+  const getSelectedEntityRole = (entityId: string) => {
+    const entity = inviteForm.entities.find((e: any) => e.entityId === entityId);
+    return entity?.roleId || '';
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-gray-900">Invite User</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Invite User to Organizations & Locations</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-lg"
@@ -1424,80 +1791,164 @@ const InviteUserModal = ({
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email Address *
-            </label>
-            <input
-              type="email"
-              value={inviteForm.email}
-              onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="user@example.com"
-            />
-          </div>
+        <div className="p-6 space-y-6">
+          {/* Basic User Information */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Email Address *
+              </label>
+              <input
+                type="email"
+                value={inviteForm.email}
+                onChange={(e) => setInviteForm((prev: any) => ({ ...prev, email: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="user@example.com"
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Full Name *
-            </label>
-            <input
-              type="text"
-              value={inviteForm.name}
-              onChange={(e) => setInviteForm(prev => ({ ...prev, name: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="John Doe"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Assign Roles (Optional)
-            </label>
-            <div className="space-y-2 max-h-32 overflow-y-auto">
-              {roles.map(role => (
-                <label key={role.roleId} className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={inviteForm.roleIds.includes(role.roleId)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setInviteForm(prev => ({ 
-                          ...prev, 
-                          roleIds: [...prev.roleIds, role.roleId] 
-                        }));
-                      } else {
-                        setInviteForm(prev => ({ 
-                          ...prev, 
-                          roleIds: prev.roleIds.filter((id: string) => id !== role.roleId) 
-                        }));
-                      }
-                    }}
-                    className="w-4 h-4"
-                  />
-                  <div className="flex items-center gap-2">
-                    <span style={{ color: role.color }}>{role.icon}</span>
-                    <span className="text-sm">{role.roleName}</span>
-                  </div>
-                </label>
-              ))}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Full Name *
+              </label>
+              <input
+                type="text"
+                value={inviteForm.name}
+                onChange={(e) => setInviteForm((prev: any) => ({ ...prev, name: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="John Doe"
+              />
             </div>
           </div>
 
+          {/* Entity Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Select Organizations & Locations *
+            </label>
+
+            {entitiesLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <span className="ml-2 text-gray-600">Loading organizations...</span>
+              </div>
+            ) : flattenedEntities.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                No organizations available. Please create organizations first.
+              </div>
+            ) : (
+              <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
+                {flattenedEntities.map((entity) => (
+                  <div
+                    key={entity.entityId}
+                    className={`border-b border-gray-100 last:border-b-0 ${
+                      isEntitySelected(entity.entityId) ? 'bg-blue-50' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center p-3">
+                      <input
+                        type="checkbox"
+                        checked={isEntitySelected(entity.entityId)}
+                        onChange={() => handleEntityToggle(entity.entityId, entity.entityType)}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                      />
+
+                      <div className="ml-3 flex-1">
+                        <div className="flex items-center">
+                          <div style={{ marginLeft: `${entity.displayLevel * 20}px` }}>
+                            {entity.displayLevel > 0 && <span className="text-gray-400 mr-2">└─</span>}
+                            <span className="font-medium text-gray-900">{entity.entityName}</span>
+                            <Badge variant="outline" className="ml-2 text-xs">
+                              {entity.entityType}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        {isEntitySelected(entity.entityId) && (
+                          <div className="mt-2 ml-6">
+                            <select
+                              value={getSelectedEntityRole(entity.entityId)}
+                              onChange={(e) => handleEntityRoleChange(entity.entityId, e.target.value)}
+                              className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-blue-500"
+                            >
+                              <option value="">Select Role</option>
+                              {roles.map((role) => (
+                                <option key={role.roleId} value={role.roleId}>
+                                  {role.roleName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+
+                      {isEntitySelected(entity.entityId) && (
+                        <input
+                          type="radio"
+                          name="primaryEntity"
+                          checked={inviteForm.primaryEntityId === entity.entityId}
+                          onChange={() => setInviteForm((prev: any) => ({ ...prev, primaryEntityId: entity.entityId }))}
+                          className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                          title="Set as primary organization"
+                        />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p className="text-xs text-gray-500 mt-2">
+              • Select organizations and locations where the user should have access<br/>
+              • Assign appropriate roles for each selected entity<br/>
+              • Choose one entity as the user's primary organization (marked with radio button)
+            </p>
+          </div>
+
+          {/* Selected Entities Summary */}
+          {inviteForm.entities.length > 0 && (
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-2">Selected Entities Summary</h4>
+              <div className="space-y-1">
+                {inviteForm.entities.map((entity: any) => {
+                  const entityData = flattenedEntities.find(e => e.entityId === entity.entityId);
+                  const roleData = roles.find(r => r.roleId === entity.roleId);
+                  return (
+                    <div key={entity.entityId} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center">
+                        <span className="font-medium">{entityData?.entityName}</span>
+                        <Badge variant="outline" className="ml-2 text-xs">
+                          {entityData?.entityType}
+                        </Badge>
+                        {inviteForm.primaryEntityId === entity.entityId && (
+                          <Badge className="ml-2 text-xs bg-blue-600">Primary</Badge>
+                        )}
+                      </div>
+                      <span className="text-gray-600">
+                        {roleData?.roleName || 'No role selected'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Personal Message */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Personal Message (Optional)
             </label>
             <textarea
               value={inviteForm.message}
-              onChange={(e) => setInviteForm(prev => ({ ...prev, message: e.target.value }))}
+              onChange={(e) => setInviteForm((prev: any) => ({ ...prev, message: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               rows={3}
               placeholder="Welcome to our team! We're excited to have you join us."
             />
           </div>
 
+          {/* Action Buttons */}
           <div className="flex gap-3 pt-4">
             <button
               onClick={onClose}
@@ -1507,9 +1958,10 @@ const InviteUserModal = ({
             </button>
             <button
               onClick={onInvite}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              disabled={!inviteForm.email || !inviteForm.name || inviteForm.entities.length === 0}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Send Invitation
+              Send Multi-Entity Invitation
             </button>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Coins, AlertTriangle, TrendingUp, Calendar, RefreshCw } from 'lucide-react';
-import { creditAPI, setKindeTokenGetter, api } from '@/lib/api';
+import { creditAPI } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
@@ -15,6 +15,21 @@ interface CreditBalanceProps {
   showUsageStats?: boolean;
   compact?: boolean;
   onPurchaseClick?: () => void;
+}
+
+interface CreditAllocation {
+  allocationId: string;
+  tenantId: string;
+  sourceEntityId: string;
+  targetApplication: string;
+  allocatedCredits: number;
+  usedCredits: number;
+  availableCredits: number;
+  allocationType: string;
+  allocationPurpose?: string;
+  allocatedAt: string;
+  expiresAt?: string;
+  autoReplenish: boolean;
 }
 
 export function CreditBalance({
@@ -41,10 +56,7 @@ export function CreditBalance({
   });
 
   // Fetch usage summary
-  const {
-    data: usageData,
-    isLoading: usageLoading
-  } = useQuery({
+  const { data: usageData } = useQuery({
     queryKey: ['credit', 'usage'],
     queryFn: async () => {
       const response = await creditAPI.getUsageSummary();
@@ -119,7 +131,8 @@ export function CreditBalance({
     creditExpiry,
     alerts = [],
     usageThisPeriod = 0,
-    periodType = 'month'
+    periodType = 'month',
+    applicationAllocations // New field for application allocations
   } = creditData;
 
   const usagePercentage = totalCredits > 0 ? (usageThisPeriod / totalCredits) * 100 : 0;
@@ -310,6 +323,82 @@ export function CreditBalance({
                 <div className="text-sm text-gray-600">Net Balance</div>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Application Credit Allocations */}
+      {applicationAllocations && applicationAllocations.summary && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Coins className="h-5 w-5" />
+              Application Credit Allocations
+            </CardTitle>
+            <CardDescription>
+              Credits allocated to specific applications
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Summary Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">
+                  {applicationAllocations?.summary?.totalAllocations ?? 0}
+                </div>
+                <div className="text-sm text-gray-600">Active Allocations</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-purple-600">
+                  {(applicationAllocations?.summary?.totalAllocatedCredits ?? 0).toFixed(2)}
+                </div>
+                <div className="text-sm text-gray-600">Total Allocated</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-red-600">
+                  {(applicationAllocations?.summary?.totalUsedCredits ?? 0).toFixed(2)}
+                </div>
+                <div className="text-sm text-gray-600">Total Used</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">
+                  {(applicationAllocations?.summary?.totalAvailableCredits ?? 0).toFixed(2)}
+                </div>
+                <div className="text-sm text-gray-600">Available</div>
+              </div>
+            </div>
+
+            {/* Application Breakdown */}
+            {applicationAllocations.allocations && applicationAllocations.allocations.length > 0 && (
+              <div>
+                <h4 className="font-medium mb-3">By Application</h4>
+                <div className="grid gap-3">
+                  {applicationAllocations.allocations.map((allocation: CreditAllocation) => (
+                    <div key={allocation.targetApplication} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                        <div>
+                          <div className="font-medium capitalize">{allocation.targetApplication}</div>
+                          <div className="text-sm text-gray-500">
+                            {allocation.allocationPurpose || 'No purpose specified'}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-medium">
+                          <span className="text-green-600">{(allocation.availableCredits ?? 0).toFixed(2)}</span>
+                          <span className="text-gray-400"> / </span>
+                          <span className="text-purple-600">{(allocation.allocatedCredits ?? 0).toFixed(2)}</span>
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {(allocation.usedCredits ?? 0).toFixed(2)} used
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

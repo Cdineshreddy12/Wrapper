@@ -3,6 +3,7 @@ import { getUserPermissions } from '../middleware/permission-middleware.js';
 import { eq, and, gte, desc, count } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { tenantUsers, userRoleAssignments, customRoles } from '../db/schema/index.js';
+import ActivityLogger, { ACTIVITY_TYPES, RESOURCE_TYPES } from '../services/activityLogger.js';
 
 export default async function userRoutes(fastify, options) {
   // Get current user profile
@@ -109,6 +110,20 @@ export default async function userRoutes(fastify, options) {
         ))
         .returning();
 
+      // Log profile update activity
+      await ActivityLogger.logActivity(
+        request.userContext.internalUserId,
+        request.userContext.tenantId,
+        null,
+        ACTIVITY_TYPES.USER_PROFILE_UPDATED,
+        {
+          updatedFields: Object.keys(request.body),
+          userId: request.userContext.internalUserId,
+          userEmail: request.userContext.email
+        },
+        ActivityLogger.createRequestContext(request)
+      );
+
       return {
         success: true,
         data: updatedUser,
@@ -203,6 +218,20 @@ export default async function userRoutes(fastify, options) {
           eq(tenantUsers.userId, request.userContext.internalUserId)
         ))
         .returning();
+
+      // Log onboarding completion activity
+      await ActivityLogger.logActivity(
+        request.userContext.internalUserId,
+        request.userContext.tenantId,
+        null,
+        ACTIVITY_TYPES.USER_ACTIVATED,
+        {
+          action: 'onboarding_completed',
+          userId: request.userContext.internalUserId,
+          userEmail: request.userContext.email
+        },
+        ActivityLogger.createRequestContext(request)
+      );
 
       return {
         success: true,

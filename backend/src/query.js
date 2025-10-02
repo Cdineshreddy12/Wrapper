@@ -1,18 +1,14 @@
-import { creditConfigurations } from './db/schema/credit_configurations.js';
-import { eq, sql } from 'drizzle-orm';
+import { entities } from './db/schema/unified-entities.js';
 import { systemDbConnection } from './db/index.js';
 async function retrieveCreditConfigurations() {
   try {
    
     //fetched all the global credit configurations
       const result = await systemDbConnection 
-      .select().from(creditConfigurations)
-      .where(eq(creditConfigurations. isGlobal, true));
+      .select().from(entities)
 
-      //i want to find the duplicate operation codes in the result
-      const duplicateOperationCodes = result.filter((item, index, self) =>
-        self.findIndex(t => t.operationCode === item.operationCode) !== index
-      );
+      console.log('✅ Result:', result);
+    
 
       // //i want to update the global credit configurations costs of all operations in lead module
       // const updatedResult = await systemDbConnection
@@ -22,7 +18,7 @@ async function retrieveCreditConfigurations() {
       //   .where(eq(creditConfigurations.isGlobal, true))
       //   .returning();
       // console.log('✅ Updated result:', updatedResult);
-      console.log('✅ Duplicate operation codes:', duplicateOperationCodes);
+     
 
   } catch (error) {
     console.error('❌ Error fetching credit configurations:', error);

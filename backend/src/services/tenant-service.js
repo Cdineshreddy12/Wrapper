@@ -1,16 +1,18 @@
 import { eq, and, desc, count } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { 
-  tenants, 
-  tenantInvitations, 
+import {
+  tenants,
+  tenantInvitations,
   subscriptions,
   tenantUsers,
   customRoles,
-  userRoleAssignments
+  userRoleAssignments,
+  organizationMemberships,
+  entities
 } from '../db/schema/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { KindeService } from './kinde-service.js';
-import { EmailService } from '../utils/email.js';
+import EmailService from '../utils/email.js';
 import { SubscriptionService } from './subscription-service.js';
 import { sql } from 'drizzle-orm';
 import { inArray } from 'drizzle-orm';
@@ -278,6 +280,30 @@ export class TenantService {
         throw new Error('User is already a member of this organization');
       }
 
+      // Normalize multi-entity payload if present
+      let invitationScope = 'tenant';
+      let targetEntities = [];
+      let primaryEntityId = null;
+
+      if (Array.isArray(data.entities) && data.entities.length > 0) {
+        invitationScope = 'multi-entity';
+        targetEntities = data.entities
+          .filter(entity => entity?.entityId)
+          .map(entity => ({
+            entityId: entity.entityId,
+            roleId: entity.roleId || null,
+            entityType: entity.entityType || null,
+            membershipType: entity.membershipType || 'direct'
+          }));
+
+        primaryEntityId = data.primaryEntityId || targetEntities[0]?.entityId || null;
+      } else if (data.primaryEntityId) {
+        invitationScope = 'organization';
+        primaryEntityId = data.primaryEntityId;
+      } else if (data.roleId) {
+        invitationScope = 'tenant';
+      }
+
       // Create invitation
       const [invitation] = await db.insert(tenantInvitations).values({
         tenantId: data.tenantId,
@@ -286,6 +312,10 @@ export class TenantService {
         invitedBy: data.invitedBy,
         invitationToken,
         expiresAt,
+        invitationScope,
+        primaryEntityId,
+        targetEntities,
+        updatedAt: new Date()
       }).returning();
 
       // Get tenant and role details for email
@@ -304,24 +334,96 @@ export class TenantService {
         .limit(1);
 
       // Send invitation email
+      console.log(`📧 Preparing to send invitation email to ${data.email}`);
       try {
-        await EmailService.sendUserInvitation({
+        const roleName = Array.isArray(targetEntities) && targetEntities.length > 0
+          ? 'Multi-entity Member'
+          : role?.roleName || 'Team Member';
+
+        // Get organization and location names for the email
+        let organizations = [];
+        let locations = [];
+
+        if (Array.isArray(targetEntities) && targetEntities.length > 0) {
+          for (const entity of targetEntities) {
+            if (entity.entityId) {
+              const [entityRecord] = await db
+                .select({
+                  entityId: entities.entityId,
+                  entityName: entities.entityName,
+                  entityType: entities.entityType
+                })
+                .from(entities)
+                .where(eq(entities.entityId, entity.entityId))
+                .limit(1);
+
+              if (entityRecord) {
+                if (entityRecord.entityType === 'organization') {
+                  organizations.push(entityRecord.entityName);
+                } else if (entityRecord.entityType === 'location') {
+                  locations.push(entityRecord.entityName);
+                }
+              }
+            }
+          }
+        } else if (primaryEntityId) {
+          // For single-entity invitations, get the entity name
+          const [entityRecord] = await db
+            .select({
+              entityName: entities.entityName,
+              entityType: entities.entityType
+            })
+            .from(entities)
+            .where(eq(entities.entityId, primaryEntityId))
+            .limit(1);
+
+          if (entityRecord) {
+            if (entityRecord.entityType === 'organization') {
+              organizations.push(entityRecord.entityName);
+            } else if (entityRecord.entityType === 'location') {
+              locations.push(entityRecord.entityName);
+            }
+          }
+        }
+
+        console.log(`📧 Email details:`, {
           email: data.email,
           tenantName: tenant.companyName,
-          roleName: role.roleName,
+          roleName,
+          invitationToken: invitationToken.substring(0, 8) + '...',
+          invitedByName: inviter?.name || 'Team Administrator',
+          hasMessage: !!data.message,
+          organizations: organizations.length,
+          locations: locations.length,
+          invitedDate: invitation.createdAt,
+          expiryDate: invitation.expiresAt
+        });
+
+        const emailResult = await EmailService.sendUserInvitation({
+          email: data.email,
+          tenantName: tenant.companyName,
+          roleName,
           invitationToken,
           invitedByName: inviter?.name || 'Team Administrator',
           message: data.message,
+          invitedDate: invitation.createdAt,
+          expiryDate: invitation.expiresAt,
+          organizations: organizations.length > 0 ? organizations : undefined,
+          locations: locations.length > 0 ? locations : undefined,
         });
-        
-        console.log(`✅ Invitation email sent successfully to ${data.email}`);
+
+        console.log(`✅ Invitation email sent successfully to ${data.email}:`, emailResult);
       } catch (emailError) {
-        console.error(`❌ Failed to send invitation email to ${data.email}:`, emailError.message);
-        
+        console.error(`❌ Failed to send invitation email to ${data.email}:`, {
+          error: emailError.message,
+          stack: emailError.stack,
+          response: emailError.response?.data
+        });
+
         // Don't fail the entire invitation process if email fails
         // The invitation is still created and can be resent later
         console.log(`⚠️ Invitation created but email failed. Token: ${invitationToken}`);
-        
+
         // You might want to queue this for retry or notify admins
         // For now, we'll continue with the invitation creation
       }
@@ -365,12 +467,81 @@ export class TenantService {
           isVerified: true,
         }).returning();
 
-        // Assign role
-        await tx.insert(userRoleAssignments).values({
-          userId: user.userId,
-          roleId: invitation.roleId,
-          assignedBy: invitation.invitedBy,
-        });
+        // Assign role if available
+        if (invitation.roleId) {
+          await tx.insert(userRoleAssignments).values({
+            userId: user.userId,
+            roleId: invitation.roleId,
+            assignedBy: invitation.invitedBy,
+          });
+        }
+
+        // Handle multi-entity or scoped invitations
+        if (invitation.targetEntities && invitation.targetEntities.length > 0) {
+          for (const entity of invitation.targetEntities) {
+            if (!entity.entityId) continue;
+
+            await tx.insert(organizationMemberships).values({
+              userId: user.userId,
+              tenantId: invitation.tenantId,
+              entityId: entity.entityId,
+              entityType: entity.entityType || 'organization',
+              roleId: entity.roleId || invitation.roleId,
+              membershipType: entity.membershipType || 'direct',
+              membershipStatus: 'active',
+              isPrimary: invitation.primaryEntityId === entity.entityId,
+              canAccessSubEntities: true,
+              invitedBy: invitation.invitedBy,
+              invitedAt: invitation.createdAt,
+              joinedAt: new Date(),
+              createdBy: invitation.invitedBy,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            });
+
+            // Assign scoped role if provided
+            if (entity.roleId) {
+              await tx.insert(userRoleAssignments).values({
+                userId: user.userId,
+                roleId: entity.roleId,
+                assignedBy: invitation.invitedBy,
+                organizationId: entity.entityType === 'organization' ? entity.entityId : null,
+                locationId: entity.entityType === 'location' ? entity.entityId : null,
+                scope: entity.entityType === 'location' ? 'location' : 'organization'
+              });
+            }
+          }
+        } else if (invitation.primaryEntityId) {
+          // Legacy single-entity invitation - create membership and scoped role
+          await tx.insert(organizationMemberships).values({
+            userId: user.userId,
+            tenantId: invitation.tenantId,
+            entityId: invitation.primaryEntityId,
+            entityType: 'organization',
+            roleId: invitation.roleId,
+            membershipType: 'direct',
+            membershipStatus: 'active',
+            isPrimary: true,
+            canAccessSubEntities: true,
+            invitedBy: invitation.invitedBy,
+            invitedAt: invitation.createdAt,
+            joinedAt: new Date(),
+            createdBy: invitation.invitedBy,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+        }
+
+        // Update user's primary organization if specified
+        if (invitation.primaryEntityId) {
+          await tx
+            .update(tenantUsers)
+            .set({
+              primaryOrganizationId: invitation.primaryEntityId,
+              updatedAt: new Date()
+            })
+            .where(eq(tenantUsers.userId, user.userId));
+        }
 
         // Update invitation status
         await tx
@@ -380,6 +551,20 @@ export class TenantService {
             acceptedAt: new Date(),
           })
           .where(eq(tenantInvitations.invitationId, invitation.invitationId));
+
+        // Trigger Kinde organization assignment asynchronously (best effort)
+        const tenant = await this.getTenantDetails(invitation.tenantId);
+        if (tenant?.kindeOrgId && kindeService?.addUserToOrganization) {
+          kindeService.addUserToOrganization(kindeUserId, tenant.kindeOrgId, { exclusive: true })
+            .then(result => {
+              if (!result?.success) {
+                console.warn('⚠️ Kinde org assignment reported failure:', result?.error || result?.message);
+              }
+            })
+            .catch(err => {
+              console.warn('⚠️ Failed to assign user to Kinde organization:', err.message);
+            });
+        }
 
         return user;
       });
@@ -628,8 +813,8 @@ export class TenantService {
 
       // Get roles for users and invitations
       const roleIds = [
-        ...(userRoleData || []).map(ur => ur.roleId),
-        ...(pendingInvitations || []).map(i => i.roleId).filter(Boolean)
+        ...(userRoleData || []).filter(ur => ur && ur.roleId).map(ur => ur.roleId),
+        ...(pendingInvitations || []).filter(i => i && i.roleId).map(i => i.roleId)
       ].filter(Boolean);
 
       const roles = roleIds.length > 0 ? await db
@@ -642,20 +827,24 @@ export class TenantService {
         .from(customRoles)
         .where(inArray(customRoles.roleId, roleIds)) : [];
 
-      const roleMap = new Map((roles || []).map(r => [r.roleId, r]));
-      const userRoleMap = new Map((userRoleData || []).map(ur => [ur.userId, ur.roleId]));
+      const roleMap = new Map((roles || []).filter(r => r && r.roleId).map(r => [r.roleId, r]));
+      const userRoleMap = new Map((userRoleData || []).filter(ur => ur && ur.userId && ur.roleId).map(ur => [ur.userId, ur.roleId]));
 
       // Format active users
       const formattedUsers = activeUsers.map(user => {
+        if (!user || !user.userId || !user.email) {
+          return null;
+        }
+
         const userRoleId = userRoleMap.get(user.userId);
         const role = userRoleId ? roleMap.get(userRoleId) : null;
         return {
           id: user.userId,
           email: user.email,
-          firstName: user.name.split(' ')[0] || user.email.split('@')[0],
-          lastName: user.name.split(' ').slice(1).join(' ') || '',
+          firstName: user.name?.split(' ')[0] || user.email.split('@')[0],
+          lastName: user.name?.split(' ').slice(1).join(' ') || '',
           role: role?.roleName || 'No role assigned',
-          isActive: user.isActive,
+          isActive: user.isActive !== false, // Default to true if undefined
           invitationStatus: 'active',
           invitedAt: user.invitedAt || user.createdAt,
           expiresAt: null,
@@ -689,10 +878,14 @@ export class TenantService {
             role: role
           }
         };
-      });
+      }).filter(user => user !== null);
 
       // Format pending invitations
       const formattedInvitations = pendingInvitations.map(invitation => {
+        if (!invitation || !invitation.invitationId || !invitation.email) {
+          return null;
+        }
+
         const role = invitation.roleId ? roleMap.get(invitation.roleId) : null;
         return {
           id: `inv_${invitation.invitationId}`,
@@ -728,7 +921,7 @@ export class TenantService {
             role: role
           }
         };
-      });
+      }).filter(invitation => invitation !== null);
 
       // Combine and return
       const allUsers = [...formattedUsers, ...formattedInvitations];
@@ -739,6 +932,360 @@ export class TenantService {
     } catch (error) {
       console.error('❌ Error getting tenant users:', error);
       throw error;
+    }
+  }
+
+  // Get users filtered by entity (organization/location/department)
+  static async getTenantUsersByEntity(tenantId, entityId) {
+    try {
+      console.log('🔍 Getting users for tenant and entity:', { tenantId, entityId });
+
+      // If no entityId provided, return all users
+      if (!entityId) {
+        console.log('📋 No entityId provided, returning all tenant users');
+        return await this.getTenantUsers(tenantId);
+      }
+
+      // Get all child entities for hierarchical filtering
+      const childEntities = await this.getEntityChildren(entityId);
+      const allRelevantEntities = new Set([entityId, ...childEntities]);
+
+      console.log('📋 Entity hierarchy:', {
+        entityId,
+        childEntities: Array.from(childEntities),
+        totalRelevantEntities: allRelevantEntities.size
+      });
+
+      // Try to get users through organization memberships
+      let entityUserIds = new Set();
+
+      try {
+        const memberships = await db
+          .select({
+            userId: organizationMemberships.userId,
+            entityId: organizationMemberships.entityId,
+            membershipStatus: organizationMemberships.membershipStatus,
+            canAccessSubEntities: organizationMemberships.canAccessSubEntities
+          })
+          .from(organizationMemberships)
+          .where(and(
+            eq(organizationMemberships.tenantId, tenantId),
+            eq(organizationMemberships.membershipStatus, 'active'),
+            inArray(organizationMemberships.entityId, Array.from(allRelevantEntities))
+          ));
+
+        console.log(`📋 Found ${memberships.length} organization memberships for entity hierarchy`);
+
+        // Collect user IDs from memberships
+        memberships.forEach(membership => {
+          entityUserIds.add(membership.userId);
+        });
+
+      } catch (membershipError) {
+        console.warn('⚠️ Could not query organization memberships:', membershipError.message);
+        console.log('🔄 Falling back to alternative entity-user association methods');
+      }
+
+      // If no users found through memberships, try alternative approaches
+      if (entityUserIds.size === 0) {
+        console.log('📋 No users found through organization memberships, trying alternative methods');
+
+        // Method 1: Check if users have this entity as their primary organization
+        try {
+          const primaryOrgUsers = await db
+            .select({ userId: tenantUsers.userId })
+            .from(tenantUsers)
+            .where(and(
+              eq(tenantUsers.tenantId, tenantId),
+              eq(tenantUsers.primaryOrganizationId, entityId)
+            ));
+
+          primaryOrgUsers.forEach(user => entityUserIds.add(user.userId));
+          console.log(`📋 Found ${primaryOrgUsers.length} users with this entity as primary organization`);
+        } catch (primaryError) {
+          console.warn('⚠️ Could not check primary organizations:', primaryError.message);
+        }
+
+        // Method 2: Check tenant invitations that target this entity
+        try {
+          const invitationUsers = await db
+            .select({ invitedBy: tenantInvitations.invitedBy })
+            .from(tenantInvitations)
+            .where(and(
+              eq(tenantInvitations.tenantId, tenantId),
+              sql`${tenantInvitations.targetEntities}::jsonb ? ${entityId}`
+            ));
+
+          // Add the users who were invited to this entity
+          for (const invitation of invitationUsers) {
+            if (invitation.invitedBy) {
+              // Also add the invited users by finding them through the invitation
+              const invitedUsers = await db
+                .select({ userId: tenantUsers.userId })
+                .from(tenantUsers)
+                .where(and(
+                  eq(tenantUsers.tenantId, tenantId),
+                  eq(tenantUsers.email, invitation.invitedBy) // This might not be correct, but it's a fallback
+                ));
+
+              invitedUsers.forEach(user => entityUserIds.add(user.userId));
+            }
+          }
+        } catch (invitationError) {
+          console.warn('⚠️ Could not check tenant invitations:', invitationError.message);
+        }
+      }
+
+      // If we still have no users, return all users as fallback
+      if (entityUserIds.size === 0) {
+        console.log('⚠️ No users found for entity, returning all tenant users as fallback');
+        return await this.getTenantUsers(tenantId);
+      }
+
+      console.log(`📊 Found ${entityUserIds.size} users associated with entity ${entityId}`);
+
+      // Ensure we have valid user IDs before querying
+      const validUserIds = Array.from(entityUserIds).filter(id => id && typeof id === 'string');
+      if (validUserIds.length === 0) {
+        console.log('⚠️ No valid user IDs found for entity, returning all tenant users as fallback');
+        return await this.getTenantUsers(tenantId);
+      }
+
+      console.log(`📋 Querying ${validUserIds.length} valid user IDs`);
+
+      // Get the actual user data for these users
+      let users = [];
+      try {
+        users = await db
+          .select({
+            userId: tenantUsers.userId,
+            tenantId: tenantUsers.tenantId,
+            kindeUserId: tenantUsers.kindeUserId,
+            email: tenantUsers.email,
+            name: tenantUsers.name,
+            avatar: tenantUsers.avatar,
+            title: tenantUsers.title,
+            department: tenantUsers.department,
+            isActive: tenantUsers.isActive,
+            isVerified: tenantUsers.isVerified,
+            isTenantAdmin: tenantUsers.isTenantAdmin,
+            invitedAt: tenantUsers.invitedAt,
+            lastActiveAt: tenantUsers.lastActiveAt,
+            lastLoginAt: tenantUsers.lastLoginAt,
+            loginCount: tenantUsers.loginCount,
+            preferences: tenantUsers.preferences,
+            onboardingCompleted: tenantUsers.onboardingCompleted,
+            onboardingStep: tenantUsers.onboardingStep,
+            createdAt: tenantUsers.createdAt,
+            updatedAt: tenantUsers.updatedAt,
+            primaryOrganizationId: tenantUsers.primaryOrganizationId
+          })
+          .from(tenantUsers)
+          .where(and(
+            eq(tenantUsers.tenantId, tenantId),
+            inArray(tenantUsers.userId, validUserIds)
+          ))
+          .orderBy(desc(tenantUsers.createdAt));
+
+        console.log(`✅ Successfully retrieved ${users.length} users from database`);
+      } catch (userQueryError) {
+        console.error('❌ Error querying users from database:', userQueryError);
+        console.log('🔄 Falling back to all tenant users');
+        return await this.getTenantUsers(tenantId);
+      }
+
+      // Get roles for these users (only if we have users)
+      let userRoles = [];
+      if (users.length > 0) {
+        const userIdsForRoles = users.map(u => u.userId).filter(id => id && typeof id === 'string');
+        if (userIdsForRoles.length > 0) {
+          try {
+            userRoles = await db
+              .select({
+                userId: userRoleAssignments.userId,
+                roleId: userRoleAssignments.roleId,
+                roleName: customRoles.roleName,
+                roleDescription: customRoles.description,
+                roleColor: customRoles.color,
+                roleIcon: customRoles.icon,
+                rolePermissions: customRoles.permissions
+              })
+              .from(userRoleAssignments)
+              .leftJoin(customRoles, eq(userRoleAssignments.roleId, customRoles.roleId))
+              .where(inArray(userRoleAssignments.userId, userIdsForRoles));
+
+            console.log(`✅ Successfully retrieved ${userRoles.length} role assignments from database`);
+          } catch (roleQueryError) {
+            console.error('❌ Error querying user roles from database:', roleQueryError);
+            userRoles = [];
+          }
+        }
+      }
+
+      // Get pending invitations for this entity
+      let pendingInvitations = [];
+      try {
+        pendingInvitations = await db
+          .select()
+          .from(tenantInvitations)
+          .where(and(
+            eq(tenantInvitations.tenantId, tenantId),
+            eq(tenantInvitations.status, 'pending'),
+            sql`${tenantInvitations.targetEntities}::jsonb ? ${entityId}`
+          ));
+
+        console.log(`✅ Successfully retrieved ${pendingInvitations.length} pending invitations from database`);
+      } catch (invitationQueryError) {
+        console.error('❌ Error querying pending invitations from database:', invitationQueryError);
+        pendingInvitations = [];
+      }
+
+      // Create role map
+      const roleMap = new Map();
+      try {
+        (userRoles || []).forEach(ur => {
+          if (ur && ur.roleId) {
+            roleMap.set(ur.roleId, {
+              roleId: ur.roleId,
+              roleName: ur.roleName || 'Unknown Role',
+              description: ur.roleDescription || '',
+              color: ur.roleColor || '#6b7280',
+              icon: ur.roleIcon || 'User',
+              permissions: ur.rolePermissions || {}
+            });
+          }
+        });
+        console.log(`✅ Successfully created role map with ${roleMap.size} roles`);
+      } catch (roleMapError) {
+        console.error('❌ Error creating role map:', roleMapError);
+      }
+
+      // Create user-role map
+      const userRoleIdMap = new Map();
+      try {
+        (userRoles || []).forEach(ur => {
+          if (ur && ur.userId && ur.roleId) {
+            userRoleIdMap.set(ur.userId, ur.roleId);
+          }
+        });
+        console.log(`✅ Successfully created user-role map with ${userRoleIdMap.size} mappings`);
+      } catch (userRoleMapError) {
+        console.error('❌ Error creating user-role map:', userRoleMapError);
+      }
+
+      // Format users
+      const formattedUsers = users.map(user => {
+        if (!user || !user.userId || !user.email) {
+          return null;
+        }
+
+        const userRoleId = userRoleIdMap.get(user.userId);
+        const role = userRoleId ? roleMap.get(userRoleId) : null;
+
+        return {
+          id: user.userId,
+          email: user.email,
+          firstName: user.name?.split(' ')[0] || user.email.split('@')[0],
+          lastName: user.name?.split(' ').slice(1).join(' ') || '',
+          role: role?.roleName || '',
+          isActive: user.isActive !== false, // Default to true if undefined
+          invitationStatus: 'active',
+          invitedAt: user.invitedAt,
+          expiresAt: null,
+          lastActiveAt: user.lastActiveAt,
+          invitationId: null,
+          status: 'active',
+          userType: 'active',
+          originalData: {
+            user: user,
+            role: role
+          }
+        };
+      }).filter(user => user !== null);
+
+      // Format pending invitations
+      let formattedInvitations = [];
+      try {
+        formattedInvitations = pendingInvitations.map(invitation => {
+          if (!invitation || !invitation.invitationId || !invitation.email) {
+            return null;
+          }
+
+          const role = invitation.roleId ? roleMap.get(invitation.roleId) : null;
+          return {
+            id: `inv_${invitation.invitationId}`,
+            email: invitation.email,
+            firstName: invitation.email.split('@')[0],
+            lastName: '',
+            role: role?.roleName || 'Member',
+            isActive: false,
+            invitationStatus: 'pending',
+            invitedAt: invitation.createdAt,
+            expiresAt: invitation.expiresAt,
+            lastActiveAt: null,
+            invitationId: invitation.invitationId,
+            status: 'pending',
+            userType: 'invited',
+            originalData: {
+              invitation: invitation,
+              role: role
+            }
+          };
+        }).filter(invitation => invitation !== null);
+
+        console.log(`✅ Successfully formatted ${formattedInvitations.length} invitations`);
+      } catch (invitationFormatError) {
+        console.error('❌ Error formatting invitations:', invitationFormatError);
+        formattedInvitations = [];
+      }
+
+      // Combine and return
+      let allUsers = [];
+      try {
+        allUsers = [...formattedUsers, ...formattedInvitations];
+        console.log(`✅ Found ${formattedUsers.length} active users and ${formattedInvitations.length} pending invitations for entity ${entityId}`);
+        console.log(`✅ Successfully combined all users: ${allUsers.length} total`);
+      } catch (combineError) {
+        console.error('❌ Error combining formatted users and invitations:', combineError);
+        // Return just the formatted users if combining fails
+        allUsers = formattedUsers;
+      }
+
+      return allUsers;
+    } catch (error) {
+      console.error('❌ Error getting tenant users by entity:', error);
+      throw error;
+    }
+  }
+
+  // Helper method to get child entities
+  static async getEntityChildren(entityId) {
+    try {
+      const children = new Set();
+
+      // Get direct children
+      const directChildren = await db
+        .select({ entityId: entities.entityId })
+        .from(entities)
+        .where(eq(entities.parentEntityId, entityId));
+
+      // Add direct children
+      directChildren.forEach(child => children.add(child.entityId));
+
+      // Recursively get children of children (simplified - only one level deep for now)
+      for (const child of directChildren) {
+        const grandChildren = await db
+          .select({ entityId: entities.entityId })
+          .from(entities)
+          .where(eq(entities.parentEntityId, child.entityId));
+
+        grandChildren.forEach(gc => children.add(gc.entityId));
+      }
+
+      return children;
+    } catch (error) {
+      console.error('❌ Error getting entity children:', error);
+      return new Set();
     }
   }
 
@@ -760,11 +1307,53 @@ export class TenantService {
       
       // Check if this is an invitation ID (prefixed with 'inv_')
       if (typeof userId === 'string' && userId.startsWith('inv_')) {
-        // This is an invitation ID, cancel the invitation instead
+        // This is an invitation ID, check if we should cancel or handle accepted invitation
         const invitationId = userId.substring(4); // Remove 'inv_' prefix
-        console.log('📧 Detected invitation ID, cancelling invitation:', invitationId);
-        
-        return await this.cancelInvitation(tenantId, invitationId, removedBy);
+        console.log('📧 Detected invitation ID:', invitationId);
+
+        // Check invitation status
+        const [invitation] = await db
+          .select()
+          .from(tenantInvitations)
+          .where(and(
+            eq(tenantInvitations.invitationId, invitationId),
+            eq(tenantInvitations.tenantId, tenantId)
+          ))
+          .limit(1);
+
+        if (invitation) {
+          if (invitation.status === 'pending') {
+            // Cancel pending invitation
+            console.log('📧 Cancelling pending invitation');
+            return await this.cancelInvitation(tenantId, invitationId, removedBy);
+          } else if (invitation.status === 'accepted') {
+            // Invitation was already accepted - remove the user instead
+            console.log('📧 Invitation already accepted, removing user instead');
+
+            // Find the user that was created from this invitation
+            // We can match by email since invitations are unique per email
+            const [user] = await db
+              .select()
+              .from(tenantUsers)
+              .where(and(
+                eq(tenantUsers.tenantId, tenantId),
+                eq(tenantUsers.email, invitation.email)
+              ))
+              .limit(1);
+
+            if (user) {
+              console.log('👤 Found user from accepted invitation, removing user:', user.userId);
+              // Remove the user (this will be handled by the regular user removal logic below)
+              userId = user.userId;
+            } else {
+              throw new Error('User from accepted invitation not found');
+            }
+          } else {
+            throw new Error(`Cannot remove user from invitation with status: ${invitation.status}`);
+          }
+        } else {
+          throw new Error('Invitation not found');
+        }
       }
       
       // Check if user exists in tenant
@@ -802,13 +1391,7 @@ export class TenantService {
         // 1. Remove user role assignments
         await tx
           .delete(userRoleAssignments)
-          .where(and(
-            eq(userRoleAssignments.userId, userId),
-            eq(userRoleAssignments.roleId, sql`(
-              SELECT role_id FROM custom_roles 
-              WHERE tenant_id = ${tenantId}
-            )`)
-          ));
+          .where(eq(userRoleAssignments.userId, userId));
 
         // 2. Cancel any pending invitations for this user
         await tx

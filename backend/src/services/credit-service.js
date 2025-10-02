@@ -1,6 +1,7 @@
 import { db, systemDbConnection } from '../db/index.js';
 import { credits, creditTransactions, creditPurchases, creditConfigurations, applications as applicationsTable, applicationModules } from '../db/schema/index.js';
 import { eq, and, desc, gte, lte, sql, or, isNull, inArray } from 'drizzle-orm';
+import CreditAllocationService from './credit-allocation-service.js';
 import Stripe from 'stripe';
 import { randomUUID } from 'crypto';
 
@@ -29,6 +30,24 @@ export class CreditService {
    */
   static getPermissionOperationCode(appCode, moduleCode, permissionCode) {
     return `${appCode}.${moduleCode}.${permissionCode}`;
+  }
+
+  /**
+   * Extract application code from operation code
+   * Operation codes follow the pattern: {appCode}.{moduleCode}.{permissionCode}
+   * e.g., 'crm.leads.create', 'hr.payroll.process'
+   */
+  static extractApplicationFromOperationCode(operationCode) {
+    if (!operationCode || typeof operationCode !== 'string') {
+      return null;
+    }
+
+    const parts = operationCode.split('.');
+    if (parts.length >= 2 && CreditAllocationService.SUPPORTED_APPLICATIONS.includes(parts[0])) {
+      return parts[0];
+    }
+
+    return null;
   }
   /**
    * Initialize credit record for an entity if it doesn't exist
@@ -218,6 +237,39 @@ export class CreditService {
         }
       }
 
+      // Get application credit allocations for this tenant
+      const applicationAllocations = await CreditAllocationService.getApplicationAllocations(tenantId, searchEntityId);
+
+      // Check for applications with low or no allocations
+      if (applicationAllocations.success && applicationAllocations.data.allocations.length > 0) {
+        const totalAllocated = applicationAllocations.data.summary.totalAllocated;
+        const totalAvailableInAllocations = applicationAllocations.data.summary.totalAvailable;
+
+        if (totalAvailableInAllocations === 0 && totalAllocated > 0) {
+          alerts.push({
+            id: 'all_applications_out_of_credits',
+            type: 'allocation_warning',
+            severity: 'critical',
+            title: 'All Applications Out of Credits',
+            message: 'All allocated credits have been consumed. Allocate more credits to applications.',
+            threshold: 0,
+            currentValue: 0,
+            actionRequired: 'allocate_credits_to_applications'
+          });
+        } else if (totalAvailableInAllocations <= 50) { // Low threshold for allocations
+          alerts.push({
+            id: 'low_application_credits',
+            type: 'allocation_warning',
+            severity: 'warning',
+            title: 'Low Application Credits',
+            message: `Only ${totalAvailableInAllocations} credits remaining across all applications`,
+            threshold: 50,
+            currentValue: totalAvailableInAllocations,
+            actionRequired: 'allocate_credits_to_applications'
+          });
+        }
+      }
+
       return {
         tenantId: creditBalance.tenantId,
         entityId: creditBalance.entityId,
@@ -232,11 +284,39 @@ export class CreditService {
         usageThisPeriod: 0,
         periodLimit: 0,
         periodType: 'month',
-        alerts
+        alerts,
+        applicationAllocations: applicationAllocations.success ? applicationAllocations.data : null
       };
     } catch (error) {
       console.error('Error fetching current credit balance:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Get the entity/organization ID for a user
+   */
+  static async getUserEntityId(tenantId, userId) {
+    try {
+      // Find the user in tenantUsers to get their organization
+      const [userRecord] = await db
+        .select({
+          entityId: tenantUsers.entityId,
+          organizationId: tenantUsers.organizationId
+        })
+        .from(tenantUsers)
+        .where(and(
+          eq(tenantUsers.tenantId, tenantId),
+          eq(tenantUsers.kindeUserId, userId),
+          eq(tenantUsers.isActive, true)
+        ))
+        .limit(1);
+
+      // Return entityId if available, otherwise organizationId as fallback
+      return userRecord?.entityId || userRecord?.organizationId || null;
+    } catch (error) {
+      console.error('Error getting user entity ID:', error);
+      return null;
     }
   }
 
@@ -1471,7 +1551,51 @@ export class CreditService {
     entityId = null // New parameter for hierarchical support
   }) {
     try {
-      // Get current balance for the specific entity
+      // Check if this operation should use application-specific credits
+      const applicationCode = this.extractApplicationFromOperationCode(operationCode);
+
+      if (applicationCode) {
+        console.log('🎯 Application-specific credit consumption detected:', {
+          tenantId,
+          applicationCode,
+          operationCode,
+          creditCost
+        });
+
+        // Try to consume from application allocation first
+        // Get the user's organization/entity for allocation filtering
+        const userEntityId = await this.getUserEntityId(tenantId, userId);
+
+        const appCreditResult = await CreditAllocationService.consumeApplicationCredits({
+          tenantId,
+          sourceEntityId: userEntityId, // Filter by user's organization
+          application: applicationCode,
+          creditAmount: creditCost,
+          operationCode,
+          operationId,
+          description,
+          initiatedBy: userId
+        });
+
+        if (appCreditResult.success) {
+          console.log('✅ Consumed credits from application allocation:', appCreditResult);
+          return {
+            success: true,
+            data: {
+              transactionId: `app_${appCreditResult.allocationId}_${Date.now()}`,
+              creditsConsumed: creditCost,
+              remainingCredits: appCreditResult.remainingCredits,
+              source: 'application_allocation',
+              application: applicationCode
+            }
+          };
+        } else {
+          console.log('⚠️ Application allocation consumption failed, falling back to organization credits:', appCreditResult.message);
+          // Fall through to organization credit consumption below
+        }
+      }
+
+      // Get current balance for the specific entity (fallback or direct consumption)
       const currentBalance = await this.getEntityBalance(tenantId, entityType, entityId);
 
       if (!currentBalance || currentBalance.availableCredits < creditCost) {

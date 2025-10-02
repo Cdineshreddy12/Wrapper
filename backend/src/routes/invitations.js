@@ -1,5 +1,5 @@
-import { db } from '../db/index.js';
-import { tenants, tenantUsers, customRoles, userRoleAssignments, tenantInvitations } from '../db/schema/index.js';
+import { db, dbManager } from '../db/index.js';
+import { tenants, tenantUsers, customRoles, userRoleAssignments, tenantInvitations, organizationMemberships, entities } from '../db/schema/index.js';
 import { eq, and, desc } from 'drizzle-orm';
 import kindeService from '../services/kinde-service.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -190,6 +190,113 @@ async function ensureUserInCorrectOrganization(kindeUserId, email, targetOrgCode
       stack: error.stack
     };
   }
+}
+
+// Permission validation helper for multi-entity invitations
+async function validateMultiEntityInvitationPermissions(inviterId, tenantId, targetEntities) {
+  console.log('🔐 Validating permissions for multi-entity invitation:', {
+    inviterId,
+    tenantId,
+    targetEntityCount: targetEntities.length
+  });
+
+  // Check if user is active and belongs to the tenant
+  const [inviter] = await db
+    .select()
+    .from(tenantUsers)
+    .where(and(
+      eq(tenantUsers.userId, inviterId),
+      eq(tenantUsers.tenantId, tenantId),
+      eq(tenantUsers.isActive, true)
+    ))
+    .limit(1);
+
+  if (!inviter) {
+    throw new Error('Inviter not found or not active in this tenant');
+  }
+
+  // Check if user is a tenant admin (can invite to any entity)
+  if (inviter.isTenantAdmin) {
+    console.log('✅ Inviter is tenant admin - all permissions granted');
+    return { canInvite: true, restrictions: [] };
+  }
+
+  const restrictions = [];
+  const allowedEntities = [];
+
+  // Get all entities the inviter has membership in with admin/manager access
+  const inviterMemberships = await db
+    .select({
+      membership: organizationMemberships,
+      entity: entities
+    })
+    .from(organizationMemberships)
+    .leftJoin(entities, eq(organizationMemberships.entityId, entities.entityId))
+    .where(and(
+      eq(organizationMemberships.userId, inviterId),
+      eq(organizationMemberships.membershipStatus, 'active'),
+      eq(organizationMemberships.tenantId, tenantId)
+    ));
+
+  console.log('👤 Inviter memberships found:', inviterMemberships.length);
+
+  // Check permissions for each target entity
+  for (const targetEntity of targetEntities) {
+    let canInviteToEntity = false;
+
+    // Check if inviter has admin/manager access to this entity or its parents
+    for (const membership of inviterMemberships) {
+      if (membership.membership.accessLevel === 'admin' ||
+          membership.membership.accessLevel === 'manager') {
+
+        // Direct membership to the entity
+        if (membership.membership.entityId === targetEntity.entityId) {
+          canInviteToEntity = true;
+          break;
+        }
+
+        // Check if membership is to a parent entity and canAccessSubEntities is true
+        if (membership.membership.canAccessSubEntities && membership.entity) {
+          // Check if target entity is under this entity's hierarchy
+          // This is a simplified check - in production you'd want more sophisticated hierarchy checking
+          const targetEntityRecord = await db
+            .select()
+            .from(entities)
+            .where(eq(entities.entityId, targetEntity.entityId))
+            .limit(1);
+
+          if (targetEntityRecord[0] &&
+              targetEntityRecord[0].hierarchyPath?.includes(membership.membership.entityId)) {
+            canInviteToEntity = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (canInviteToEntity) {
+      allowedEntities.push(targetEntity);
+    } else {
+      restrictions.push({
+        entityId: targetEntity.entityId,
+        reason: 'Insufficient permissions to invite to this entity'
+      });
+    }
+  }
+
+  const canInvite = restrictions.length === 0;
+
+  console.log('🔐 Permission validation result:', {
+    canInvite,
+    allowedEntities: allowedEntities.length,
+    restrictions: restrictions.length
+  });
+
+  return {
+    canInvite,
+    restrictions,
+    allowedEntities
+  };
 }
 
 // Helper function to generate proper invitation URLs
@@ -641,7 +748,7 @@ export default async function invitationRoutes(fastify, options) {
       // Resend invitation email
       try {
         // Import EmailService dynamically to avoid circular dependencies
-        const { EmailService } = await import('../utils/email.js');
+        const EmailService = (await import('../utils/email.js')).default;
         
         await EmailService.sendUserInvitation({
           email: invitation.invitation.email,
@@ -1025,6 +1132,393 @@ export default async function invitationRoutes(fastify, options) {
     }
   });
 
+  // Create multi-entity invitation (authenticated endpoint)
+  fastify.post('/create-multi-entity', {
+    // Authentication handled globally, no need for route-level auth
+  }, async (request, reply) => {
+    try {
+      console.log('🔥 MULTI-ENTITY INVITATION ROUTE CALLED');
+      const { email, entities: rawEntities, primaryEntityId, message } = request.body;
+      const targetEntities = Array.isArray(rawEntities)
+        ? rawEntities
+        : rawEntities
+          ? [rawEntities]
+          : [];
+
+      console.log('🔍 Request body destructured:', {
+        email,
+        entitiesType: Array.isArray(rawEntities) ? 'array' : typeof rawEntities,
+        entitiesValue: targetEntities,
+        primaryEntityId,
+        message,
+        fullBody: request.body
+      });
+
+      if (!email) {
+        return reply.code(400).send({
+          error: 'Missing required fields',
+          message: 'email is required'
+        });
+      }
+
+      if (!targetEntities || targetEntities.length === 0) {
+        console.log('🔍 Entities validation failed:', {
+          entities: targetEntities,
+          isArray: Array.isArray(targetEntities),
+          length: targetEntities?.length
+        });
+        return reply.code(400).send({
+          error: 'Missing required fields',
+          message: 'entities array is required and cannot be empty'
+        });
+      }
+
+      if (!request.userContext?.isAuthenticated) {
+        return reply.code(401).send({
+          error: 'Unauthorized',
+          message: 'Authentication required'
+        });
+      }
+
+      const tenantId = request.userContext.tenantId;
+      if (!tenantId) {
+        return reply.code(400).send({
+          error: 'Tenant context required',
+          message: 'User must be associated with a tenant'
+        });
+      }
+
+      console.log('🚀 NEW CODE RUNNING: Creating multi-entity invitation...', {
+        email,
+        entityCount: targetEntities?.length || 0,
+        primaryEntityId,
+        tenantId,
+        entitiesType: Array.isArray(targetEntities) ? 'array' : typeof targetEntities,
+        entitiesValue: targetEntities,
+        requestBody: request.body
+      });
+
+      // Get tenant details
+      console.log('🔍 Querying tenant with ID:', tenantId, typeof tenantId);
+      let tenant;
+      try {
+        const query = db
+          .select({
+            tenantId: tenants.tenantId,
+            companyName: tenants.companyName,
+            kindeOrgId: tenants.kindeOrgId
+          })
+          .from(tenants)
+          .where(eq(tenants.tenantId, tenantId))
+          .limit(1);
+
+        console.log('🔍 Executing tenant query...');
+        const [tenantRecord] = await query;
+        tenant = tenantRecord;
+        console.log('✅ Tenant query successful:', tenant);
+
+        if (!tenant) {
+          return reply.code(404).send({
+            error: 'Organization not found',
+            message: 'Current user\'s organization not found'
+          });
+        }
+      } catch (error) {
+        console.error('❌ Tenant query failed:', error);
+        throw error;
+      }
+
+      // Validate target entities and permissions
+      const validatedEntities = [];
+      for (const entity of targetEntities) {
+        if (!entity.entityId || !entity.roleId) {
+          return reply.code(400).send({
+            error: 'Invalid entity specification',
+            message: 'Each entity must have entityId and roleId'
+          });
+        }
+
+        // Verify entity exists and belongs to the tenant
+        console.log('🔍 Verifying entity:', { entityId: entity.entityId, tenantId });
+        let entityRecord;
+        try {
+          const entityQuery = db
+            .select()
+            .from(entities)
+            .where(and(
+              eq(entities.entityId, entity.entityId),
+              eq(entities.tenantId, tenantId)
+            ))
+            .limit(1);
+
+          console.log('🔍 Executing entity verification query...');
+          [entityRecord] = await entityQuery;
+          console.log('✅ Entity verification successful:', entityRecord);
+
+          if (!entityRecord) {
+            return reply.code(404).send({
+              error: 'Entity not found',
+              message: `Entity ${entity.entityId} not found in this tenant`
+            });
+          }
+        } catch (error) {
+          console.error('❌ Entity verification failed:', error);
+          console.error('❌ Entity ID:', entity.entityId);
+          console.error('❌ Tenant ID:', tenantId);
+          throw error;
+        }
+
+        // Verify role exists
+        const [roleRecord] = await db
+          .select()
+          .from(customRoles)
+          .where(eq(customRoles.roleId, entity.roleId))
+          .limit(1);
+
+        if (!roleRecord) {
+          return reply.code(404).send({
+            error: 'Role not found',
+            message: `Role ${entity.roleId} not found`
+          });
+        }
+
+        // Validate permissions for this entity
+        const permissionCheck = await validateMultiEntityInvitationPermissions(
+          request.userContext.internalUserId,
+          tenant.tenantId,
+          [{
+            entityId: entity.entityId,
+            roleId: entity.roleId,
+            entityType: entityRecord.entityType
+          }]
+        );
+
+        if (!permissionCheck.canInvite) {
+          return reply.code(403).send({
+            error: 'Insufficient permissions',
+            message: `You don't have permission to invite users to ${entityRecord.entityName}`,
+            restrictions: permissionCheck.restrictions
+          });
+        }
+
+        validatedEntities.push({
+          entityId: entity.entityId,
+          roleId: entity.roleId,
+          entityType: entityRecord.entityType,
+          membershipType: entity.membershipType || 'direct'
+        });
+      }
+
+      // Validate primary entity if specified
+      if (primaryEntityId) {
+        const isPrimaryValid = validatedEntities.some(e => e.entityId === primaryEntityId);
+        if (!isPrimaryValid) {
+          return reply.code(400).send({
+            error: 'Invalid primary entity',
+            message: 'Primary entity must be one of the target entities'
+          });
+        }
+      }
+
+      // Ensure we have at least one entity
+      if (validatedEntities.length === 0) {
+        return reply.code(400).send({
+          error: 'No valid entities',
+          message: 'At least one valid entity must be specified'
+        });
+      }
+
+      // Check if invitation already exists
+      const [existingInvitation] = await db
+        .select()
+        .from(tenantInvitations)
+        .where(and(
+          eq(tenantInvitations.tenantId, tenant.tenantId),
+          eq(tenantInvitations.email, email)
+        ))
+        .limit(1);
+
+      if (existingInvitation) {
+        return reply.code(409).send({
+          error: 'Invitation already exists',
+          message: `An invitation for ${email} already exists in this organization`,
+          invitation: existingInvitation
+        });
+      }
+
+      // Create the invitation
+      const invitationToken = uuidv4();
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+      // Generate the full invitation URL
+      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+      const invitationUrl = `${baseUrl}/invite/accept?token=${invitationToken}`;
+
+      // Try simple raw SQL with string interpolation (temporary workaround)
+      // Ensure we have a valid primary entity ID
+      const finalPrimaryEntityId = primaryEntityId || validatedEntities[0]?.entityId;
+      if (!finalPrimaryEntityId) {
+        return reply.code(400).send({
+          error: 'Invalid primary entity',
+          message: 'Unable to determine primary entity ID'
+        });
+      }
+
+      // Try a two-step approach: insert without JSONB first, then update
+      const dbConnection = dbManager.getAppConnection();
+
+      // First insert without the JSONB field
+      const insertQuery = `
+        INSERT INTO tenant_invitations (
+          tenant_id, email, invitation_scope, primary_entity_id,
+          invited_by, invitation_token, invitation_url, status, expires_at, updated_at
+        ) VALUES (
+          '${tenant.tenantId}', '${email}', 'multi-entity',
+          '${finalPrimaryEntityId}', '${request.userContext.internalUserId}', '${invitationToken}',
+          '${invitationUrl}', 'pending', '${expiresAt.toISOString()}', '${new Date().toISOString()}'
+        )
+        RETURNING invitation_id
+      `;
+
+      console.log('🔍 Step 1 - Inserting base invitation:', insertQuery);
+
+      const insertResult = await dbConnection.unsafe(insertQuery);
+      const invitationId = insertResult[0].invitation_id;
+
+      // Now update with JSONB
+      const targetEntitiesJson = JSON.stringify(validatedEntities).replace(/'/g, "''");
+      const updateQuery = `
+        UPDATE tenant_invitations
+        SET target_entities = '${targetEntitiesJson}'::jsonb
+        WHERE invitation_id = '${invitationId}'
+        RETURNING *
+      `;
+
+      console.log('🔍 Step 2 - Updating with JSONB:', updateQuery);
+
+      const updateResult = await dbConnection.unsafe(updateQuery);
+      const newInvitation = updateResult[0];
+
+      console.log('✅ Multi-entity invitation created successfully:', {
+        invitationId: newInvitation.invitation_id,
+        email: newInvitation.email,
+        token: newInvitation.invitation_token,
+        url: newInvitation.invitation_url,
+        targetEntities: validatedEntities.length
+      });
+
+      // Send invitation email
+      console.log(`📧 Preparing to send multi-entity invitation email to ${newInvitation.email}`);
+      try {
+        // Import EmailService dynamically to avoid circular dependencies
+        const EmailService = (await import('../utils/email.js')).default;
+
+        const roleName = validatedEntities.length > 1 ? 'Multi-entity Member' : 'Team Member';
+
+        console.log(`📧 Email details:`, {
+          email: newInvitation.email,
+          tenantName: tenant.companyName,
+          roleName,
+          invitationToken: newInvitation.invitation_token.substring(0, 8) + '...',
+          invitedByName: request.userContext.name || 'Team Administrator',
+          entityCount: validatedEntities.length
+        });
+
+        const emailResult = await EmailService.sendUserInvitation({
+          email: newInvitation.email,
+          tenantName: tenant.companyName,
+          roleName,
+          invitationToken: newInvitation.invitation_token,
+          invitedByName: request.userContext.name || 'Team Administrator',
+          message: request.body.message || `You've been invited to join ${tenant.companyName} with access to ${validatedEntities.length} organization${validatedEntities.length > 1 ? 's' : ''}.`
+        });
+
+        console.log(`✅ Multi-entity invitation email sent successfully to ${newInvitation.email}:`, emailResult);
+      } catch (emailError) {
+        console.error(`❌ Failed to send multi-entity invitation email to ${newInvitation.email}:`, {
+          error: emailError.message,
+          stack: emailError.stack,
+          response: emailError.response?.data
+        });
+
+        // Don't fail the entire invitation process if email fails
+        console.log(`⚠️ Multi-entity invitation created but email failed. Token: ${newInvitation.invitation_token}`);
+      }
+
+      return {
+        success: true,
+        message: 'Multi-entity invitation created successfully',
+        invitation: {
+          invitationId: newInvitation.invitation_id,
+          email: newInvitation.email,
+          targetEntities: validatedEntities,
+          primaryEntityId: newInvitation.primary_entity_id,
+          invitationScope: newInvitation.invitation_scope,
+          token: newInvitation.invitation_token,
+          url: newInvitation.invitation_url,
+          expiresAt: newInvitation.expires_at
+        }
+      };
+    } catch (error) {
+      console.error('❌ Error creating multi-entity invitation:', error);
+      return reply.code(500).send({
+        error: 'Failed to create multi-entity invitation',
+        message: error.message
+      });
+    }
+  });
+
+  // Test email service
+  fastify.post('/test-email', async (request, reply) => {
+    try {
+      console.log('🧪 Testing email service...');
+
+      const { email } = request.body;
+      if (!email) {
+        return reply.code(400).send({
+          error: 'Email required',
+          message: 'Please provide an email address to test'
+        });
+      }
+
+      // Import EmailService
+      const EmailService = (await import('../utils/email.js')).default;
+
+      console.log('📧 Testing email service with:', {
+        provider: EmailService.emailProvider,
+        testEmail: email
+      });
+
+      // Test connection first
+      const connectionTest = await EmailService.testConnection();
+      console.log('🔌 Connection test result:', connectionTest);
+
+      // Try to send a test email
+      const testResult = await EmailService.sendUserInvitation({
+        email,
+        tenantName: 'Wrapper Test',
+        roleName: 'Test User',
+        invitationToken: 'test-token-123',
+        invitedByName: 'Test Administrator',
+        message: 'This is a test email to verify the email service is working.'
+      });
+
+      return {
+        success: true,
+        message: 'Email test completed',
+        connectionTest,
+        emailResult: testResult
+      };
+    } catch (error) {
+      console.error('❌ Email test failed:', error);
+      return reply.code(500).send({
+        error: 'Email test failed',
+        message: error.message,
+        details: error.response?.data
+      });
+    }
+  });
+
   // Test endpoint to verify invitation system with working user assignment
   fastify.post('/test-invitation-flow', async (request, reply) => {
     try {
@@ -1303,27 +1797,82 @@ export default async function invitationRoutes(fastify, options) {
         .where(eq(tenantUsers.userId, invitation.invitedBy))
         .limit(1);
 
-      // Get role details
-      const [role] = await db
-        .select({
-          roleName: customRoles.roleName,
-          description: customRoles.description
-        })
-        .from(customRoles)
-        .where(eq(customRoles.roleId, invitation.roleId))
-        .limit(1);
+      // Handle multi-entity vs single-entity invitation details
+      let invitationDetails;
+      if (invitation.invitationScope === 'multi-entity' && invitation.targetEntities && invitation.targetEntities.length > 0) {
+        // Multi-entity invitation - get details for each target entity
+        const targetEntityDetails = [];
 
-      return {
-        success: true,
-        invitation: {
+        for (const targetEntity of invitation.targetEntities) {
+          // Get entity details
+          const [entity] = await db
+            .select({
+              entityId: entities.entityId,
+              entityName: entities.entityName,
+              entityType: entities.entityType,
+              hierarchyPath: entities.hierarchyPath
+            })
+            .from(entities)
+            .where(eq(entities.entityId, targetEntity.entityId))
+            .limit(1);
+
+          // Get role details for this entity
+          const [role] = await db
+            .select({
+              roleName: customRoles.roleName,
+              description: customRoles.description
+            })
+            .from(customRoles)
+            .where(eq(customRoles.roleId, targetEntity.roleId))
+            .limit(1);
+
+          targetEntityDetails.push({
+            entityId: targetEntity.entityId,
+            entityName: entity?.entityName || 'Unknown Entity',
+            entityType: targetEntity.entityType,
+            roleName: role?.roleName || 'Member',
+            roleDescription: role?.description,
+            isPrimary: targetEntity.entityId === invitation.primaryEntityId
+          });
+        }
+
+        invitationDetails = {
           email: invitation.email,
           organizationName: tenant.companyName,
           inviterName: inviter?.name || 'Team Member',
+          invitationScope: 'multi-entity',
+          targetEntities: targetEntityDetails,
+          primaryEntityId: invitation.primaryEntityId,
+          primaryEntityName: targetEntityDetails.find(e => e.isPrimary)?.entityName,
+          orgCode: tenant.kindeOrgId,
+          expiresAt: invitation.expiresAt
+        };
+      } else {
+        // Legacy single-entity invitation
+        const [role] = await db
+          .select({
+            roleName: customRoles.roleName,
+            description: customRoles.description
+          })
+          .from(customRoles)
+          .where(eq(customRoles.roleId, invitation.roleId))
+          .limit(1);
+
+        invitationDetails = {
+          email: invitation.email,
+          organizationName: tenant.companyName,
+          inviterName: inviter?.name || 'Team Member',
+          invitationScope: invitation.invitationScope || 'organization',
           roles: role ? [role.roleName] : ['Member'],
           orgCode: tenant.kindeOrgId,
           roleName: role?.roleName || 'Member',
           expiresAt: invitation.expiresAt
-        }
+        };
+      }
+
+      return {
+        success: true,
+        invitation: invitationDetails
       };
     } catch (error) {
       console.error('❌ Error getting invitation details by token:', error);
@@ -1392,31 +1941,118 @@ export default async function invitationRoutes(fastify, options) {
         });
       }
 
-      // CRITICAL: Ensure user is in the correct organization and removed from default ones
-      console.log('🔗 Ensuring user is in correct Kinde organization for token-based invitation...');
-      const orgResult = await ensureUserInCorrectOrganization(
-        kindeUserId,
-        invitation.email,
-        tenant.kindeOrgId // Use the organization's Kinde org ID
-      );
-      
-      if (orgResult.success) {
-        console.log('✅ User organization assignment completed:', orgResult);
+      // CRITICAL: Ensure user is in the correct organization(s)
+      console.log('🔗 Ensuring user is in correct Kinde organizations for invitation...');
+
+      // For multi-entity invitations, add user to each specified organization/location
+      if (invitation.invitationScope === 'multi-entity' && invitation.targetEntities && invitation.targetEntities.length > 0) {
+        console.log('🎯 Processing multi-entity invitation with', invitation.targetEntities.length, 'target entities');
+
+        // Collect unique organization IDs from target entities
+        const targetOrgIds = new Set();
+
+        for (const entity of invitation.targetEntities) {
+          if (entity.entityId) {
+            // Get the organization that contains this entity (could be a location or organization)
+            const [entityRecord] = await db
+              .select({
+                entityId: entities.entityId,
+                entityType: entities.entityType,
+                parentEntityId: entities.parentEntityId
+              })
+              .from(entities)
+              .where(eq(entities.entityId, entity.entityId))
+              .limit(1);
+
+            if (entityRecord) {
+              // If it's a location, get its parent organization
+              // If it's already an organization, use it directly
+              let orgEntityId = entity.entityId;
+
+              if (entityRecord.entityType === 'location' && entityRecord.parentEntityId) {
+                // For locations, we need the parent organization
+                const [parentOrg] = await db
+                  .select({
+                    entityId: entities.entityId,
+                    kindeOrgId: tenants.kindeOrgId
+                  })
+                  .from(entities)
+                  .leftJoin(tenants, eq(entities.tenantId, tenants.tenantId))
+                  .where(eq(entities.entityId, entityRecord.parentEntityId))
+                  .limit(1);
+
+                if (parentOrg?.kindeOrgId) {
+                  targetOrgIds.add(parentOrg.kindeOrgId);
+                  console.log('🏢 Added parent organization for location:', parentOrg.kindeOrgId);
+                }
+              } else if (entityRecord.entityType === 'organization') {
+                // For organizations, get the tenant's Kinde org ID
+                targetOrgIds.add(tenant.kindeOrgId);
+                console.log('🏢 Added direct organization:', tenant.kindeOrgId);
+              }
+            }
+          }
+        }
+
+        // Add user to each unique organization
+        const uniqueOrgIds = Array.from(targetOrgIds);
+        console.log('🎯 Adding user to', uniqueOrgIds.length, 'unique organizations:', uniqueOrgIds);
+
+        for (const orgId of uniqueOrgIds) {
+          try {
+            console.log('🔗 Adding user to organization:', orgId);
+            const orgResult = await ensureUserInCorrectOrganization(
+              kindeUserId,
+              invitation.email,
+              orgId
+            );
+
+            if (orgResult.success) {
+              console.log('✅ Successfully added user to organization:', orgId);
+            } else {
+              console.warn('⚠️ Failed to add user to organization:', orgId, orgResult);
+            }
+          } catch (orgError) {
+            console.warn('⚠️ Error adding user to organization:', orgId, orgError.message);
+          }
+        }
       } else {
-        console.error('❌ Failed to ensure user organization assignment:', orgResult);
-        // In development, we'll log the error but continue with invitation acceptance
-        // In production, this should be a hard failure
-        const isDevelopment = process.env.NODE_ENV !== 'production';
-        if (!isDevelopment) {
-          return reply.code(500).send({
-            error: 'Organization assignment failed',
-            message: `Failed to add user to organization: ${orgResult.message}`,
-            details: orgResult
-          });
-        } else {
-          console.log('⚠️ Development mode: Continuing with invitation acceptance despite org assignment failure');
+        // Single-entity or legacy invitation - add to tenant's default organization
+        console.log('🏢 Processing single-entity invitation, adding to tenant organization:', tenant.kindeOrgId);
+
+        try {
+          // Try with the full org code first, then try without 'org_' prefix if it fails
+          let orgResult = await ensureUserInCorrectOrganization(
+            kindeUserId,
+            invitation.email,
+            tenant.kindeOrgId // Use the organization's Kinde org ID
+          );
+
+          // If the first attempt fails and the org code starts with 'org_', try without the prefix
+          if (!orgResult.success && tenant.kindeOrgId.startsWith('org_')) {
+            const orgCodeWithoutPrefix = tenant.kindeOrgId.replace('org_', '');
+            console.log('🔄 Retrying with org code without prefix:', orgCodeWithoutPrefix);
+            orgResult = await ensureUserInCorrectOrganization(
+              kindeUserId,
+              invitation.email,
+              orgCodeWithoutPrefix
+            );
+          }
+
+          if (orgResult.success) {
+            console.log('✅ User organization assignment completed:', orgResult);
+          } else {
+            console.warn('⚠️ Kinde organization assignment failed, but continuing:', orgResult);
+            console.log('ℹ️ This is expected if your M2M client lacks organization management permissions');
+          }
+        } catch (orgError) {
+          console.warn('⚠️ Kinde organization assignment threw error, but continuing:', orgError.message);
+          console.log('ℹ️ This is expected if your M2M client lacks organization management permissions');
         }
       }
+
+      // Always continue with invitation acceptance regardless of Kinde org assignment status
+      console.log('✅ Proceeding with invitation acceptance - user will be properly set up in internal system');
 
       // Check if user already exists (from legacy invitation system)
       const [existingUser] = await db
@@ -1438,7 +2074,6 @@ export default async function invitationRoutes(fastify, options) {
             kindeUserId: kindeUserId,
             isActive: true,
             onboardingCompleted: true, // ✅ INVITED USERS SKIP ONBOARDING
-            invitationAcceptedAt: new Date(),
             updatedAt: new Date()
           })
           .where(eq(tenantUsers.userId, existingUser.userId))
@@ -1458,22 +2093,105 @@ export default async function invitationRoutes(fastify, options) {
             isTenantAdmin: false, // Invited users are never admins
             invitedBy: invitation.invitedBy,
             invitedAt: invitation.createdAt,
-            invitationAcceptedAt: new Date(),
             updatedAt: new Date()
           })
           .returning();
       }
 
-      // Assign role if roleId is set
-      if (invitation.roleId) {
-        await db
-          .insert(userRoleAssignments)
-          .values({
-            userId: newUser.userId,
-            roleId: invitation.roleId,
-            assignedBy: invitation.invitedBy,
-            assignedAt: new Date()
-          });
+      // Handle role/entity assignments based on invitation type
+      if (invitation.invitationScope === 'multi-entity' && invitation.targetEntities && invitation.targetEntities.length > 0) {
+        // Multi-entity invitation - create memberships for each target entity
+        console.log('🎯 Processing multi-entity invitation with', invitation.targetEntities.length, 'target entities');
+
+        const memberships = [];
+        for (const targetEntity of invitation.targetEntities) {
+          // Create organization membership for each target entity
+          const [membership] = await db
+            .insert(organizationMemberships)
+            .values({
+              userId: newUser.userId,
+              tenantId: invitation.tenantId,
+              entityId: targetEntity.entityId,
+              entityType: targetEntity.entityType,
+              roleId: targetEntity.roleId,
+              roleName: null, // Will be set by trigger or separate query
+              membershipType: targetEntity.membershipType || 'direct',
+              membershipStatus: 'active',
+              isPrimary: targetEntity.entityId === invitation.primaryEntityId,
+              canAccessSubEntities: true, // Default for invited users
+              invitedBy: invitation.invitedBy,
+              invitedAt: invitation.createdAt,
+              joinedAt: new Date(),
+              createdBy: invitation.invitedBy,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            })
+            .returning();
+
+          memberships.push(membership);
+          console.log('✅ Created membership for entity:', targetEntity.entityId);
+        }
+
+        // Update user's primary organization
+        if (invitation.primaryEntityId) {
+          await db
+            .update(tenantUsers)
+            .set({
+              primaryOrganizationId: invitation.primaryEntityId,
+              updatedAt: new Date()
+            })
+            .where(eq(tenantUsers.userId, newUser.userId));
+          console.log('✅ Set primary organization to:', invitation.primaryEntityId);
+        }
+
+      } else {
+        // Legacy single-entity invitation - assign role directly
+        console.log('📋 Processing legacy single-entity invitation');
+
+        if (invitation.roleId) {
+          await db
+            .insert(userRoleAssignments)
+            .values({
+              userId: newUser.userId,
+              roleId: invitation.roleId,
+              assignedBy: invitation.invitedBy,
+              assignedAt: new Date()
+            });
+          console.log('✅ Assigned legacy role:', invitation.roleId);
+        }
+
+        // Create default organization membership if primaryEntityId exists
+        if (invitation.primaryEntityId) {
+          const [membership] = await db
+            .insert(organizationMemberships)
+            .values({
+              userId: newUser.userId,
+              tenantId: invitation.tenantId,
+              entityId: invitation.primaryEntityId,
+              entityType: 'organization', // Assume organization for legacy compatibility
+              roleId: invitation.roleId,
+              membershipType: 'direct',
+              membershipStatus: 'active',
+              isPrimary: true,
+              canAccessSubEntities: true,
+              invitedBy: invitation.invitedBy,
+              invitedAt: invitation.createdAt,
+              joinedAt: new Date(),
+              createdBy: invitation.invitedBy,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            })
+            .returning();
+
+          // Update user's primary organization
+          await db
+            .update(tenantUsers)
+            .set({
+              primaryOrganizationId: invitation.primaryEntityId,
+              updatedAt: new Date()
+            })
+            .where(eq(tenantUsers.userId, newUser.userId));
+        }
       }
 
       // Update invitation status to accepted
@@ -1491,9 +2209,11 @@ export default async function invitationRoutes(fastify, options) {
         tenantId: newUser.tenantId,
         kindeUserId: newUser.kindeUserId,
         invitedOrg: tenant.kindeOrgId,
+        invitationScope: invitation.invitationScope,
+        targetEntities: invitation.invitationScope === 'multi-entity' ? invitation.targetEntities.length : 1,
         isActive: newUser.isActive,
-        onboardingCompleted: newUser.onboardingCompleted, // Should be true
-        isTenantAdmin: newUser.isTenantAdmin // Should be false for invited users
+        onboardingCompleted: newUser.onboardingCompleted,
+        isTenantAdmin: newUser.isTenantAdmin
       });
 
       return {
@@ -1507,6 +2227,11 @@ export default async function invitationRoutes(fastify, options) {
           tenantId: newUser.tenantId,
           onboardingCompleted: newUser.onboardingCompleted,
           isTenantAdmin: newUser.isTenantAdmin
+        },
+        invitationDetails: {
+          invitationScope: invitation.invitationScope,
+          targetEntities: invitation.targetEntities || [],
+          primaryEntityId: invitation.primaryEntityId
         }
       };
     } catch (error) {

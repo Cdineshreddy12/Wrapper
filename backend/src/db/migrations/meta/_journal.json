@@ -15,6 +15,27 @@
       "when": 1758272835607,
       "tag": "0001_bright_raider",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1759256519120,
+      "tag": "0002_odd_marvel_zombies",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1759257142853,
+      "tag": "0003_sticky_mantis",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1759257301667,
+      "tag": "0004_rapid_zemo",
+      "breakpoints": true
     }
   ]
 }
