@@ -16,6 +16,7 @@ import EmailService from '../utils/email.js';
 import { SubscriptionService } from './subscription-service.js';
 import { sql } from 'drizzle-orm';
 import { inArray } from 'drizzle-orm';
+import { crmSyncStreams } from '../utils/redis.js';
 
 export class TenantService {
   // Create a new tenant
@@ -564,6 +565,22 @@ export class TenantService {
             .catch(err => {
               console.warn('⚠️ Failed to assign user to Kinde organization:', err.message);
             });
+        }
+
+        // Publish user creation event to Redis streams for CRM sync
+        try {
+          await crmSyncStreams.publishUserEvent(invitation.tenantId, 'user_created', {
+            userId: user.userId,
+            email: user.email,
+            name: user.name,
+            avatar: user.avatar,
+            isVerified: user.isVerified,
+            createdAt: user.createdAt,
+            kindeUserId: user.kindeUserId
+          });
+        } catch (streamError) {
+          console.warn('⚠️ Failed to publish user creation event to Redis streams:', streamError.message);
+          // Don't fail the user creation if stream publishing fails
         }
 
         return user;
@@ -1407,7 +1424,23 @@ export class TenantService {
             eq(tenantInvitations.status, 'pending')
           ));
 
-        // 3. Remove the user from tenant_users
+        // 3. Publish user deactivation event to Redis streams before deletion
+        try {
+          await crmSyncStreams.publishUserEvent(tenantId, 'user_deactivated', {
+            userId: user.userId,
+            email: user.email,
+            name: user.name,
+            avatar: user.avatar,
+            deactivatedAt: new Date(),
+            deactivatedBy: removedBy,
+            reason: 'User removed from tenant'
+          });
+        } catch (streamError) {
+          console.warn('⚠️ Failed to publish user deactivation event to Redis streams:', streamError.message);
+          // Continue with user deletion even if stream publishing fails
+        }
+
+        // 4. Remove the user from tenant_users
         await tx
           .delete(tenantUsers)
           .where(and(
@@ -1526,7 +1559,35 @@ export class TenantService {
         };
       } else {
         // Update active user role
-        // First remove existing role assignments
+        // First remove existing role assignments and publish unassignment events
+        const existingAssignments = await db
+          .select({
+            assignmentId: userRoleAssignments.id,
+            roleId: userRoleAssignments.roleId,
+            assignedAt: userRoleAssignments.assignedAt
+          })
+          .from(userRoleAssignments)
+          .where(and(
+            eq(userRoleAssignments.userId, userId),
+            eq(userRoleAssignments.tenantId, tenantId)
+          ));
+
+        // Publish role unassignment events for removed roles
+        for (const assignment of existingAssignments) {
+          try {
+            await crmSyncStreams.publishRoleEvent(tenantId, 'role_unassigned', {
+              assignmentId: assignment.assignmentId,
+              userId: userId,
+              roleId: assignment.roleId,
+              unassignedAt: new Date(),
+              reason: 'Role updated to new assignment'
+            });
+          } catch (streamError) {
+            console.warn('⚠️ Failed to publish role unassignment event:', streamError.message);
+          }
+        }
+
+        // Remove existing role assignments
         await db
           .delete(userRoleAssignments)
           .where(and(
@@ -1544,6 +1605,19 @@ export class TenantService {
             assignedAt: new Date()
           })
           .returning();
+
+        // Publish role assignment event for new role
+        try {
+          await crmSyncStreams.publishRoleEvent(tenantId, 'role_assigned', {
+            assignmentId: newRoleAssignment.id,
+            userId: userId,
+            roleId: roleId,
+            assignedAt: newRoleAssignment.assignedAt,
+            reason: 'Role assigned via update'
+          });
+        } catch (streamError) {
+          console.warn('⚠️ Failed to publish role assignment event:', streamError.message);
+        }
 
         return {
           success: true,

@@ -16,6 +16,7 @@ export * from './credit_purchases.js';
 export * from './credit_usage.js';
 export * from './credit_configurations.js';
 export * from './responsible_persons.js';
+export * from './event-tracking.js';
 
 // Define relationships
 import { relations } from 'drizzle-orm';
@@ -41,7 +42,8 @@ import {
   creditConfigurations,
   responsiblePersons,
   responsibilityHistory,
-  responsibilityNotifications
+  responsibilityNotifications,
+  eventTracking
 } from './index.js';
 
 export const tenantsRelations = relations(tenants, ({ many, one }) => ({

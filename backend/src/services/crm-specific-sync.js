@@ -1,5 +1,6 @@
 import { dbManager } from '../db/connection-manager.js';
 import { v4 as uuidv4 } from 'uuid';
+import sql from '../utils/sql-template.js';
 
 class CRMSpecificSyncService {
   constructor() {

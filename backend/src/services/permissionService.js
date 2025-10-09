@@ -371,6 +371,47 @@ class PermissionService {
       newValues: updates
     });
 
+    // Publish role change event to Redis streams for real-time sync
+    try {
+      const { crmSyncStreams } = await import('../utils/redis.js');
+      const { v4: uuidv4 } = await import('uuid');
+
+      // Create event data for Redis stream
+      const eventData = {
+        eventId: uuidv4(),
+        timestamp: new Date().toISOString(),
+        eventType: 'role_permissions_changed',
+        tenantId: tenantId,
+        entityType: 'role',
+        entityId: updatedRole[0].roleId,
+        action: 'permissions_updated',
+        data: {
+          roleId: updatedRole[0].roleId,
+          roleName: updatedRole[0].roleName,
+          permissions: JSON.parse(updatedRole[0].permissions || '{}'),
+          isActive: updatedRole[0].isActive !== false,
+          description: updatedRole[0].description,
+          scope: updatedRole[0].scope || 'organization'
+        },
+        metadata: {
+          correlationId: `role_permissions_${updatedRole[0].roleId}_${Date.now()}`,
+          version: '1.0',
+          sourceTimestamp: new Date().toISOString(),
+          sourceApp: 'wrapper'
+        }
+      };
+
+      // Publish to Redis stream
+      const streamKey = `crm:sync:role_permissions`;
+      const result = await crmSyncStreams.publishToStream(streamKey, eventData);
+
+      console.log(`📡 Published role permissions change event for role "${roleId}" to Redis stream: ${streamKey}`);
+      console.log(`   Stream ID: ${result?.messageId}`);
+    } catch (publishError) {
+      console.error('⚠️ Failed to publish role change event:', publishError.message);
+      // Don't fail the role update if event publishing fails
+    }
+
     return updatedRole[0];
   }
 

@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import DataIsolationService from './data-isolation-service.js';
 import ApplicationDataIsolationService from './application-data-isolation-service.js';
 import HierarchyManager from '../utils/hierarchy-manager.js';
+import { crmSyncStreams } from '../utils/redis.js';
 
 export class OrganizationService {
 
@@ -70,6 +71,24 @@ export class OrganizationService {
       createdBy,
       createdAt: new Date()
     }).returning();
+
+    // Publish organization creation event to Redis streams
+    try {
+      await crmSyncStreams.publishOrgEvent(parentTenantId, 'org_created', {
+        orgCode: organization[0].entityId,
+        orgName: organization[0].entityName,
+        orgType: 'organization',
+        organizationType: 'business_unit',
+        description: organization[0].description,
+        parentId: null,
+        entityLevel: organization[0].entityLevel,
+        isActive: organization[0].isActive,
+        createdBy: organization[0].createdBy,
+        createdAt: organization[0].createdAt
+      });
+    } catch (streamError) {
+      console.warn('⚠️ Failed to publish organization creation event:', streamError.message);
+    }
 
     return {
       success: true,
@@ -177,6 +196,24 @@ export class OrganizationService {
 
     console.log('✅ Organization inserted successfully:', organization[0]);
     // Note: Hierarchy paths are automatically maintained by database triggers
+
+    // Publish organization creation event to Redis streams
+    try {
+      await crmSyncStreams.publishOrgEvent(tenantIdToUse, 'org_created', {
+        orgCode: organization[0].entityId,
+        orgName: organization[0].entityName,
+        orgType: organization[0].entityType,
+        organizationType: organization[0].organizationType,
+        description: organization[0].description,
+        parentId: organization[0].parentEntityId,
+        entityLevel: organization[0].entityLevel,
+        isActive: organization[0].isActive,
+        createdBy: organization[0].createdBy,
+        createdAt: organization[0].createdAt
+      });
+    } catch (streamError) {
+      console.warn('⚠️ Failed to publish organization creation event:', streamError.message);
+    }
 
     return {
       success: true,

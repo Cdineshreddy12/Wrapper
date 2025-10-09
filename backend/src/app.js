@@ -42,6 +42,8 @@ import customRolesRoutes from './routes/custom-roles.js';
 import adminPromotionRoutes from './routes/admin-promotion.js';
 import permissionMatrixRoutes from './routes/permission-matrix.js';
 import enhancedCrmIntegrationRoutes from './routes/enhanced-crm-integration.js';
+import wrapperCrmSyncRoutes from './routes/wrapper-crm-sync.js';
+import userVerificationRoutes from './routes/user-verification-routes.js';
 import healthRoutes from './routes/health.js';
 import permissionSyncRoutes from './routes/permission-sync.js';
 import userSyncRoutes from './routes/user-sync.js';
@@ -409,7 +411,9 @@ async function registerRoutes() {
   await fastify.register(creditRoutes, { prefix: '/api/credits' });
   await fastify.register(demoRoutes, { prefix: '/api/demo' });
   await fastify.register(enhancedCrmIntegrationRoutes, { prefix: '/api/enhanced-crm-integration' });
-await fastify.register(healthRoutes, { prefix: '/api' });
+  await fastify.register(wrapperCrmSyncRoutes, { prefix: '/api/wrapper' });
+  await fastify.register(userVerificationRoutes, { prefix: '/api' });
+  await fastify.register(healthRoutes, { prefix: '/api' });
 
   // RLS Example Routes (temporarily disabled - need Fastify compatibility)
   // TODO: Implement Fastify-compatible RLS routes
@@ -710,9 +714,10 @@ async function start() {
     // // Initialize trial monitoring system after app setup
     // await initializeTrialSystem();
     
-    // Initialize demo cache data for distributed caching demonstration
+    // Initialize Redis connection for sync services
     try {
-      // Redis is handled by the sync services
+      const redisManager = (await import('./utils/redis.js')).default;
+      await redisManager.connect();
       console.log('✅ Redis sync services initialized');
     } catch (error) {
       console.error('❌ Failed to initialize Redis services:', error);

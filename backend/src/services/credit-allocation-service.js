@@ -3,6 +3,8 @@ import { eq, and, sql, gte, desc, sum } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { CreditService } from './credit-service.js';
 import { creditAllocations, creditAllocationTransactions, entities, creditTransactions, credits } from '../db/schema/index.js';
+import { crmSyncStreams } from '../utils/redis.js';
+import { EventTrackingService } from './event-tracking-service.js';
 
 class CreditAllocationService {
   // Supported applications that can have credit allocations
@@ -157,6 +159,51 @@ class CreditAllocationService {
         availableCredits: result.availableCredits
       });
 
+      // Publish credit application allocation event to Redis streams
+      let publishedEventId = null;
+      try {
+        const publishResult = await crmSyncStreams.publishCreditAllocation(tenantId, sourceEntityId, creditAmount, {
+          allocationId,
+          reason: allocationPurpose || 'application_allocation',
+          entityType: 'organization',
+          targetApplication,
+          allocatedBy,
+          availableCredits: parseFloat(result.availableCredits)
+        });
+
+        // Track the published event
+        if (publishResult) {
+          publishedEventId = publishResult.eventId;
+          await EventTrackingService.trackPublishedEvent({
+            eventId: publishedEventId,
+            eventType: 'credit.allocated',
+            tenantId,
+            entityId: sourceEntityId,
+            streamKey: 'credit-events',
+            sourceApplication: 'wrapper',
+            targetApplication: targetApplication, // crm, hr, affiliate, system
+            eventData: {
+              allocationId,
+              amount: creditAmount,
+              targetApplication,
+              allocatedBy,
+              availableCredits: parseFloat(result.availableCredits)
+            },
+            publishedBy: allocatedBy,
+            metadata: {
+              operation: 'credit_allocation_to_application',
+              allocationPurpose
+            }
+          });
+        }
+      } catch (streamError) {
+        console.warn('⚠️ Failed to publish credit application allocation event:', streamError.message);
+        // Still track the attempt even if publishing failed
+        if (publishedEventId) {
+          await EventTrackingService.markEventFailed(publishedEventId, streamError.message, false);
+        }
+      }
+
       return {
         success: true,
         allocationId,
@@ -265,6 +312,58 @@ class CreditAllocationService {
         consumedCredits: creditAmount,
         remainingCredits: parseFloat(result.availableCredits)
       });
+
+      // Publish credit consumption event to Redis streams
+      let publishedEventId = null;
+      try {
+        const publishResult = await crmSyncStreams.publishCreditConsumption(
+          tenantId,
+          sourceEntityId || allocation.sourceEntityId,
+          initiatedBy,
+          creditAmount,
+          operationCode,
+          operationId,
+          {
+            resourceType: description ? 'operation' : 'application',
+            resourceId: operationId || application,
+            remainingCredits: parseFloat(result.availableCredits),
+            allocationId: allocation.allocationId
+          }
+        );
+
+        // Track the published event
+        if (publishResult) {
+          publishedEventId = publishResult.eventId;
+          await EventTrackingService.trackPublishedEvent({
+            eventId: publishedEventId,
+            eventType: 'credit.consumed',
+            tenantId,
+            entityId: sourceEntityId || allocation.sourceEntityId,
+            streamKey: 'credit-events',
+            sourceApplication: 'wrapper',
+            targetApplication: application, // crm, hr, affiliate, system
+            eventData: {
+              amount: creditAmount,
+              operationCode,
+              operationId,
+              application,
+              remainingCredits: parseFloat(result.availableCredits),
+              allocationId: allocation.allocationId
+            },
+            publishedBy: initiatedBy,
+            metadata: {
+              operation: 'credit_consumption_from_application',
+              resourceType: description ? 'operation' : 'application'
+            }
+          });
+        }
+      } catch (streamError) {
+        console.warn('⚠️ Failed to publish credit consumption event:', streamError.message);
+        // Still track the attempt even if publishing failed
+        if (publishedEventId) {
+          await EventTrackingService.markEventFailed(publishedEventId, streamError.message, false);
+        }
+      }
 
       return {
         success: true,

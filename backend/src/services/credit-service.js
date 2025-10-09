@@ -4,6 +4,7 @@ import { eq, and, desc, gte, lte, sql, or, isNull, inArray } from 'drizzle-orm';
 import CreditAllocationService from './credit-allocation-service.js';
 import Stripe from 'stripe';
 import { randomUUID } from 'crypto';
+import { crmSyncStreams } from '../utils/redis.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -911,6 +912,35 @@ export class CreditService {
         changedBy: userId
       });
 
+      // Publish credit configuration change event to Redis streams
+      try {
+        await crmSyncStreams.publishCreditEvent(tenantId, 'credit_config_updated', {
+          configId: result[0].configId,
+          operationCode: result[0].operationCode,
+          creditCost: parseFloat(result[0].creditCost),
+          unit: result[0].unit,
+          unitMultiplier: parseFloat(result[0].unitMultiplier),
+          freeAllowance: result[0].freeAllowance,
+          freeAllowancePeriod: result[0].freeAllowancePeriod,
+          volumeTiers: result[0].volumeTiers,
+          allowOverage: result[0].allowOverage,
+          overageLimit: result[0].overageLimit,
+          overagePeriod: result[0].overagePeriod,
+          overageCost: result[0].overageCost ? parseFloat(result[0].overageCost) : null,
+          isActive: result[0].isActive,
+          updatedBy: result[0].updatedBy,
+          updatedAt: result[0].updatedAt,
+          changeType: existing.length > 0 ? 'updated' : 'created',
+          previousConfig: existing.length > 0 ? {
+            creditCost: parseFloat(existing[0].creditCost),
+            unit: existing[0].unit,
+            isActive: existing[0].isActive
+          } : null
+        });
+      } catch (streamError) {
+        console.warn('⚠️ Failed to publish credit config change event:', streamError.message);
+      }
+
       return {
         success: true,
         config: result[0],
@@ -1493,8 +1523,87 @@ export class CreditService {
 
       console.log(`✅ Added ${creditAmount} credits to ${normalizedEntityType}${normalizedEntityId ? ` (${normalizedEntityId})` : ''} for tenant ${tenantId}`);
 
+      // Publish credit allocation event to Redis streams (for CRM sync)
+      try {
+        await crmSyncStreams.publishCreditAllocation(tenantId, normalizedEntityId, creditAmount, {
+          allocationId: `alloc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          reason: source,
+          entityType: normalizedEntityType,
+          previousBalance: previousBalance,
+          newBalance: newBalance,
+          sourceId: sourceId,
+          description: description,
+          allocatedBy: initiatedBy
+        });
+      } catch (streamError) {
+        console.warn('⚠️ Failed to publish credit allocation event to CRM:', streamError.message);
+      }
+
+      // Also publish to existing CRM sync streams (backward compatibility)
+      try {
+        await crmSyncStreams.publishCreditEvent(tenantId, 'credit_allocated', {
+          entityId: normalizedEntityId,
+          entityType: normalizedEntityType,
+          allocatedCredits: creditAmount,
+          previousBalance: previousBalance,
+          newBalance: newBalance,
+          source: source,
+          sourceId: sourceId,
+          description: description,
+          allocatedBy: initiatedBy,
+          allocatedAt: new Date().toISOString()
+        });
+      } catch (streamError) {
+        console.warn('⚠️ Failed to publish credit allocation event (legacy):', streamError.message);
+      }
+
     } catch (error) {
       console.error('Error adding credits to entity:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Record credit consumption from CRM (called by CRM consumer)
+   */
+  static async recordCreditConsumption(tenantId, entityId, userId, amount, operationType, operationId, metadata = {}) {
+    try {
+      console.log(`📊 Recording credit consumption: ${amount} credits by ${userId} for ${operationType}`);
+
+      // Publish credit consumption event to Redis streams
+      try {
+        await crmSyncStreams.publishCreditConsumption(
+          tenantId,
+          entityId,
+          userId,
+          amount,
+          operationType,
+          operationId,
+          metadata
+        );
+      } catch (streamError) {
+        console.warn('⚠️ Failed to publish credit consumption event:', streamError.message);
+      }
+
+      // Here you could also update consumption tracking in wrapper database
+      // For now, we just publish the event
+
+      return {
+        success: true,
+        message: 'Credit consumption recorded and published',
+        data: {
+          tenantId,
+          entityId,
+          userId,
+          amount,
+          operationType,
+          operationId,
+          timestamp: new Date().toISOString()
+        }
+      };
+
+    } catch (error) {
+      console.error('Error recording credit consumption:', error);
       throw error;
     }
   }

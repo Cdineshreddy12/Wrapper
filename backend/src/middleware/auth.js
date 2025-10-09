@@ -41,6 +41,9 @@ const PUBLIC_ROUTES = [
   '/api/entities/tenant',
   'POST /api/entities/organization',
   'POST /api/entities/location',
+  // User tenant verification for CRM (public endpoint)
+  '/api/user/tenant',
+  '/api/user/test',
 ];
 
 // Helper functions
