@@ -461,14 +461,14 @@ export default async function enhancedInternalRoutes(fastify, options) {
       console.log('📊 Business Dashboard: Fetching focused metrics with distributed cache');
       
       // Import distributed cache and Redis utilities
-      const { CacheService, UsageCache } = await import('../utils/redis.js');
+      const { UsageCache, redis } = await import('../utils/redis.js');
       
       // Define cache key for business dashboard metrics
       const cacheKey = 'business-dashboard-metrics';
       const cacheExpiry = 30; // 30 seconds for real-time feel
       
       // Try to get cached metrics first
-      const cachedMetrics = await CacheService.get(cacheKey);
+      const cachedMetrics = await redis.get(cacheKey);
       if (cachedMetrics) {
         console.log('🎯 Cache HIT: Business dashboard metrics served from Redis');
         
@@ -503,7 +503,7 @@ export default async function enhancedInternalRoutes(fastify, options) {
       };
       
       // Get performance trends from Redis cache
-      const performanceTrends = await CacheService.get(`performance-trends:${tenantId}`) || [];
+      const performanceTrends = await redis.get(`performance-trends:${tenantId}`) || [];
       
       // Generate time-based performance data from actual Redis usage
       const generatePerformanceTrends = async () => {
@@ -515,7 +515,7 @@ export default async function enhancedInternalRoutes(fastify, options) {
           const intervalUsage = await UsageCache.getTotalApiCalls(tenantId, timeSlot.toISOString().split('T')[0]);
           
           // Get cached performance metrics for this interval
-          const intervalMetrics = await CacheService.get(`interval-metrics:${tenantId}:${timeSlot.getTime()}`);
+          const intervalMetrics = await redis.get(`interval-metrics:${tenantId}:${timeSlot.getTime()}`);
           
           trends.push({
             time: timeKey,
@@ -566,7 +566,7 @@ export default async function enhancedInternalRoutes(fastify, options) {
           const perfData = {};
           for (const [app, data] of Object.entries(metrics.applicationUsage)) {
             const appUsage = currentUsage[app] || 0;
-            const appMetrics = await CacheService.get(`app-metrics:${tenantId}:${app}`) || {};
+            const appMetrics = await redis.get(`app-metrics:${tenantId}:${app}`) || {};
             
             perfData[app.toUpperCase()] = {
               totalCalls: data.totalCalls + appUsage,
@@ -600,7 +600,7 @@ export default async function enhancedInternalRoutes(fastify, options) {
       };
       
       // Cache the metrics for future requests
-      await CacheService.set(cacheKey, businessMetrics, cacheExpiry);
+      await redis.set(cacheKey, businessMetrics, cacheExpiry);
       
       // Track this API call
       await UsageCache.incrementApiCalls(tenantId, 'wrapper');

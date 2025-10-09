@@ -39,13 +39,12 @@ export function Dashboard() {
     cacheAge
   } = useDashboardData()
 
+
   const { expiredData } = useTrialStatus()
 
   // Check if user is admin
   const isAdmin = user?.email && (
-    user.email.includes('admin') ||
-    user.email === 'hellobrother9959@gmail.com' ||
-    user.email === 'growthcrm7@gmail.com'
+    user.email.includes('admin') 
   )
 
   // Handle tab navigation

@@ -42,6 +42,8 @@ import customRolesRoutes from './routes/custom-roles.js';
 import adminPromotionRoutes from './routes/admin-promotion.js';
 import permissionMatrixRoutes from './routes/permission-matrix.js';
 import enhancedCrmIntegrationRoutes from './routes/enhanced-crm-integration.js';
+import wrapperCrmSyncRoutes from './routes/wrapper-crm-sync.js';
+import userVerificationRoutes from './routes/user-verification-routes.js';
 import healthRoutes from './routes/health.js';
 import permissionSyncRoutes from './routes/permission-sync.js';
 import userSyncRoutes from './routes/user-sync.js';
@@ -51,6 +53,7 @@ import locationRoutes from './routes/locations.js';
 import entityRoutes from './routes/entities.js';
 import paymentUpgradeRoutes from './routes/payment-upgrade.js';
 import creditRoutes from './routes/credits.js';
+import demoRoutes from './routes/demo.js';
 // import { createRLSRoutes } from './routes/rls-examples.js'; // Temporarily disabled
 
 
@@ -61,6 +64,7 @@ import { usageTrackingPlugin } from './middleware/usage-tracking.js';
 import { trialRestrictionMiddleware } from './middleware/trial-restriction.js';
 import { fastifyCacheMetrics } from './middleware/cache-metrics.js';
 import { RLSTenantIsolationService } from './middleware/rls-tenant-isolation.js';
+import { trackActivity } from './middleware/activityTracker.js';
 
 // Import utilities
 import trialManager from './utils/trial-manager.js';
@@ -294,6 +298,9 @@ async function initializeRLS() {
 
 // Register global middleware
 async function registerMiddleware() {
+  // Activity tracking middleware (runs on all requests for comprehensive logging)
+  fastify.addHook('onRequest', trackActivity());
+
   // Auth middleware (will set userContext if authenticated) - runs on all requests
   fastify.addHook('preHandler', authMiddleware);
 
@@ -402,8 +409,11 @@ async function registerRoutes() {
   console.log('✅ Entities routes registered successfully');
   await fastify.register(paymentUpgradeRoutes, { prefix: '/api/payment-upgrade' });
   await fastify.register(creditRoutes, { prefix: '/api/credits' });
+  await fastify.register(demoRoutes, { prefix: '/api/demo' });
   await fastify.register(enhancedCrmIntegrationRoutes, { prefix: '/api/enhanced-crm-integration' });
-await fastify.register(healthRoutes, { prefix: '/api' });
+  await fastify.register(wrapperCrmSyncRoutes, { prefix: '/api/wrapper' });
+  await fastify.register(userVerificationRoutes, { prefix: '/api' });
+  await fastify.register(healthRoutes, { prefix: '/api' });
 
   // RLS Example Routes (temporarily disabled - need Fastify compatibility)
   // TODO: Implement Fastify-compatible RLS routes
@@ -704,12 +714,13 @@ async function start() {
     // // Initialize trial monitoring system after app setup
     // await initializeTrialSystem();
     
-    // Initialize demo cache data for distributed caching demonstration
+    // Initialize Redis connection for sync services
     try {
-      const { initializeDemoCache } = await import('./utils/redis.js');
-      await initializeDemoCache();
+      const redisManager = (await import('./utils/redis.js')).default;
+      await redisManager.connect();
+      console.log('✅ Redis sync services initialized');
     } catch (error) {
-      console.error('❌ Failed to initialize demo cache:', error);
+      console.error('❌ Failed to initialize Redis services:', error);
     }
     
     // Setup graceful shutdown

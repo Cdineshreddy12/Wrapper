@@ -1,7 +1,9 @@
 import { CreditService } from '../services/credit-service.js';
+import CreditAllocationService from '../services/credit-allocation-service.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { trackUsage } from '../middleware/usage.js';
 import { getPlanLimits } from '../middleware/planRestrictions.js';
+import { validateApplicationCreditAllocation, validateCreditConsumption, autoReplenishApplicationCredits } from '../middleware/credit-allocation-validation.js';
 import { db } from '../db/index.js';
 import { credits, creditTransactions, tenantUsers, entities } from '../db/schema/index.js';
 import { eq, and, desc, gte, lte } from 'drizzle-orm';
@@ -343,7 +345,7 @@ export default async function creditRoutes(fastify, options) {
 
   // Consume credits (for operations)
   fastify.post('/consume', {
-    preHandler: authenticateToken,
+    preHandler: [authenticateToken, validateApplicationCreditAllocation, validateCreditConsumption, autoReplenishApplicationCredits],
     schema: {
       body: {
         type: 'object',
@@ -878,6 +880,367 @@ export default async function creditRoutes(fastify, options) {
     } catch (error) {
       request.log.error('Error fetching credit packages:', error);
       return reply.code(500).send({ error: 'Failed to fetch credit packages' });
+    }
+  });
+
+  // ===============================
+  // APPLICATION CREDIT ALLOCATION ROUTES
+  // ===============================
+
+  // Allocate credits to application
+  fastify.post('/allocate/application', {
+    preHandler: [authenticateToken, requirePermission('credits:allocate')],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['targetApplication', 'creditAmount'],
+        properties: {
+          sourceEntityId: { type: 'string', format: 'uuid' }, // Optional: specify source entity
+          targetApplication: {
+            type: 'string',
+            enum: ['crm', 'hr', 'affiliate', 'system']
+          },
+          creditAmount: { type: 'number', minimum: 0.01 },
+          allocationPurpose: { type: 'string' },
+          expiresAt: { type: 'string', format: 'date-time' },
+          autoReplenish: { type: 'boolean', default: false }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const {
+        sourceEntityId,
+        targetApplication,
+        creditAmount,
+        allocationPurpose = '',
+        expiresAt = null,
+        autoReplenish = false
+      } = request.body;
+      const tenantId = request.userContext.tenantId;
+      const internalUserId = request.userContext.internalUserId;
+
+      if (!tenantId) {
+        return reply.code(400).send({
+          error: 'No organization found',
+          message: 'User must be associated with an organization'
+        });
+      }
+
+      // Find the source entity (organization) - use user's organization as default
+      let finalSourceEntityId = sourceEntityId;
+
+      if (!finalSourceEntityId) {
+        console.log('🔍 Finding user\'s organization entity for tenant:', tenantId);
+
+        // Get the user's organization/entity from tenantUsers
+        const [userRecord] = await db
+          .select({
+            entityId: tenantUsers.entityId,
+            organizationId: tenantUsers.organizationId
+          })
+          .from(tenantUsers)
+          .where(and(
+            eq(tenantUsers.tenantId, tenantId),
+            eq(tenantUsers.kindeUserId, request.userContext.userId),
+            eq(tenantUsers.isActive, true)
+          ))
+          .limit(1);
+
+        finalSourceEntityId = userRecord?.entityId || userRecord?.organizationId;
+
+        if (!finalSourceEntityId) {
+          // Fallback: Find organization entities with credits
+          console.log('⚠️ User not associated with organization, finding entities with credits');
+
+          const organizationEntities = await db
+            .select()
+            .from(entities)
+            .where(and(
+              eq(entities.tenantId, tenantId),
+              eq(entities.entityType, 'organization'),
+              eq(entities.isActive, true)
+            ));
+
+          if (organizationEntities.length > 0) {
+            // Try to find entity with credits
+            const defaultEntity = organizationEntities.find(entity => entity.isDefault);
+            const entitiesToCheck = defaultEntity ? [defaultEntity] : organizationEntities;
+
+            for (const entity of entitiesToCheck) {
+            const entityCreditBalance = await CreditService.getCurrentBalance(tenantId, 'organization', entity.entityId);
+            if (entityCreditBalance && entityCreditBalance.availableCredits > 0) {
+              finalSourceEntityId = entity.entityId;
+              break;
+            }
+          }
+        }
+
+          // Fallback to default entity if no entity has credits
+          if (!finalSourceEntityId) {
+            finalSourceEntityId = defaultEntity ? defaultEntity.entityId : organizationEntities[0].entityId;
+          }
+        } else {
+          return reply.code(400).send({
+            error: 'No source entity found',
+            message: 'No organization entities found for this tenant'
+          });
+        }
+      }
+
+      console.log('🔄 Allocating credits to application:', {
+        tenantId,
+        sourceEntityId: finalSourceEntityId,
+        targetApplication,
+        creditAmount
+      });
+
+      const result = await CreditAllocationService.allocateCreditsToApplication({
+        tenantId,
+        sourceEntityId: finalSourceEntityId,
+        targetApplication,
+        creditAmount: parseFloat(creditAmount),
+        allocationPurpose,
+        allocatedBy: internalUserId,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        autoReplenish
+      });
+
+      if (!result.success) {
+        return reply.code(400).send({
+          error: 'Allocation failed',
+          message: result.message
+        });
+      }
+
+      return {
+        success: true,
+        data: result,
+        message: `Successfully allocated ${creditAmount} credits to ${targetApplication}`
+      };
+    } catch (error) {
+      request.log.error('Error allocating credits to application:', error);
+      return reply.code(500).send({
+        error: 'Failed to allocate credits to application',
+        message: error.message
+      });
+    }
+  });
+
+  // Get application credit allocations
+  fastify.get('/allocations/application', {
+    preHandler: authenticateToken,
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          sourceEntityId: { type: 'string', format: 'uuid' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const { sourceEntityId } = request.query;
+      const tenantId = request.userContext.tenantId;
+
+      if (!tenantId) {
+        return ErrorResponses.notFound(reply, 'Organization', 'User is not associated with any organization');
+      }
+
+      const result = await CreditAllocationService.getApplicationAllocations(tenantId, sourceEntityId);
+
+      return {
+        success: true,
+        data: result.data
+      };
+    } catch (error) {
+      request.log.error('Error fetching application allocations:', error);
+      return reply.code(500).send({ error: 'Failed to fetch application allocations' });
+    }
+  });
+
+  // Get credit balance for specific application
+  fastify.get('/balance/application/:application', {
+    preHandler: authenticateToken,
+    schema: {
+      params: {
+        type: 'object',
+        required: ['application'],
+        properties: {
+          application: {
+            type: 'string',
+            enum: ['crm', 'hr', 'affiliate', 'system']
+          }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const { application } = request.params;
+      const tenantId = request.userContext.tenantId;
+
+      if (!tenantId) {
+        return ErrorResponses.notFound(reply, 'Organization', 'User is not associated with any organization');
+      }
+
+      const result = await CreditAllocationService.getApplicationCreditBalance(tenantId, application);
+
+      return {
+        success: true,
+        data: result.data
+      };
+    } catch (error) {
+      request.log.error('Error fetching application credit balance:', error);
+      return reply.code(500).send({ error: 'Failed to fetch application credit balance' });
+    }
+  });
+
+  // Transfer credits between applications
+  fastify.post('/transfer/application', {
+    preHandler: [authenticateToken, requirePermission('credits:transfer')],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['fromApplication', 'toApplication', 'creditAmount'],
+        properties: {
+          fromApplication: {
+            type: 'string',
+            enum: ['crm', 'hr', 'affiliate', 'system']
+          },
+          toApplication: {
+            type: 'string',
+            enum: ['crm', 'hr', 'affiliate', 'system']
+          },
+          creditAmount: { type: 'number', minimum: 0.01 },
+          transferReason: { type: 'string' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const { fromApplication, toApplication, creditAmount, transferReason = '' } = request.body;
+      const tenantId = request.userContext.tenantId;
+      const internalUserId = request.userContext.internalUserId;
+
+      if (!tenantId) {
+        return reply.code(400).send({
+          error: 'No organization found',
+          message: 'User must be associated with an organization'
+        });
+      }
+
+      if (fromApplication === toApplication) {
+        return reply.code(400).send({
+          error: 'Invalid transfer',
+          message: 'Cannot transfer credits to the same application'
+        });
+      }
+
+      console.log('🔄 Transferring credits between applications:', {
+        tenantId,
+        fromApplication,
+        toApplication,
+        creditAmount
+      });
+
+      const result = await CreditAllocationService.transferCreditsBetweenApplications({
+        tenantId,
+        fromApplication,
+        toApplication,
+        creditAmount: parseFloat(creditAmount),
+        transferReason,
+        initiatedBy: internalUserId
+      });
+
+      if (!result.success) {
+        return reply.code(400).send({
+          error: 'Transfer failed',
+          message: result.message
+        });
+      }
+
+      return {
+        success: true,
+        data: result,
+        message: `Successfully transferred ${creditAmount} credits from ${fromApplication} to ${toApplication}`
+      };
+    } catch (error) {
+      request.log.error('Error transferring credits between applications:', error);
+      return reply.code(500).send({
+        error: 'Failed to transfer credits between applications',
+        message: error.message
+      });
+    }
+  });
+
+  // Consume credits from application allocation (for applications to call)
+  fastify.post('/consume/application', {
+    preHandler: [authenticateToken, validateCreditConsumption, autoReplenishApplicationCredits],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['application', 'creditAmount', 'operationCode'],
+        properties: {
+          application: {
+            type: 'string',
+            enum: ['crm', 'hr', 'affiliate', 'system']
+          },
+          creditAmount: { type: 'number', minimum: 0.01 },
+          operationCode: { type: 'string' },
+          operationId: { type: 'string' },
+          description: { type: 'string' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const { application, creditAmount, operationCode, operationId, description } = request.body;
+      const tenantId = request.userContext.tenantId;
+      const internalUserId = request.userContext.internalUserId;
+
+      if (!tenantId) {
+        return reply.code(400).send({
+          error: 'No organization found',
+          message: 'User must be associated with an organization'
+        });
+      }
+
+      console.log('💰 Consuming application credits:', {
+        tenantId,
+        application,
+        creditAmount,
+        operationCode
+      });
+
+      const result = await CreditAllocationService.consumeApplicationCredits({
+        tenantId,
+        application,
+        creditAmount: parseFloat(creditAmount),
+        operationCode,
+        operationId,
+        description,
+        initiatedBy: internalUserId
+      });
+
+      if (!result.success) {
+        return reply.code(402).send({
+          error: 'Insufficient application credits',
+          message: result.message,
+          data: result.data
+        });
+      }
+
+      return {
+        success: true,
+        data: result,
+        message: 'Credits consumed successfully'
+      };
+    } catch (error) {
+      request.log.error('Error consuming application credits:', error);
+      return reply.code(500).send({
+        error: 'Failed to consume application credits',
+        message: error.message
+      });
     }
   });
 

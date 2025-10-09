@@ -16,7 +16,8 @@ export const trackActivity = (options = {}) => {
       /\/metrics/,
       /\/favicon/,
       /\/static/,
-      /\/api\/auth\/token/
+      /\/api\/auth\/token/,
+      /\/api\/activity/ // Skip activity logging for activity endpoints to avoid recursion
     ];
 
     const shouldSkip = skipPatterns.some(pattern => 
@@ -101,9 +102,11 @@ async function logRequestActivity(request, reply, options = {}) {
 
 /**
  * Determine activity type based on request patterns
+ * Only returns activity types for meaningful operations (no views)
  */
 function determineActivityType(method, url, body = {}) {
   const patterns = [
+    // Only meaningful operations - no view activities
     // Authentication activities
     {
       pattern: /\/api\/auth\/login/,
@@ -145,7 +148,7 @@ function determineActivityType(method, url, body = {}) {
 
     // Role management activities
     {
-      pattern: /\/api\/roles$/,
+      pattern: /\/api\/roles\/?$/,
       method: 'POST',
       action: ACTIVITY_TYPES.ROLE_CREATED,
       appId: null,
@@ -160,6 +163,22 @@ function determineActivityType(method, url, body = {}) {
     },
     {
       pattern: /\/api\/roles\/(.+)$/,
+      method: 'DELETE',
+      action: ACTIVITY_TYPES.ROLE_DELETED,
+      appId: null,
+      metadata: { roleId: extractIdFromUrl(url) }
+    },
+
+    // Permission-based role activities
+    {
+      pattern: /\/api\/permissions\/roles\/(.+)$/,
+      method: 'PUT',
+      action: ACTIVITY_TYPES.ROLE_UPDATED,
+      appId: null,
+      metadata: { roleId: extractIdFromUrl(url) }
+    },
+    {
+      pattern: /\/api\/permissions\/roles\/(.+)$/,
       method: 'DELETE',
       action: ACTIVITY_TYPES.ROLE_DELETED,
       appId: null,
@@ -214,6 +233,279 @@ function determineActivityType(method, url, body = {}) {
       pattern: /\/api\/.*\/bulk/,
       method: 'POST',
       action: ACTIVITY_TYPES.DATA_BULK_UPDATE,
+      appId: null
+    },
+
+    // Tenant management activities (only meaningful operations)
+    {
+      pattern: /\/api\/tenants\/current\/settings$/,
+      method: 'PUT',
+      action: ACTIVITY_TYPES.TENANT_SETTINGS_UPDATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/tenants\/current\/users$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.TENANT_USER_INVITED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/tenants\/current\/users\/(.+)\/activate$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.TENANT_USER_ACTIVATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/tenants\/current\/users\/(.+)\/deactivate$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.TENANT_USER_DEACTIVATED,
+      appId: null
+    },
+
+    // User profile activities (only updates)
+    {
+      pattern: /\/api\/users\/me$/,
+      method: 'PUT',
+      action: ACTIVITY_TYPES.USER_PROFILE_UPDATED,
+      appId: null
+    },
+
+    // Subscription activities (only meaningful operations)
+    {
+      pattern: /\/api\/subscriptions$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.SUBSCRIPTION_CREATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/subscriptions\/(.+)$/,
+      method: 'PUT',
+      action: ACTIVITY_TYPES.SUBSCRIPTION_UPDATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/subscriptions\/(.+)\/cancel$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.SUBSCRIPTION_CANCELLED,
+      appId: null
+    },
+
+    // Payment activities (only meaningful operations)
+    {
+      pattern: /\/api\/payments$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.PAYMENT_CREATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/payment-upgrade$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.PAYMENT_UPGRADED,
+      appId: null
+    },
+
+    // Organization activities (only meaningful operations)
+    {
+      pattern: /\/api\/organizations$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.ORGANIZATION_CREATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/organizations\/(.+)$/,
+      method: 'PUT',
+      action: ACTIVITY_TYPES.ORGANIZATION_UPDATED,
+      appId: null
+    },
+
+    // Entity activities (only meaningful operations)
+    {
+      pattern: /\/api\/entities$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.ENTITY_CREATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/entities\/(.+)$/,
+      method: 'PUT',
+      action: ACTIVITY_TYPES.ENTITY_UPDATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/entities\/(.+)$/,
+      method: 'DELETE',
+      action: ACTIVITY_TYPES.ENTITY_DELETED,
+      appId: null
+    },
+
+    // Invitation activities (only meaningful operations)
+    {
+      pattern: /\/api\/invitations$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.INVITATION_SENT,
+      appId: null
+    },
+    {
+      pattern: /\/api\/invitations\/(.+)$/,
+      method: 'DELETE',
+      action: ACTIVITY_TYPES.INVITATION_CANCELLED,
+      appId: null
+    },
+
+    // Location activities (only meaningful operations)
+    {
+      pattern: /\/api\/locations$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.LOCATION_CREATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/locations\/(.+)$/,
+      method: 'PUT',
+      action: ACTIVITY_TYPES.LOCATION_UPDATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/locations\/(.+)$/,
+      method: 'DELETE',
+      action: ACTIVITY_TYPES.LOCATION_DELETED,
+      appId: null
+    },
+
+    // Credit activities (only meaningful operations)
+    {
+      pattern: /\/api\/credits$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.CREDIT_ALLOCATED,
+      appId: null
+    },
+
+    // Demo activities (only meaningful operations)
+    {
+      pattern: /\/api\/demo/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.DEMO_REQUESTED,
+      appId: null
+    },
+
+    // DNS Management activities (only meaningful operations)
+    {
+      pattern: /\/api\/dns/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.DNS_UPDATED,
+      appId: null
+    },
+
+    // Trial activities (only meaningful operations)
+    {
+      pattern: /\/api\/trial/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.TRIAL_EXTENDED,
+      appId: null
+    },
+
+    // Admin activities (only meaningful operations)
+    {
+      pattern: /\/api\/admin\/tenants/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.ADMIN_TENANT_CREATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/admin\/tenants\/(.+)$/,
+      method: 'PUT',
+      action: ACTIVITY_TYPES.ADMIN_TENANT_UPDATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/admin\/tenants\/(.+)\/activate$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.ADMIN_TENANT_ACTIVATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/admin\/tenants\/(.+)\/deactivate$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.ADMIN_TENANT_DEACTIVATED,
+      appId: null
+    },
+
+    // Webhook activities (only meaningful operations)
+    {
+      pattern: /\/api\/webhooks/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.WEBHOOK_CREATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/webhooks\/(.+)$/,
+      method: 'PUT',
+      action: ACTIVITY_TYPES.WEBHOOK_UPDATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/webhooks\/(.+)$/,
+      method: 'DELETE',
+      action: ACTIVITY_TYPES.WEBHOOK_DELETED,
+      appId: null
+    },
+
+    // Custom role activities (only meaningful operations)
+    {
+      pattern: /\/api\/custom-roles$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.CUSTOM_ROLE_CREATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/custom-roles\/create-from-builder$/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.CUSTOM_ROLE_CREATED,
+      appId: null,
+      metadata: { roleName: body?.roleName }
+    },
+    {
+      pattern: /\/api\/custom-roles\/(.+)$/,
+      method: 'PUT',
+      action: ACTIVITY_TYPES.CUSTOM_ROLE_UPDATED,
+      appId: null
+    },
+    {
+      pattern: /\/api\/custom-roles\/(.+)$/,
+      method: 'DELETE',
+      action: ACTIVITY_TYPES.CUSTOM_ROLE_DELETED,
+      appId: null
+    },
+
+    // Permission matrix activities (only meaningful operations)
+    {
+      pattern: /\/api\/permission-matrix/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.PERMISSION_MATRIX_UPDATED,
+      appId: null
+    },
+
+    // User sync activities (only meaningful operations)
+    {
+      pattern: /\/api\/user-sync/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.USER_SYNC_TRIGGERED,
+      appId: null
+    },
+
+    // User application activities (only meaningful operations)
+    {
+      pattern: /\/api\/user-applications/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.USER_APPLICATION_UPDATED,
+      appId: null
+    },
+
+    // Enhanced CRM integration activities (only meaningful operations)
+    {
+      pattern: /\/api\/enhanced-crm-integration/,
+      method: 'POST',
+      action: ACTIVITY_TYPES.CRM_INTEGRATION_UPDATED,
       appId: null
     }
   ];

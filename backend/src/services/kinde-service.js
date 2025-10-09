@@ -31,11 +31,19 @@ class KindeService {
       formData.append('client_id', this.m2mClientId);
       formData.append('client_secret', this.m2mClientSecret);
       formData.append('audience', managementAudience);
-      
-      // Temporarily comment out scopes to test basic M2M token
-      // if (process.env.KINDE_MANAGEMENT_SCOPES) {
-      //   formData.append('scope', process.env.KINDE_MANAGEMENT_SCOPES);
-      // }
+
+      // Add required scopes for organization management
+      // Convert comma-separated scopes to space-separated (OAuth2 standard)
+      // Use the correct Kinde M2M API scopes for organization user management
+      const defaultScopes = 'create:organization_users read:organization_users read:organizations';
+      const envScopes = process.env.KINDE_MANAGEMENT_SCOPES;
+
+      const scopesToUse = envScopes && envScopes.trim() ? envScopes : defaultScopes;
+      const scopes = scopesToUse.replace(/,/g, ' ');
+
+      console.log('🔍 Requesting Kinde M2M scopes:', scopes);
+      console.log('📋 Required scopes for org user management: create:organization_users, read:organization_users, read:organizations');
+      formData.append('scope', scopes);
 
       const response = await axios.post(
         `${this.baseURL}/oauth2/token`,
@@ -317,10 +325,7 @@ class KindeService {
       // Try multiple endpoints for getting user organizations
       // Based on Kinde API documentation, we need to use different approaches
       const endpoints = [
-        `${this.baseURL}/api/v1/users/${kindeUserId}/organizations`,
-        `${this.baseURL}/api/v1/users/${kindeUserId}/orgs`,
-        `${this.baseURL}/api/v1/user/${kindeUserId}/organizations`,
-        // Alternative: get all organizations and filter by user membership
+        // Primary approach: get all organizations (M2M token can't filter by user)
         `${this.baseURL}/api/v1/organizations`
       ];
       
@@ -443,10 +448,9 @@ class KindeService {
         }
       }
       
-      // Try multiple endpoints for adding user to organization
+      // Try the correct endpoint for adding user to organization
       const endpoints = [
-        `${this.baseURL}/api/v1/organizations/${orgCode}/users`,
-        `${this.baseURL}/api/v1/organization/${orgCode}/users`
+        `${this.baseURL}/api/v1/organizations/${orgCode}/users`
       ];
       
       let response = null;
@@ -506,6 +510,16 @@ class KindeService {
               };
               
               response = await axios.post(endpoint, payload, requestConfig);
+
+              // Check if the response indicates success but no users were added
+              // This typically means the M2M client doesn't have permission
+              if (response.data?.message?.includes('No users added')) {
+                console.warn(`⚠️ addUserToOrganization - API returned success but no users added:`, response.data);
+                console.log('ℹ️ This usually means the M2M client lacks organization management permissions');
+                // Treat this as a definitive failure - don't try other payloads
+                throw new Error(`Kinde API returned: ${response.data.message} (likely permission issue)`);
+              }
+
               successfulEndpoint = endpoint;
               successfulPayload = payload;
               console.log(`✅ addUserToOrganization - Success with endpoint: ${endpoint} and payload:`, JSON.stringify(payload));
@@ -538,7 +552,28 @@ class KindeService {
       
       if (!response) {
         console.error(`❌ addUserToOrganization - All endpoints and payloads failed. Last error:`, lastError?.message);
-        throw new Error(`All user assignment endpoints and payloads failed. Last error: ${lastError?.message}`);
+
+      // Provide helpful guidance for common issues
+      if (lastError?.message?.includes('No users added')) {
+        console.log(`
+🔧 KINDE ORGANIZATION MANAGEMENT SETUP REQUIRED:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Your M2M client needs organization management permissions.
+
+In your Kinde dashboard:
+1. Go to Settings → Applications
+2. Find your M2M application
+3. Add these scopes: 'admin', 'organizations:read', 'organizations:write'
+4. Ensure the M2M client has 'Organization Admin' role
+5. The organization must allow M2M management
+
+If you can't configure this, the invitation system will still work
+for internal user management - Kinde org assignment is optional.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        `);
+      }
+
+      throw new Error(`All user assignment endpoints and payloads failed. Last error: ${lastError?.message}`);
       }
 
       console.log('✅ addUserToOrganization - Success via Kinde API:', {

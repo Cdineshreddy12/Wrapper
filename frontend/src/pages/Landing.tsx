@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { HeroSection, StackedCardsSection, DemoSection, TrustIndicators } from '@/components/landing'
-import { ZopkitNavbar } from '@/components/common/zopkit-navbar'
+import { ZopkitNavbar } from '@/components/ui/zopkit-navbar'
 import { AuroraBackground } from '@/components/ui/aurora-background'
 import api from '@/lib/api'
-import EcosystemDemo from '@/components/landing/EcosystemDemo'
-
+import EcosystemDemo from './EcosystemDemo'
+import { CostSavingsSection } from '@/components/landing'   
+import { CostComparison } from '@/components/ui'
 const Landing: React.FC = () => {
   const navigate = useNavigate()
   const { login, isAuthenticated } = useKindeAuth()

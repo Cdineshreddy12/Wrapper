@@ -1,5 +1,6 @@
 import { pgTable, uuid, varchar, timestamp, boolean, jsonb, integer, text } from 'drizzle-orm/pg-core';
 import { tenants } from './tenants.js';
+import { entities } from './unified-entities.js';
 
 // Tenant users
 export const tenantUsers = pgTable('tenant_users', {
@@ -24,7 +25,7 @@ export const tenantUsers = pgTable('tenant_users', {
   profileData: jsonb('profile_data').default({}),
   
   // Multi-Entity Support
-  primaryOrganizationId: uuid('primary_organization_id').references(() => tenants.tenantId),
+  primaryOrganizationId: uuid('primary_organization_id').references(() => entities.entityId),
   isResponsiblePerson: boolean('is_responsible_person').default(false),
   adminPrivileges: jsonb('admin_privileges').default({}), // Admin privileges per entity
 

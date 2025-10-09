@@ -6,6 +6,13 @@ const BREVO_API_URL = 'https://api.brevo.com/v3';
 const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.SMTP_FROM_EMAIL || 'noreply@wrapper.app';
 const senderName = process.env.BREVO_SENDER_NAME || process.env.SMTP_FROM_NAME || 'Wrapper';
 
+console.log('📧 Email configuration:', {
+  senderEmail,
+  senderName,
+  brevoApiUrl: BREVO_API_URL,
+  hasApiKey: !!process.env.BREVO_API_KEY
+});
+
 // Create axios instance for Brevo API
 const brevoClient = axios.create({
   baseURL: BREVO_API_URL,
@@ -32,10 +39,20 @@ class EmailService {
   detectEmailProvider() {
     // Clean up the API key - remove any whitespace or invalid characters
     const cleanApiKey = process.env.BREVO_API_KEY?.trim();
-    
+
+    console.log('🔍 Email provider detection:', {
+      hasBrevoKey: !!cleanApiKey,
+      brevoKeyLength: cleanApiKey?.length || 0,
+      brevoKeyStartsWith: cleanApiKey?.substring(0, 10) + '...',
+      isDefaultKey: cleanApiKey === 'your-brevo-api-key',
+      hasSMTP: !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
+    });
+
     if (cleanApiKey && cleanApiKey !== 'your-brevo-api-key' && cleanApiKey.length > 20) {
+      console.log('📧 Using Brevo as email provider');
       return 'brevo';
     } else if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+      console.log('📧 Using SMTP as email provider');
       return 'smtp';
     } else {
       console.warn('⚠️  No email provider configured. Email service will run in demo mode.');
@@ -147,14 +164,29 @@ class EmailService {
   }
 
   // Send user invitation email
-  async sendUserInvitation({ email, tenantName, roleName, invitationToken, invitedByName, message }) {
+  async sendUserInvitation({ email, tenantName, roleName, invitationToken, invitedByName, message, invitedDate, expiryDate, organizations, locations }) {
     const subject = `You're invited to join ${tenantName} on Wrapper`;
-    
+
     // Handle both token-based and direct URL invitations
-    const acceptUrl = invitationToken.startsWith('http') 
-      ? invitationToken 
+    const acceptUrl = invitationToken.startsWith('http')
+      ? invitationToken
       : `${process.env.FRONTEND_URL}/invite/accept?token=${invitationToken}`;
-    
+
+    // Format dates
+    const formatDate = (date) => {
+      return new Date(date).toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    };
+
+    const invitedDateFormatted = invitedDate ? formatDate(invitedDate) : formatDate(new Date());
+    const expiryDateFormatted = expiryDate ? formatDate(expiryDate) : formatDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+
     const html = `
       <!DOCTYPE html>
       <html>
@@ -163,58 +195,146 @@ class EmailService {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Team Invitation</title>
         <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background-color: #f8fafc; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-          .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; }
-          .button { display: inline-block; padding: 15px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0; }
-          .info-box { background: #e8f5e8; border-left: 4px solid #4caf50; padding: 15px; margin: 20px 0; border-radius: 5px; }
-          .message-box { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px; }
+          .card { background: white; border-radius: 16px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); overflow: hidden; }
+          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 30px; text-align: center; position: relative; }
+          .header::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
+          .header-content { position: relative; z-index: 1; }
+          .content { padding: 40px 30px; background: white; }
+          .invitation-badge { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; display: inline-block; margin-bottom: 20px; }
+          .inviter-section { background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 1px solid #0ea5e9; border-radius: 12px; padding: 20px; margin: 24px 0; }
+          .details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 24px 0; }
+          .detail-item { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
+          .detail-label { font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+          .detail-value { font-size: 14px; font-weight: 500; color: #1f2937; }
+          .role-badge { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; padding: 6px 12px; border-radius: 16px; font-size: 12px; font-weight: 600; display: inline-block; }
+          .organization-list { background: #fefefe; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin: 16px 0; }
+          .org-item { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
+          .org-item:last-child { border-bottom: none; }
+          .org-icon { width: 8px; height: 8px; background: #10b981; border-radius: 50%; margin-right: 12px; }
+          .message-section { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 12px; padding: 20px; margin: 24px 0; }
+          .cta-section { text-align: center; margin: 32px 0; }
+          .cta-button { display: inline-block; padding: 16px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 14px rgba(102, 126, 234, 0.4); transition: all 0.2s; }
+          .cta-button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6); }
+          .features-section { background: #f8fafc; border-radius: 12px; padding: 24px; margin: 24px 0; }
+          .feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+          .feature-item { display: flex; align-items: center; font-size: 14px; color: #4b5563; }
+          .feature-icon { width: 20px; height: 20px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px; color: white; font-size: 12px; font-weight: bold; }
+          .footer { text-align: center; padding: 24px; color: #6b7280; font-size: 12px; border-top: 1px solid #e5e7eb; }
+          .expiry-notice { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; margin: 16px 0; color: #dc2626; font-size: 13px; }
+          @media (max-width: 640px) { .details-grid { grid-template-columns: 1fr; } .feature-grid { grid-template-columns: 1fr; } }
         </style>
       </head>
       <body>
         <div class="container">
-          <div class="header">
-            <h1>🎉 You're Invited!</h1>
-            <p>Join ${tenantName} on Wrapper</p>
-          </div>
-          <div class="content">
-            <h2>Hi there!</h2>
-            
-            <p><strong>${invitedByName}</strong> has invited you to join <strong>${tenantName}</strong> on Wrapper.</p>
-            
-            <div class="info-box">
-              <h3>📋 Your Role</h3>
-              <p>You've been assigned the role of <strong>${roleName}</strong> in the organization.</p>
+          <div class="card">
+            <div class="header">
+              <div class="header-content">
+                <div class="invitation-badge">🎉 Team Invitation</div>
+                <h1 style="margin: 16px 0; font-size: 28px; font-weight: 700;">You're Invited!</h1>
+                <p style="margin: 0; opacity: 0.9; font-size: 16px;">Join ${tenantName} on Wrapper</p>
+              </div>
             </div>
-            
-            ${message ? `
-            <div class="message-box">
-              <h4>💌 Personal Message</h4>
-              <p><em>"${message}"</em></p>
+
+            <div class="content">
+              <div class="inviter-section">
+                <h2 style="margin: 0 0 8px 0; color: #0c4a6e; font-size: 18px;">👋 Invitation from ${invitedByName}</h2>
+                <p style="margin: 0; color: #374151;">You've been personally invited to join our team. We're excited to have you!</p>
+              </div>
+
+              <div class="details-grid">
+                <div class="detail-item">
+                  <div class="detail-label">Organization</div>
+                  <div class="detail-value">${tenantName}</div>
+                </div>
+                <div class="detail-item">
+                  <div class="detail-label">Your Role</div>
+                  <div class="detail-value">
+                    <span class="role-badge">${roleName}</span>
+                  </div>
+                </div>
+                <div class="detail-item">
+                  <div class="detail-label">Invited Date</div>
+                  <div class="detail-value">${invitedDateFormatted}</div>
+                </div>
+                <div class="detail-item">
+                  <div class="detail-label">Expires</div>
+                  <div class="detail-value">${expiryDateFormatted}</div>
+                </div>
+              </div>
+
+              ${organizations && organizations.length > 0 ? `
+              <div class="organization-list">
+                <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">🏢 Access to Organizations</h3>
+                ${organizations.map(org => `
+                  <div class="org-item">
+                    <div class="org-icon"></div>
+                    <span style="font-weight: 500;">${org}</span>
+                  </div>
+                `).join('')}
+              </div>
+              ` : ''}
+
+              ${locations && locations.length > 0 ? `
+              <div class="organization-list">
+                <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">📍 Access to Locations</h3>
+                ${locations.map(loc => `
+                  <div class="org-item">
+                    <div class="org-icon"></div>
+                    <span style="font-weight: 500;">${loc}</span>
+                  </div>
+                `).join('')}
+              </div>
+              ` : ''}
+
+              ${message ? `
+              <div class="message-section">
+                <h3 style="margin: 0 0 8px 0; color: #92400e; font-size: 16px;">💌 Personal Message</h3>
+                <p style="margin: 0; font-style: italic; color: #374151;">"${message}"</p>
+              </div>
+              ` : ''}
+
+              <div class="expiry-notice">
+                <strong>⏰ Important:</strong> This invitation expires on ${expiryDateFormatted}. Please accept it before then.
+              </div>
+
+              <div class="cta-section">
+                <a href="${acceptUrl}" class="cta-button">🚀 Accept Invitation & Join Team</a>
+                <p style="margin: 16px 0 0 0; font-size: 14px; color: #6b7280;">
+                  Secure sign-in with Google • No passwords required
+                </p>
+              </div>
+
+              <div class="features-section">
+                <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #1f2937;">✨ What You'll Get Access To</h3>
+                <div class="feature-grid">
+                  <div class="feature-item">
+                    <div class="feature-icon">📊</div>
+                    <span>CRM & Business Tools</span>
+                  </div>
+                  <div class="feature-item">
+                    <div class="feature-icon">👥</div>
+                    <span>Team Collaboration</span>
+                  </div>
+                  <div class="feature-item">
+                    <div class="feature-icon">📈</div>
+                    <span>Analytics & Reporting</span>
+                  </div>
+                  <div class="feature-item">
+                    <div class="feature-icon">🔒</div>
+                    <span>Secure Workspace</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="footer">
+                <p style="margin: 0;">
+                  Questions? Contact <strong>${invitedByName}</strong> or reply to this email.<br>
+                  Powered by <strong>Wrapper</strong> • Secure & Collaborative
+                </p>
+              </div>
             </div>
-            ` : ''}
-            
-            <h3>🔐 Easy SSO Access</h3>
-            <p>We use Single Sign-On (SSO) for secure, password-free authentication. Just use your email address to log in!</p>
-            
-            <div style="text-align: center;">
-              <a href="${acceptUrl}" class="button">Accept Invitation & Join Team</a>
-            </div>
-            
-            <h3>🚀 What You'll Get Access To</h3>
-            <ul>
-              <li>Integrated CRM, HR, and Business Tools</li>
-              <li>Collaborative Workspace</li>
-              <li>Team Communication</li>
-              <li>Analytics and Reporting</li>
-              <li>And much more!</li>
-            </ul>
-            
-            <p><small>This invitation will expire in 7 days. If you have any questions, please contact ${invitedByName} or reply to this email.</small></p>
-            
-            <p>Welcome to the team!</p>
-            <p><strong>The Wrapper Team</strong></p>
           </div>
         </div>
       </body>
@@ -591,10 +711,12 @@ class EmailService {
   }
 
   async sendViaBrevo({ recipients, subject, htmlContent, textContent, attachments }) {
+    console.log('🔄 Attempting to send email via Brevo API...');
+
     const emailData = {
-      sender: { 
-        name: senderName, 
-        email: senderEmail 
+      sender: {
+        name: senderName,
+        email: senderEmail
       },
       to: recipients,
       subject,
@@ -603,15 +725,25 @@ class EmailService {
       attachments
     };
 
+    console.log('📧 Brevo email data:', {
+      sender: emailData.sender,
+      to: emailData.to,
+      subject: emailData.subject,
+      hasHtmlContent: !!emailData.htmlContent,
+      recipientCount: recipients.length
+    });
+
     try {
+      console.log('🌐 Making API call to Brevo...');
       const response = await brevoClient.post('/smtp/email', emailData);
-      
+
       console.log('✅ Email sent via Brevo:', {
         messageId: response.data.messageId,
         to: recipients.map(r => r.email || r),
-        subject
+        subject,
+        status: response.status
       });
-      
+
       return response.data;
     } catch (error) {
       // Handle specific Brevo errors
@@ -747,26 +879,49 @@ class EmailService {
   }
 
   async testBrevoConnection() {
+    console.log('🧪 Testing Brevo connection...');
+    console.log('🔑 API Key details:', {
+      exists: !!process.env.BREVO_API_KEY,
+      length: process.env.BREVO_API_KEY?.length || 0,
+      startsWith: process.env.BREVO_API_KEY?.substring(0, 10) + '...'
+    });
+
     try {
+      console.log('🌐 Calling Brevo /account endpoint...');
       const response = await brevoClient.get('/account');
       console.log('✅ Brevo connection test successful:', {
         email: response.data.email,
-        plan: response.data.plan
+        plan: response.data.plan,
+        status: response.status
       });
-      return { 
-        success: true, 
-        provider: 'brevo', 
+      return {
+        success: true,
+        provider: 'brevo',
         account: {
           email: response.data.email,
           plan: response.data.plan
         }
       };
     } catch (error) {
-      console.error('❌ Brevo connection test failed:', error.response?.data || error.message);
-      return { 
-        success: false, 
-        provider: 'brevo', 
-        error: error.response?.data?.message || error.message 
+      console.error('❌ Brevo connection test failed:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message
+      });
+
+      // Provide helpful troubleshooting info
+      if (error.response?.status === 401) {
+        console.error('🔐 AUTHENTICATION ISSUE: Check your BREVO_API_KEY');
+      } else if (error.response?.status === 403) {
+        console.error('🚫 PERMISSION ISSUE: Your API key may not have the right permissions');
+      }
+
+      return {
+        success: false,
+        provider: 'brevo',
+        error: error.response?.data?.message || error.message,
+        status: error.response?.status
       };
     }
   }

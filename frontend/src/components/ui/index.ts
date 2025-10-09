@@ -36,3 +36,10 @@ export { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 export { Form, FormField, FormItem, FormLabel, FormControl, FormDescription, FormMessage } from './form'
 export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table'
 export { ScrollArea, ScrollBar } from './scroll-area' 
+// Animation and visual effects
+export { GoogleGeminiEffect } from './google-gemini-effect'
+export { TextGenerateEffect } from './text-generate-effect'
+export { BusinessTextEffect } from './business-text-effect'
+export { Compare } from './compare'
+export { SparklesCore } from './sparkles'
+export { default as CostComparison } from './cost-comparison'

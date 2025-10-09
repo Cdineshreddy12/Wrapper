@@ -1,6 +1,6 @@
 "use client";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { MotionValue, motion, useScroll, useTransform } from "motion/react";
+import React, { useEffect, useRef, useState } from "react";
+import { MotionValue, motion, useScroll, useTransform } from "framer-motion";
 import { cn } from "@/lib/utils";
 import {
   IconBrightnessDown,
@@ -24,14 +24,11 @@ import { IconCommand } from "@tabler/icons-react";
 import { IconCaretLeftFilled } from "@tabler/icons-react";
 import { IconCaretDownFilled } from "@tabler/icons-react";
 
-
 export const MacbookScroll = ({
-  src,
   showGradient,
   title,
   badge,
 }: {
-  src?: string;
   showGradient?: boolean;
   title?: string | React.ReactNode;
   badge?: React.ReactNode;
@@ -43,6 +40,28 @@ export const MacbookScroll = ({
   });
 
   const [isMobile, setIsMobile] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  // Business suite SVGs
+  const businessSuiteImages = [
+    '/crm-dashboard.svg',
+    '/hrms.svg',
+    '/finance-management.svg',
+    '/operations-management.svg',
+    '/project-management.svg',
+    '/zopkit-academy.svg',
+    '/shared-workspace.svg'
+  ];
+
+  const businessSuiteNames = [
+    'CRM Dashboard',
+    'HRMS System',
+    'Finance Management',
+    'Operations Management',
+    'Project Management',
+    'Zopkit Academy',
+    'Shared Workspace'
+  ];
 
   useEffect(() => {
     if (window && window.innerWidth < 768) {
@@ -50,25 +69,38 @@ export const MacbookScroll = ({
     }
   }, []);
 
+  // Auto-cycle through images
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentImageIndex((prev) => {
+        const nextIndex = (prev + 1) % businessSuiteImages.length;
+        return nextIndex;
+      });
+    }, 1000); // Change image every 4 seconds for smoother experience
+
+    return () => clearInterval(interval);
+  }, [businessSuiteImages.length]);
+
   const scaleX = useTransform(
     scrollYProgress,
-    [0, 0.3],
-    [1.2, isMobile ? 1 : 1.5],
+    [0, 0.4, 0.6, 1],
+    [1, isMobile ? 1 : 1.3, isMobile ? 1. : 1.8, isMobile ? 1.8 : 2.5],
   );
   const scaleY = useTransform(
     scrollYProgress,
-    [0, 0.3],
-    [0.6, isMobile ? 1 : 1.5],
+    [0, 0.3, 0.6, 1],
+    [1, isMobile ? 1 : 1.3, isMobile ? 1.5 : 1.8, isMobile ? 1.8 : 2.5],
   );
-  const translate = useTransform(scrollYProgress, [0, 1], [0, 1500]);
-  const rotate = useTransform(scrollYProgress, [0.1, 0.12, 0.3], [-28, -28, 0]);
-  const textTransform = useTransform(scrollYProgress, [0, 0.3], [0, 100]);
-  const textOpacity = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
+  const translate = useTransform(scrollYProgress, [0, 1], [0, 1000]);
+  const rotate = useTransform(scrollYProgress, [0, 0.2, 0.4], [-58, -58, 0]);
+  const lidOpacity = useTransform(scrollYProgress, [0, 0.1, 0.2], [0, 0, 1]);
+  const textTransform = useTransform(scrollYProgress, [0, 0.4], [0, 80]);
+  const textOpacity = useTransform(scrollYProgress, [0, 0.3], [1, 0]);
 
   return (
     <div
       ref={ref}
-      className="flex min-h-[200vh] shrink-0 scale-[0.35] transform flex-col items-center justify-start py-0 [perspective:800px] sm:scale-50 md:scale-100 md:py-80"
+      className="flex min-h-[100vh] shrink-0 scale-[0.45] transform flex-col items-center justify-start py-0 [perspective:800px] sm:scale-60 md:scale-100 md:py-20"
     >
       <motion.h2
         style={{
@@ -85,11 +117,14 @@ export const MacbookScroll = ({
       </motion.h2>
       {/* Lid */}
       <Lid
-        src={src}
+        currentImageIndex={currentImageIndex}
+        businessSuiteImages={businessSuiteImages}
+        businessSuiteNames={businessSuiteNames}
         scaleX={scaleX}
         scaleY={scaleY}
         rotate={rotate}
         translate={translate}
+        opacity={lidOpacity}
       />
       {/* Base area */}
       <div className="relative -z-10 h-[22rem] w-[32rem] overflow-hidden rounded-2xl bg-gray-200 dark:bg-[#272729]">
@@ -109,11 +144,7 @@ export const MacbookScroll = ({
           </div>
         </div>
         <Trackpad />
-        <div className="absolute inset-x-0 bottom-0 mx-auto h-2 w-20 rounded-tl-3xl rounded-tr-3xl bg-gradient-to-t from-[#272729] to-[#050505]" />
-        {showGradient && (
-          <div className="absolute inset-x-0 bottom-0 z-50 h-40 w-full bg-gradient-to-t from-white via-white to-transparent dark:from-black dark:via-black"></div>
-        )}
-        {badge && <div className="absolute bottom-4 left-4">{badge}</div>}
+       
       </div>
     </div>
   );
@@ -124,23 +155,36 @@ export const Lid = ({
   scaleY,
   rotate,
   translate,
-  src,
+  opacity,
+  currentImageIndex,
+  businessSuiteImages,
+  businessSuiteNames,
 }: {
   scaleX: MotionValue<number>;
   scaleY: MotionValue<number>;
   rotate: MotionValue<number>;
   translate: MotionValue<number>;
-  src?: string;
+  opacity: MotionValue<number>;
+  currentImageIndex: number;
+  businessSuiteImages: string[];
+  businessSuiteNames: string[];
 }) => {
+  const [imageError, setImageError] = React.useState(false);
+
+  // Reset error state when image changes
+  React.useEffect(() => {
+    setImageError(false);
+  }, [currentImageIndex]);
+
   return (
     <div className="relative [perspective:800px]">
       <div
         style={{
-          transform: "perspective(800px) rotateX(-25deg) translateZ(0px)",
+          transform: "perspective(1000px) rotateX(-25deg) translateZ(0px)",
           transformOrigin: "bottom",
           transformStyle: "preserve-3d",
         }}
-        className="relative h-[12rem] w-[32rem] rounded-2xl bg-[#010101] p-2"
+        className="relative h-[14rem] w-[32rem] rounded-2xl bg-[#010101] p-2"
       >
         <div
           style={{
@@ -159,17 +203,71 @@ export const Lid = ({
           scaleY: scaleY,
           rotateX: rotate,
           translateY: translate,
+          opacity: opacity,
           transformStyle: "preserve-3d",
-          transformOrigin: "top",
+          transformOrigin: "center",
         }}
-        className="absolute inset-0 h-96 w-[32rem] rounded-2xl bg-[#010101] p-2"
+        className="absolute inset-0 h-[18rem] w-[32rem] rounded-2xl bg-[#010101] p-2"
       >
-        <div className="absolute inset-0 rounded-lg bg-[#272729]" />
-        <img
-          src={src as string}
-          alt="aceternity logo"
-          className="absolute inset-0 h-full w-full rounded-lg object-cover object-left-top"
-        />
+        <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-600" />
+
+        {/* Current business suite image */}
+        {!imageError ? (
+          <motion.img
+            key={`image-${currentImageIndex}`}
+            src={businessSuiteImages[currentImageIndex]}
+            alt={businessSuiteNames[currentImageIndex]}
+            className="absolute inset-0 h-full w-full rounded-lg object-cover object-center opacity-95"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.95 }}
+            transition={{ duration: 0.5 }}
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          <motion.div
+            key={`fallback-${currentImageIndex}`}
+            className="absolute inset-0 flex items-center justify-center h-full w-full text-white text-center p-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+          >
+            <div>
+              <h2 className="text-2xl font-bold mb-3">Zopkit Business Suite</h2>
+              <p className="text-lg opacity-90 mb-4">Complete business management platform</p>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>📊 CRM</div>
+                <div>👥 HRMS</div>
+                <div>💰 Finance</div>
+                <div>⚙️ Operations</div>
+                <div>📋 Projects</div>
+                <div>🎓 Academy</div>
+                <div>🤝 Workspace</div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Business suite name overlay */}
+        <motion.div
+          className="absolute bottom-4 left-4 right-4 bg-black/70 backdrop-blur-sm rounded-lg p-3"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: .1 }}
+        >
+          <div className="text-white text-center">
+            <h3 className="font-semibold text-lg mb-1">{businessSuiteNames[currentImageIndex]}</h3>
+            <div className="flex justify-center space-x-1">
+              {businessSuiteImages.map((_, index) => (
+                <div
+                  key={index}
+                  className={`w-2 h-2 rounded-full transition-colors duration-300 ${
+                    index === currentImageIndex ? 'bg-white' : 'bg-white/40'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+        </motion.div>
       </motion.div>
     </div>
   );
@@ -635,21 +733,8 @@ export const OptionKey = ({ className }: { className: string }) => {
 
 const AceternityLogo = () => {
   return (
-    <svg
-      width="66"
-      height="65"
-      viewBox="0 0 66 65"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className="h-3 w-3 text-white"
-    >
-      <path
-        d="M8 8.05571C8 8.05571 54.9009 18.1782 57.8687 30.062C60.8365 41.9458 9.05432 57.4696 9.05432 57.4696"
-        stroke="currentColor"
-        strokeWidth="15"
-        strokeMiterlimit="3.86874"
-        strokeLinecap="round"
-      />
-    </svg>
+   <div className="text-white text-sm text-xl font-bold">
+        Welcome to Zopkit
+   </div>
   );
 };

@@ -1,5 +1,4 @@
 import { pgTable, uuid, varchar, timestamp, jsonb, boolean, text, integer, decimal, date } from 'drizzle-orm/pg-core';
-import { tenantUsers } from './users.js';
 
 // Main tenants table
 export const tenants = pgTable('tenants', {
@@ -71,7 +70,15 @@ export const tenantInvitations = pgTable('tenant_invitations', {
   invitationId: uuid('invitation_id').primaryKey().defaultRandom(),
   tenantId: uuid('tenant_id').references(() => tenants.tenantId).notNull(),
   email: varchar('email', { length: 255 }).notNull(),
-  roleId: uuid('role_id'), // Reference to role they'll get
+
+  // Legacy role field for backward compatibility (single role)
+  roleId: uuid('role_id'), // Reference to role they'll get (deprecated for multi-entity)
+
+  // Multi-entity invitation support
+  targetEntities: jsonb('target_entities').default([]), // Array of {entityId, roleId, entityType, membershipType}
+  invitationScope: varchar('invitation_scope', { length: 20 }).default('tenant'), // 'tenant', 'organization', 'location', 'multi-entity'
+  primaryEntityId: uuid('primary_entity_id'), // User's primary organization/location (references entities table)
+
   invitedBy: uuid('invited_by').notNull(),
   invitationToken: varchar('invitation_token', { length: 255 }).notNull().unique(),
   invitationUrl: varchar('invitation_url', { length: 1000 }), // Full invitation URL for easy access

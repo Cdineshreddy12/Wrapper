@@ -1,450 +1,739 @@
-import Redis from 'ioredis';
-import dotenv from 'dotenv';
-dotenv.config();
+import Redis from 'redis';
 
-// Debug environment variables
-console.log('🔍 Environment variables check:', {
-  REDIS_URL: process.env.REDIS_URL ? 'SET' : 'NOT SET',
-  REDIS_HOST: process.env.REDIS_HOST ? 'SET' : 'NOT SET', 
-  REDIS_PORT: process.env.REDIS_PORT ? 'SET' : 'NOT SET',
-  REDIS_PASSWORD: process.env.REDIS_PASSWORD ? 'SET' : 'NOT SET',
-  REDIS_DB: process.env.REDIS_DB ? 'SET' : 'NOT SET'
-});
-
-// Redis configuration with the provided URL
-const redisUrl = process.env.REDIS_URL;
-const redisHost = process.env.REDIS_HOST ;
-const redisPort = process.env.REDIS_PORT
-
-let redisConfig;
-let redis;
-
-// Fallback mock data when Redis is unavailable
-const mockCache = new Map();
-let isRedisAvailable = false;
-
-if (redisUrl && (redisUrl.startsWith('redis://') || redisUrl.startsWith('rediss://'))) {
-  // Use URL format
-  console.log('🔗 Using Redis URL format');
-  redisConfig = redisUrl;
-} else if (redisUrl && !redisUrl.startsWith('redis://') && !redisUrl.startsWith('rediss://')) {
-  // Handle URL without protocol - assume redis:// and add password if provided
-  const password = '7PBMVK2WaoWNN6cfVqlyJTb979Q4Cv5d';
-  if (password) {
-    redisConfig = `redis://:${password}@${redisUrl}`;
-  } else {
-    redisConfig = `redis://${redisUrl}`;
+class RedisManager {
+  constructor() {
+    this.client = null;
+    this.subscribers = new Map();
+    this.isConnected = false;
   }
-  console.log('🔗 Constructed Redis URL from host:port format');
-} else {
-  // Use host/port configuration as fallback
-  console.log('🔧 Using Redis host/port configuration');
-  redisConfig = {
-    host: redisHost,
-    port: redisPort,
-    password: process.env.REDIS_PASSWORD,
-    db: parseInt(process.env.REDIS_DB || '0'),
-    family: 4, // 4 (IPv4) or 6 (IPv6)
-    connectTimeout: 10000,
-    lazyConnect: true,
-  };
-}
 
-console.log('redisConfig', redisConfig);
+  async connect() {
+    if (this.isConnected) {
+      return;
+    }
 
-try {
-  redis = new Redis(redisConfig, {
-    retryDelayOnFailover: 100,
-    enableReadyCheck: true,
-    maxRetriesPerRequest: 2, // Reduced retries for faster fallback
-    keepAlive: 30000,
-    commandTimeout: 3000, // Shorter timeout
-    connectTimeout: 5000,
-    lazyConnect: true,
-  });
-} catch (error) {
-  console.error('❌ Failed to create Redis instance:', error);
-  redis = null;
-}
-
-if (redis) {
-  redis.on('connect', () => {
-    console.log('✅ Redis connected successfully to:', redisHost);
-    isRedisAvailable = true;
-  });
-
-  redis.on('error', (err) => {
-    console.error('❌ Redis connection error:', err.message);
-    isRedisAvailable = false;
-  });
-
-  redis.on('ready', () => {
-    console.log('🚀 Redis is ready to accept commands');
-    isRedisAvailable = true;
-  });
-
-  redis.on('close', () => {
-    console.log('⚠️ Redis connection closed');
-    isRedisAvailable = false;
-  });
-}
-
-// Cache key generators
-export const cacheKeys = {
-  userPermissions: (userId) => `permissions:user:${userId}`,
-  tenantUsers: (tenantId) => `tenant:${tenantId}:users`,
-  subscription: (tenantId) => `subscription:${tenantId}`,
-  usageDaily: (tenantId, app, date) => `usage:${tenantId}:${app}:${date}`,
-  apiCalls: (tenantId, app, date) => `usage:${tenantId}:${app}:api_calls:${date}`,
-  activeUsers: (tenantId) => `active_users:${tenantId}`,
-  rateLimit: (tenantId, endpoint, window) => `rate_limit:${tenantId}:${endpoint}:${window}`,
-  session: (sessionToken) => `session:${sessionToken}`,
-};
-
-// Usage tracking helpers
-export class UsageCache {
-  // Increment API call counter
-  static async incrementApiCalls(tenantId, app, date = null) {
     try {
-      if (redis && isRedisAvailable) {
-        const today = date || new Date().toISOString().split('T')[0];
-        const key = cacheKeys.apiCalls(tenantId, app, today);
-        return await redis.incr(key);
-      } else {
-        // Fallback to mock counter
-        const today = date || new Date().toISOString().split('T')[0];
-        const key = `usage:${tenantId}:${app}:api_calls:${today}`;
-        const current = mockCache.get(key)?.value || 0;
-        const newValue = current + 1;
-        mockCache.set(key, { value: newValue, expires: Date.now() + (24 * 60 * 60 * 1000) });
-        console.log(`📊 Mock API Counter: ${key} = ${newValue} (Redis unavailable)`);
-        return newValue;
-      }
-    } catch (error) {
-      console.error('❌ UsageCache incrementApiCalls error:', error.message);
-      return 1; // Return 1 as fallback
-    }
-  }
-
-  // Set expiry for daily counters (expire at end of day)
-  static async setDailyExpiry(key) {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-    const secondsUntilMidnight = Math.floor((tomorrow - new Date()) / 1000);
-    await redis.expire(key, secondsUntilMidnight);
-  }
-
-  // Track active user (expires in 30 minutes)
-  static async trackActiveUser(tenantId, userId) {
-    const key = `active_user:${tenantId}:${userId}`;
-    await redis.setex(key, 1800, '1'); // 30 minutes
-  }
-
-  // Get active user count
-  static async getActiveUserCount(tenantId) {
-    const pattern = `active_user:${tenantId}:*`;
-    const keys = await redis.keys(pattern);
-    return keys.length;
-  }
-
-  // Get active users (alias for compatibility)
-  static async getActiveUsers(tenantId) {
-    return await this.getActiveUserCount(tenantId);
-  }
-
-  // Get current API call count
-  static async getApiCallCount(tenantId, app, date = null) {
-    const today = date || new Date().toISOString().split('T')[0];
-    const key = cacheKeys.apiCalls(tenantId, app, today);
-    const count = await redis.get(key);
-    return parseInt(count || '0');
-  }
-
-  // Get API calls (alias with period support)
-  static async getApiCalls(tenantId, period = 'today') {
-    if (period === 'today') {
-      return await this.getTotalApiCalls(tenantId);
-    }
-    // For other periods, return total across apps
-    return await this.getTotalApiCalls(tenantId);
-  }
-
-  // Get current usage summary
-  static async getCurrentUsage(tenantId) {
-    const apps = ['crm', 'hr', 'affiliate', 'accounting', 'inventory', 'wrapper'];
-    const usage = {};
-    
-    for (const app of apps) {
-      usage[app] = await this.getApiCallCount(tenantId, app);
-    }
-    
-    return usage;
-  }
-
-  // Get total usage across all apps
-  static async getTotalApiCalls(tenantId, date = null) {
-    const today = date || new Date().toISOString().split('T')[0];
-    const apps = ['crm', 'hr', 'affiliate', 'accounting', 'inventory', 'wrapper'];
-    
-    let total = 0;
-    for (const app of apps) {
-      const count = await this.getApiCallCount(tenantId, app, today);
-      total += count;
-    }
-    return total;
-  }
-
-  // Get tenant-wise API calls summary
-  static async getTenantApiCallsSummary(tenantId, date = null) {
-    const today = date || new Date().toISOString().split('T')[0];
-    const apps = ['crm', 'hr', 'affiliate', 'accounting', 'inventory', 'wrapper'];
-    
-    const summary = {
-      tenantId,
-      date: today,
-      totalCalls: 0,
-      appBreakdown: {},
-      timestamp: new Date().toISOString()
-    };
-
-    for (const app of apps) {
-      const count = await this.getApiCallCount(tenantId, app, today);
-      summary.appBreakdown[app] = count;
-      summary.totalCalls += count;
-    }
-
-    return summary;
-  }
-
-  // Get all tenants with their API usage
-  static async getAllTenantsUsage(date = null) {
-    const today = date || new Date().toISOString().split('T')[0];
-    
-    // Get all tenant keys from Redis
-    const pattern = `usage:*:*:api_calls:${today}`;
-    const keys = await redis.keys(pattern);
-    
-    const tenantUsage = {};
-    
-    for (const key of keys) {
-      const parts = key.split(':');
-      if (parts.length >= 4) {
-        const tenantId = parts[1];
-        const app = parts[2];
-        const count = parseInt(await redis.get(key) || '0');
-        
-        if (!tenantUsage[tenantId]) {
-          tenantUsage[tenantId] = {
-            tenantId,
-            totalCalls: 0,
-            appBreakdown: {},
-            timestamp: new Date().toISOString()
-          };
+      const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+      console.log('redis url',process.env.REDIS_URL);
+      this.client = Redis.createClient({
+        url: redisUrl,
+        retry_strategy: (options) => {
+          if (options.error && options.error.code === 'ECONNREFUSED') {
+            console.error('Redis server connection refused');
+            return new Error('Redis server connection refused');
+          }
+          if (options.total_retry_time > 1000 * 60 * 60) {
+            console.error('Redis retry time exhausted');
+            return new Error('Retry time exhausted');
+          }
+          if (options.attempt > 10) {
+            console.error('Redis max retry attempts exceeded');
+            return undefined;
+          }
+          // Exponential backoff
+          return Math.min(options.attempt * 100, 3000);
         }
-        
-        tenantUsage[tenantId].appBreakdown[app] = count;
-        tenantUsage[tenantId].totalCalls += count;
+      });
+
+      this.client.on('error', (error) => {
+        console.error('Redis client error:', error);
+        this.isConnected = false;
+      });
+
+      this.client.on('connect', () => {
+        console.log('✅ Redis client connected');
+        this.isConnected = true;
+      });
+
+      this.client.on('disconnect', () => {
+        console.log('❌ Redis client disconnected');
+        this.isConnected = false;
+      });
+
+      await this.client.connect();
+      console.log('🚀 Redis manager initialized');
+
+    } catch (error) {
+      console.error('❌ Failed to connect to Redis:', error);
+      this.client = null;
+      throw error;
+    }
+  }
+
+  async disconnect() {
+    if (this.client) {
+      await this.client.quit();
+      this.client = null;
+      this.isConnected = false;
+      console.log('🛑 Redis manager disconnected');
+    }
+  }
+
+  /**
+   * Publish message to channel
+   */
+  async publish(channel, message) {
+    if (!this.client || !this.isConnected) {
+      throw new Error('Redis client not connected');
+    }
+
+    try {
+      await this.client.publish(channel, message);
+      console.log(`📡 Published to ${channel}: ${message.length} characters`);
+    } catch (error) {
+      console.error(`❌ Failed to publish to ${channel}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Subscribe to channel
+   */
+  async subscribe(channel) {
+    if (!this.client || !this.isConnected) {
+      throw new Error('Redis client not connected');
+    }
+
+    try {
+      await this.client.subscribe(channel);
+      console.log(`📡 Subscribed to ${channel}`);
+    } catch (error) {
+      console.error(`❌ Failed to subscribe to ${channel}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Subscribe to multiple channels
+   */
+  async subscribeMultiple(channels) {
+    if (!this.client || !this.isConnected) {
+      throw new Error('Redis client not connected');
+    }
+
+    try {
+      await this.client.subscribe(channels);
+      console.log(`📡 Subscribed to ${channels.length} channels: ${channels.join(', ')}`);
+    } catch (error) {
+      console.error(`❌ Failed to subscribe to channels:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Unsubscribe from channel
+   */
+  async unsubscribe(channel) {
+    if (!this.client || !this.isConnected) {
+      console.warn('⚠️ Redis client not connected, skipping unsubscribe');
+      return;
+    }
+
+    try {
+      await this.client.unsubscribe(channel);
+      console.log(`📡 Unsubscribed from ${channel}`);
+    } catch (error) {
+      console.error(`❌ Failed to unsubscribe from ${channel}:`, error);
+    }
+  }
+
+  /**
+   * Set key-value pair
+   */
+  async set(key, value, ttl = null) {
+    if (!this.client || !this.isConnected) {
+      throw new Error('Redis client not connected');
+    }
+
+    try {
+      const serializedValue = JSON.stringify(value);
+
+      if (ttl) {
+        await this.client.setEx(key, ttl, serializedValue);
+      } else {
+        await this.client.set(key, serializedValue);
       }
+
+      console.log(`💾 Redis SET: ${key} (${serializedValue.length} bytes)`);
+    } catch (error) {
+      console.error(`❌ Failed to set Redis key ${key}:`, error);
+      throw error;
     }
-    
-    return Object.values(tenantUsage);
   }
 
-  // Store performance metrics for intervals
-  static async storeIntervalMetrics(tenantId, timestamp, metrics) {
-    const key = `interval-metrics:${tenantId}:${timestamp}`;
-    await CacheService.set(key, metrics, 3600); // 1 hour TTL
-  }
-
-  // Store app-specific metrics
-  static async storeAppMetrics(tenantId, app, metrics) {
-    const key = `app-metrics:${tenantId}:${app}`;
-    await CacheService.set(key, metrics, 1800); // 30 minutes TTL
-  }
-}
-
-// Rate limiting helpers
-export class RateLimitCache {
-  // Check rate limit
-  static async checkRateLimit(tenantId, endpoint, limit, windowSeconds) {
-    const window = Math.floor(Date.now() / 1000 / windowSeconds);
-    const key = cacheKeys.rateLimit(tenantId, endpoint, window);
-    
-    const current = await redis.incr(key);
-    if (current === 1) {
-      await redis.expire(key, windowSeconds);
+  /**
+   * Get value by key
+   */
+  async get(key) {
+    if (!this.client || !this.isConnected) {
+      throw new Error('Redis client not connected');
     }
-    
+
+    try {
+      const value = await this.client.get(key);
+
+      if (value) {
+        const parsedValue = JSON.parse(value);
+        console.log(`💾 Redis GET: ${key} (${value.length} bytes)`);
+        return parsedValue;
+      }
+
+      console.log(`💾 Redis GET: ${key} (not found)`);
+      return null;
+
+    } catch (error) {
+      console.error(`❌ Failed to get Redis key ${key}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete key
+   */
+  async delete(key) {
+    if (!this.client || !this.isConnected) {
+      console.warn('⚠️ Redis client not connected, skipping delete');
+      return;
+    }
+
+    try {
+      const result = await this.client.del(key);
+      console.log(`💾 Redis DEL: ${key} (deleted: ${result})`);
+      return result;
+    } catch (error) {
+      console.error(`❌ Failed to delete Redis key ${key}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if key exists
+   */
+  async exists(key) {
+    if (!this.client || !this.isConnected) {
+      throw new Error('Redis client not connected');
+    }
+
+    try {
+      const result = await this.client.exists(key);
+      return result === 1;
+    } catch (error) {
+      console.error(`❌ Failed to check Redis key ${key}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all keys matching pattern
+   */
+  async keys(pattern = '*') {
+    if (!this.client || !this.isConnected) {
+      throw new Error('Redis client not connected');
+    }
+
+    try {
+      const keys = await this.client.keys(pattern);
+      console.log(`💾 Redis KEYS: ${pattern} (found: ${keys.length})`);
+      return keys;
+    } catch (error) {
+      console.error(`❌ Failed to get Redis keys ${pattern}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Set up message handler
+   */
+  onMessage(callback) {
+    if (!this.client) {
+      console.warn('⚠️ Redis client not initialized');
+      return;
+    }
+
+    this.client.on('message', callback);
+    console.log('📡 Message handler registered');
+  }
+
+  /**
+   * Health check
+   */
+  async healthCheck() {
+    if (!this.client) {
+      return {
+        status: 'disconnected',
+        message: 'Redis client not initialized'
+      };
+    }
+
+    try {
+      const ping = await this.client.ping();
+      const isConnected = ping === 'PONG';
+
+      return {
+        status: isConnected ? 'healthy' : 'unhealthy',
+        connected: isConnected,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
     return {
-      current,
-      limit,
-      remaining: Math.max(0, limit - current),
-      resetTime: (window + 1) * windowSeconds * 1000,
-      blocked: current > limit
-    };
-  }
-
-  // Reset rate limit
-  static async resetRateLimit(tenantId, endpoint, windowSeconds) {
-    const window = Math.floor(Date.now() / 1000 / windowSeconds);
-    const key = cacheKeys.rateLimit(tenantId, endpoint, window);
-    await redis.del(key);
-  }
-}
-
-// Cache helpers
-export class CacheService {
-  // Set cache with TTL
-  static async set(key, value, ttlSeconds = 3600) {
-    try {
-      if (redis && isRedisAvailable) {
-        const serialized = typeof value === 'string' ? value : JSON.stringify(value);
-        await redis.setex(key, ttlSeconds, serialized);
-        console.log(`📝 Redis SET: ${key}`);
-      } else {
-        // Fallback to in-memory cache
-        mockCache.set(key, { value, expires: Date.now() + (ttlSeconds * 1000) });
-        console.log(`📝 Mock SET: ${key} (Redis unavailable)`);
-      }
-    } catch (error) {
-      console.error('❌ Cache SET error:', error.message);
-      // Fallback to in-memory cache
-      mockCache.set(key, { value, expires: Date.now() + (ttlSeconds * 1000) });
+        status: 'error',
+        error: error.message,
+        timestamp: new Date().toISOString()
+      };
     }
   }
 
-  // Get from cache
-  static async get(key) {
+  /**
+   * Get connection status
+   */
+  isConnected() {
+    return this.isConnected;
+  }
+}
+
+// Singleton instance
+const redisManager = new RedisManager();
+
+// Helper functions for backward compatibility
+export function getRedis() {
+  return redisManager;
+}
+
+export function publish(channel, message) {
+  return redisManager.publish(channel, message);
+}
+
+export function subscribe(channel) {
+  return redisManager.subscribe(channel);
+}
+
+/**
+ * Usage Cache Class for tracking API usage and active users
+ */
+class UsageCache {
+  constructor() {
+    this.redis = redisManager;
+  }
+
+  /**
+   * Increment API calls counter for a tenant and app
+   */
+  async incrementApiCalls(tenantId, app) {
+    if (!this.redis.isConnected()) {
+      console.warn('⚠️ Redis not connected, skipping API call tracking');
+      return;
+    }
+
     try {
-      if (redis && isRedisAvailable) {
-        const value = await redis.get(key);
-        if (!value) return null;
-        
-        try {
-          console.log(`📖 Redis GET: ${key} - Found`);
-          return JSON.parse(value);
-        } catch {
-          return value;
-        }
-      } else {
-        // Fallback to in-memory cache
-        const cached = mockCache.get(key);
-        if (cached && cached.expires > Date.now()) {
-          console.log(`📖 Mock GET: ${key} - Found (Redis unavailable)`);
-          return cached.value;
-        }
-        console.log(`📖 Mock GET: ${key} - Not found or expired (Redis unavailable)`);
-        return null;
-      }
+      const key = `api_calls:${tenantId}:${app}:${this.getCurrentHourKey()}`;
+      await this.redis.client.incr(key);
+
+      // Set expiry for 24 hours
+      await this.redis.client.expire(key, 24 * 60 * 60);
+
+      console.log(`📊 API call tracked: ${tenantId}:${app}`);
     } catch (error) {
-      console.error('❌ Cache GET error:', error.message);
-      // Fallback to in-memory cache
-      const cached = mockCache.get(key);
-      if (cached && cached.expires > Date.now()) {
-        return cached.value;
+      console.error('❌ Failed to increment API calls:', error);
+    }
+  }
+
+  /**
+   * Track active user for a tenant
+   */
+  async trackActiveUser(tenantId, userId) {
+    if (!this.redis.isConnected()) {
+      console.warn('⚠️ Redis not connected, skipping active user tracking');
+      return;
+    }
+
+    try {
+      const key = `active_users:${tenantId}`;
+
+      // Add user to active users set
+      await this.redis.client.sAdd(key, userId);
+
+      // Set expiry for 1 hour
+      await this.redis.client.expire(key, 60 * 60);
+
+      console.log(`👤 Active user tracked: ${tenantId}:${userId}`);
+    } catch (error) {
+      console.error('❌ Failed to track active user:', error);
+    }
+  }
+
+  /**
+   * Get API calls count for a tenant and app in the current hour
+   */
+  async getApiCallsCount(tenantId, app) {
+    if (!this.redis.isConnected()) {
+      return 0;
+    }
+
+    try {
+      const key = `api_calls:${tenantId}:${app}:${this.getCurrentHourKey()}`;
+      const count = await this.redis.client.get(key);
+      return parseInt(count) || 0;
+    } catch (error) {
+      console.error('❌ Failed to get API calls count:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get active users count for a tenant
+   */
+  async getActiveUsersCount(tenantId) {
+    if (!this.redis.isConnected()) {
+      return 0;
+    }
+
+    try {
+      const key = `active_users:${tenantId}`;
+      const count = await this.redis.client.sCard(key);
+      return count;
+    } catch (error) {
+      console.error('❌ Failed to get active users count:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get current hour key for time-based tracking
+   */
+  getCurrentHourKey() {
+    const now = new Date();
+    return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${now.getHours()}`;
+  }
+
+  /**
+   * Clean up old tracking data
+   */
+  async cleanupOldData() {
+    if (!this.redis.isConnected()) {
+      return;
+    }
+
+    try {
+      // Get all API call keys older than 24 hours
+      const apiKeys = await this.redis.client.keys('api_calls:*:*');
+
+      // Get all active user keys older than 1 hour
+      const userKeys = await this.redis.client.keys('active_users:*');
+
+      // Clean up old keys
+      for (const key of [...apiKeys, ...userKeys]) {
+        const ttl = await this.redis.client.ttl(key);
+        if (ttl < 0) {
+          await this.redis.client.del(key);
+        }
       }
+
+      console.log('🧹 Cleaned up old usage tracking data');
+    } catch (error) {
+      console.error('❌ Failed to cleanup usage data:', error);
+    }
+  }
+}
+
+// Create singleton instance
+const usageCache = new UsageCache();
+
+/**
+ * CRM Sync Streams Class - Handles Redis Streams for CRM synchronization
+ */
+class CrmSyncStreams {
+  constructor() {
+    this.redis = redisManager;
+    this.streamPrefix = 'crm:sync';
+  }
+
+  /**
+   * Publish user lifecycle event
+   */
+  async publishUserEvent(tenantId, eventType, userData, metadata = {}) {
+    const streamKey = `${this.streamPrefix}:user:${eventType}`;
+
+    const message = {
+      streamId: streamKey,
+      messageId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      sourceApp: 'wrapper',
+      eventType,
+      entityType: 'user',
+      entityId: userData.userId,
+      tenantId,
+      action: eventType.replace('user_', ''),
+      data: userData,
+      metadata: {
+        correlationId: `user_${userData.userId}_${Date.now()}`,
+        version: '1.0',
+        retryCount: 0,
+        sourceTimestamp: new Date().toISOString(),
+        ...metadata
+      }
+    };
+
+    return await this.publishToStream(streamKey, message);
+  }
+
+  /**
+   * Publish role/permission event
+   */
+  async publishRoleEvent(tenantId, eventType, roleData, metadata = {}) {
+    const streamKey = `${this.streamPrefix}:permissions:${eventType}`;
+
+    const message = {
+      streamId: streamKey,
+      messageId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      sourceApp: 'wrapper',
+      eventType,
+      entityType: 'role_assignment',
+      entityId: roleData.assignmentId || roleData.roleId,
+      tenantId,
+      action: eventType.replace('role_', ''),
+      data: roleData,
+      metadata: {
+        correlationId: `role_${roleData.userId || roleData.roleId}_${Date.now()}`,
+        version: '1.0',
+        retryCount: 0,
+        sourceTimestamp: new Date().toISOString(),
+        ...metadata
+      }
+    };
+
+    return await this.publishToStream(streamKey, message);
+  }
+
+  /**
+   * Publish organization event
+   */
+  async publishOrgEvent(tenantId, eventType, orgData, metadata = {}) {
+    const streamKey = `${this.streamPrefix}:organization:${eventType}`;
+
+    const message = {
+      streamId: streamKey,
+      messageId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      sourceApp: 'wrapper',
+      eventType,
+      entityType: 'organization',
+      entityId: orgData.orgCode || orgData.organizationId,
+      tenantId,
+      action: eventType.replace('org_', '').replace('employee_', ''),
+      data: orgData,
+      metadata: {
+        correlationId: `org_${orgData.orgCode || orgData.organizationId}_${Date.now()}`,
+        version: '1.0',
+        retryCount: 0,
+        sourceTimestamp: new Date().toISOString(),
+        ...metadata
+      }
+    };
+
+    return await this.publishToStream(streamKey, message);
+  }
+
+        /**
+         * Publish credit/billing event
+         */
+        async publishCreditEvent(tenantId, eventType, creditData, metadata = {}) {
+          const streamKey = `${this.streamPrefix}:credits:${eventType}`;
+
+          const message = {
+            streamId: streamKey,
+            messageId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            timestamp: new Date().toISOString(),
+            sourceApp: 'wrapper',
+            eventType,
+            entityType: 'credit',
+            entityId: creditData.allocationId || creditData.configId || `credit_${Date.now()}`,
+            tenantId,
+            action: eventType.replace('credit_', ''),
+            data: creditData,
+            metadata: {
+              correlationId: `credit_${creditData.entityId || 'system'}_${Date.now()}`,
+              version: '1.0',
+              retryCount: 0,
+              sourceTimestamp: new Date().toISOString(),
+              ...metadata
+            }
+          };
+
+          return await this.publishToStream(streamKey, message);
+        }
+
+        /**
+         * Publish credit allocation event (for CRM sync)
+         */
+        async publishCreditAllocation(tenantId, entityId, amount, metadata = {}) {
+          const streamKey = 'credit-events';
+
+          const message = {
+            eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            eventType: 'credit.allocated',
+            tenantId,
+            entityId,
+            amount,
+            timestamp: new Date().toISOString(),
+            source: 'wrapper',
+            metadata: JSON.stringify({
+              allocationId: metadata.allocationId,
+              reason: metadata.reason || 'credit_allocation',
+              ...metadata
+            })
+          };
+
+          console.log(`📡 Publishing credit allocation: ${amount} credits to ${entityId}`);
+          return await this.publishToStream(streamKey, message);
+        }
+
+        /**
+         * Publish credit consumption event (from CRM)
+         */
+        async publishCreditConsumption(tenantId, entityId, userId, amount, operationType, operationId, metadata = {}) {
+          const streamKey = 'credit-events';
+
+          const message = {
+            eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            eventType: 'credit.consumed',
+            tenantId,
+            entityId,
+            userId,
+            amount,
+            operationType,
+            operationId,
+            timestamp: new Date().toISOString(),
+            source: 'crm',
+            metadata: JSON.stringify({
+              resourceType: metadata.resourceType,
+              resourceId: metadata.resourceId,
+              ...metadata
+            })
+          };
+
+          console.log(`📡 Publishing credit consumption: ${amount} credits by ${userId} for ${operationType}`);
+          return await this.publishToStream(streamKey, message);
+        }
+
+        /**
+         * Publish acknowledgment for processed event
+         */
+        async publishAcknowledgment(originalEventId, status, acknowledgmentData = {}) {
+          const streamKey = 'acknowledgments';
+
+          const message = {
+            acknowledgmentId: `ack_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            originalEventId,
+            status, // 'processed', 'failed', 'timeout'
+            timestamp: new Date().toISOString(),
+            source: acknowledgmentData.sourceApplication || 'crm', // Dynamic source
+            acknowledgmentData: JSON.stringify(acknowledgmentData)
+          };
+
+          console.log(`📡 Publishing acknowledgment for event ${originalEventId}: ${status}`);
+          return await this.publishToStream(streamKey, message);
+        }
+
+        /**
+         * Publish inter-application event (any app to any app)
+         */
+        async publishInterAppEvent(eventType, sourceApp, targetApp, tenantId, entityId, eventData = {}, publishedBy = 'system') {
+          const streamKey = 'inter-app-events';
+
+          const message = {
+            eventId: `inter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            eventType,
+            sourceApplication: sourceApp,
+            targetApplication: targetApp,
+            tenantId,
+            entityId,
+            timestamp: new Date().toISOString(),
+            eventData: JSON.stringify(eventData),
+            publishedBy
+          };
+
+          console.log(`📡 Publishing inter-app event: ${sourceApp} → ${targetApp} (${eventType})`);
+          return await this.publishToStream(streamKey, message);
+        }
+
+  /**
+   * Generic publish method to Redis Stream
+   */
+  async publishToStream(streamKey, message) {
+    if (!this.redis.isConnected) {
+      console.warn('⚠️ Redis not connected, skipping stream publish');
+      return null;
+    }
+
+    try {
+      // Convert message to Redis stream format
+      const streamData = {};
+      Object.entries(message).forEach(([key, value]) => {
+        streamData[key] = JSON.stringify(value);
+      });
+
+      // Use XADD to add to stream
+      const result = await this.redis.client.xAdd(streamKey, '*', streamData);
+
+      console.log(`📡 Published to Redis Stream: ${streamKey} (ID: ${result})`);
+      console.log(`   Event: ${message.eventType}, Entity: ${message.entityId}`);
+
+      return {
+        streamKey,
+        messageId: result,
+        success: true
+      };
+
+    } catch (error) {
+      console.error(`❌ Failed to publish to Redis Stream ${streamKey}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get stream info for monitoring
+   */
+  async getStreamInfo(streamKey) {
+    if (!this.redis.isConnected()) {
+      return null;
+    }
+
+    try {
+      const info = await this.redis.client.xInfoStream(streamKey);
+      return info;
+    } catch (error) {
+      console.error(`❌ Failed to get stream info for ${streamKey}:`, error);
       return null;
     }
   }
 
-  // Delete from cache
-  static async del(key) {
-    try {
-      if (redis && isRedisAvailable) {
-        await redis.del(key);
-      } else {
-        mockCache.delete(key);
-      }
-    } catch (error) {
-      console.error('❌ Cache DEL error:', error.message);
-      mockCache.delete(key);
+  /**
+   * Trim old stream entries
+   */
+  async trimStream(streamKey, maxLength = 10000) {
+    if (!this.redis.isConnected()) {
+      return;
     }
-  }
 
-  // Clear pattern
-  static async clearPattern(pattern) {
     try {
-      if (redis && isRedisAvailable) {
-        const keys = await redis.keys(pattern);
-        if (keys.length > 0) {
-          await redis.del(...keys);
-        }
-      } else {
-        // For mock cache, clear all keys that match pattern (simple implementation)
-        const keysToDelete = [];
-        for (const key of mockCache.keys()) {
-          if (key.includes(pattern.replace('*', ''))) {
-            keysToDelete.push(key);
-          }
-        }
-        keysToDelete.forEach(key => mockCache.delete(key));
-      }
+      await this.redis.client.xTrim(streamKey, 'MAXLEN', '~', maxLength);
+      console.log(`🧹 Trimmed stream ${streamKey} to ${maxLength} entries`);
     } catch (error) {
-      console.error('❌ Cache clearPattern error:', error.message);
-    }
-  }
-
-  // Check if key exists
-  static async exists(key) {
-    try {
-      if (redis && isRedisAvailable) {
-        return await redis.exists(key) === 1;
-      } else {
-        const cached = mockCache.get(key);
-        return cached && cached.expires > Date.now();
-      }
-    } catch (error) {
-      console.error('❌ Cache exists error:', error.message);
-      return false;
+      console.error(`❌ Failed to trim stream ${streamKey}:`, error);
     }
   }
 }
 
-// Initialize some demo cache data for testing
-export const initializeDemoCache = async () => {
-  try {
-    console.log('🚀 Initializing demo cache data...');
-    
-    if (redis && isRedisAvailable) {
-      console.log('📡 Using Redis for demo cache');
-    } else {
-      console.log('💾 Using in-memory fallback for demo cache (Redis unavailable)');
-    }
-    
-    // Set some sample usage data
-    await UsageCache.incrementApiCalls('demo-tenant', 'crm');
-    await UsageCache.incrementApiCalls('demo-tenant', 'hr');
-    await UsageCache.incrementApiCalls('demo-tenant', 'affiliate');
-    await UsageCache.trackActiveUser('demo-tenant', 'user-1');
-    await UsageCache.trackActiveUser('demo-tenant', 'user-2');
-    
-    // Set some sample important feature metrics
-    await CacheService.set('important-feature:user-permissions', {
-      totalCalls: 1247,
-      cacheHits: 1199,
-      avgResponseTime: 38,
-      lastUpdated: new Date().toISOString()
-    }, 3600);
-    
-    await CacheService.set('important-feature:subscription-status', {
-      totalCalls: 892,
-      cacheHits: 845,
-      avgResponseTime: 41,
-      lastUpdated: new Date().toISOString()
-    }, 3600);
-    
-    console.log('✅ Demo cache data initialized successfully');
-    
-    // Log current Redis status
-    const info = await redis.info('memory');
-    console.log('📊 Redis Memory Info:', info.split('\r\n').filter(line => 
-      line.includes('used_memory_human') || line.includes('used_memory_peak_human')
-    ));
-    
-  } catch (error) {
-    console.error('❌ Failed to initialize demo cache data:', error);
-  }
-};
+// Create singleton instance
+const crmSyncStreams = new CrmSyncStreams();
 
-export default redis; 
+// Export the CRM sync streams instance
+export { crmSyncStreams };
+export { CrmSyncStreams };
+
+// Export both the manager and the cache
+export { redisManager as redis };
+export { usageCache };
+export { UsageCache };
+export default redisManager;

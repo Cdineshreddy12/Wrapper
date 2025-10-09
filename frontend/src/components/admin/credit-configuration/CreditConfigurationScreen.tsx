@@ -94,6 +94,7 @@ const CreditConfigurationScreen: React.FC = () => {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [configurations, setConfigurations] = useState<TenantConfigurations | null>(null);
+  const [applicationAllocations, setApplicationAllocations] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -128,12 +129,73 @@ const CreditConfigurationScreen: React.FC = () => {
     }
   }, []);
 
+  // Load tenant application allocations
+  const loadTenantApplicationAllocations = useCallback(async (tenantId: string) => {
+    try {
+      // Get all application allocations for this tenant
+      const response = await api.get('/admin/credits/application-allocations');
+      if (response.data.success) {
+        // Filter allocations for this specific tenant
+        const tenantAllocations = response.data.data.allocations.filter(
+          (allocation: any) => allocation.tenantId === tenantId
+        );
+
+        // Group by application and calculate totals
+        const allocationsByApplication: Record<string, any> = {};
+        let totalAllocations = 0;
+        let totalAllocatedCredits = 0;
+        let totalUsedCredits = 0;
+        let totalAvailableCredits = 0;
+
+        tenantAllocations.forEach((allocation: any) => {
+          totalAllocations++;
+          totalAllocatedCredits += parseFloat(allocation.allocatedCredits || 0);
+          totalUsedCredits += parseFloat(allocation.usedCredits || 0);
+          totalAvailableCredits += parseFloat(allocation.availableCredits || 0);
+
+          const appKey = allocation.targetApplication;
+          if (!allocationsByApplication[appKey]) {
+            allocationsByApplication[appKey] = {
+              application: appKey,
+              allocationCount: 0,
+              totalAllocated: 0,
+              totalUsed: 0,
+              totalAvailable: 0,
+              allocations: []
+            };
+          }
+          allocationsByApplication[appKey].allocationCount++;
+          allocationsByApplication[appKey].totalAllocated += parseFloat(allocation.allocatedCredits || 0);
+          allocationsByApplication[appKey].totalUsed += parseFloat(allocation.usedCredits || 0);
+          allocationsByApplication[appKey].totalAvailable += parseFloat(allocation.availableCredits || 0);
+          allocationsByApplication[appKey].allocations.push(allocation);
+        });
+
+        setApplicationAllocations({
+          tenantId,
+          allocations: tenantAllocations,
+          summary: {
+            totalAllocations,
+            totalAllocatedCredits,
+            totalUsedCredits,
+            totalAvailableCredits,
+            allocationsByApplication: Object.values(allocationsByApplication)
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error loading tenant application allocations:', error);
+      setApplicationAllocations(null);
+    }
+  }, []);
+
   // Handle tenant selection
   const handleTenantSelect = useCallback((tenant: Tenant) => {
     setSelectedTenant(tenant);
     setSelectedOperation(null); // Reset selected operation when changing tenant
     loadTenantConfigurations(tenant.tenantId);
-  }, [loadTenantConfigurations]);
+    loadTenantApplicationAllocations(tenant.tenantId);
+  }, [loadTenantConfigurations, loadTenantApplicationAllocations]);
 
   // Handle operation configuration save
   const handleOperationSave = useCallback(async (config: OperationConfig) => {
@@ -333,7 +395,7 @@ const CreditConfigurationScreen: React.FC = () => {
               {/* Configuration Tabs */}
               {configurations && (
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <TabsList className="grid w-full grid-cols-4">
+                  <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="operations" className="flex items-center gap-2">
                       <Zap className="h-4 w-4" />
                       Operations
@@ -345,6 +407,10 @@ const CreditConfigurationScreen: React.FC = () => {
                     <TabsTrigger value="apps" className="flex items-center gap-2">
                       <Building2 className="h-4 w-4" />
                       Apps
+                    </TabsTrigger>
+                    <TabsTrigger value="allocations" className="flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      Allocations
                     </TabsTrigger>
                     <TabsTrigger value="templates" className="flex items-center gap-2">
                       <Upload className="h-4 w-4" />
@@ -477,6 +543,129 @@ const CreditConfigurationScreen: React.FC = () => {
                         <div className="text-center py-8 text-muted-foreground">
                           Application configuration editor will be implemented here
                         </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+
+                  <TabsContent value="allocations" className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Application Credit Allocations</CardTitle>
+                        <CardDescription>
+                          View and manage credit allocations for applications assigned to this tenant
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {applicationAllocations ? (
+                          <>
+                            {/* Summary Stats */}
+                            {applicationAllocations.summary.totalAllocations > 0 && (
+                              <div className="grid gap-4 md:grid-cols-4 mb-6">
+                                <div className="text-center">
+                                  <div className="text-2xl font-bold text-blue-600">
+                                    {applicationAllocations.summary.totalAllocations}
+                                  </div>
+                                  <div className="text-sm text-gray-600">Active Allocations</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-2xl font-bold text-purple-600">
+                                    {applicationAllocations.summary.totalAllocatedCredits.toFixed(2)}
+                                  </div>
+                                  <div className="text-sm text-gray-600">Total Allocated</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-2xl font-bold text-red-600">
+                                    {applicationAllocations.summary.totalUsedCredits.toFixed(2)}
+                                  </div>
+                                  <div className="text-sm text-gray-600">Total Used</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-2xl font-bold text-green-600">
+                                    {applicationAllocations.summary.totalAvailableCredits.toFixed(2)}
+                                  </div>
+                                  <div className="text-sm text-gray-600">Available</div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* By Application */}
+                            {applicationAllocations.summary.allocationsByApplication.length > 0 ? (
+                              <div>
+                                <h4 className="font-medium mb-3">By Application</h4>
+                                <div className="grid gap-3">
+                                  {applicationAllocations.summary.allocationsByApplication.map((app: any) => (
+                                    <div key={app.application} className="flex items-center justify-between p-3 border rounded-lg">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                                        <div>
+                                          <div className="font-medium capitalize">{app.application}</div>
+                                          <div className="text-sm text-gray-500">
+                                            {app.allocationCount} allocation{app.allocationCount !== 1 ? 's' : ''}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="text-right">
+                                        <div className="font-medium">
+                                          <span className="text-green-600">{app.totalAvailable.toFixed(2)}</span>
+                                          <span className="text-gray-400"> / </span>
+                                          <span className="text-purple-600">{app.totalAllocated.toFixed(2)}</span>
+                                        </div>
+                                        <div className="text-sm text-gray-500">
+                                          {app.totalUsed.toFixed(2)} used
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-center py-8">
+                                <div className="text-sm text-muted-foreground">
+                                  No application credit allocations found for this tenant
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Detailed Allocations */}
+                            {applicationAllocations.allocations.length > 0 && (
+                              <div className="mt-6">
+                                <h4 className="font-medium mb-3">Detailed Allocations</h4>
+                                <div className="space-y-2">
+                                  {applicationAllocations.allocations.map((allocation: any) => (
+                                    <div key={allocation.allocationId} className="flex items-center justify-between py-2 border-b last:border-b-0">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                        <div>
+                                          <div className="font-medium capitalize">{allocation.targetApplication}</div>
+                                          <div className="text-sm text-gray-500">
+                                            {allocation.allocationPurpose || 'No purpose specified'} •
+                                            {new Date(allocation.allocatedAt).toLocaleDateString()}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="text-right">
+                                        <div className="font-medium">
+                                          <span className="text-green-600">{allocation.availableCredits.toFixed(2)}</span>
+                                          <span className="text-gray-400"> / </span>
+                                          <span className="text-purple-600">{allocation.allocatedCredits.toFixed(2)}</span>
+                                        </div>
+                                        <div className="text-sm text-gray-500">
+                                          {allocation.usedCredits.toFixed(2)} used
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="text-center py-8">
+                            <div className="text-sm text-muted-foreground">
+                              Loading application allocations...
+                            </div>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   </TabsContent>

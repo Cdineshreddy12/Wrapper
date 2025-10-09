@@ -236,11 +236,15 @@ export default async function authRoutes(fastify, options) {
       }
 
       if (appContext.app_code && appContext.redirect_url) {
-        // App authentication error - redirect back to app
-        const errorUrl = new URL(appContext.redirect_url);
-        errorUrl.searchParams.set('error', 'auth_failed');
-        errorUrl.searchParams.set('error_description', 'Authentication failed');
-        return reply.redirect(errorUrl.toString());
+        // App authentication error - redirect to frontend AuthCallback with error state
+        const frontendCallbackUrl = new URL(`${process.env.FRONTEND_URL}/auth/callback`);
+        frontendCallbackUrl.searchParams.set('state', JSON.stringify({
+          app_code: appContext.app_code,
+          redirect_url: appContext.redirect_url,
+          error: 'auth_failed',
+          error_description: 'Authentication failed'
+        }));
+        return reply.redirect(frontendCallbackUrl.toString());
       } else {
         // Onboarding error - redirect to onboarding
         const errorRedirectUrl = new URL(`${process.env.FRONTEND_URL}/onboarding`);
@@ -262,10 +266,15 @@ export default async function authRoutes(fastify, options) {
       }
 
       if (appContext.app_code && appContext.redirect_url) {
-        // App authentication error - redirect back to app
-        const errorUrl = new URL(appContext.redirect_url);
-        errorUrl.searchParams.set('error', 'no_code');
-        return reply.redirect(errorUrl.toString());
+        // App authentication error - redirect to frontend AuthCallback with error state
+        const frontendCallbackUrl = new URL(`${process.env.FRONTEND_URL}/auth/callback`);
+        frontendCallbackUrl.searchParams.set('state', JSON.stringify({
+          app_code: appContext.app_code,
+          redirect_url: appContext.redirect_url,
+          error: 'no_code',
+          error_description: 'No authorization code provided'
+        }));
+        return reply.redirect(frontendCallbackUrl.toString());
       } else {
         // Onboarding error - redirect to onboarding
         const errorRedirectUrl = new URL(`${process.env.FRONTEND_URL}/onboarding`);
@@ -332,24 +341,15 @@ export default async function authRoutes(fastify, options) {
         console.log('🔍 App redirect URL:', parsedState.redirect_url);
         console.log('🔍 User info:', { id: userInfo.id, email: userInfo.email });
 
-        try {
-          // Direct redirect to app (SSO removed)
-          const targetUrl = new URL(parsedState.redirect_url);
-          targetUrl.searchParams.set('user_id', userInfo.id);
-          targetUrl.searchParams.set('org_code', userInfo.organization?.code || 'default');
-          targetUrl.searchParams.set('app_code', parsedState.app_code);
+        // Redirect to frontend AuthCallback with state data for proper CRM flow handling
+        const frontendCallbackUrl = new URL(`${process.env.FRONTEND_URL}/auth/callback`);
+        frontendCallbackUrl.searchParams.set('state', JSON.stringify({
+          app_code: parsedState.app_code,
+          redirect_url: parsedState.redirect_url
+        }));
 
-          console.log('🚀 Redirecting to app (direct access):', targetUrl.toString());
-          return reply.redirect(targetUrl.toString());
-        } catch (error) {
-          console.error('❌ Error redirecting to app:', error);
-
-          // Redirect back to app with error
-          const errorUrl = new URL(parsedState.redirect_url);
-          errorUrl.searchParams.set('error', 'redirect_failed');
-          errorUrl.searchParams.set('error_description', error.message);
-          return reply.redirect(errorUrl.toString());
-        }
+        console.log('🚀 Redirecting to frontend AuthCallback for CRM flow:', frontendCallbackUrl.toString());
+        return reply.redirect(frontendCallbackUrl.toString());
       }
 
       // Handle organization login flow
@@ -386,11 +386,15 @@ export default async function authRoutes(fastify, options) {
       }
 
       if (appContext.app_code && appContext.redirect_url) {
-        // App authentication error - redirect back to app
-        const errorUrl = new URL(appContext.redirect_url);
-        errorUrl.searchParams.set('error', 'callback_failed');
-        errorUrl.searchParams.set('error_description', 'Failed to process authentication');
-        return reply.redirect(errorUrl.toString());
+        // App authentication error - redirect to frontend AuthCallback with error state
+        const frontendCallbackUrl = new URL(`${process.env.FRONTEND_URL}/auth/callback`);
+        frontendCallbackUrl.searchParams.set('state', JSON.stringify({
+          app_code: appContext.app_code,
+          redirect_url: appContext.redirect_url,
+          error: 'callback_failed',
+          error_description: error.message || 'Failed to process authentication'
+        }));
+        return reply.redirect(frontendCallbackUrl.toString());
       } else {
         // Onboarding error - redirect to onboarding
         const errorRedirectUrl = new URL(`${process.env.FRONTEND_URL}/onboarding`);

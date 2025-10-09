@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import DataIsolationService from './data-isolation-service.js';
 import ApplicationDataIsolationService from './application-data-isolation-service.js';
 import HierarchyManager from '../utils/hierarchy-manager.js';
+import { crmSyncStreams } from '../utils/redis.js';
 
 export class OrganizationService {
 
@@ -70,6 +71,24 @@ export class OrganizationService {
       createdBy,
       createdAt: new Date()
     }).returning();
+
+    // Publish organization creation event to Redis streams
+    try {
+      await crmSyncStreams.publishOrgEvent(parentTenantId, 'org_created', {
+        orgCode: organization[0].entityId,
+        orgName: organization[0].entityName,
+        orgType: 'organization',
+        organizationType: 'business_unit',
+        description: organization[0].description,
+        parentId: null,
+        entityLevel: organization[0].entityLevel,
+        isActive: organization[0].isActive,
+        createdBy: organization[0].createdBy,
+        createdAt: organization[0].createdAt
+      });
+    } catch (streamError) {
+      console.warn('⚠️ Failed to publish organization creation event:', streamError.message);
+    }
 
     return {
       success: true,
@@ -177,6 +196,24 @@ export class OrganizationService {
 
     console.log('✅ Organization inserted successfully:', organization[0]);
     // Note: Hierarchy paths are automatically maintained by database triggers
+
+    // Publish organization creation event to Redis streams
+    try {
+      await crmSyncStreams.publishOrgEvent(tenantIdToUse, 'org_created', {
+        orgCode: organization[0].entityId,
+        orgName: organization[0].entityName,
+        orgType: organization[0].entityType,
+        organizationType: organization[0].organizationType,
+        description: organization[0].description,
+        parentId: organization[0].parentEntityId,
+        entityLevel: organization[0].entityLevel,
+        isActive: organization[0].isActive,
+        createdBy: organization[0].createdBy,
+        createdAt: organization[0].createdAt
+      });
+    } catch (streamError) {
+      console.warn('⚠️ Failed to publish organization creation event:', streamError.message);
+    }
 
     return {
       success: true,
@@ -303,78 +340,139 @@ export class OrganizationService {
    */
   async getOrganizationHierarchy(tenantId, userContext = null, applicationContext = null) {
     try {
-      // Use HierarchyManager to get the complete entity hierarchy
-      const hierarchyResult = await HierarchyManager.getEntityHierarchyTree(tenantId);
+      // Get all entities first to filter organizations
+      const { db } = await import('../db/index.js');
+      const { entities } = await import('../db/schema/index.js');
+      const { eq, and } = await import('drizzle-orm');
 
-      if (!hierarchyResult.success) {
-        throw new Error(hierarchyResult.message);
-      }
+      const allEntities = await db
+        .select({
+          entityId: entities.entityId,
+          entityName: entities.entityName,
+          entityType: entities.entityType,
+          entityCode: entities.entityCode,
+          entityLevel: entities.entityLevel,
+          hierarchyPath: entities.hierarchyPath,
+          fullHierarchyPath: entities.fullHierarchyPath,
+          parentEntityId: entities.parentEntityId,
+          organizationType: entities.organizationType,
+          locationType: entities.locationType,
+          address: entities.address,
+          description: entities.description,
+          isActive: entities.isActive,
+          createdAt: entities.createdAt,
+          updatedAt: entities.updatedAt
+        })
+        .from(entities)
+        .where(and(
+          eq(entities.tenantId, tenantId),
+          eq(entities.isActive, true)
+        ))
+        .orderBy(entities.entityLevel, entities.entityName);
 
-      // Filter to only organizations and apply data isolation if needed
-      let hierarchy = hierarchyResult.hierarchy.filter(entity => entity.entityType === 'organization');
+      console.log(`📊 Found ${allEntities.length} total entities, including both organizations and locations...`);
+
+      // Include both organizations and locations in hierarchy
+      let hierarchy = allEntities.filter(entity =>
+        entity.entityType === 'organization' || entity.entityType === 'location'
+      );
+
+      console.log(`🏢 Found ${hierarchy.length} entities before access control filtering (${hierarchy.filter(e => e.entityType === 'organization').length} organizations, ${hierarchy.filter(e => e.entityType === 'location').length} locations)`);
 
       if (userContext) {
-        let accessibleOrgs = [];
+        // Check if user is a tenant admin or super admin - they should have access to all organizations
+        const isAdmin = userContext.isTenantAdmin || userContext.isSuperAdmin || userContext.isAdmin;
+        console.log('🔍 User access check - isAdmin:', isAdmin, 'isTenantAdmin:', userContext.isTenantAdmin, 'isSuperAdmin:', userContext.isSuperAdmin);
 
-        // If application context is provided, use application-specific filtering
-        if (applicationContext?.application) {
-          const appAccess = await ApplicationDataIsolationService.getUserApplicationAccess(
-            userContext,
-            applicationContext.application
-          );
+        if (isAdmin) {
+          console.log('👑 User is admin, granting access to all organizations and locations');
+          // Admin users can access all organizations and locations, no filtering needed
+        } else {
+          let accessibleEntities = [];
 
-          if (!appAccess.hasAccess) {
-            return {
-              success: true,
-              hierarchy: [],
-              totalOrganizations: 0,
-              message: `User does not have access to ${applicationContext.application} application`
-            };
+          // If application context is provided, use application-specific filtering
+          if (applicationContext?.application) {
+            const appAccess = await ApplicationDataIsolationService.getUserApplicationAccess(
+              userContext,
+              applicationContext.application
+            );
+
+            if (!appAccess.hasAccess) {
+              return {
+                success: true,
+                hierarchy: [],
+                totalOrganizations: 0,
+                message: `User does not have access to ${applicationContext.application} application`
+              };
+            }
+
+            accessibleEntities = appAccess.organizations;
+          } else {
+            // Use regular organizational access
+            accessibleEntities = await DataIsolationService.getUserAccessibleOrganizations(userContext);
           }
 
-          accessibleOrgs = appAccess.organizations;
-        } else {
-          // Use regular organizational access
-          accessibleOrgs = await DataIsolationService.getUserAccessibleOrganizations(userContext);
-        }
-
-        if (accessibleOrgs.length > 0) {
-          // Filter hierarchy to only include accessible organizations
-          hierarchy = hierarchy.filter(org => accessibleOrgs.includes(org.entityId));
-        } else {
-          // User has no access to any organizations
-          return { success: true, hierarchy: [], totalOrganizations: 0 };
+          if (accessibleEntities.length > 0) {
+            // Filter hierarchy to only include accessible organizations and locations
+            hierarchy = hierarchy.filter(entity => accessibleEntities.includes(entity.entityId));
+          } else {
+            // User has no access to any organizations or locations
+            return { success: true, hierarchy: [], totalOrganizations: 0 };
+          }
         }
       }
 
-      // Transform to match expected format
-      const transformedHierarchy = hierarchy.map(org => ({
-        organizationId: org.entityId,
-        organizationName: org.entityName,
-        organizationType: org.organizationType,
-        organizationLevel: org.entityLevel,
-        hierarchyPath: org.hierarchyPath,
-        fullHierarchyPath: org.fullHierarchyPath,
-        description: org.description,
-        isActive: org.isActive,
-        createdAt: org.createdAt,
-        updatedAt: org.updatedAt,
-        parentOrganizationId: org.parentEntityId,
-        children: org.children || []
-      }));
+      console.log(`✅ Final entities after filtering: ${hierarchy.length} (${hierarchy.filter(e => e.entityType === 'organization').length} organizations, ${hierarchy.filter(e => e.entityType === 'location').length} locations)`);
+
+      // Build hierarchy tree from flat list
+      const orgMap = new Map();
+      const rootOrgs = [];
+
+      // First pass: create all nodes
+      hierarchy.forEach(org => {
+        const node = {
+          organizationId: org.entityId,
+          organizationName: org.entityName,
+          organizationType: org.organizationType,
+          organizationLevel: org.entityLevel,
+          hierarchyPath: org.hierarchyPath,
+          fullHierarchyPath: org.fullHierarchyPath,
+          description: org.description,
+          isActive: org.isActive,
+          createdAt: org.createdAt,
+          updatedAt: org.updatedAt,
+          parentOrganizationId: org.parentEntityId,
+          children: []
+        };
+        orgMap.set(org.entityId, node);
+      });
+
+      // Second pass: build tree structure
+      hierarchy.forEach(org => {
+        const node = orgMap.get(org.entityId);
+
+        if (org.parentEntityId && orgMap.has(org.parentEntityId)) {
+          // Add as child to parent
+          const parent = orgMap.get(org.parentEntityId);
+          parent.children.push(node);
+        } else {
+          // Add as root organization
+          rootOrgs.push(node);
+        }
+      });
 
       return {
         success: true,
-        hierarchy: transformedHierarchy,
-        totalOrganizations: transformedHierarchy.length,
-        message: 'Organization hierarchy retrieved successfully'
+        hierarchy: rootOrgs,
+        totalOrganizations: hierarchy.length,
+        message: 'Entity hierarchy retrieved successfully'
       };
     } catch (error) {
       console.error('Error in getOrganizationHierarchy:', error);
 
       // Fallback to simple query if hierarchy manager fails
       console.log('Falling back to simple hierarchy query...');
-      const allOrgs = await db
+      const allEntities = await db
         .select({
           organizationId: entities.entityId,
           parentOrganizationId: entities.parentEntityId,
@@ -385,24 +483,29 @@ export class OrganizationService {
           description: entities.description,
           isActive: entities.isActive,
           createdAt: entities.createdAt,
-          updatedAt: entities.updatedAt
+          updatedAt: entities.updatedAt,
+          entityType: entities.entityType
         })
         .from(entities)
         .where(and(
           eq(entities.tenantId, tenantId),
-          eq(entities.entityType, 'organization'),
           eq(entities.isActive, true)
         ))
         .orderBy(entities.entityLevel, entities.createdAt);
 
+      // Filter to include both organizations and locations
+      const filteredEntities = allEntities.filter(entity =>
+        entity.entityType === 'organization' || entity.entityType === 'location'
+      );
+
       return {
         success: true,
-        hierarchy: allOrgs.map(org => ({
-          ...org,
+        hierarchy: filteredEntities.map(entity => ({
+          ...entity,
           children: [] // Simple fallback doesn't build tree structure
         })),
-        totalOrganizations: allOrgs.length,
-        message: 'Organization hierarchy retrieved (fallback mode)'
+        totalOrganizations: filteredEntities.length,
+        message: 'Entity hierarchy retrieved (fallback mode)'
       };
     }
   }

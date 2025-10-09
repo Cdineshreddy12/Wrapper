@@ -21,6 +21,15 @@ interface Entity {
   children: Entity[];
   availableCredits?: number;
   reservedCredits?: number;
+  // Application credit allocations for organizations
+  applicationAllocations?: Array<{
+    application: string;
+    allocatedCredits: number;
+    usedCredits: number;
+    availableCredits: number;
+    hasAllocation: boolean;
+    autoReplenish: boolean;
+  }>;
   address?: {
     street: string;
     city: string;
@@ -236,7 +245,7 @@ const EntityCard = ({
   return (
     <div className="relative">
       {/* Entity Card */}
-      <div 
+      <div
         ref={cardRef}
         className={`
           relative bg-white rounded-lg shadow-lg p-4 transition-all duration-200 hover:shadow-xl
@@ -244,6 +253,7 @@ const EntityCard = ({
           ${isTenant ? 'w-80 min-h-[160px] shadow-xl' : 'w-72 min-h-[140px]'}
           select-none
         `}
+        onClick={() => onSelect?.(entity)}
         onMouseEnter={() => setShowActions(true)}
         onMouseLeave={() => setShowActions(false)}
         data-entity-id={entity.entityId}
@@ -342,18 +352,51 @@ const EntityCard = ({
         )}
 
         {/* Credits (if available) */}
-        {(entity.availableCredits !== undefined || entity.reservedCredits !== undefined) && (
+        {(entity.availableCredits !== undefined || entity.reservedCredits !== undefined || entity.applicationAllocations) && (
           <div className="text-xs text-gray-600 space-y-1">
-            {entity.availableCredits !== undefined && (
-              <div className="flex items-center gap-1">
-                <CreditCard className="w-3 h-3 text-green-600" />
-                <span>Available: <span className="font-medium text-green-700">{Number(entity.availableCredits || 0).toLocaleString()}</span></span>
+            {/* Organization Credits */}
+            {(entity.availableCredits !== undefined || entity.reservedCredits !== undefined) && (
+              <div className="border-b border-gray-200 pb-1 mb-1">
+                <div className="font-medium text-gray-800 mb-1">Organization Credits:</div>
+                {entity.availableCredits !== undefined && (
+                  <div className="flex items-center gap-1">
+                    <CreditCard className="w-3 h-3 text-green-600" />
+                    <span>Available: <span className="font-medium text-green-700">{Number(entity.availableCredits || 0).toLocaleString()}</span></span>
+                  </div>
+                )}
+                {entity.reservedCredits !== undefined && Number(entity.reservedCredits) > 0 && (
+                  <div className="flex items-center gap-1">
+                    <CreditCard className="w-3 h-3 text-yellow-600" />
+                    <span>Reserved: <span className="font-medium text-yellow-700">{Number(entity.reservedCredits || 0).toLocaleString()}</span></span>
+                  </div>
+                )}
               </div>
             )}
-            {entity.reservedCredits !== undefined && Number(entity.reservedCredits) > 0 && (
-              <div className="flex items-center gap-1">
-                <CreditCard className="w-3 h-3 text-yellow-600" />
-                <span>Reserved: <span className="font-medium text-yellow-700">{Number(entity.reservedCredits || 0).toLocaleString()}</span></span>
+
+            {/* Application Allocations */}
+            {entity.applicationAllocations && entity.applicationAllocations.length > 0 && (
+              <div>
+                <div className="font-medium text-gray-800 mb-1">Application Credits:</div>
+                {entity.applicationAllocations.slice(0, 3).map((allocation, index) => (
+                  <div key={allocation.application} className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                      <span className="capitalize">{allocation.application}:</span>
+                    </div>
+                    <span className={`font-medium ${
+                      allocation.availableCredits > 0 ? 'text-green-600' :
+                      allocation.hasAllocation ? 'text-yellow-600' : 'text-gray-500'
+                    }`}>
+                      {Number(allocation.availableCredits || 0).toFixed(0)}/{Number(allocation.allocatedCredits || 0).toFixed(0)}
+                      {allocation.autoReplenish && <span className="text-xs ml-1">🔄</span>}
+                    </span>
+                  </div>
+                ))}
+                {entity.applicationAllocations.length > 3 && (
+                  <div className="text-gray-500 text-xs mt-1">
+                    +{entity.applicationAllocations.length - 3} more...
+                  </div>
+                )}
               </div>
             )}
           </div>

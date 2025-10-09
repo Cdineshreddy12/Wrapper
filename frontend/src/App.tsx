@@ -2,6 +2,7 @@ import React, { useMemo, useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { Toaster as Sonner } from 'sonner'
+import { OnboardingApp, OnboardingForm } from '@/components/onboarding'
 
 import api from '@/lib/api'
 
@@ -15,8 +16,6 @@ import { UserContextProvider } from './contexts/UserContextProvider'
 import { PermissionRefreshNotification } from './components/PermissionRefreshNotification'
 import { ThemeProvider } from './components/theme/ThemeProvider'
 
-// Trial Management Components
-import { TrialExpiryBanner, TrialBannerSpacer } from './components/trial/TrialExpiryBanner'
 
 // Layout Components
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
@@ -37,12 +36,43 @@ import UserApplicationAccessPage from '@/pages/UserApplicationAccess'
 import UserApplicationManagement from '@/pages/UserApplicationManagement'
 import SuiteDashboard from '@/pages/SuiteDashboard'
 import AdminDashboardPage from '@/pages/AdminDashboardPage'
-import SimpleOnboarding from '@/pages/SimpleOnboarding'
-import { OverviewPage } from './pages/OverviewPage'
-import SectionExamples from './components/common/Page/SectionExamples'
-import { DemoIndexPage } from './pages/DemoIndexPage'
-import { RoleManagementDashboard } from './components/roles'
+import MacbookTest from '@/pages/MacbookTest'
+import EcosystemDemo from '@/pages/EcosystemDemo'
+import TextEffectDemo from '@/pages/TextEffectDemo'
+import CompareDemo from '@/pages/CompareDemo'
+import ActivityLogs from '@/pages/ActivityLogs'
 
+// Create an optimized query client with better caching strategy
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error: any) => {
+        // Don't retry on 4xx errors except 429 (rate limit)
+        if (error?.response?.status >= 400 && error?.response?.status < 500 && error?.response?.status !== 429) {
+          return false;
+        }
+        return failureCount < 2;
+      },
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+      staleTime: 1 * 60 * 1000, // 2 minutes
+      gcTime: 1 * 60 * 1000, // 10 minutes (formerly cacheTime)
+      // Enable background refetching for better UX
+      refetchInterval: false, // Disable automatic polling by default
+      refetchIntervalInBackground: false,
+    },
+    mutations: {
+      retry: (failureCount, error: any) => {
+        // Don't retry mutations on client errors
+        if (error?.response?.status >= 400 && error?.response?.status < 500) {
+          return false;
+        }
+        return failureCount < 1;
+      },
+    },
+  },
+})
 
 // Loading component
 const LoadingScreen = () => (
@@ -156,83 +186,48 @@ function AppContent() {
   console.log('🚀 App.tsx - Rendering routes with auth state:', authState)
 
   return (
-    <div className="App">
-      {/* Trial Expiry Banner Only */}
-      <TrialExpiryBanner />
-      <TrialBannerSpacer />
+      <div className="App">
 
       {/* Permission refresh notification - only show when authenticated */}
       {authState.isAuthenticated && <PermissionRefreshNotification />}
 
-      <Routes>
-        {/* Public Routes */}
-        <Route
-          path="/landing"
-          element={
+        <Routes>
+          {/* Public Routes */}
+          <Route
+            path="/landing"
+            element={
             authState.isAuthenticated ? <Navigate to="/" replace /> : <Landing />
-          }
-        />
+            }
+          />
 
-        {/* Root redirect based on auth status */}
-        <Route
-          path="/"
-          element={<RootRedirect />}
-        />
+          <Route
+            path="/macbook-test"
+            element={<MacbookTest />}
+          />
+          
+          {/* Root redirect based on auth status */}
+          <Route 
+            path="/" 
+            element={<RootRedirect />} 
+          />
+          
 
-       
+          
+          <Route
+            path="/onboarding"
+            element={<OnboardingApp />}
+          />
+          
+          <Route 
+            path="/login" 
+            element={<Login />} 
+          />
+          
+          <Route 
+            path="/auth/callback" 
+            element={<AuthCallback />} 
+          />
 
-        <Route
-          path="/onboarding"
-          element={<SimpleOnboarding />}
-        // element={<OnboardingPage />}
-        // element={<FlowSelectorMultiStepExample />}
-        />
-
-        <Route
-          path="/section-examples"
-          element={<SectionExamples />}
-        />
-
-       
-        <Route
-          path="/demos"
-          element={<DemoIndexPage />}
-        />
-
-        {/* <Route
-          path="/form-demo"
-          element={<FormComponentsDemo />}
-        />
-
-        <Route
-          path="/context-demo"
-          element={<ContextDemo />}
-        />
-
-        <Route
-          path="/perfect-form"
-          element={<PerfectFormDemo />}
-        />
-
-        <Route
-          path="/form-layout-test"
-          element={<FormLayoutTest />}
-        />
-
-        <Route
-          path="/form-error-test"
-          element={<FormErrorTest />}
-        /> */}
-
-        <Route
-          path="/login"
-          element={<Login />}
-        />
-
-        <Route
-          path="/auth/callback"
-          element={<AuthCallback />}
-        />
 
         {/* Invitation Accept Route - Public (handles auth internally) */}
         <Route
@@ -269,6 +264,9 @@ function AppContent() {
           <Route path="analytics" element={<Analytics />} />
           <Route path="usage" element={<Usage />} />
           <Route path="permissions" element={<Permissions />} />
+          <Route path="activity-logs" element={<ActivityLogs />} />
+          <Route path="text-effect-demo" element={<TextEffectDemo />} />
+          <Route path="compare-demo" element={<CompareDemo />} />
         </Route>
 
         {/* Standalone Admin Dashboard Route */}
@@ -301,6 +299,7 @@ function AppContent() {
           <Route path="billing" element={<Billing />} />
           <Route path="usage" element={<Usage />} />
           <Route path="permissions" element={<Permissions />} />
+          <Route path="activity-logs" element={<ActivityLogs />} />
         </Route>
 
         {/* Catch all - redirect to landing if not authenticated */}

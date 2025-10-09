@@ -5,7 +5,7 @@
 
 import { authenticateToken, requirePermission } from '../../middleware/auth.js';
 import { db } from '../../db/index.js';
-import { credits, creditTransactions, tenants, entities } from '../../db/schema/index.js';
+import { credits, creditTransactions, tenants, entities, creditAllocations } from '../../db/schema/index.js';
 import { eq, and, desc, sql, count, sum, gte, lte, between } from 'drizzle-orm';
 
 export default async function adminCreditOverviewRoutes(fastify, options) {
@@ -654,6 +654,229 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
     } catch (error) {
       console.error('Error fetching credit transactions:', error);
       return reply.code(500).send({ error: 'Failed to fetch credit transactions' });
+    }
+  });
+
+  // Get all application credit allocations (admin only)
+  fastify.get('/application-allocations', {
+    preHandler: [authenticateToken, requirePermission('admin.credits.view')],
+    schema: {
+      description: 'Get all application credit allocations across all tenants'
+    }
+  }, async (request, reply) => {
+    try {
+      const allocations = await db
+        .select({
+          allocationId: creditAllocations.allocationId,
+          tenantId: creditAllocations.tenantId,
+          sourceEntityId: creditAllocations.sourceEntityId,
+          targetApplication: creditAllocations.targetApplication,
+          allocatedCredits: creditAllocations.allocatedCredits,
+          usedCredits: creditAllocations.usedCredits,
+          availableCredits: creditAllocations.availableCredits,
+          allocationType: creditAllocations.allocationType,
+          allocationPurpose: creditAllocations.allocationPurpose,
+          allocatedAt: creditAllocations.allocatedAt,
+          expiresAt: creditAllocations.expiresAt,
+          autoReplenish: creditAllocations.autoReplenish
+        })
+        .from(creditAllocations)
+        .leftJoin(tenants, eq(creditAllocations.tenantId, tenants.tenantId))
+        .leftJoin(entities, eq(creditAllocations.sourceEntityId, entities.entityId))
+        .where(eq(creditAllocations.isActive, true))
+        .orderBy(desc(creditAllocations.allocatedAt));
+
+      // Get company names for allocations
+      const allocationsWithNames = await Promise.all(
+        allocations.map(async (allocation) => {
+          const [tenant] = await db
+            .select({ companyName: tenants.companyName })
+            .from(tenants)
+            .where(eq(tenants.tenantId, allocation.tenantId))
+            .limit(1);
+
+          const [entity] = await db
+            .select({ entityName: entities.entityName })
+            .from(entities)
+            .where(eq(entities.entityId, allocation.sourceEntityId))
+            .limit(1);
+
+          return {
+            ...allocation,
+            companyName: tenant?.companyName,
+            entityName: entity?.entityName,
+            allocatedCredits: parseFloat(allocation.allocatedCredits),
+            usedCredits: parseFloat(allocation.usedCredits),
+            availableCredits: parseFloat(allocation.availableCredits)
+          };
+        })
+      );
+
+      // Calculate summary
+      const summary = allocationsWithNames.reduce((acc, allocation) => {
+        acc.totalAllocations++;
+        acc.totalAllocatedCredits += allocation.allocatedCredits;
+        acc.totalUsedCredits += allocation.usedCredits;
+        acc.totalAvailableCredits += allocation.availableCredits;
+
+        // Group by application
+        const appKey = allocation.targetApplication;
+        if (!acc.allocationsByApplication[appKey]) {
+          acc.allocationsByApplication[appKey] = {
+            application: appKey,
+            allocationCount: 0,
+            totalAllocated: 0,
+            totalUsed: 0,
+            totalAvailable: 0
+          };
+        }
+        acc.allocationsByApplication[appKey].allocationCount++;
+        acc.allocationsByApplication[appKey].totalAllocated += allocation.allocatedCredits;
+        acc.allocationsByApplication[appKey].totalUsed += allocation.usedCredits;
+        acc.allocationsByApplication[appKey].totalAvailable += allocation.availableCredits;
+
+        return acc;
+      }, {
+        totalAllocations: 0,
+        totalAllocatedCredits: 0,
+        totalUsedCredits: 0,
+        totalAvailableCredits: 0,
+        allocationsByApplication: {}
+      });
+
+      summary.allocationsByApplication = Object.values(summary.allocationsByApplication);
+
+      return {
+        success: true,
+        data: {
+          allocations: allocationsWithNames,
+          summary
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching admin application allocations:', error);
+      return reply.code(500).send({ error: 'Failed to fetch application allocations' });
+    }
+  });
+
+  // Get application credit allocations for a specific entity
+  fastify.get('/entity/:entityId/application-allocations', {
+    preHandler: [authenticateToken, requirePermission('admin.credits.view')],
+    schema: {
+      description: 'Get application credit allocations for a specific entity',
+      params: {
+        type: 'object',
+        properties: {
+          entityId: { type: 'string', format: 'uuid' }
+        },
+        required: ['entityId']
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const { entityId } = request.params;
+
+      // Get entity details first
+      const [entity] = await db
+        .select({
+          entityId: entities.entityId,
+          entityName: entities.entityName,
+          entityType: entities.entityType,
+          tenantId: entities.tenantId
+        })
+        .from(entities)
+        .where(eq(entities.entityId, entityId))
+        .limit(1);
+
+      if (!entity) {
+        return reply.code(404).send({
+          success: false,
+          error: 'Entity not found'
+        });
+      }
+
+      // Get application allocations for this entity
+      const allocations = await db
+        .select({
+          allocationId: creditAllocations.allocationId,
+          tenantId: creditAllocations.tenantId,
+          sourceEntityId: creditAllocations.sourceEntityId,
+          targetApplication: creditAllocations.targetApplication,
+          allocatedCredits: creditAllocations.allocatedCredits,
+          usedCredits: creditAllocations.usedCredits,
+          availableCredits: creditAllocations.availableCredits,
+          allocationType: creditAllocations.allocationType,
+          allocationPurpose: creditAllocations.allocationPurpose,
+          allocatedAt: creditAllocations.allocatedAt,
+          expiresAt: creditAllocations.expiresAt,
+          autoReplenish: creditAllocations.autoReplenish
+        })
+        .from(creditAllocations)
+        .where(and(
+          eq(creditAllocations.sourceEntityId, entityId),
+          eq(creditAllocations.isActive, true)
+        ))
+        .orderBy(desc(creditAllocations.allocatedAt));
+
+      // Calculate summary
+      const summary = allocations.reduce((acc, allocation) => {
+        acc.totalAllocations++;
+        acc.totalAllocatedCredits += parseFloat(allocation.allocatedCredits);
+        acc.totalUsedCredits += parseFloat(allocation.usedCredits);
+        acc.totalAvailableCredits += parseFloat(allocation.availableCredits);
+
+        // Group by application
+        const appKey = allocation.targetApplication;
+        if (!acc.allocationsByApplication[appKey]) {
+          acc.allocationsByApplication[appKey] = {
+            application: appKey,
+            allocationCount: 1,
+            totalAllocated: parseFloat(allocation.allocatedCredits),
+            totalUsed: parseFloat(allocation.usedCredits),
+            totalAvailable: parseFloat(allocation.availableCredits)
+          };
+        } else {
+          acc.allocationsByApplication[appKey].allocationCount++;
+          acc.allocationsByApplication[appKey].totalAllocated += parseFloat(allocation.allocatedCredits);
+          acc.allocationsByApplication[appKey].totalUsed += parseFloat(allocation.usedCredits);
+          acc.allocationsByApplication[appKey].totalAvailable += parseFloat(allocation.availableCredits);
+        }
+
+        return acc;
+      }, {
+        totalAllocations: 0,
+        totalAllocatedCredits: 0,
+        totalUsedCredits: 0,
+        totalAvailableCredits: 0,
+        allocationsByApplication: {}
+      });
+
+      summary.allocationsByApplication = Object.values(summary.allocationsByApplication);
+
+      return {
+        success: true,
+        data: {
+          entity: {
+            entityId: entity.entityId,
+            entityName: entity.entityName,
+            entityType: entity.entityType,
+            tenantId: entity.tenantId
+          },
+          allocations: allocations.map(allocation => ({
+            ...allocation,
+            allocatedCredits: parseFloat(allocation.allocatedCredits),
+            usedCredits: parseFloat(allocation.usedCredits),
+            availableCredits: parseFloat(allocation.availableCredits)
+          })),
+          summary
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching entity application allocations:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch entity application allocations'
+      });
     }
   });
 }

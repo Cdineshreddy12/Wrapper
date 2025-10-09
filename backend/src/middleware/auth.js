@@ -17,7 +17,11 @@ const PUBLIC_ROUTES = [
   '/api/subscriptions/debug-stripe-config',
   '/api/payments/webhook',
   '/api/credits/webhook',
-  '/api/invitations',
+  // Specific invitation routes that are public
+  '/api/invitations/details',
+  '/api/invitations/accept',
+  '/api/invitations/accept-by-token',
+  '/api/invitations/details-by-token',
   '/api/locations',
   '/docs',
   '/api/metrics/',
@@ -27,7 +31,7 @@ const PUBLIC_ROUTES = [
   '/api/organizations/parent',
   '/api/organizations/sub',
   '/api/organizations/bulk',
-  '/api/organizations/hierarchy',
+  // Removed: '/api/organizations/hierarchy' - now requires authentication
   'POST /api/organizations/sub',
   // Location routes with fallback authentication
   '/api/locations',
@@ -37,6 +41,9 @@ const PUBLIC_ROUTES = [
   '/api/entities/tenant',
   'POST /api/entities/organization',
   'POST /api/entities/location',
+  // User tenant verification for CRM (public endpoint)
+  '/api/user/tenant',
+  '/api/user/test',
 ];
 
 // Helper functions
@@ -64,7 +71,7 @@ async function findUserInDatabase(kindeUserId) {
     } catch (selectError) {
       console.log('⚠️ Falling back to raw SQL query');
 
-      const result = await db.execute(
+      const result = await dbManager.getAppConnection().unsafe(
         `SELECT user_id as "userId", tenant_id as "tenantId", email, name,
                 onboarding_completed as "onboardingCompleted", is_active as "isActive",
                 is_tenant_admin as "isTenantAdmin"
@@ -73,7 +80,7 @@ async function findUserInDatabase(kindeUserId) {
         [kindeUserId]
       );
 
-      userRecords = result.rows || [];
+      userRecords = result || [];
     }
 
     if (!Array.isArray(userRecords) || userRecords.length === 0) {

@@ -5,6 +5,40 @@ import { customRoles } from '../db/schema/index.js';
 import { creditConfigurations } from '../db/schema/credit_configurations.js';
 import { PERMISSION_TIERS, getAccessibleModules, isModuleAccessible } from '../config/permission-tiers.js';
 import { BUSINESS_SUITE_MATRIX } from '../data/permission-matrix.js';
+import { crmSpecificSync } from './crm-specific-sync.js';
+import { v4 as uuidv4 } from 'uuid';
+
+/**
+ * Convert flat permission array to hierarchical object format
+ * @param {string[]} permissionsArray - Array of permission strings like ['crm.leads.read', 'crm.leads.create']
+ * @returns {object} Hierarchical permission object like { crm: { leads: ['read', 'create'] } }
+ */
+function convertPermissionsToHierarchical(permissionsArray) {
+  if (!Array.isArray(permissionsArray)) {
+    return permissionsArray; // Return as-is if already in correct format
+  }
+
+  const hierarchical = {};
+
+  permissionsArray.forEach(permission => {
+    const parts = permission.split('.');
+    if (parts.length >= 3) {
+      const [app, module, operation] = parts;
+
+      if (!hierarchical[app]) {
+        hierarchical[app] = {};
+      }
+      if (!hierarchical[app][module]) {
+        hierarchical[app][module] = [];
+      }
+      if (!hierarchical[app][module].includes(operation)) {
+        hierarchical[app][module].push(operation);
+      }
+    }
+  });
+
+  return hierarchical;
+}
 
 /**
  * 🏗️ **CUSTOM ROLE SERVICE**
@@ -228,6 +262,9 @@ export class CustomRoleService {
       isObject: typeof restrictions === 'object'
     });
     
+    // Convert permissions to hierarchical format (consistent with Super Administrator)
+    const hierarchicalPermissions = convertPermissionsToHierarchical(permissions);
+
     // Handle restrictions properly - avoid double-stringification
     let processedRestrictions;
     if (typeof restrictions === 'string') {
@@ -237,19 +274,19 @@ export class CustomRoleService {
       console.log('📦 Restrictions is object, stringifying');
       processedRestrictions = JSON.stringify(restrictions);
     }
-    
+
     const [role] = await db.insert(customRoles).values({
       tenantId,
       roleName,
       description,
-      permissions: JSON.stringify(permissions), // Convert array to JSON string
+      permissions: JSON.stringify(hierarchicalPermissions), // Store in hierarchical format
       restrictions: processedRestrictions, // Handle restrictions properly
       isSystemRole: false, // This is a custom role
       createdBy,
       lastModifiedBy: createdBy
     }).returning();
-    
-    console.log(`🎉 Created role "${roleName}" with ${permissions.length} permissions`);
+
+    console.log(`🎉 Created role "${roleName}" with hierarchical permissions structure`);
     return role;
   }
   
@@ -369,7 +406,10 @@ export class CustomRoleService {
       isString: typeof restrictions === 'string',
       isObject: typeof restrictions === 'object'
     });
-    
+
+    // Convert permissions to hierarchical format (consistent with Super Administrator)
+    const hierarchicalPermissions = convertPermissionsToHierarchical(permissions);
+
     // Handle restrictions properly - avoid double-stringification
     let processedRestrictions;
     if (typeof restrictions === 'string') {
@@ -379,13 +419,13 @@ export class CustomRoleService {
       console.log('📦 Restrictions is object, stringifying');
       processedRestrictions = JSON.stringify(restrictions);
     }
-    
+
     const [updatedRole] = await db
       .update(customRoles)
       .set({
         roleName,
         description,
-        permissions: JSON.stringify(permissions), // Convert array to JSON string
+        permissions: JSON.stringify(hierarchicalPermissions), // Store in hierarchical format
         restrictions: processedRestrictions, // Handle restrictions properly
         lastModifiedBy: updatedBy,
         updatedAt: new Date()
@@ -395,8 +435,51 @@ export class CustomRoleService {
         eq(customRoles.tenantId, tenantId)
       ))
       .returning();
-    
-    console.log(`🎉 Updated role "${roleName}" with ${permissions.length} permissions`);
+
+    console.log(`🎉 Updated role "${roleName}" with hierarchical permissions structure`);
+
+    // Publish role change event to Redis streams for real-time sync
+    console.log(`🔄 Attempting to publish role change event for "${roleName}"...`);
+    try {
+      const { crmSyncStreams } = await import('../utils/redis.js');
+
+      // Create event data for Redis stream
+      const eventData = {
+        eventId: uuidv4(),
+        timestamp: new Date().toISOString(),
+        eventType: 'role_permissions_changed',
+        tenantId: tenantId,
+        entityType: 'role',
+        entityId: updatedRole.roleId,
+        action: 'permissions_updated',
+        data: {
+          roleId: updatedRole.roleId,
+          roleName: updatedRole.roleName,
+          permissions: JSON.parse(updatedRole.permissions || '{}'),
+          isActive: updatedRole.isActive !== false, // Default to true if not set
+          description: updatedRole.description,
+          scope: updatedRole.scope || 'organization'
+        },
+        metadata: {
+          correlationId: `role_permissions_${updatedRole.roleId}_${Date.now()}`,
+          version: '1.0',
+          sourceTimestamp: new Date().toISOString(),
+          sourceApp: 'wrapper'
+        }
+      };
+
+      // Publish to Redis stream
+      const streamKey = `crm:sync:role_permissions`;
+      const result = await crmSyncStreams.publishToStream(streamKey, eventData);
+
+      console.log(`📡 Published role permissions change event for "${roleName}" to Redis stream: ${streamKey}`);
+      console.log(`   Stream ID: ${result?.messageId}`);
+    } catch (publishError) {
+      console.error('⚠️ Failed to publish role change event:', publishError.message);
+      console.error('⚠️ Full error:', publishError);
+      // Don't fail the role update if event publishing fails
+    }
+
     return updatedRole;
   }
   

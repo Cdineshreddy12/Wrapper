@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { SparklesCore } from "@/components/ui/sparkles";
+import { SparklesCore } from "./sparkles";
 import { AnimatePresence, motion } from "motion/react";
 import { cn } from "@/lib/utils";
 import { IconDotsVertical } from "@tabler/icons-react";
@@ -34,7 +34,7 @@ export const Compare = ({
 
   const sliderRef = useRef<HTMLDivElement>(null);
 
-  const [isMouseOver, setIsMouseOver] = useState(false);
+  // const [isMouseOver, setIsMouseOver] = useState(false); // Not used in this implementation
 
   const autoplayRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -68,12 +68,12 @@ export const Compare = ({
   }, [startAutoplay, stopAutoplay]);
 
   function mouseEnterHandler() {
-    setIsMouseOver(true);
+    // setIsMouseOver(true); // Not used in this implementation
     stopAutoplay();
   }
 
   function mouseLeaveHandler() {
-    setIsMouseOver(false);
+    // setIsMouseOver(false); // Not used in this implementation
     if (slideMode === "hover") {
       setSliderXPercent(initialSliderPercentage);
     }
@@ -84,7 +84,7 @@ export const Compare = ({
   }
 
   const handleStart = useCallback(
-    (clientX: number) => {
+    (_clientX: number) => {
       if (slideMode === "drag") {
         setIsDragging(true);
       }
