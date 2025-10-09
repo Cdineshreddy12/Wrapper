@@ -28,7 +28,6 @@ import Landing from '@/pages/Landing'
 import { Login } from '@/pages/Login'
 import { AuthCallback } from '@/pages/AuthCallback'
 import { InviteAccept } from '@/pages/InviteAccept'
-import { Dashboard } from '@/pages/Dashboard'
 import { Analytics } from '@/pages/Analytics'
 import { UserManagementDashboard } from '@/components/users/UserManagementDashboard'
 import { Billing } from '@/pages/Billing'
@@ -38,17 +37,19 @@ import UserApplicationAccessPage from '@/pages/UserApplicationAccess'
 import UserApplicationManagement from '@/pages/UserApplicationManagement'
 import SuiteDashboard from '@/pages/SuiteDashboard'
 import AdminDashboardPage from '@/pages/AdminDashboardPage'
-import OnboardingPage from '@/pages/Onboarding'
 import SimpleOnboarding from '@/pages/SimpleOnboarding'
 import { OverviewPage } from './pages/OverviewPage'
+import SectionExamples from './components/common/Page/SectionExamples'
+import { DemoIndexPage } from './pages/DemoIndexPage'
+import { RoleManagementDashboard } from './components/roles'
 
 
 // Loading component
 const LoadingScreen = () => (
   <div className="min-h-screen bg-background flex items-center justify-center">
     <div className="text-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-      <p className="text-muted-foreground">Loading...</p>
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-blue mx-auto mb-4"></div>
+      <p className="text-light-grey text-small">Loading...</p>
     </div>
   </div>
 )
@@ -84,17 +85,39 @@ function App() {
         toastOptions={{
           duration: 4000,
           style: {
-            background: '#363636',
-            color: '#fff',
+            background: 'var(--background-white)',
+            color: 'var(--text-dark)',
+            border: '1px solid var(--border-light-grey)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: 'var(--shadow-md)',
+            fontFamily: 'var(--font-family)',
+            fontSize: 'var(--font-size-small)',
+            fontWeight: 'var(--font-weight-regular)',
           },
           success: {
             style: {
-              background: '#059669',
+              background: 'var(--background-white)',
+              color: 'var(--text-dark)',
+              border: '1px solid var(--feedback-success)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: 'var(--shadow-md)',
+            },
+            iconTheme: {
+              primary: 'var(--feedback-success)',
+              secondary: 'var(--text-white)',
             },
           },
           error: {
             style: {
-              background: '#DC2626',
+              background: 'var(--background-white)',
+              color: 'var(--text-dark)',
+              border: '1px solid var(--accent-red)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: 'var(--shadow-md)',
+            },
+            iconTheme: {
+              primary: 'var(--accent-red)',
+              secondary: 'var(--text-white)',
             },
           },
         }}
@@ -165,6 +188,17 @@ function AppContent() {
         // element={<FlowSelectorMultiStepExample />}
         />
 
+        <Route
+          path="/section-examples"
+          element={<SectionExamples />}
+        />
+
+       
+        <Route
+          path="/demos"
+          element={<DemoIndexPage />}
+        />
+
         {/* <Route
           path="/form-demo"
           element={<FormComponentsDemo />}
@@ -227,7 +261,7 @@ function AppContent() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<OverviewPage />} />
+          <Route index element={<RoleManagementDashboard />} />
           <Route path="users" element={<UserManagementDashboard />} />
           <Route path="user-apps" element={<UserApplicationAccessPage />} />
           <Route path="user-application-management" element={<UserApplicationManagement />} />
@@ -387,8 +421,8 @@ function RootRedirect() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-sm text-muted-foreground">Loading...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-blue mx-auto"></div>
+          <p className="mt-2 text-small text-light-grey">Loading...</p>
         </div>
       </div>
     )

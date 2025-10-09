@@ -1,9 +1,8 @@
 import React, { ReactNode } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
-import { MoreVertical, Eye, Edit, Copy, Trash2, UserPlus } from 'lucide-react';
+import { MoreVertical } from 'lucide-react';
 
 export interface TableColumn<T = any> {
   key: string;
@@ -94,14 +93,14 @@ export function ReusableTable<T = any>({
   }
 
   return (
-    <div className={`bg-white rounded-lg border ${className}`}>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-max">
+    <div className={`bg-white rounded-lg border w-full max-w-full ${className}`}>
+      <div className="overflow-x-auto w-full" style={{ maxWidth: '100%' }}>
+        <table style={{ minWidth: 'max-content', width: 'max-content' }}>
           {/* Header - Sticky */}
           <thead className="bg-gray-50 border-b sticky top-0 z-10">
             <tr>
               {selectable && (
-                <th className="p-4 text-left w-10">
+                <th className="p-4 text-left w-12 min-w-[3rem]">
                   <Checkbox
                     checked={isAllSelected}
                     onCheckedChange={handleSelectAll}
@@ -114,15 +113,15 @@ export function ReusableTable<T = any>({
               {columns.map((column) => (
                 <th 
                   key={column.key} 
-                  className="p-4 text-left font-medium text-gray-700"
-                  style={{ width: column.width || 'auto' }}
+                  className="p-4 text-left font-medium text-gray-700 whitespace-nowrap"
+                  style={{ width: column.width || 'auto', minWidth: column.width || '150px' }}
                 >
                   {column.label}
                 </th>
               ))}
               
               {actions.length > 0 && (
-                <th className="p-4 text-center font-medium text-gray-700 w-16">
+                <th className="p-4 text-center font-medium text-gray-700 w-16 min-w-[4rem]">
                   Actions
                 </th>
               )}
@@ -141,7 +140,7 @@ export function ReusableTable<T = any>({
                   className="hover:bg-gray-50 transition-colors border-b last:border-b-0"
                 >
                   {selectable && (
-                    <td className="p-4 w-10">
+                    <td className="p-4 w-12 min-w-[3rem]">
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={(checked) => handleSelectItem(itemId, checked as boolean)}
@@ -151,7 +150,7 @@ export function ReusableTable<T = any>({
                   )}
                   
                   {columns.map((column) => (
-                    <td key={column.key} className="p-4">
+                    <td key={column.key} className="p-4 whitespace-nowrap">
                       <div className="min-w-0">
                         {column.render ? column.render(item) : (
                           <span className="truncate block">{(item as any)[column.key]}</span>
@@ -161,7 +160,7 @@ export function ReusableTable<T = any>({
                   ))}
                   
                   {actions.length > 0 && (
-                    <td className="p-4 text-center w-16">
+                    <td className="p-4 text-center w-16 min-w-[4rem]">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon">

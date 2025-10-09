@@ -8,7 +8,7 @@ export { StatusBadge, UserStatusBadge, PaymentStatusBadge, SubscriptionStatusBad
 
 // Re-export existing ShadCN components
 export { Button } from './button'
-export { Card, CardContent, CardDescription, CardHeader, CardTitle } from './card'
+export { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './card'
 export { Badge } from './badge'
 export { Input } from './input'
 export { Label } from './label'
@@ -17,7 +17,6 @@ export { Checkbox } from './checkbox'
 export { Switch } from './switch'
 export { RadioGroup, RadioGroupItem } from './radio-group'
 export { 
-  FormField, 
   FormInput, 
   FormTextarea, 
   FormSelect, 
@@ -34,5 +33,6 @@ export { Skeleton } from './skeleton'
 export { Separator } from './separator'
 export { Progress } from './progress'
 export { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from './sheet'
-export { Form } from './form'
-export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table' 
+export { Form, FormField, FormItem, FormLabel, FormControl, FormDescription, FormMessage } from './form'
+export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table'
+export { ScrollArea, ScrollBar } from './scroll-area' 

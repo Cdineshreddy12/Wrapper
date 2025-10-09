@@ -1,8 +1,8 @@
-import Typography from "@/components/common/Typography";
-import IconButton from "@/components/common/IconButton";
+import { IconButton } from "@/components/common/LoadingButton";
+import { Typography } from "@/components/common/Typography";
 import { Plus } from "lucide-react";
-import useRedirect from "@/hooks/useRedirect";
-import { EntityType } from "@/types/common";
+// import useRedirect from "@/hooks/useRedirect";
+// import { EntityType } from "@/types/common";
 
 interface EmptyTableStateProps {
   title?: string;
@@ -11,7 +11,7 @@ interface EmptyTableStateProps {
     link: string;
     label: string;
   };
-  entityType?: EntityType;
+  entityType?: string;
 }
 export function DataTableEmptyState({
   title = "You don't have any data",
@@ -19,7 +19,7 @@ export function DataTableEmptyState({
   action,
   entityType,
 }: EmptyTableStateProps) {
-  const redirect = useRedirect();
+  // const redirect = useRedirect();
 
   const heading = entityType
     ? `You don't have any ${entityType?.toLowerCase()}s`
@@ -29,12 +29,12 @@ export function DataTableEmptyState({
     : subTitle;
   return (
     <div className=" flex flex-col gap-2 items-center text-slate-500 min-h-[300px] justify-center">
-      <Typography variant="subtitle2">{heading}</Typography>
-      <Typography variant="body1">{subHeading}</Typography>
+      <Typography variant="h4">{heading}</Typography>
+      <Typography variant="body">{subHeading}</Typography>
       {action || entityType ? (
         <IconButton
-          icon={Plus}
-          onClick={() => redirect.to(entityType ? "new" : action?.link || "/")}
+          startIcon={Plus}
+          onClick={() => {}}
         >
           {entityType ? `ADD ${entityType}` : action?.label}
         </IconButton>

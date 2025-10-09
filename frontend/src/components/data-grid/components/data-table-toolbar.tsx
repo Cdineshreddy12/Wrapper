@@ -7,7 +7,7 @@ import { DataTableViewOptions } from "./data-table-view-options";
 import { Badge } from "@/components/ui/badge";
 import { DataTableDensityToggle } from "./data-table-density-toggle";
 import type { TableDensity } from "./data-table";
-import Typography from "@/components/common/Typography";
+import { Typography } from "@/components/common/Typography";
 
 interface DataTableToolbarProps<TData> {
   table: Table<TData>;

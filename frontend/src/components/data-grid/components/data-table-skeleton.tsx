@@ -7,9 +7,8 @@ import {
   TableCell,
   Table,
 } from "@/components/ui/table";
-import { columns } from "@/pages/tickets/table/columns";
 
-function DataTableSkeleton({ loadingRows }: { loadingRows: number }) {
+function DataTableSkeleton({ loadingRows, colsLength = 6 }: { loadingRows: number, colsLength?: number }) {
   return (
     <div className="space-y-4 p-4 rounded-md">
       {/* Top bar: search + controls */}
@@ -26,7 +25,7 @@ function DataTableSkeleton({ loadingRows }: { loadingRows: number }) {
         <Table>
           <TableHeader>
             <TableRow>
-              {Array.from({ length: columns.length }).map((_, index) => (
+              {Array.from({ length: colsLength }).map((_, index) => (
                 <TableHead key={index}>
                   <Skeleton className="h-4 w-[80px]" />
                 </TableHead>

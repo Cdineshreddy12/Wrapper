@@ -4,6 +4,7 @@ import { useDashboardData } from '@/hooks/useDashboardData';
 import { useOrganizationAuth } from '@/hooks/useOrganizationAuth';
 import api from '@/lib/api';
 
+
 export function OrganizationPage({
     isAdmin = false
 }: {
@@ -11,12 +12,11 @@ export function OrganizationPage({
 }) {
     const { tenantId } = useOrganizationAuth()
 
-    const { users: employees, applications, refreshDashboard } = useDashboardData();
+    const { users: employees, refreshDashboard } = useDashboardData();
     return (
         <Container>
             <OrganizationManagement
                 employees={employees || []}
-                applications={applications || []}
                 isAdmin={isAdmin || false}
                 tenantId={tenantId}
                 makeRequest={async (endpoint: string, options?: RequestInit) => {

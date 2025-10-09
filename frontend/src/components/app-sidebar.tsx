@@ -8,7 +8,6 @@ import {
   CreditCard,
   Crown,
   GalleryVerticalEnd,
-  LayoutDashboard,
   Shield,
   Users,
 } from "lucide-react"

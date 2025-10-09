@@ -30,6 +30,8 @@ export  function LoadingButton({
     isLoading,
     variant = 'outline',
     children,
+    startIcon,
+    startIconClassName,
     ...props
 }: LoadingButtonProps) {
     return (
@@ -37,9 +39,14 @@ export  function LoadingButton({
             variant={variant}
             {...props}
             disabled={isLoading}
-            startIcon={RefreshCw}
-            startIconClassName={cn(isLoading && "animate-spin")}
-        />
+            startIcon={isLoading ? RefreshCw : startIcon}
+            startIconClassName={cn(
+                startIconClassName,
+                isLoading && "animate-spin"
+            )}
+        >
+            {children}
+        </IconButton>
 
     )
 }

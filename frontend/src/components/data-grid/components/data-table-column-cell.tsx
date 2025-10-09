@@ -1,9 +1,5 @@
-import ColorBadge, { ColorBadgeProps } from "@/components/ColorBadge";
-import StyledLabel, { StyledLabelProps } from "@/components/common/StyledLabel";
-import Typography, {
-  type TypographyVariant,
-} from "@/components/common/Typography";
-import UserCard, { NameCard, NameCardProps, UserCardProps } from "@/components/common/UserCard";
+
+import { Typography, TypographyProps } from "@/components/common/Typography";
 import { cn } from "@/lib/utils";
 import { Minus, type LucideIcon } from "lucide-react";
 
@@ -11,7 +7,7 @@ type DataTableColumnCellProps = {
   children: React.ReactNode;
   rootClassName?: string;
   className?: string;
-  variant?: TypographyVariant;
+  variant?: TypographyProps['variant'];
   icon?: LucideIcon;
   renderAs?: "tel" | "email";
   size?: "sm" | "md" | "lg";
@@ -61,30 +57,32 @@ export function DataTableColumnCell({
   }
 }
 
-function DataTableUserCell(props: UserCardProps) {
-  return <UserCard {...props} />;
-}
+// function DataTableUserCell(props: UserCardProps) {
+//   return <UserCard {...props} />;
+// }
 
-function DataTableStyledLabelCell(props: StyledLabelProps) {
-  return <StyledLabel {...props} />;
-}
+// function DataTableStyledLabelCell(props: StyledLabelProps) {
+//   return <StyledLabel {...props} />;
+// }
 
-function DataTableColorBadgeCell(props: ColorBadgeProps) {
-  if (!props.children) {
-  return <Minus className="text-muted-foreground"/>
+// function DataTableColorBadgeCell(props: ColorBadgeProps) {
+//   if (!props.children) {
+//   return <Minus className="text-muted-foreground"/>
 
-  }
-  return <ColorBadge {...props} />;
-}
+//   }
+//   return <ColorBadge {...props} />;
+// }
 
-function DataTableNameCardCell(props: NameCardProps) {
-  return <NameCard {...props} />;
-}
-DataTableColumnCell.User = DataTableUserCell;
+// function DataTableNameCardCell(props: NameCardProps) {
+//   return <NameCard {...props} />;
+// }
+// DataTableColumnCell.User = DataTableUserCell;
 
-DataTableColumnCell.StyleLabel = DataTableStyledLabelCell;
+// DataTableColumnCell.StyleLabel = DataTableStyledLabelCell;
 
-DataTableColumnCell.ColorBadge = DataTableColorBadgeCell;
-DataTableColumnCell.NameCard = DataTableNameCardCell;
+// DataTableColumnCell.ColorBadge = DataTableColorBadgeCell;
+// DataTableColumnCell.NameCard = DataTableNameCardCell;
+
+DataTableColumnCell.StyleLabel = () => <div>StyleLabel</div>;
 
 export default DataTableColumnCell;

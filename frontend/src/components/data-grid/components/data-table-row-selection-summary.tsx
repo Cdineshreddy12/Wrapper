@@ -1,4 +1,4 @@
-import Typography from "@/components/common/Typography";
+import { Typography } from "@/components/common/Typography";
 import type { Table } from "@tanstack/react-table";
 
 interface DataTableRowSelectionSummaryProps<TData> {

@@ -1,0 +1,36 @@
+export interface Role {
+    roleId: string;
+    roleName: string;
+    description: string;
+    color: string;
+    icon: string;
+    permissions: Record<string, any>;
+  }
+
+  export interface User {
+    userId: string;
+    email: string;
+    name: string;
+    isActive: boolean;
+    isTenantAdmin: boolean;
+    onboardingCompleted: boolean;
+    department?: string;
+    title?: string;
+    invitedBy?: string;
+    invitedAt?: string;
+    invitationAcceptedAt?: string;
+    lastLoginAt?: string;
+    roles?: Role[];
+    avatar?: string;
+    invitationStatus?: string;
+    userType?: string;
+    originalData?: {
+      invitationToken?: string;
+      user?: {
+        invitationToken?: string;
+        invitationId?: string;
+      };
+    };
+    invitationId?: string;
+  }
+  

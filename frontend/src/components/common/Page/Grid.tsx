@@ -126,9 +126,9 @@ const gridFlowMap: Record<GridFlow, string> = {
 export const Grid = ({
     children,
     columns = { xs: 1, sm: 2, md: 3, lg: 4 },
-    gap,
-    gapX,
-    gapY,
+    gap = 6,
+    gapX = 6,
+    gapY = 6,
     autoFit,
     minWidth = '250px',
     flow = 'row',

@@ -7,7 +7,6 @@ import {
 } from "@/components/ui/collapsible"
 import {
   SidebarGroup,
-  SidebarGroupLabel,  
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -33,7 +32,6 @@ export function NavMain({
 }) {
   return (
     <SidebarGroup>
-      {/* <SidebarGroupLabel>Platform</SidebarGroupLabel> */}
       <SidebarMenu>
         {items.map((item) => (
           <Collapsible
@@ -46,8 +44,8 @@ export function NavMain({
               {item.items && item.items.length > 0 ? (
                 <>
                   <CollapsibleTrigger asChild>
-                    <SidebarMenuButton tooltip={item.title}>
-                      {item.icon ? <item.icon /> : null}
+                    <SidebarMenuButton tooltip={item.title} className="hover:bg-accent [&:hover_svg]:text-primary">
+                      {item.icon ? <item.icon className="transition-colors duration-200" /> : null}
                       <span>{item.title}</span>
                       <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                     </SidebarMenuButton>
@@ -56,9 +54,12 @@ export function NavMain({
                     <SidebarMenuSub>
                       {item.items.map((subItem) => (
                         <SidebarMenuSubItem key={subItem.title}>
-                          <SidebarMenuSubButton asChild>
+                          <SidebarMenuSubButton asChild className="hover:bg-accent [&:hover_svg]:text-primary">
                             <a href={subItem.url}>
-                              <span className="flex items-center gap-2">{subItem.icon ? <subItem.icon size='16'/> : null}{subItem.title}</span>
+                              <span className="flex items-center gap-2">
+                                {subItem.icon ? <subItem.icon size='16' className="transition-colors duration-200"/> : null}
+                                {subItem.title}
+                              </span>
                             </a>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
@@ -67,9 +68,9 @@ export function NavMain({
                   </CollapsibleContent>
                 </>
               ) : (
-                <SidebarMenuButton tooltip={item.title} asChild>
+                <SidebarMenuButton tooltip={item.title} asChild className="h-10 px-4 hover:bg-accent [&:hover_svg]:text-primary">
                   <a href={item.url}>
-                    {item.icon ? <item.icon /> : null}
+                    {item.icon ? <item.icon className="transition-colors duration-200" /> : null}
                     <span>{item.title}</span>
                   </a>
                 </SidebarMenuButton>

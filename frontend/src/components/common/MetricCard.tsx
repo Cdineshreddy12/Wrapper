@@ -27,10 +27,15 @@ export function MetricCard({
     if (isLoading) {
       return (
         <Card>
-          <CardContent className="p-6 space-y-4">
-            <Skeleton className="h-4 w-1/2 mb-2" />
-            <Skeleton className="h-8 w-3/4 mb-2" />
-            <Skeleton className="h-3 w-1/3" />
+          <CardContent className="p-6">
+            <Flex align="center" justify="between" className="h-full">
+              <div className="space-y-3 flex-1">
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-8 w-3/4" />
+                <Skeleton className="h-3 w-1/3" />
+              </div>
+              <Skeleton className="w-12 h-12 rounded-full flex-shrink-0" />
+            </Flex>
           </CardContent>
         </Card>
       )
@@ -39,13 +44,13 @@ export function MetricCard({
     return (
       <Card>
         <CardContent className="p-6">
-          <Flex align="center" justify="between">
-            <div className="space-y-2">
-              <Typography variant='lead'>{title}</Typography>
-              <Typography variant='h3'>{value}</Typography>
-              <Typography variant='muted'>{trend} from last month</Typography>
+          <Flex align="center" justify="between" className="h-full">
+            <div className="space-y-3 flex-1">
+              <Typography variant='lead' className="text-sm font-medium text-gray-600">{title}</Typography>
+              <Typography variant='h3' className="text-2xl font-bold text-gray-900">{value}</Typography>
+              <Typography variant='muted' className="text-xs text-gray-500">{trend} from last month</Typography>
             </div>
-            <div className={`p-3 rounded-full ${colorClasses[color as keyof typeof colorClasses]}`}>
+            <div className={`p-3 rounded-full ${colorClasses[color as keyof typeof colorClasses]} flex-shrink-0`}>
               <Icon className="w-6 h-6" />
             </div>
           </Flex>
