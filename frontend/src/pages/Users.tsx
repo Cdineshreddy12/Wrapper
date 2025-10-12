@@ -25,6 +25,23 @@ import type { UnifiedUser } from '@/lib/api'
 interface InviteUserFormData {
   email: string
   role: string
+  organizationId?: string
+  assignmentType?: 'primary' | 'secondary' | 'temporary' | 'guest'
+  priority?: number
+}
+
+interface OrganizationAssignment {
+  assignmentId: string
+  userId: string
+  userName: string
+  userEmail: string
+  organizationId: string
+  organizationName: string
+  organizationCode: string
+  assignmentType: 'primary' | 'secondary' | 'temporary' | 'guest'
+  isActive: boolean
+  assignedAt: string
+  priority: number
 }
 
 export function Users() {
@@ -33,9 +50,20 @@ export function Users() {
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteForm, setInviteForm] = useState<InviteUserFormData>({
     email: '',
-    role: ''
+    role: '',
+    organizationId: undefined,
+    assignmentType: 'primary',
+    priority: 1
   })
   const [showInvitationUrls, setShowInvitationUrls] = useState(false)
+  const [organizationAssignments, setOrganizationAssignments] = useState<OrganizationAssignment[]>([])
+  const [showOrgAssignmentModal, setShowOrgAssignmentModal] = useState(false)
+  const [selectedUserForOrg, setSelectedUserForOrg] = useState<UnifiedUser | null>(null)
+  const [orgAssignmentForm, setOrgAssignmentForm] = useState({
+    organizationId: '',
+    assignmentType: 'primary' as const,
+    priority: 1
+  })
 
   const queryClient = useQueryClient()
   const [users, setUsers] = useState<UnifiedUser[]>([])
@@ -51,11 +79,45 @@ export function Users() {
     queryFn: () => permissionsAPI.getRoles(),
   })
 
+  // Fetch organizations for assignment
+  const { data: organizationsData, isLoading: orgsLoading, error: orgsError } = useQuery({
+    queryKey: ['organizations'],
+    queryFn: () => {
+      console.log('🔍 Fetching organizations...');
+      return api.get('/api/organizations/hierarchy/current').then(res => {
+        console.log('🔍 Organizations response:', res.data);
+        return res.data.hierarchy || [];
+      });
+    },
+    onError: (error) => {
+      console.error('❌ Error fetching organizations:', error);
+    }
+  })
+
+  // Fetch organization assignments
+  const { data: assignmentsData, isLoading: assignmentsLoading, refetch: refetchAssignments, error: assignmentsError } = useQuery({
+    queryKey: ['organization-assignments'],
+    queryFn: () => tenantAPI.getOrganizationAssignments().then(res => {
+      console.log('🔍 Debug - getOrganizationAssignments response:', res);
+      return res.data.data;
+    }),
+    onError: (error) => {
+      console.error('❌ Error fetching organization assignments:', error);
+    }
+  })
+
   console.log('🔍 Debug - rolesData:', rolesData);
   console.log('🔍 Debug - rolesData.data:', rolesData?.data);
   console.log('🔍 Debug - rolesData.data.data:', rolesData?.data?.data);
   console.log('🔍 Debug - rolesData.data.data type:', typeof rolesData?.data?.data);
   console.log('🔍 Debug - isArray:', Array.isArray(rolesData?.data?.data));
+
+  // Debug organization assignments
+  console.log('🔍 Debug - assignmentsData:', assignmentsData);
+  console.log('🔍 Debug - assignmentsLoading:', assignmentsLoading);
+  console.log('🔍 Debug - assignmentsError:', assignmentsError);
+  console.log('🔍 Debug - assignmentsData type:', typeof assignmentsData);
+  console.log('🔍 Debug - assignmentsData isArray:', Array.isArray(assignmentsData));
 
   // Update users when data changes
   React.useEffect(() => {
@@ -176,14 +238,23 @@ export function Users() {
   const isFiltering = searchTerm !== '' || selectedRole !== 'all';
 
   const inviteUserMutation = useMutation({
-    mutationFn: (data: InviteUserFormData) => invitationAPI.createInvitation({
+    mutationFn: (data: InviteUserFormData) => tenantAPI.inviteUser({
       email: data.email,
-      roleName: data.role
+      roleId: data.role,
+      organizationId: data.organizationId,
+      assignmentType: data.assignmentType,
+      priority: data.priority
     }),
     onSuccess: () => {
       toast.success('User invitation sent successfully!')
       setShowInviteModal(false)
-      setInviteForm({ email: '', role: 'Member' })
+      setInviteForm({
+        email: '',
+        role: '',
+        organizationId: undefined,
+        assignmentType: 'primary',
+        priority: 1
+      })
       queryClient.invalidateQueries({ queryKey: ['tenant-users'] })
     },
     onError: (error: any) => {
@@ -203,7 +274,7 @@ export function Users() {
   })
 
   const updateRoleMutation = useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: string }) => 
+    mutationFn: ({ userId, role }: { userId: string; role: string }) =>
       tenantAPI.updateUserRole(userId, role),
     onSuccess: () => {
       toast.success('User role updated successfully!')
@@ -211,6 +282,34 @@ export function Users() {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Failed to update user role')
+    }
+  })
+
+  // Organization assignment mutations
+  const assignOrgMutation = useMutation({
+    mutationFn: ({ userId, data }: { userId: string; data: any }) =>
+      tenantAPI.assignUserToOrganization(userId, data),
+    onSuccess: () => {
+      toast.success('User assigned to organization successfully!')
+      refetchAssignments()
+      setShowOrgAssignmentModal(false)
+      setSelectedUserForOrg(null)
+      setOrgAssignmentForm({ organizationId: '', assignmentType: 'primary', priority: 1 })
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to assign user to organization')
+    }
+  })
+
+  const removeOrgMutation = useMutation({
+    mutationFn: ({ userId, data }: { userId: string; data: any }) =>
+      tenantAPI.removeUserFromOrganization(userId, data),
+    onSuccess: () => {
+      toast.success('User removed from organization successfully!')
+      refetchAssignments()
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to remove user from organization')
     }
   })
 
@@ -253,8 +352,54 @@ export function Users() {
       toast('Role changes for invited users will take effect when they accept the invitation');
       return;
     }
-    
+
     updateRoleMutation.mutate({ userId, role: newRole });
+  }
+
+  // Organization assignment handlers
+  const handleAssignOrg = (user: UnifiedUser) => {
+    setSelectedUserForOrg(user);
+    setOrgAssignmentForm({ organizationId: '', assignmentType: 'primary', priority: 1 });
+    setShowOrgAssignmentModal(true);
+  }
+
+  const handleSubmitOrgAssignment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUserForOrg || !orgAssignmentForm.organizationId) {
+      toast.error('Please select an organization');
+      return;
+    }
+
+    assignOrgMutation.mutate({
+      userId: selectedUserForOrg.id,
+      data: orgAssignmentForm
+    });
+  }
+
+  const handleRemoveOrgAssignment = (userId: string, assignment: OrganizationAssignment) => {
+    if (confirm(`Remove ${assignment.userName} from ${assignment.organizationName}?`)) {
+      removeOrgMutation.mutate({
+        userId,
+        data: {
+          organizationId: assignment.organizationId,
+          reason: 'manual_removal'
+        }
+      });
+    }
+  }
+
+  // Get organization assignment for a user
+  const getUserOrgAssignment = (userId: string) => {
+    console.log(`🔍 Debug - getUserOrgAssignment(${userId}) - assignmentsData:`, assignmentsData);
+    const assignment = assignmentsData?.find((assignment: OrganizationAssignment) => {
+      const match = assignment.userId === userId;
+      if (match) {
+        console.log(`🔍 Debug - Found assignment for ${userId}:`, assignment);
+      }
+      return match;
+    });
+    console.log(`🔍 Debug - getUserOrgAssignment(${userId}) result:`, assignment);
+    return assignment;
   }
 
   // Copy invitation URL to clipboard
@@ -744,20 +889,37 @@ export function Users() {
                   </div>
 
                   {/* Roles & Status Column */}
-                  <div className="col-span-3 flex items-center gap-2">
-                    {getStatusBadge(user)}
-                    
-                    {/* Show role if available */}
-                    {user.role && user.role !== 'No role assigned' && (
-                      <Badge className={getRoleColor(user.role)}>
-                        {user.role}
-                      </Badge>
-                    )}
-                    
-                    {/* Show "No role assigned" for users without roles */}
-                    {(!user.role || user.role === 'No role assigned') && (
-                      <Badge variant="outline">No role assigned</Badge>
-                    )}
+                  <div className="col-span-3 space-y-1">
+                    <div className="flex items-center gap-2">
+                      {getStatusBadge(user)}
+
+                      {/* Show role if available */}
+                      {user.role && user.role !== 'No role assigned' && (
+                        <Badge className={getRoleColor(user.role)}>
+                          {user.role}
+                        </Badge>
+                      )}
+
+                      {/* Show "No role assigned" for users without roles */}
+                      {(!user.role || user.role === 'No role assigned') && (
+                        <Badge variant="outline">No role assigned</Badge>
+                      )}
+                    </div>
+
+                    {/* Show organization assignment */}
+                    {(() => {
+                      console.log(`🔍 Debug - User ${user.email} status: ${user.invitationStatus}, id: ${user.id}`);
+                      const orgAssignment = getUserOrgAssignment(user.id);
+                      return (
+                        <div className="text-xs text-gray-500">
+                          <Building2 className="h-3 w-3 inline mr-1" />
+                          {orgAssignment ?
+                            `${orgAssignment.organizationName} (${orgAssignment.assignmentType})` :
+                            'No organization assigned'
+                          }
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Last Activity Column */}
@@ -775,9 +937,22 @@ export function Users() {
 
                   {/* Actions Column */}
                   <div className="col-span-12 flex items-center gap-1 pt-2 border-t">
+                    {/* Organization Assignment - Show for all users for debugging */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleAssignOrg(user)}
+                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      title={getUserOrgAssignment(user.id) ? "Change Organization Assignment" : "Assign to Organization"}
+                    >
+                      <Building2 className="h-4 w-4" />
+                      {getUserOrgAssignment(user.id) && <span className="ml-1 text-xs">✓</span>}
+                    </Button>
+
                     {/* Show actions for active users (non-pending) */}
                     {user.invitationStatus !== 'pending' && (
                       <>
+
                         <Button
                           variant="ghost"
                           size="sm"
@@ -789,7 +964,7 @@ export function Users() {
                         >
                           <Shield className="h-4 w-4" />
                         </Button>
-                        
+
                         <Button
                           variant="ghost"
                           size="sm"
@@ -801,7 +976,7 @@ export function Users() {
                         </Button>
                       </>
                     )}
-                    
+
                     {/* Show actions for pending invitations */}
                     {user.invitationStatus === 'pending' && (
                       <>
@@ -814,7 +989,7 @@ export function Users() {
                         >
                           <X className="h-4 w-4" />
                         </Button>
-                        
+
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1013,6 +1188,63 @@ export function Users() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Organization Assignments Overview */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Organization Assignments</CardTitle>
+            <CardDescription>Overview of user-organization assignments in your tenant</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {assignmentsLoading ? (
+              <div className="animate-pulse">
+                <div className="h-32 bg-gray-200 rounded"></div>
+              </div>
+            ) : assignmentsData && assignmentsData.length > 0 ? (
+              <div className="space-y-3">
+                {assignmentsData.slice(0, 10).map((assignment: OrganizationAssignment) => (
+                  <div key={assignment.assignmentId} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                        <Building2 className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{assignment.organizationName}</p>
+                        <p className="text-sm text-gray-600">
+                          {assignment.userName} • {assignment.assignmentType} • Priority {assignment.priority}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-600">
+                        Assigned {formatDate(assignment.assignedAt)}
+                      </p>
+                      <Badge variant={assignment.isActive ? "default" : "secondary"}>
+                        {assignment.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+
+                {assignmentsData.length > 10 && (
+                  <div className="text-center pt-2">
+                    <p className="text-sm text-gray-600">
+                      Showing 10 of {assignmentsData.length} assignments
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">No organization assignments yet</p>
+                <p className="text-sm text-gray-500">
+                  Assign users to organizations using the building icon next to each user
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Invite User Modal */}
@@ -1063,6 +1295,84 @@ export function Users() {
                       No roles found. Please create some roles before inviting users.
                     </p>
                   )}
+                </div>
+
+                {/* Organization Assignment (Optional) */}
+                <div className="border-t pt-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Building2 className="h-4 w-4 text-gray-600" />
+                    <span className="text-sm font-medium text-gray-700">Organization Assignment (Optional)</span>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm font-medium">Organization</label>
+                      <Select
+                        value={inviteForm.organizationId || ''}
+                        onValueChange={(value) => setInviteForm(prev => ({
+                          ...prev,
+                          organizationId: value || undefined
+                        }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={orgsLoading ? "Loading organizations..." : "Select organization (optional)"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">No organization assignment</SelectItem>
+                          {orgsLoading ? (
+                            <SelectItem value="loading" disabled>Loading organizations...</SelectItem>
+                          ) : organizationsData && Array.isArray(organizationsData) && organizationsData.length > 0 ? (
+                            organizationsData.map((org: any) => (
+                              <SelectItem key={org.entityId} value={org.entityId}>
+                                {org.entityName} ({org.entityCode})
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="no-orgs" disabled>No organizations available</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {inviteForm.organizationId && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-sm font-medium">Assignment Type</label>
+                          <Select
+                            value={inviteForm.assignmentType}
+                            onValueChange={(value: any) => setInviteForm(prev => ({
+                              ...prev,
+                              assignmentType: value
+                            }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="primary">Primary</SelectItem>
+                              <SelectItem value="secondary">Secondary</SelectItem>
+                              <SelectItem value="temporary">Temporary</SelectItem>
+                              <SelectItem value="guest">Guest</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <label className="text-sm font-medium">Priority</label>
+                          <Input
+                            type="number"
+                            min="1"
+                            max="10"
+                            value={inviteForm.priority}
+                            onChange={(e) => setInviteForm(prev => ({
+                              ...prev,
+                              priority: parseInt(e.target.value) || 1
+                            }))}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="flex gap-2">
@@ -1232,6 +1542,101 @@ export function Users() {
                   Close
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Organization Assignment Modal */}
+      {showOrgAssignmentModal && selectedUserForOrg && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle>Assign to Organization</CardTitle>
+              <CardDescription>
+                Assign {selectedUserForOrg.firstName} {selectedUserForOrg.lastName} to an organization (users can belong to multiple organizations)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmitOrgAssignment} className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Organization</label>
+                  <Select
+                    value={orgAssignmentForm.organizationId}
+                    onValueChange={(value) => setOrgAssignmentForm(prev => ({ ...prev, organizationId: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={orgsLoading ? "Loading organizations..." : "Select organization"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {orgsLoading ? (
+                        <SelectItem value="loading" disabled>Loading organizations...</SelectItem>
+                      ) : organizationsData && Array.isArray(organizationsData) && organizationsData.length > 0 ? (
+                        organizationsData.map((org: any) => (
+                          <SelectItem key={org.entityId} value={org.entityId}>
+                            {org.entityName} ({org.entityCode})
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-orgs" disabled>No organizations available</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium">Assignment Type</label>
+                    <Select
+                      value={orgAssignmentForm.assignmentType}
+                      onValueChange={(value: any) => setOrgAssignmentForm(prev => ({ ...prev, assignmentType: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="primary">Primary</SelectItem>
+                        <SelectItem value="secondary">Secondary</SelectItem>
+                        <SelectItem value="temporary">Temporary</SelectItem>
+                        <SelectItem value="guest">Guest</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium">Priority</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={orgAssignmentForm.priority}
+                      onChange={(e) => setOrgAssignmentForm(prev => ({
+                        ...prev,
+                        priority: parseInt(e.target.value) || 1
+                      }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    type="submit"
+                    disabled={assignOrgMutation.isPending || !orgAssignmentForm.organizationId}
+                  >
+                    {assignOrgMutation.isPending ? 'Assigning...' : 'Assign to Organization'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowOrgAssignmentModal(false);
+                      setSelectedUserForOrg(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
             </CardContent>
           </Card>
         </div>

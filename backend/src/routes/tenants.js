@@ -2,11 +2,12 @@ import { TenantService } from '../services/tenant-service.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { trackUsage } from '../middleware/usage.js';
 import { db } from '../db/index.js';
-import { tenants, tenantUsers, userRoleAssignments, customRoles, tenantInvitations } from '../db/schema/index.js';
+import { tenants, tenantUsers, userRoleAssignments, customRoles, tenantInvitations, entities, organizationMemberships } from '../db/schema/index.js';
 import { and, eq, sql, inArray } from 'drizzle-orm';
 import ErrorResponses from '../utils/error-responses.js';
 import { randomUUID } from 'crypto';
 import ActivityLogger, { ACTIVITY_TYPES, RESOURCE_TYPES } from '../services/activityLogger.js';
+import { OrganizationAssignmentService } from '../services/organization-assignment-service.js';
 
 export default async function tenantRoutes(fastify, options) {
   // List all tenants (Authenticated users only)
@@ -162,7 +163,10 @@ export default async function tenantRoutes(fastify, options) {
         properties: {
           email: { type: 'string', format: 'email' },
           roleId: { type: 'string' },
-          message: { type: 'string', maxLength: 500 }
+          message: { type: 'string', maxLength: 500 },
+          organizationId: { type: 'string', format: 'uuid' },
+          assignmentType: { type: 'string', enum: ['primary', 'secondary', 'temporary', 'guest'], default: 'primary' },
+          priority: { type: 'integer', default: 1 }
         }
       }
     }
@@ -178,14 +182,37 @@ export default async function tenantRoutes(fastify, options) {
         return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       }
 
-      const { email, roleId, message } = request.body;
-      
+      const { email, roleId, message, organizationId, assignmentType = 'primary', priority = 1 } = request.body;
+
+      // Validate organization if provided
+      if (organizationId) {
+        const organization = await db
+          .select()
+          .from(entities)
+          .where(and(
+            eq(entities.entityId, organizationId),
+            eq(entities.tenantId, tenantId),
+            eq(entities.isActive, true)
+          ))
+          .limit(1);
+
+        if (organization.length === 0) {
+          return reply.code(404).send({
+            success: false,
+            message: 'Organization not found in this tenant'
+          });
+        }
+      }
+
       const invitation = await TenantService.inviteUser({
         tenantId: tenantId,
         email,
         roleId,
         invitedBy: request.userContext.internalUserId,
-        message
+        message,
+        primaryEntityId: organizationId,
+        assignmentType,
+        priority
       });
 
       // Log user invitation activity
@@ -1078,6 +1105,792 @@ export default async function tenantRoutes(fastify, options) {
     } catch (error) {
       request.log.error('Error assigning roles:', error);
       return reply.code(500).send({ error: 'Failed to assign roles' });
+    }
+  });
+
+  // Organization Assignment Routes
+
+  /**
+   * GET /current/organization-assignments
+   * Get all organization assignments for the current tenant
+   */
+  fastify.get('/current/organization-assignments', {
+    schema: {
+      description: 'Get all organization assignments for the current tenant',
+      tags: ['Tenant', 'Organization Assignment'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  assignmentId: { type: 'string' },
+                  userId: { type: 'string' },
+                  userName: { type: 'string' },
+                  userEmail: { type: 'string' },
+                  organizationId: { type: 'string' },
+                  organizationName: { type: 'string' },
+                  organizationCode: { type: 'string' },
+                  assignmentType: { type: 'string', enum: ['primary', 'secondary', 'temporary', 'guest'] },
+                  isActive: { type: 'boolean' },
+                  assignedAt: { type: 'string', format: 'date-time' },
+                  priority: { type: 'integer' }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    if (!request.userContext?.isAuthenticated) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+
+    try {
+      const tenantId = request.userContext.tenantId;
+      console.log('🔍 Organization assignments requested for tenant:', tenantId);
+
+      // Get all organization memberships for this tenant
+      const memberships = await db
+        .select({
+          membershipId: organizationMemberships.membershipId,
+          userId: organizationMemberships.userId,
+          userName: tenantUsers.name,
+          userEmail: tenantUsers.email,
+          organizationId: organizationMemberships.entityId,
+          membershipType: organizationMemberships.membershipType,
+          membershipStatus: organizationMemberships.membershipStatus,
+          accessLevel: organizationMemberships.accessLevel,
+          isPrimary: organizationMemberships.isPrimary,
+          assignedAt: organizationMemberships.createdAt,
+          organizationName: entities.entityName,
+          organizationCode: entities.entityCode
+        })
+        .from(organizationMemberships)
+        .innerJoin(tenantUsers, eq(organizationMemberships.userId, tenantUsers.userId))
+        .innerJoin(entities, eq(organizationMemberships.entityId, entities.entityId))
+        .where(and(
+          eq(organizationMemberships.tenantId, tenantId),
+          eq(organizationMemberships.membershipStatus, 'active'),
+          eq(tenantUsers.isActive, true),
+          eq(entities.isActive, true)
+        ));
+
+      // Transform to the expected format
+      const enrichedAssignments = memberships.map(membership => ({
+        assignmentId: membership.membershipId,
+        userId: membership.userId,
+        userName: membership.userName,
+        userEmail: membership.userEmail,
+        organizationId: membership.organizationId,
+        organizationName: membership.organizationName,
+        organizationCode: membership.organizationCode,
+        assignmentType: membership.membershipType,
+        accessLevel: membership.accessLevel,
+        isPrimary: membership.isPrimary,
+        isActive: membership.membershipStatus === 'active',
+        assignedAt: membership.assignedAt?.toISOString(),
+        priority: membership.isPrimary ? 1 : 2 // Primary gets higher priority
+      }));
+
+      console.log('🔍 Returning enriched assignments:', enrichedAssignments.length);
+      return {
+        success: true,
+        data: enrichedAssignments
+      };
+    } catch (error) {
+      console.error('❌ Error fetching organization assignments:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'Failed to fetch organization assignments',
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * POST /current/users/:userId/assign-organization
+   * Assign a user to an organization
+   */
+  fastify.post('/current/users/:userId/assign-organization', {
+    schema: {
+      description: 'Assign a user to an organization within the tenant',
+      tags: ['Tenant', 'Organization Assignment'],
+      params: {
+        type: 'object',
+        properties: {
+          userId: { type: 'string', format: 'uuid' }
+        },
+        required: ['userId']
+      },
+      body: {
+        type: 'object',
+        properties: {
+          organizationId: { type: 'string', format: 'uuid' },
+          assignmentType: { type: 'string', enum: ['primary', 'secondary', 'temporary', 'guest'], default: 'primary' },
+          priority: { type: 'integer', default: 1 },
+          metadata: { type: 'object' }
+        },
+        required: ['organizationId']
+      }
+    }
+  }, async (request, reply) => {
+    if (!request.userContext?.isAuthenticated) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+
+    try {
+      const tenantId = request.userContext.tenantId;
+      const { userId } = request.params;
+      const {
+        organizationId,
+        assignmentType = 'primary',
+        priority = 1,
+        metadata = {}
+      } = request.body;
+
+      // Validate that user exists and belongs to this tenant
+      const user = await db
+        .select()
+        .from(tenantUsers)
+        .where(and(
+          eq(tenantUsers.userId, userId),
+          eq(tenantUsers.tenantId, tenantId)
+        ))
+        .limit(1);
+
+      if (user.length === 0) {
+        return reply.code(404).send({
+          success: false,
+          message: 'User not found in this tenant'
+        });
+      }
+
+      // Validate that organization exists and belongs to this tenant
+      const organization = await db
+        .select()
+        .from(entities)
+        .where(and(
+          eq(entities.entityId, organizationId),
+          eq(entities.tenantId, tenantId),
+          eq(entities.isActive, true)
+        ))
+        .limit(1);
+
+      if (organization.length === 0) {
+        return reply.code(404).send({
+          success: false,
+          message: 'Organization not found in this tenant'
+        });
+      }
+
+      // Check if user is already assigned to this organization
+      const existingMembership = await db
+        .select()
+        .from(organizationMemberships)
+        .where(and(
+          eq(organizationMemberships.userId, userId),
+          eq(organizationMemberships.tenantId, tenantId),
+          eq(organizationMemberships.entityId, organizationId),
+          eq(organizationMemberships.membershipStatus, 'active')
+        ))
+        .limit(1);
+
+      if (existingMembership.length > 0) {
+        return reply.code(200).send({
+          success: true,
+          message: 'User is already assigned to this organization',
+          data: {
+            membershipId: existingMembership[0].membershipId,
+            userId,
+            organizationId,
+            organizationName: organization[0].entityName,
+            membershipType: existingMembership[0].membershipType,
+            accessLevel: existingMembership[0].accessLevel,
+            assignedAt: existingMembership[0].createdAt?.toISOString()
+          }
+        });
+      }
+
+      // Create new organization membership
+      const membershipId = randomUUID();
+      const newMembership = await db
+        .insert(organizationMemberships)
+        .values({
+          membershipId,
+          userId,
+          tenantId,
+          entityId: organizationId,
+          entityType: 'organization',
+          membershipType: assignmentType || 'direct',
+          membershipStatus: 'active',
+          accessLevel: 'standard',
+          isPrimary: !user[0].primaryOrganizationId, // Set as primary if user has no primary org
+          createdBy: request.userContext.internalUserId,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        })
+        .returning();
+
+      // If this is the user's first organization assignment, update their primary organization
+      if (!user[0].primaryOrganizationId) {
+        await db
+          .update(tenantUsers)
+          .set({
+            primaryOrganizationId: organizationId,
+            updatedAt: new Date()
+          })
+          .where(and(
+            eq(tenantUsers.userId, userId),
+            eq(tenantUsers.tenantId, tenantId)
+          ));
+      }
+
+      if (newMembership.length === 0) {
+        return reply.code(500).send({
+          success: false,
+          message: 'Failed to create organization membership'
+        });
+      }
+
+      // Publish organization assignment created event
+      const assignmentData = {
+        assignmentId: membershipId,
+        tenantId,
+        userId,
+        organizationId,
+        organizationCode: organization[0].entityCode,
+        assignmentType,
+        isActive: true,
+        assignedAt: new Date().toISOString(),
+        priority,
+        assignedBy: request.userContext.internalUserId,
+        metadata
+      };
+
+      try {
+        await OrganizationAssignmentService.publishOrgAssignmentCreated(assignmentData);
+      } catch (publishError) {
+        console.error('❌ Failed to publish assignment event:', publishError);
+        // Don't fail the assignment if event publishing fails
+      }
+
+      // Log activity
+      await ActivityLogger.logActivity(
+        request.userContext.internalUserId,
+        tenantId,
+        organizationId,
+        ACTIVITY_TYPES.USER_ORGANIZATION_ASSIGNED,
+        {
+          userId,
+          userEmail: user[0].email,
+          organizationId,
+          organizationName: organization[0].entityName,
+          assignmentType,
+          assignedBy: request.userContext.internalUserId,
+          tenantId
+        },
+        ActivityLogger.createRequestContext(request)
+      );
+
+      return {
+        success: true,
+        message: 'User successfully assigned to organization',
+        data: {
+          membershipId: newMembership[0].membershipId,
+          userId,
+          organizationId,
+          organizationName: organization[0].entityName,
+          membershipType: newMembership[0].membershipType,
+          accessLevel: newMembership[0].accessLevel,
+          isPrimary: newMembership[0].isPrimary,
+          assignedAt: newMembership[0].createdAt?.toISOString()
+        }
+      };
+    } catch (error) {
+      console.error('❌ Error assigning user to organization:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'Failed to assign user to organization',
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * PUT /current/users/:userId/update-organization
+   * Update a user's organization assignment
+   */
+  fastify.put('/current/users/:userId/update-organization', {
+    schema: {
+      description: 'Update a user\'s organization assignment within the tenant',
+      tags: ['Tenant', 'Organization Assignment'],
+      params: {
+        type: 'object',
+        properties: {
+          userId: { type: 'string', format: 'uuid' }
+        },
+        required: ['userId']
+      },
+      body: {
+        type: 'object',
+        properties: {
+          organizationId: { type: 'string', format: 'uuid' },
+          changes: {
+            type: 'object',
+            properties: {
+              assignmentType: { type: 'string', enum: ['primary', 'secondary', 'temporary', 'guest'] },
+              isActive: { type: 'boolean' },
+              priority: { type: 'integer' }
+            }
+          }
+        },
+        required: ['organizationId', 'changes']
+      }
+    }
+  }, async (request, reply) => {
+    if (!request.userContext?.isAuthenticated) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+
+    try {
+      const tenantId = request.userContext.tenantId;
+      const { userId } = request.params;
+      const { organizationId, changes, assignmentId } = request.body;
+
+      // Validate user and organization belong to tenant
+      const user = await db
+        .select()
+        .from(tenantUsers)
+        .where(and(
+          eq(tenantUsers.userId, userId),
+          eq(tenantUsers.tenantId, tenantId)
+        ))
+        .limit(1);
+
+      if (user.length === 0) {
+        return reply.code(404).send({
+          success: false,
+          message: 'User not found in this tenant'
+        });
+      }
+
+      const organization = await db
+        .select()
+        .from(entities)
+        .where(and(
+          eq(entities.entityId, organizationId),
+          eq(entities.tenantId, tenantId)
+        ))
+        .limit(1);
+
+      if (organization.length === 0) {
+        return reply.code(404).send({
+          success: false,
+          message: 'Organization not found in this tenant'
+        });
+      }
+
+      // Update the user record
+      const updateData = {
+        updatedAt: new Date()
+      };
+
+      // Handle different types of changes
+      if (changes.isActive !== undefined) {
+        updateData.isActive = changes.isActive;
+      }
+
+      // If organization is changing, update it
+      if (changes.organizationId) {
+        updateData.primaryOrganizationId = changes.organizationId;
+      }
+
+      const updatedUser = await db
+        .update(tenantUsers)
+        .set(updateData)
+        .where(and(
+          eq(tenantUsers.userId, userId),
+          eq(tenantUsers.tenantId, tenantId)
+        ))
+        .returning();
+
+      if (updatedUser.length === 0) {
+        return reply.code(404).send({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      // Publish organization assignment updated event
+      const assignmentData = {
+        assignmentId: assignmentId || `${userId}_${organizationId}_${Date.now()}`,
+        tenantId,
+        userId,
+        organizationId,
+        changes,
+        updatedBy: request.userContext.internalUserId
+      };
+
+      try {
+        await OrganizationAssignmentService.publishOrgAssignmentUpdated(assignmentData);
+        console.log(`📡 Published organization assignment updated event for user ${userId}`);
+      } catch (publishError) {
+        console.warn('⚠️ Failed to publish assignment update event:', publishError.message);
+      }
+
+      // Log activity
+      await ActivityLogger.logActivity(
+        request.userContext.internalUserId,
+        tenantId,
+        organizationId,
+        ACTIVITY_TYPES.USER_ORGANIZATION_UPDATED,
+        {
+          userId,
+          userEmail: user[0].email,
+          organizationId,
+          changes,
+          updatedBy: request.userContext.internalUserId,
+          tenantId
+        },
+        ActivityLogger.createRequestContext(request)
+      );
+
+      return {
+        success: true,
+        message: 'Organization assignment updated successfully',
+        data: {
+          userId,
+          organizationId,
+          changes,
+          updatedAt: updateData.updatedAt.toISOString()
+        }
+      };
+    } catch (error) {
+      console.error('❌ Error updating organization assignment:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'Failed to update organization assignment',
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * DELETE /current/users/:userId/remove-organization
+   * Remove a user from an organization
+   */
+  fastify.delete('/current/users/:userId/remove-organization', {
+    schema: {
+      description: 'Remove a user from an organization within the tenant',
+      tags: ['Tenant', 'Organization Assignment'],
+      params: {
+        type: 'object',
+        properties: {
+          userId: { type: 'string', format: 'uuid' }
+        },
+        required: ['userId']
+      },
+      body: {
+        type: 'object',
+        properties: {
+          organizationId: { type: 'string', format: 'uuid' },
+          reason: { type: 'string', default: 'permanent_removal' }
+        },
+        required: ['organizationId']
+      }
+    }
+  }, async (request, reply) => {
+    if (!request.userContext?.isAuthenticated) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+
+    try {
+      const tenantId = request.userContext.tenantId;
+      const { userId } = request.params;
+      const { organizationId, reason = 'permanent_removal' } = request.body;
+
+      // Validate that user exists and belongs to this tenant
+      const user = await db
+        .select()
+        .from(tenantUsers)
+        .where(and(
+          eq(tenantUsers.userId, userId),
+          eq(tenantUsers.tenantId, tenantId)
+        ))
+        .limit(1);
+
+      if (user.length === 0) {
+        return reply.code(404).send({
+          success: false,
+          message: 'User not found in this tenant'
+        });
+      }
+
+      // Find the organization membership to remove
+      const membership = await db
+        .select()
+        .from(organizationMemberships)
+        .where(and(
+          eq(organizationMemberships.userId, userId),
+          eq(organizationMemberships.tenantId, tenantId),
+          eq(organizationMemberships.entityId, organizationId),
+          eq(organizationMemberships.membershipStatus, 'active')
+        ))
+        .limit(1);
+
+      if (membership.length === 0) {
+        return reply.code(404).send({
+          success: false,
+          message: 'User organization membership not found'
+        });
+      }
+
+      // Deactivate the membership
+      const updatedMembership = await db
+        .update(organizationMemberships)
+        .set({
+          membershipStatus: 'inactive',
+          updatedBy: request.userContext.internalUserId,
+          updatedAt: new Date()
+        })
+        .where(eq(organizationMemberships.membershipId, membership[0].membershipId))
+        .returning();
+
+      if (updatedMembership.length === 0) {
+        return reply.code(500).send({
+          success: false,
+          message: 'Failed to remove organization membership'
+        });
+      }
+
+      // If this was the primary organization, update user's primary organization
+      if (membership[0].isPrimary) {
+        // Find another active membership to set as primary
+        const otherMemberships = await db
+          .select()
+          .from(organizationMemberships)
+          .where(and(
+            eq(organizationMemberships.userId, userId),
+            eq(organizationMemberships.tenantId, tenantId),
+            eq(organizationMemberships.membershipStatus, 'active')
+          ));
+
+        if (otherMemberships.length > 0) {
+          // Set the first remaining membership as primary
+          await db
+            .update(organizationMemberships)
+            .set({
+              isPrimary: true,
+              updatedBy: request.userContext.internalUserId,
+              updatedAt: new Date()
+            })
+            .where(eq(organizationMemberships.membershipId, otherMemberships[0].membershipId));
+
+          // Update user's primary organization
+          await db
+            .update(tenantUsers)
+            .set({
+              primaryOrganizationId: otherMemberships[0].entityId,
+              updatedAt: new Date()
+            })
+            .where(and(
+              eq(tenantUsers.userId, userId),
+              eq(tenantUsers.tenantId, tenantId)
+            ));
+        } else {
+          // No more memberships, clear primary organization
+          await db
+            .update(tenantUsers)
+            .set({
+              primaryOrganizationId: null,
+              updatedAt: new Date()
+            })
+            .where(and(
+              eq(tenantUsers.userId, userId),
+              eq(tenantUsers.tenantId, tenantId)
+            ));
+        }
+      }
+
+      // Publish organization assignment deleted event
+      const assignmentData = {
+        assignmentId: `${userId}_${organizationId}_${Date.now()}`,
+        tenantId,
+        userId,
+        organizationId,
+        deletedBy: request.userContext.internalUserId,
+        reason
+      };
+
+      try {
+        await OrganizationAssignmentService.publishOrgAssignmentDeleted(assignmentData);
+        console.log(`📡 Published organization assignment deleted event for user ${userId}`);
+      } catch (publishError) {
+        console.warn('⚠️ Failed to publish assignment deletion event:', publishError.message);
+      }
+
+      // Log activity
+      await ActivityLogger.logActivity(
+        request.userContext.internalUserId,
+        tenantId,
+        organizationId,
+        ACTIVITY_TYPES.USER_ORGANIZATION_REMOVED,
+        {
+          userId,
+          userEmail: user[0].email,
+          organizationId,
+          reason,
+          removedBy: request.userContext.internalUserId,
+          tenantId
+        },
+        ActivityLogger.createRequestContext(request)
+      );
+
+      return {
+        success: true,
+        message: 'User successfully removed from organization',
+        data: {
+          userId,
+          organizationId,
+          removedAt: new Date().toISOString()
+        }
+      };
+    } catch (error) {
+      console.error('❌ Error removing user from organization:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'Failed to remove user from organization',
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * POST /current/users/bulk-assign-organizations
+   * Bulk assign multiple users to organizations
+   */
+  fastify.post('/current/users/bulk-assign-organizations', {
+    schema: {
+      description: 'Bulk assign multiple users to organizations within the tenant',
+      tags: ['Tenant', 'Organization Assignment'],
+      body: {
+        type: 'object',
+        properties: {
+          assignments: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                userId: { type: 'string', format: 'uuid' },
+                organizationId: { type: 'string', format: 'uuid' },
+                assignmentType: { type: 'string', enum: ['primary', 'secondary', 'temporary', 'guest'], default: 'primary' },
+                priority: { type: 'integer', default: 1 }
+              },
+              required: ['userId', 'organizationId']
+            }
+          }
+        },
+        required: ['assignments']
+      }
+    }
+  }, async (request, reply) => {
+    if (!request.userContext?.isAuthenticated) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+
+    try {
+      const tenantId = request.userContext.tenantId;
+      const { assignments } = request.body;
+
+      const results = [];
+      const events = [];
+
+      for (const assignment of assignments) {
+        try {
+          // Update user organization assignment
+          await db
+            .update(tenantUsers)
+            .set({
+              primaryOrganizationId: assignment.organizationId,
+              updatedAt: new Date()
+            })
+            .where(and(
+              eq(tenantUsers.userId, assignment.userId),
+              eq(tenantUsers.tenantId, tenantId)
+            ));
+
+          // Prepare event data
+          const eventData = {
+            assignmentId: `${assignment.userId}_${assignment.organizationId}_${Date.now()}`,
+            tenantId,
+            userId: assignment.userId,
+            organizationId: assignment.organizationId,
+            assignmentType: assignment.assignmentType || 'primary',
+            isActive: true,
+            assignedAt: new Date().toISOString(),
+            priority: assignment.priority || 1,
+            assignedBy: request.userContext.internalUserId
+          };
+
+          events.push(eventData);
+          results.push({ success: true, userId: assignment.userId, assignmentId: eventData.assignmentId });
+
+        } catch (error) {
+          console.error(`❌ Failed to assign user ${assignment.userId}:`, error);
+          results.push({ success: false, userId: assignment.userId, error: error.message });
+        }
+      }
+
+      // Publish events in bulk
+      try {
+        const publishResults = await OrganizationAssignmentService.publishBulkAssignments(events, 'created');
+        console.log(`📡 Published ${events.length} organization assignment events`);
+      } catch (publishError) {
+        console.warn('⚠️ Failed to publish some assignment events:', publishError.message);
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      const failureCount = results.filter(r => !r.success).length;
+
+      // Log bulk activity
+      await ActivityLogger.logActivity(
+        request.userContext.internalUserId,
+        tenantId,
+        null,
+        ACTIVITY_TYPES.BULK_USER_ORGANIZATION_ASSIGNED,
+        {
+          totalAssignments: assignments.length,
+          successful: successCount,
+          failed: failureCount,
+          assignments: results,
+          tenantId
+        },
+        ActivityLogger.createRequestContext(request)
+      );
+
+      return {
+        success: true,
+        message: `Bulk assignment completed: ${successCount} successful, ${failureCount} failed`,
+        data: {
+          total: assignments.length,
+          successful: successCount,
+          failed: failureCount,
+          results
+        }
+      };
+    } catch (error) {
+      console.error('❌ Error in bulk organization assignment:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'Failed to complete bulk organization assignment',
+        error: error.message
+      });
     }
   });
 

@@ -1,9 +1,43 @@
 import { authenticateToken } from '../middleware/auth.js';
 import { WrapperSyncService } from '../services/wrapper-sync-service.js';
+
+// Combined authentication middleware that accepts both Kinde tokens and service tokens
+async function authenticateServiceOrToken(request, reply) {
+  try {
+    // Try service token validation first
+    const authHeader = request.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      console.log('🔑 Token received - Length:', token.length);
+
+      try {
+        // Try to decode as service token
+        const { verify } = await import('jsonwebtoken');
+        const secret = process.env.JWT_SECRET || 'default-secret-change-in-production';
+        const decoded = verify(token, secret);
+
+        if (decoded.type === 'service_token' && decoded.service === 'crm') {
+          console.log('✅ Service token validated for CRM');
+          request.serviceAuth = decoded;
+          return; // Service token is valid
+        }
+      } catch (serviceTokenError) {
+        // Not a valid service token, try regular Kinde authentication
+        console.log('🔄 Service token validation failed, trying Kinde auth');
+      }
+    }
+
+    // Fall back to regular Kinde authentication
+    await authenticateToken(request, reply);
+  } catch (error) {
+    console.log('❌ All authentication methods failed');
+    throw error;
+  }
+}
 import { EventTrackingService } from '../services/event-tracking-service.js';
 import { InterAppEventService } from '../services/inter-app-event-service.js';
 import { db } from '../db/index.js';
-import { tenants, tenantUsers, customRoles, userRoleAssignments, entities, credits, creditAllocations, creditConfigurations } from '../db/schema/index.js';
+import { tenants, tenantUsers, customRoles, userRoleAssignments, entities, credits, creditAllocations, creditConfigurations, organizationMemberships } from '../db/schema/index.js';
 import { eq, and, or, sql } from 'drizzle-orm';
 import ErrorResponses from '../utils/error-responses.js';
 import { getRedis } from '../utils/redis.js';
@@ -21,7 +55,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Trigger full tenant data synchronization
   fastify.post('/tenants/:tenantId/sync', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Trigger full tenant data synchronization for CRM',
       params: {
@@ -73,7 +107,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Get sync status for tenant
   fastify.get('/tenants/:tenantId/sync/status', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Get tenant sync status',
       params: {
@@ -107,7 +141,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Get sync health metrics for a tenant
   fastify.get('/tenants/:tenantId/sync/health', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Get sync health metrics and event acknowledgment status',
       params: {
@@ -141,7 +175,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Get inter-application sync health metrics
   fastify.get('/tenants/:tenantId/sync/inter-app-health', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Get inter-application sync health metrics showing communication between all business suite apps',
       params: {
@@ -175,7 +209,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Get inter-application communication matrix
   fastify.get('/tenants/:tenantId/communication-matrix', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Get detailed communication matrix showing all inter-application event flows',
       params: {
@@ -209,7 +243,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Publish inter-application event (for testing/debugging)
   fastify.post('/tenants/:tenantId/inter-app-events', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Publish an event from any app to any other app (for testing)',
       params: {
@@ -272,7 +306,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Get unacknowledged events for reconciliation
   fastify.get('/tenants/:tenantId/events/unacknowledged', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Get events that have not been acknowledged by target applications',
       params: {
@@ -316,7 +350,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Trigger reconciliation for unacknowledged events
   fastify.post('/tenants/:tenantId/events/reconcile', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Trigger reconciliation for unacknowledged events',
       params: {
@@ -399,7 +433,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Get basic tenant information
   fastify.get('/tenants/:tenantId', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Get basic tenant information for CRM',
       params: {
@@ -441,10 +475,6 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
           organization: {
             orgCode: tenant.tenantId,
             orgName: tenant.companyName
-          },
-          hierarchy: {
-            level: 0,
-            path: [tenant.tenantId]
           }
         }
       };
@@ -460,7 +490,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Get user profiles for tenant
   fastify.get('/tenants/:tenantId/users', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Get user profiles for tenant (CRM format)',
       params: {
@@ -569,7 +599,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Get organizations for tenant
   fastify.get('/tenants/:tenantId/organizations', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Get organizations for tenant (CRM format)',
       params: {
@@ -654,7 +684,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Get detailed tenant users information
   fastify.get('/tenants/:tenantId/tenant-users', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Get detailed tenant users information for CRM',
       params: {
@@ -774,7 +804,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Get role definitions for tenant
   fastify.get('/tenants/:tenantId/roles', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Get role definitions for tenant (CRM format)',
       params: {
@@ -899,7 +929,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Get complete CRM credit configurations for tenant (priority-based: tenant > global)
   fastify.get('/tenants/:tenantId/credit-configs', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Get complete CRM credit configurations for tenant (tenant-specific takes precedence over global)',
       params: {
@@ -1053,7 +1083,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Get CRM credit allocations for tenant entities
   fastify.get('/tenants/:tenantId/entity-credits', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Get CRM credit allocations for tenant entities (CRM format)',
       params: {
@@ -1161,7 +1191,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Get employee organization assignments for tenant
   fastify.get('/tenants/:tenantId/employee-assignments', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Get employee organization assignments for tenant (CRM format)',
       params: {
@@ -1184,97 +1214,87 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
     }
   }, async (request, reply) => {
     try {
+      // Log the authorization token
+      console.log('🔐 Received token:', request.headers.authorization);
+
       const { tenantId } = request.params;
       const { userId, entityId, includeInactive = false, page = 1, limit = 50 } = request.query;
       const offset = (page - 1) * limit;
 
-      // For now, we'll derive assignments from tenant users and their organization relationships
-      // In a full implementation, this would come from a dedicated assignments table
+      // Build conditions for organization memberships
+      let conditions = [
+        eq(organizationMemberships.tenantId, tenantId),
+        eq(organizationMemberships.membershipStatus, 'active')
+      ];
 
-      let conditions = [eq(tenantUsers.tenantId, tenantId)];
       if (userId) {
-        conditions.push(eq(tenantUsers.userId, userId));
+        conditions.push(eq(organizationMemberships.userId, userId));
       }
       if (entityId) {
-        conditions.push(eq(tenantUsers.entityId, entityId));
-      }
-      if (!includeInactive) {
-        conditions.push(eq(tenantUsers.isActive, true));
+        conditions.push(eq(organizationMemberships.entityId, entityId));
       }
 
-      // Get users first, then enrich with organization data separately
-      const users = await db
+      // Get organization memberships with user and entity details
+      const memberships = await db
         .select({
-          userId: tenantUsers.userId,
-          tenantId: tenantUsers.tenantId,
-          primaryOrgId: tenantUsers.primaryOrganizationId,
-          isActive: tenantUsers.isActive,
-          createdAt: tenantUsers.createdAt
+          membershipId: organizationMemberships.membershipId,
+          userId: organizationMemberships.userId,
+          tenantId: organizationMemberships.tenantId,
+          entityId: organizationMemberships.entityId,
+          membershipType: organizationMemberships.membershipType,
+          membershipStatus: organizationMemberships.membershipStatus,
+          accessLevel: organizationMemberships.accessLevel,
+          isPrimary: organizationMemberships.isPrimary,
+          assignedAt: organizationMemberships.createdAt,
+          createdBy: organizationMemberships.createdBy,
+          // User details
+          userEmail: tenantUsers.email,
+          userName: tenantUsers.name,
+          userIsActive: tenantUsers.isActive,
+          // Entity details
+          entityName: entities.entityName,
+          entityCode: entities.entityCode
         })
-        .from(tenantUsers)
+        .from(organizationMemberships)
+        .innerJoin(tenantUsers, eq(organizationMemberships.userId, tenantUsers.userId))
+        .innerJoin(entities, eq(organizationMemberships.entityId, entities.entityId))
         .where(and(...conditions))
-        .orderBy(tenantUsers.createdAt)
+        .orderBy(organizationMemberships.createdAt)
         .limit(limit)
         .offset(offset);
 
-      // Enrich with organization data
-      const assignments = await Promise.all(users.map(async (user) => {
-        let orgCode = null;
-        let orgName = null;
+      // Get total count for pagination
+      const totalResult = await db
+        .select({ count: sql`count(*)` })
+        .from(organizationMemberships)
+        .where(and(...conditions));
 
-        if (user.primaryOrgId) {
-          const org = await db
-            .select({
-              orgCode: entities.entityId,
-              orgName: entities.entityName
-            })
-            .from(entities)
-            .where(and(
-              eq(entities.tenantId, tenantId),
-              eq(entities.entityId, user.primaryOrgId)
-            ))
-            .limit(1);
-
-          if (org.length > 0) {
-            orgCode = org[0].orgCode;
-            orgName = org[0].orgName;
-          }
-        }
-
-        return {
-          ...user,
-          orgCode,
-          orgName,
-          userEntityId: user.primaryOrgId // For backward compatibility
-        };
-      }));
+      const total = parseInt(totalResult[0].count);
+      const totalPages = Math.ceil(total / limit);
 
       // Transform to CRM format
-      const transformedAssignments = assignments.map(assignment => ({
-        assignmentId: `${assignment.userId}_${assignment.orgCode || assignment.userEntityId || tenantId}`,
-        tenantId: assignment.tenantId,
-        userId: assignment.userId,
-        entityId: assignment.orgCode || assignment.userEntityId || tenantId, // Use actual orgCode from entities table, fallback to user's entityId, then tenantId
-        assignmentType: 'primary',
-        isActive: assignment.isActive !== null ? assignment.isActive : true,
-        assignedAt: assignment.createdAt,
+      const transformedAssignments = memberships.map(membership => ({
+        assignmentId: membership.membershipId, // Use actual membership UUID
+        tenantId: membership.tenantId,
+        userId: membership.userId,
+        entityId: membership.entityId,
+        assignmentType: membership.membershipType || 'primary',
+        isActive: membership.membershipStatus === 'active' && membership.userIsActive,
+        assignedAt: membership.assignedAt?.toISOString(),
         expiresAt: null,
-        assignedBy: null,
+        assignedBy: membership.createdBy,
         deactivatedAt: null,
         deactivatedBy: null,
-        priority: 1,
+        priority: membership.isPrimary ? 1 : 2,
         metadata: {
           department: '',
           designation: '',
-          employeeCode: assignment.userId
+          employeeCode: membership.userId,
+          organizationName: membership.entityName,
+          organizationCode: membership.entityCode,
+          accessLevel: membership.accessLevel
         }
       }));
-
-      // Get total count
-      const [{ count }] = await db
-        .select({ count: sql`count(*)` })
-        .from(tenantUsers)
-        .where(and(...conditions));
 
       return {
         success: true,
@@ -1282,8 +1302,8 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
         pagination: {
           page,
           limit,
-          total: count,
-          totalPages: Math.ceil(count / limit)
+          total: total.toString(),
+          totalPages
         }
       };
     } catch (error) {
@@ -1298,7 +1318,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Get role assignments for tenant
   fastify.get('/tenants/:tenantId/role-assignments', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Get role assignments for tenant (CRM format)',
       params: {
@@ -1448,7 +1468,7 @@ export default async function wrapperCrmSyncRoutes(fastify, options) {
 
   // Redis Stream Monitoring Endpoint
   fastify.get('/monitoring/streams', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateServiceOrToken],
     schema: {
       description: 'Monitor Redis streams for CRM sync',
       querystring: {

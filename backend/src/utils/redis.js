@@ -8,13 +8,29 @@ class RedisManager {
   }
 
   async connect() {
-    if (this.isConnected) {
+    // Return early if already connected
+    if (this.isConnected && this.client) {
+      console.log('✅ Redis already connected, skipping connection');
       return;
+    }
+
+    // If client exists but not connected, try to reconnect
+    if (this.client && !this.isConnected) {
+      try {
+        console.log('🔄 Attempting to reconnect existing Redis client');
+        await this.client.connect();
+        return;
+      } catch (error) {
+        console.warn('Failed to reconnect existing Redis client, creating new one:', error.message);
+        // Reset client and fall through to create new client
+        this.client = null;
+      }
     }
 
     try {
       const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-      console.log('redis url',process.env.REDIS_URL);
+      console.log('🔗 Connecting to Redis:', process.env.REDIS_URL ? 'Cloud Redis' : 'localhost:6379');
+
       this.client = Redis.createClient({
         url: redisUrl,
         retry_strategy: (options) => {
@@ -51,7 +67,7 @@ class RedisManager {
       });
 
       await this.client.connect();
-      console.log('🚀 Redis manager initialized');
+      console.log('✅ Redis connection established successfully');
 
     } catch (error) {
       console.error('❌ Failed to connect to Redis:', error);
@@ -61,11 +77,21 @@ class RedisManager {
   }
 
   async disconnect() {
-    if (this.client) {
-      await this.client.quit();
+    if (this.client && this.isConnected) {
+      try {
+        await this.client.quit();
+        console.log('✅ Redis client disconnected gracefully');
+      } catch (error) {
+        console.warn('Error during Redis disconnect:', error.message);
+        // Force disconnect if quit fails
+        try {
+          this.client.disconnect();
+        } catch (forceError) {
+          console.warn('Force disconnect also failed:', forceError.message);
+        }
+      }
       this.client = null;
       this.isConnected = false;
-      console.log('🛑 Redis manager disconnected');
     }
   }
 
@@ -319,7 +345,7 @@ class UsageCache {
    * Increment API calls counter for a tenant and app
    */
   async incrementApiCalls(tenantId, app) {
-    if (!this.redis.isConnected()) {
+    if (!this.redis.isConnected) {
       console.warn('⚠️ Redis not connected, skipping API call tracking');
       return;
     }
@@ -341,7 +367,7 @@ class UsageCache {
    * Track active user for a tenant
    */
   async trackActiveUser(tenantId, userId) {
-    if (!this.redis.isConnected()) {
+    if (!this.redis.isConnected) {
       console.warn('⚠️ Redis not connected, skipping active user tracking');
       return;
     }
@@ -365,7 +391,7 @@ class UsageCache {
    * Get API calls count for a tenant and app in the current hour
    */
   async getApiCallsCount(tenantId, app) {
-    if (!this.redis.isConnected()) {
+    if (!this.redis.isConnected) {
       return 0;
     }
 
@@ -383,7 +409,7 @@ class UsageCache {
    * Get active users count for a tenant
    */
   async getActiveUsersCount(tenantId) {
-    if (!this.redis.isConnected()) {
+    if (!this.redis.isConnected) {
       return 0;
     }
 
@@ -409,7 +435,7 @@ class UsageCache {
    * Clean up old tracking data
    */
   async cleanupOldData() {
-    if (!this.redis.isConnected()) {
+    if (!this.redis.isConnected) {
       return;
     }
 
@@ -534,128 +560,128 @@ class CrmSyncStreams {
     return await this.publishToStream(streamKey, message);
   }
 
-        /**
-         * Publish credit/billing event
-         */
-        async publishCreditEvent(tenantId, eventType, creditData, metadata = {}) {
-          const streamKey = `${this.streamPrefix}:credits:${eventType}`;
+  /**
+   * Publish credit/billing event
+   */
+  async publishCreditEvent(tenantId, eventType, creditData, metadata = {}) {
+    const streamKey = `${this.streamPrefix}:credits:${eventType}`;
 
-          const message = {
-            streamId: streamKey,
-            messageId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            timestamp: new Date().toISOString(),
-            sourceApp: 'wrapper',
-            eventType,
-            entityType: 'credit',
-            entityId: creditData.allocationId || creditData.configId || `credit_${Date.now()}`,
-            tenantId,
-            action: eventType.replace('credit_', ''),
-            data: creditData,
-            metadata: {
-              correlationId: `credit_${creditData.entityId || 'system'}_${Date.now()}`,
-              version: '1.0',
-              retryCount: 0,
-              sourceTimestamp: new Date().toISOString(),
-              ...metadata
-            }
-          };
+    const message = {
+      streamId: streamKey,
+      messageId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      sourceApp: 'wrapper',
+      eventType,
+      entityType: 'credit',
+      entityId: creditData.allocationId || creditData.configId || `credit_${Date.now()}`,
+      tenantId,
+      action: eventType.replace('credit_', ''),
+      data: creditData,
+      metadata: {
+        correlationId: `credit_${creditData.entityId || 'system'}_${Date.now()}`,
+        version: '1.0',
+        retryCount: 0,
+        sourceTimestamp: new Date().toISOString(),
+        ...metadata
+      }
+    };
 
-          return await this.publishToStream(streamKey, message);
-        }
+    return await this.publishToStream(streamKey, message);
+  }
 
-        /**
-         * Publish credit allocation event (for CRM sync)
-         */
-        async publishCreditAllocation(tenantId, entityId, amount, metadata = {}) {
-          const streamKey = 'credit-events';
+  /**
+   * Publish credit allocation event (for CRM sync)
+   */
+  async publishCreditAllocation(tenantId, entityId, amount, metadata = {}) {
+    const streamKey = 'credit-events';
 
-          const message = {
-            eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            eventType: 'credit.allocated',
-            tenantId,
-            entityId,
-            amount,
-            timestamp: new Date().toISOString(),
-            source: 'wrapper',
-            metadata: JSON.stringify({
-              allocationId: metadata.allocationId,
-              reason: metadata.reason || 'credit_allocation',
-              ...metadata
-            })
-          };
+    const message = {
+      eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      eventType: 'credit.allocated',
+      tenantId,
+      entityId,
+      amount,
+      timestamp: new Date().toISOString(),
+      source: 'wrapper',
+      metadata: JSON.stringify({
+        allocationId: metadata.allocationId,
+        reason: metadata.reason || 'credit_allocation',
+        ...metadata
+      })
+    };
 
-          console.log(`📡 Publishing credit allocation: ${amount} credits to ${entityId}`);
-          return await this.publishToStream(streamKey, message);
-        }
+    console.log(`📡 Publishing credit allocation: ${amount} credits to ${entityId}`);
+    return await this.publishToStream(streamKey, message);
+  }
 
-        /**
-         * Publish credit consumption event (from CRM)
-         */
-        async publishCreditConsumption(tenantId, entityId, userId, amount, operationType, operationId, metadata = {}) {
-          const streamKey = 'credit-events';
+  /**
+   * Publish credit consumption event (from CRM)
+   */
+  async publishCreditConsumption(tenantId, entityId, userId, amount, operationType, operationId, metadata = {}) {
+    const streamKey = 'credit-events';
 
-          const message = {
-            eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            eventType: 'credit.consumed',
-            tenantId,
-            entityId,
-            userId,
-            amount,
-            operationType,
-            operationId,
-            timestamp: new Date().toISOString(),
-            source: 'crm',
-            metadata: JSON.stringify({
-              resourceType: metadata.resourceType,
-              resourceId: metadata.resourceId,
-              ...metadata
-            })
-          };
+    const message = {
+      eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      eventType: 'credit.consumed',
+      tenantId,
+      entityId,
+      userId,
+      amount,
+      operationType,
+      operationId,
+      timestamp: new Date().toISOString(),
+      source: 'crm',
+      metadata: JSON.stringify({
+        resourceType: metadata.resourceType,
+        resourceId: metadata.resourceId,
+        ...metadata
+      })
+    };
 
-          console.log(`📡 Publishing credit consumption: ${amount} credits by ${userId} for ${operationType}`);
-          return await this.publishToStream(streamKey, message);
-        }
+    console.log(`📡 Publishing credit consumption: ${amount} credits by ${userId} for ${operationType}`);
+    return await this.publishToStream(streamKey, message);
+  }
 
-        /**
-         * Publish acknowledgment for processed event
-         */
-        async publishAcknowledgment(originalEventId, status, acknowledgmentData = {}) {
-          const streamKey = 'acknowledgments';
+  /**
+   * Publish acknowledgment for processed event
+   */
+  async publishAcknowledgment(originalEventId, status, acknowledgmentData = {}) {
+    const streamKey = 'acknowledgments';
 
-          const message = {
-            acknowledgmentId: `ack_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            originalEventId,
-            status, // 'processed', 'failed', 'timeout'
-            timestamp: new Date().toISOString(),
-            source: acknowledgmentData.sourceApplication || 'crm', // Dynamic source
-            acknowledgmentData: JSON.stringify(acknowledgmentData)
-          };
+    const message = {
+      acknowledgmentId: `ack_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      originalEventId,
+      status, // 'processed', 'failed', 'timeout'
+      timestamp: new Date().toISOString(),
+      source: acknowledgmentData.sourceApplication || 'crm', // Dynamic source
+      acknowledgmentData: JSON.stringify(acknowledgmentData)
+    };
 
-          console.log(`📡 Publishing acknowledgment for event ${originalEventId}: ${status}`);
-          return await this.publishToStream(streamKey, message);
-        }
+    console.log(`📡 Publishing acknowledgment for event ${originalEventId}: ${status}`);
+    return await this.publishToStream(streamKey, message);
+  }
 
-        /**
-         * Publish inter-application event (any app to any app)
-         */
-        async publishInterAppEvent(eventType, sourceApp, targetApp, tenantId, entityId, eventData = {}, publishedBy = 'system') {
-          const streamKey = 'inter-app-events';
+  /**
+   * Publish inter-application event (any app to any app)
+   */
+  async publishInterAppEvent(eventType, sourceApp, targetApp, tenantId, entityId, eventData = {}, publishedBy = 'system') {
+    const streamKey = 'inter-app-events';
 
-          const message = {
-            eventId: `inter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            eventType,
-            sourceApplication: sourceApp,
-            targetApplication: targetApp,
-            tenantId,
-            entityId,
-            timestamp: new Date().toISOString(),
-            eventData: JSON.stringify(eventData),
-            publishedBy
-          };
+    const message = {
+      eventId: `inter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      eventType,
+      sourceApplication: sourceApp,
+      targetApplication: targetApp,
+      tenantId,
+      entityId,
+      timestamp: new Date().toISOString(),
+      eventData: JSON.stringify(eventData),
+      publishedBy
+    };
 
-          console.log(`📡 Publishing inter-app event: ${sourceApp} → ${targetApp} (${eventType})`);
-          return await this.publishToStream(streamKey, message);
-        }
+    console.log(`📡 Publishing inter-app event: ${sourceApp} → ${targetApp} (${eventType})`);
+    return await this.publishToStream(streamKey, message);
+  }
 
   /**
    * Generic publish method to Redis Stream
@@ -695,7 +721,7 @@ class CrmSyncStreams {
    * Get stream info for monitoring
    */
   async getStreamInfo(streamKey) {
-    if (!this.redis.isConnected()) {
+    if (!this.redis.isConnected) {
       return null;
     }
 
@@ -712,7 +738,7 @@ class CrmSyncStreams {
    * Trim old stream entries
    */
   async trimStream(streamKey, maxLength = 10000) {
-    if (!this.redis.isConnected()) {
+    if (!this.redis.isConnected) {
       return;
     }
 

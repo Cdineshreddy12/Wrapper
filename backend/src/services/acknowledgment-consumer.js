@@ -6,21 +6,19 @@
  * Listens for event acknowledgments from CRM and updates event tracking status
  */
 
-import Redis from 'redis';
 import dotenv from 'dotenv';
 import { EventTrackingService } from './event-tracking-service.js';
+import { redisManager } from '../utils/redis.js';
 
 // Load environment variables
 dotenv.config();
-
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const consumerGroup = 'wrapper-consumers';
 const consumerName = `wrapper-consumer-${Date.now()}`;
 const streamKey = 'acknowledgments';
 
 class AcknowledgmentConsumer {
   constructor() {
-    this.redis = Redis.createClient({ url: redisUrl });
+    this.redis = redisManager;
     this.consumerGroup = consumerGroup;
     this.consumerName = consumerName;
     this.streamKey = streamKey;
@@ -29,8 +27,9 @@ class AcknowledgmentConsumer {
 
   async connect() {
     try {
+      // Use the singleton RedisManager - it handles connection management
       await this.redis.connect();
-      console.log('✅ Acknowledgment Consumer connected to Redis');
+      console.log('✅ Acknowledgment Consumer connected to Redis (via RedisManager)');
     } catch (error) {
       console.error('❌ Failed to connect to Redis:', error);
       throw error;

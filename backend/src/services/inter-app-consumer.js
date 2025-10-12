@@ -9,15 +9,13 @@
  * Usage: node src/services/inter-app-consumer.js
  */
 
-import Redis from 'redis';
 import dotenv from 'dotenv';
 import { InterAppEventService } from './inter-app-event-service.js';
-import { crmSyncStreams } from '../utils/redis.js';
+import { crmSyncStreams, redisManager } from '../utils/redis.js';
 
 // Load environment variables
 dotenv.config();
 
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const consumerGroup = 'inter-app-consumers';
 const consumerName = `inter-app-consumer-${Date.now()}`;
 const streamKey = 'inter-app-events';
@@ -63,7 +61,7 @@ const appDatabases = new MockAppDatabases();
 
 class InterAppEventConsumer {
   constructor() {
-    this.redis = Redis.createClient({ url: redisUrl });
+    this.redis = redisManager;
     this.consumerGroup = consumerGroup;
     this.consumerName = consumerName;
     this.streamKey = streamKey;
@@ -72,8 +70,9 @@ class InterAppEventConsumer {
 
   async connect() {
     try {
+      // Use the singleton RedisManager - it handles connection management
       await this.redis.connect();
-      console.log('✅ Inter-App Event Consumer connected to Redis');
+      console.log('✅ Inter-App Event Consumer connected to Redis (via RedisManager)');
     } catch (error) {
       console.error('❌ Failed to connect to Redis:', error);
       throw error;

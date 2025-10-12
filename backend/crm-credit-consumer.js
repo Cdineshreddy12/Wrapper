@@ -10,6 +10,7 @@
  */
 
 import Redis from 'redis';
+import { getRedis } from './src/utils/redis.js';
 import dotenv from 'dotenv';
 import { crmSyncStreams } from './src/utils/redis.js';
 
@@ -78,7 +79,7 @@ const crmDb = new CrmCreditDatabase();
 
 class CrmCreditConsumer {
   constructor() {
-    this.redis = Redis.createClient({ url: redisUrl });
+    this.redisManager = getRedis();
     this.consumerGroup = consumerGroup;
     this.consumerName = consumerName;
     this.streamKey = streamKey;
@@ -87,7 +88,7 @@ class CrmCreditConsumer {
 
   async connect() {
     try {
-      await this.redis.connect();
+      await this.redisManager.connect();
       console.log('✅ CRM Credit Consumer connected to Redis');
     } catch (error) {
       console.error('❌ Failed to connect to Redis:', error);
@@ -98,7 +99,7 @@ class CrmCreditConsumer {
   async setupConsumerGroup() {
     try {
       // Try to create consumer group (will fail if it already exists)
-      await this.redis.xGroupCreate(
+      await this.redisManager.client.xGroupCreate(
         this.streamKey,
         this.consumerGroup,
         '0', // Start from beginning
@@ -135,13 +136,13 @@ class CrmCreditConsumer {
       }
 
       // Acknowledge successful processing
-      await this.redis.xAck(this.streamKey, this.consumerGroup, event.id);
+      await this.redisManager.client.xAck(this.streamKey, this.consumerGroup, event.id);
       console.log(`✅ Acknowledged event: ${event.id}`);
 
     } catch (error) {
       console.error(`❌ Failed to process event ${event.id}:`, error);
       // Still acknowledge to prevent infinite retries
-      await this.redis.xAck(this.streamKey, this.consumerGroup, event.id);
+      await this.redisManager.client.xAck(this.streamKey, this.consumerGroup, event.id);
     }
   }
 
@@ -271,7 +272,7 @@ class CrmCreditConsumer {
     while (this.isRunning) {
       try {
         // Read pending messages first
-        const pendingMessages = await this.redis.xReadGroup(
+        const pendingMessages = await this.redisManager.client.xReadGroup(
           this.streamKey,
           this.consumerGroup,
           this.consumerName,
@@ -288,7 +289,7 @@ class CrmCreditConsumer {
         }
 
         // Then read new messages
-        const newMessages = await this.redis.xReadGroup(
+        const newMessages = await this.redisManager.client.xReadGroup(
           this.streamKey,
           this.consumerGroup,
           this.consumerName,
@@ -314,14 +315,14 @@ class CrmCreditConsumer {
   async stop() {
     console.log('🛑 Stopping CRM Credit Consumer...');
     this.isRunning = false;
-    await this.redis.quit();
+    await this.redisManager.disconnect();
   }
 
   async getStreamInfo() {
     try {
-      const info = await this.redis.xInfoStream(this.streamKey);
-      const groups = await this.redis.xInfoGroups(this.streamKey);
-      const pending = await this.redis.xPending(this.streamKey, this.consumerGroup);
+      const info = await this.redisManager.client.xInfoStream(this.streamKey);
+      const groups = await this.redisManager.client.xInfoGroups(this.streamKey);
+      const pending = await this.redisManager.client.xPending(this.streamKey, this.consumerGroup);
 
       return {
         streamLength: info.length,

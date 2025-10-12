@@ -542,6 +542,51 @@ export class TenantService {
               updatedAt: new Date()
             })
             .where(eq(tenantUsers.userId, user.userId));
+
+          // Publish organization assignment created event (async, don't wait)
+          setImmediate(async () => {
+            try {
+              const { OrganizationAssignmentService } = await import('../services/organization-assignment-service.js');
+
+              // Get organization details for event
+              const [organization] = await db
+                .select({
+                  entityId: entities.entityId,
+                  entityName: entities.entityName,
+                  entityCode: entities.entityCode
+                })
+                .from(entities)
+                .where(and(
+                  eq(entities.entityId, invitation.primaryEntityId),
+                  eq(entities.tenantId, invitation.tenantId)
+                ))
+                .limit(1);
+
+              if (organization) {
+                const assignmentData = {
+                  assignmentId: `${user.userId}_${invitation.primaryEntityId}_${Date.now()}`,
+                  tenantId: invitation.tenantId,
+                  userId: user.userId,
+                  organizationId: invitation.primaryEntityId,
+                  organizationCode: organization.entityCode,
+                  assignmentType: 'primary',
+                  isActive: true,
+                  assignedAt: new Date().toISOString(),
+                  priority: 1,
+                  assignedBy: invitation.invitedBy,
+                  metadata: {
+                    source: 'invitation_acceptance',
+                    invitationId: invitation.invitationId
+                  }
+                };
+
+                await OrganizationAssignmentService.publishOrgAssignmentCreated(assignmentData);
+                console.log(`📡 Published organization assignment created event for user ${user.email} via invitation`);
+              }
+            } catch (publishError) {
+              console.warn('⚠️ Failed to publish organization assignment event during invitation acceptance:', publishError.message);
+            }
+          });
         }
 
         // Update invitation status

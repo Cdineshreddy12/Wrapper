@@ -635,7 +635,14 @@ export const tenantAPI = {
   getUsers: () => api.get<ApiResponse<UnifiedUser[]>>('/api/tenants/current/users'),
 
   // Invite user to tenant
-  inviteUser: (data: { email: string; roleId: string; message?: string }) =>
+  inviteUser: (data: {
+    email: string;
+    roleId: string;
+    message?: string;
+    organizationId?: string;
+    assignmentType?: 'primary' | 'secondary' | 'temporary' | 'guest';
+    priority?: number;
+  }) =>
     api.post<ApiResponse<any>>('/api/tenants/current/users/invite', data),
 
   // Remove user from tenant
@@ -652,6 +659,46 @@ export const tenantAPI = {
 
   // Export users
   exportUsers: () => api.get('/api/tenants/current/users/export'),
+
+  // Organization Assignment APIs
+  getOrganizationAssignments: () =>
+    api.get<ApiResponse<any[]>>('/api/tenants/current/organization-assignments'),
+
+  assignUserToOrganization: (userId: string, data: {
+    organizationId: string;
+    assignmentType?: 'primary' | 'secondary' | 'temporary' | 'guest';
+    priority?: number;
+    metadata?: any;
+  }) =>
+    api.post<ApiResponse<any>>(`/api/tenants/current/users/${userId}/assign-organization`, data),
+
+  updateUserOrganization: (userId: string, data: {
+    organizationId: string;
+    changes: {
+      assignmentType?: 'primary' | 'secondary' | 'temporary' | 'guest';
+      isActive?: boolean;
+      priority?: number;
+    };
+  }) =>
+    api.put<ApiResponse<any>>(`/api/tenants/current/users/${userId}/update-organization`, data),
+
+  removeUserFromOrganization: (userId: string, data: {
+    organizationId: string;
+    reason?: string;
+  }) =>
+    api.delete<ApiResponse<any>>(`/api/tenants/current/users/${userId}/remove-organization`, {
+      data: data // DELETE with body
+    }),
+
+  bulkAssignOrganizations: (data: {
+    assignments: Array<{
+      userId: string;
+      organizationId: string;
+      assignmentType?: 'primary' | 'secondary' | 'temporary' | 'guest';
+      priority?: number;
+    }>;
+  }) =>
+    api.post<ApiResponse<any>>('/api/tenants/current/users/bulk-assign-organizations', data),
 }
 
 // Subscription API

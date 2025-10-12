@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { 
-  Users, 
-  Plus, 
-  Search, 
-  Filter, 
-  Mail, 
+import {
+  Users,
+  Plus,
+  Search,
+  Filter,
+  Mail,
   MoreVertical,
   Edit,
   Trash2,
@@ -28,7 +28,8 @@ import {
   UserX,
   UserCheck,
   Save,
-  AlertTriangle
+  AlertTriangle,
+  Building2
 } from 'lucide-react';
 import api from '@/lib/api';
 import { ReusableTable, TableColumn, TableAction } from '@/components/common/ReusableTable';
@@ -127,6 +128,19 @@ export function UserManagementDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'inactive'>('all');
   const [roleFilter, setRoleFilter] = useState<string>('all');
+
+  // Organization Assignment
+  const [organizationAssignments, setOrganizationAssignments] = useState<any[]>([]);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+  const [showOrgAssignmentModal, setShowOrgAssignmentModal] = useState(false);
+  const [showRemoveOrgModal, setShowRemoveOrgModal] = useState(false);
+  const [selectedUserForOrg, setSelectedUserForOrg] = useState<User | null>(null);
+  const [orgToRemove, setOrgToRemove] = useState<{ userId: string; assignment: any } | null>(null);
+  const [orgAssignmentForm, setOrgAssignmentForm] = useState({
+    organizationId: '',
+    assignmentType: 'primary' as const,
+    priority: 1
+  });
   const [sortBy, setSortBy] = useState<'name' | 'email' | 'created' | 'lastLogin'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
@@ -328,6 +342,21 @@ export function UserManagementDashboard() {
       setUsers([]); // Set empty array on error
     } finally {
       setLoading(false);
+    }
+
+    // Load organization assignments
+    try {
+      setAssignmentsLoading(true);
+      const assignmentsResponse = await api.get('/tenants/current/organization-assignments');
+      if (assignmentsResponse.data.success) {
+        setOrganizationAssignments(assignmentsResponse.data.data || []);
+        console.log('✅ Organization assignments loaded:', assignmentsResponse.data.data?.length || 0);
+      }
+    } catch (error) {
+      console.error('Failed to load organization assignments:', error);
+      // Don't show error toast for assignments as it's not critical
+    } finally {
+      setAssignmentsLoading(false);
     }
   };
 
@@ -867,6 +896,184 @@ export function UserManagementDashboard() {
     }
   };
 
+  // Organization Assignment Functions
+  const getUserOrgAssignments = (userId: string) => {
+    return organizationAssignments?.filter((assignment: any) => assignment.userId === userId) || [];
+  };
+
+  const getUserPrimaryOrgAssignment = (userId: string) => {
+    return organizationAssignments?.find((assignment: any) =>
+      assignment.userId === userId && assignment.isPrimary
+    );
+  };
+
+  const getUserOrgAssignment = (userId: string) => {
+    // For backward compatibility, return primary assignment
+    return getUserPrimaryOrgAssignment(userId);
+  };
+
+  const handleAssignOrg = (user: User) => {
+    setSelectedUserForOrg(user);
+    setOrgAssignmentForm({
+      organizationId: '',
+      assignmentType: 'primary',
+      priority: 1
+    });
+    setShowOrgAssignmentModal(true);
+  };
+
+  const handleSubmitOrgAssignment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUserForOrg || !orgAssignmentForm.organizationId) {
+      toast.error('Please select an organization');
+      return;
+    }
+
+    try {
+      const response = await api.post(`/tenants/current/users/${selectedUserForOrg.userId}/assign-organization`, {
+        organizationId: orgAssignmentForm.organizationId,
+        assignmentType: orgAssignmentForm.assignmentType,
+        priority: orgAssignmentForm.priority
+      });
+
+      if (response.data.success) {
+        toast.success(response.data.message || 'Organization assigned successfully!');
+        setShowOrgAssignmentModal(false);
+        // Reload users and assignments
+        await loadUsers();
+      } else {
+        toast.error(response.data.message || 'Failed to assign organization');
+      }
+    } catch (error: any) {
+      console.error('Error assigning organization:', error);
+
+      // Handle specific validation errors from backend
+      if (error.response?.data?.message) {
+        toast.error(error.response.data.message);
+      } else if (error.response?.status === 400) {
+        toast.error('User already has an organization assigned. Remove the current assignment first.');
+      } else {
+        toast.error('Failed to assign organization');
+      }
+    }
+  };
+
+  const handleRemoveOrgAssignment = (userId: string, assignment: any) => {
+    setOrgToRemove({ userId, assignment });
+    setShowRemoveOrgModal(true);
+  };
+
+  const confirmRemoveOrgAssignment = async () => {
+    if (!orgToRemove) return;
+
+    try {
+      const response = await api.delete(`/tenants/current/users/${orgToRemove.userId}/remove-organization`, {
+        data: {
+          organizationId: orgToRemove.assignment.organizationId
+        }
+      });
+
+      if (response.data.success) {
+        toast.success('Organization assignment removed successfully!');
+        // Reload users and assignments
+        await loadUsers();
+        await loadOrganizationAssignments();
+      } else {
+        toast.error(response.data.message || 'Failed to remove organization assignment');
+      }
+    } catch (error: any) {
+      console.error('Error removing organization assignment:', error);
+      toast.error(error.response?.data?.message || 'Failed to remove organization assignment');
+    } finally {
+      setShowRemoveOrgModal(false);
+      setOrgToRemove(null);
+    }
+  };
+
+  // Generate dynamic actions for each user
+  const getUserTableActions = (user: User): TableAction<User>[] => {
+    const baseActions: TableAction<User>[] = [
+      {
+        key: 'view',
+        label: 'View Details',
+        icon: Eye,
+        onClick: (user) => {
+          setViewingUser(user);
+          setShowUserModal(true);
+        }
+      },
+      {
+        key: 'edit',
+        label: 'Edit User',
+        icon: Edit,
+        onClick: (user) => handleEditUser(user)
+      },
+      {
+        key: 'assignRoles',
+        label: 'Assign Roles',
+        icon: UserCog,
+        onClick: (user) => handleAssignRoles(user)
+      },
+      {
+        key: 'assignOrg',
+        label: 'Assign Organization',
+        icon: Building2,
+        onClick: (user) => handleAssignOrg(user),
+        variant: 'ghost' as const,
+        className: 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'
+      }
+    ];
+
+    // Add dynamic remove buttons for each organization assignment
+    const userAssignments = getUserOrgAssignments(user.userId);
+    const removeActions: TableAction<User>[] = userAssignments.map((assignment: any) => ({
+      key: `removeOrg_${assignment.assignmentId}`,
+      label: `Remove from ${assignment.organizationName}`,
+      icon: UserX,
+      onClick: () => handleRemoveOrgAssignment(user.userId, assignment),
+      variant: 'ghost' as const,
+      className: 'text-orange-600 hover:text-orange-700 hover:bg-orange-50'
+    }));
+
+    const finalActions: TableAction<User>[] = [
+      ...baseActions,
+      ...removeActions,
+      {
+        key: 'promote',
+        label: 'Promote to Admin',
+        icon: Crown,
+        onClick: (user) => handlePromoteUser(user.userId, user.name || user.email),
+        disabled: (user) => user.isTenantAdmin
+      },
+      {
+        key: 'reactivate',
+        label: 'Reactivate User',
+        icon: UserCheck,
+        onClick: (user) => handleReactivateUser(user.userId, user.name || user.email),
+        disabled: (user) => user.isActive,
+        separator: true
+      },
+      {
+        key: 'deactivate',
+        label: 'Deactivate User',
+        icon: UserX,
+        onClick: (user) => handleDeactivateUser(user.userId, user.name || user.email),
+        disabled: (user) => !user.isActive
+      },
+      {
+        key: 'delete',
+        label: 'Delete User',
+        icon: Trash2,
+        onClick: (user) => {
+          setDeletingUser(user);
+          setShowDeleteModal(true);
+        }
+      }
+    ];
+
+    return finalActions;
+  };
+
   // Table columns configuration
   const userTableColumns: TableColumn<User>[] = [
     {
@@ -920,6 +1127,32 @@ export function UserManagementDashboard() {
           <Badge className={getStatusColor(user)}>
             {getUserStatus(user)}
           </Badge>
+
+          {/* Organization Assignment Display */}
+          {(() => {
+            const userAssignments = getUserOrgAssignments(user.userId);
+            return userAssignments.length > 0 ? (
+              <div className="space-y-1 mt-1">
+                {userAssignments.slice(0, 2).map((assignment: any) => (
+                  <div key={assignment.assignmentId} className="flex items-center gap-1 text-xs text-gray-600">
+                    <Building2 className="h-3 w-3" />
+                    <span>
+                      {assignment.organizationName}
+                      {assignment.isPrimary && <Badge className="ml-1 text-xs bg-blue-100 text-blue-800 px-1 py-0">Primary</Badge>}
+                      ({assignment.assignmentType})
+                    </span>
+                  </div>
+                ))}
+                {userAssignments.length > 2 && (
+                  <div className="text-xs text-gray-500">
+                    +{userAssignments.length - 2} more organizations
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-gray-500 mt-1">No organization assigned</div>
+            );
+          })()}
         </div>
       )
     },
@@ -987,80 +1220,38 @@ export function UserManagementDashboard() {
         }
         return <div className="text-xs text-gray-400">-</div>;
       }
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      width: '400px',
+      render: (user) => {
+        const userActions = getUserTableActions(user);
+        return (
+          <div className="flex flex-wrap gap-1">
+            {userActions.map((action) => (
+              <Button
+                key={action.key}
+                variant={action.variant || 'ghost'}
+                size="sm"
+                onClick={() => action.onClick(user)}
+                disabled={action.disabled?.(user)}
+                className={`text-xs ${action.className || ''}`}
+                title={typeof action.label === 'function' ? action.label(user) : action.label}
+              >
+                <action.icon className="w-3 h-3 mr-1" />
+                <span className="hidden sm:inline">
+                  {typeof action.label === 'function' ? action.label(user) : action.label}
+                </span>
+              </Button>
+            ))}
+          </div>
+        );
+      }
     }
   ];
 
   // Table actions configuration
-  const userTableActions: TableAction<User>[] = [
-    {
-      key: 'view',
-      label: 'View Details',
-      icon: Eye,
-      onClick: (user) => {
-        setViewingUser(user);
-        setShowUserModal(true);
-      }
-    },
-    {
-      key: 'edit',
-      label: 'Edit User',
-      icon: Edit,
-      onClick: (user) => handleEditUser(user)
-    },
-    {
-      key: 'assignRoles',
-      label: 'Assign Roles',
-      icon: UserCog,
-      onClick: (user) => handleAssignRoles(user)
-    },
-    {
-      key: 'promote',
-      label: 'Promote to Admin',
-      icon: Crown,
-      onClick: (user) => handlePromoteUser(user.userId, user.name || user.email),
-      disabled: (user) => user.isTenantAdmin
-    },
-    {
-      key: 'reactivate',
-      label: 'Reactivate User',
-      icon: UserCheck,
-      onClick: (user) => handleReactivateUser(user.userId, user.name || user.email),
-      disabled: (user) => user.isActive,
-      separator: true
-    },
-    {
-      key: 'deactivate',
-      label: 'Deactivate User',
-      icon: UserX,
-      onClick: (user) => handleDeactivateUser(user.userId, user.name || user.email),
-      disabled: (user) => !user.isActive
-    },
-    {
-      key: 'delete',
-      label: 'Delete User',
-      icon: Trash2,
-      onClick: (user) => {
-        setDeletingUser(user);
-        setShowDeleteModal(true);
-      },
-      destructive: true,
-      separator: true
-    },
-    {
-      key: 'resendInvite',
-      label: 'Resend Invite',
-      icon: Mail,
-      onClick: (user) => handleResendInvite(user.userId, user.email),
-      disabled: (user) => user.isActive && user.onboardingCompleted
-    },
-    {
-      key: 'copyInvitationUrl',
-      label: 'Copy Invitation URL',
-      icon: Mail,
-      onClick: (user) => copyInvitationUrl(user),
-      disabled: (user) => user.invitationStatus !== 'pending'
-    }
-  ];
 
   return (
     <div className="p-6 space-y-6">
@@ -1320,11 +1511,62 @@ export function UserManagementDashboard() {
         </div>
       )}
 
+      {/* Organization Assignments Overview */}
+      <div className="bg-white border border-gray-200 rounded-lg p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-blue-600" />
+            <h3 className="text-lg font-semibold text-gray-900">Organization Assignments</h3>
+          </div>
+          <span className="text-sm text-gray-500">{organizationAssignments.length} assignments</span>
+        </div>
+
+        {assignmentsLoading ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="text-sm text-gray-600 mt-2">Loading assignments...</p>
+          </div>
+        ) : organizationAssignments.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {organizationAssignments.slice(0, 6).map((assignment: any) => (
+              <div key={assignment.assignmentId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-blue-600" />
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{assignment.userName}</div>
+                    <div className="text-xs text-gray-600">{assignment.organizationName}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {assignment.isPrimary && (
+                    <Badge className="text-xs bg-blue-100 text-blue-800">Primary</Badge>
+                  )}
+                  <Badge variant="outline" className="text-xs">
+                    {assignment.assignmentType}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            <Building2 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+            <p className="text-sm">No organization assignments yet</p>
+            <p className="text-xs">Assign users to organizations to get started</p>
+          </div>
+        )}
+
+        {organizationAssignments.length > 6 && (
+          <div className="text-sm text-gray-500 text-center mt-4">
+            And {organizationAssignments.length - 6} more assignments...
+          </div>
+        )}
+      </div>
+
       {/* Users Table */}
       <ReusableTable<User>
         data={filteredUsers}
         columns={userTableColumns}
-        actions={userTableActions}
         selectable={true}
         selectedItems={selectedUsers}
         onSelectionChange={setSelectedUsers}
@@ -1544,6 +1786,144 @@ export function UserManagementDashboard() {
               className="flex-1"
             >
               Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Organization Assignment Modal */}
+      {showOrgAssignmentModal && selectedUserForOrg && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between p-6 border-b">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Assign to Organization
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  {getUserOrgAssignment(selectedUserForOrg.userId)
+                    ? 'Assign this user to an additional organization'
+                    : 'Assign this user to an organization (users can belong to multiple organizations)'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowOrgAssignmentModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitOrgAssignment} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Organization *
+                </label>
+                <Select
+                  value={orgAssignmentForm.organizationId}
+                  onValueChange={(value) => setOrgAssignmentForm(prev => ({ ...prev, organizationId: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={entitiesLoading ? "Loading organizations..." : "Select organization"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {entitiesLoading ? (
+                      <SelectItem value="loading" disabled>Loading organizations...</SelectItem>
+                    ) : availableEntities.filter(entity => entity.entityType === 'organization').length > 0 ? (
+                      availableEntities
+                        .filter(entity => entity.entityType === 'organization')
+                        .map((org) => (
+                          <SelectItem key={org.entityId} value={org.entityId}>
+                            {org.displayName || org.entityName} ({org.entityCode})
+                          </SelectItem>
+                        ))
+                    ) : (
+                      <SelectItem value="none" disabled>No organizations available</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Assignment Type
+                </label>
+                <Select
+                  value={orgAssignmentForm.assignmentType}
+                  onValueChange={(value: any) => setOrgAssignmentForm(prev => ({ ...prev, assignmentType: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="primary">Primary</SelectItem>
+                    <SelectItem value="secondary">Secondary</SelectItem>
+                    <SelectItem value="temporary">Temporary</SelectItem>
+                    <SelectItem value="guest">Guest</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Priority (1-10)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={orgAssignmentForm.priority}
+                  onChange={(e) => setOrgAssignmentForm(prev => ({ ...prev, priority: parseInt(e.target.value) || 1 }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowOrgAssignmentModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
+                  Assign Organization
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Organization Modal */}
+      <Dialog open={showRemoveOrgModal} onOpenChange={setShowRemoveOrgModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove Organization Assignment</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove {orgToRemove?.assignment.organizationName} from{' '}
+              {orgToRemove && users.find(u => u.userId === orgToRemove.userId)?.name}?
+              {orgToRemove?.assignment.isPrimary && (
+                <span className="block mt-2 text-orange-600 font-medium">
+                  ⚠️ This is their primary organization. Another organization will be set as primary if available.
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowRemoveOrgModal(false)}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmRemoveOrgAssignment}
+              className="flex-1 bg-red-600 hover:bg-red-700"
+            >
+              Remove
             </Button>
           </div>
         </DialogContent>
