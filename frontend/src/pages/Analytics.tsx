@@ -118,17 +118,17 @@ export function Analytics() {
 
   const { data: metricsData, isLoading: metricsLoading, error: metricsError } = useQuery({
     queryKey: ['analytics-metrics', selectedPeriod],
-    queryFn: () => api.fetch(`/analytics/metrics?period=${selectedPeriod}`),
+    queryFn: () => api.get(`/analytics/metrics?period=${selectedPeriod}`),
   })
 
   const { data: performanceData, error: performanceError } = useQuery({
     queryKey: ['analytics-performance'],
-    queryFn: () => api.fetch('/analytics/performance'),
+    queryFn: () => api.get('/analytics/performance'),
   })
 
   const { data: reportsData, isLoading: reportsLoading, error: reportsError } = useQuery({
     queryKey: ['analytics-reports'],
-    queryFn: () => api.fetch('/analytics/reports'),
+    queryFn: () => api.get('/analytics/reports'),
   })
 
   // Auto-fallback to mock data in development if API fails

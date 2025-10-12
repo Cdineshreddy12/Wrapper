@@ -20,7 +20,7 @@ const Landing: React.FC = () => {
       if (isAuthenticated) {
         try {
           // Quietly check if user is already fully onboarded
-          const response = await api.fetch('/admin/auth-status') as { data: any }
+          const response = await api.get('/admin/auth-status') as { data: any }
           const status = response.data
 
           if (status.hasUser && status.hasTenant) {

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
-import { Button } from '../../ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui';
+import { Button } from '@/components/ui';
 import { toast } from 'sonner';
-import { operationCostAPI, creditConfigurationAPI, applicationAssignmentAPI } from '../../../lib/api';
+import { operationCostAPI, creditConfigurationAPI, applicationAssignmentAPI } from '@/lib/api';
 
 // Import our extracted components
 import {

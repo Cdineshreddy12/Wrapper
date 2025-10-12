@@ -411,7 +411,7 @@ function RootRedirect() {
 
       try {
         console.log('🔍 RootRedirect: Checking onboarding status for authenticated user')
-        const response = await api.fetch<any>('/admin/auth-status')
+        const response = await api.get<any>('/admin/auth-status')
         console.log('✅ RootRedirect: Auth status received:', response)
         setOnboardingStatus(response)
       } catch (error: any) {

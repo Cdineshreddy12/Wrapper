@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { api, subscriptionAPI, creditAPI } from '@/lib/api'
+import { api, creditAPI  } from '@/lib/api'
 import toast from 'react-hot-toast'
 
 export interface CreditStatus {
@@ -96,7 +96,7 @@ export function useCreditStatus() {
       // CRITICAL FIX: Check if user needs onboarding first
       try {
         console.log('🔍 useCreditStatus: Checking onboarding status first...')
-        const onboardingResponse = await api.fetch<any>('/onboarding/status')
+        const onboardingResponse = await api.get<any>('/onboarding/status')
         const onboardingData = onboardingResponse.data?.data
 
         // Check URL parameters for onboarding completion
