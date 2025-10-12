@@ -1,9 +1,12 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
+import React from "react"
+import { createRoot } from "react-dom/client"
+import { BrowserRouter } from "react-router-dom"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
+import { Toaster } from "sonner"
 import { NuqsAdapter } from 'nuqs/adapters/react'
-import App from './App'
-import './index.css'
-import { QueryProvider } from '@/providers'
+import App from "@/App"
+import "@/index.css"
 
 // Suppress browser extension warnings for video elements
 const originalWarn = console.warn;
@@ -15,12 +18,34 @@ console.warn = function (...args) {
   originalWarn.apply(console, args);
 };
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 10, // 10 minutes
+      retry: (failureCount, error: any) => {
+        if (error?.response?.status >= 400 && error?.response?.status < 500) {
+          return false
+        }
+        return failureCount < 3
+      },
+    },
+    mutations: {
+      retry: false,
+    },
+  },
+})
+
+createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-      <QueryProvider>
+    <BrowserRouter>
+      <QueryClientProvider client={queryClient}>
         <NuqsAdapter>
           <App />
+          <Toaster position="top-right" richColors />
+          <ReactQueryDevtools initialIsOpen={false} />
         </NuqsAdapter>
-      </QueryProvider>
-  </React.StrictMode>,
+      </QueryClientProvider>
+    </BrowserRouter>
+  </React.StrictMode>
 ) 

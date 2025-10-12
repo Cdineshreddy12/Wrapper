@@ -1,12 +1,11 @@
 import { Card, CardContent, Badge } from "@/components/ui";
 import { Typography } from "@/components/common/Typography";
 import { IconButton } from "@/components/common/LoadingButton";
-import { getApplicationIcon, getStatusColor } from "@/components/application/applicationUtils";
 import { Application } from "@/types/application";
 import { Eye } from "lucide-react";
 import { memo } from "react";
-import { Flex } from "../common/Page";
-import { IconBox } from "../common/IconBox";
+import { Flex } from "@/components/common/Page";
+import { getApplicationIcon, getStatusColor } from "./applicationUtils";
 
 interface ApplicationCardProps {
   application: Application;
@@ -24,7 +23,9 @@ export const ApplicationCard = memo(function ApplicationCard({ application, onVi
       <CardContent className="p-6">
         <Flex align="center" justify="between" gap={4}>
           <Flex align="center" gap={3}>
-            <IconBox icon={getApplicationIcon(appCode)} variant="default" size="default" shape="square" shadow="none" />
+            <span className="w-10 h-10 flex items-center justify-center bg-muted rounded-md">
+              {getApplicationIcon(appCode)}
+            </span>
             <Flex direction="col">
               <Typography variant="h4">{appName || "Unknown App"}</Typography>
               <Typography variant="muted">{appCode || "N/A"}</Typography>

@@ -1,11 +1,11 @@
 import { Container } from "@/components/common/Page";
 import { Section } from "@/components/common/Page/Section";
 import { useApplications } from "@/hooks/useApplications";
-import { ApplicationGrid } from "@/components/application/ApplicationGrid";
-import { ApplicationDetailsModal } from "@/components/application/ApplicationDetailsModal";
 import { EmptyState } from "@/components/common/EmptyState";
-import { LoadingState } from "@/components/application/LoadingState";
 import { Package, RefreshCw } from "lucide-react";
+import { ApplicationDetailsModal } from "@/features/applications/components/ApplicationDetailsModal";
+import { ApplicationGrid } from "@/features/applications/components/ApplicationGrid";
+import { LoadingState } from "@/features/applications/components/LoadingState";
 
 /**
  * Applications Tab Component

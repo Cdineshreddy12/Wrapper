@@ -10,12 +10,14 @@ import toast from 'react-hot-toast';
 import { ThemeBadge, ThemeBadgeProps } from './common/ThemeBadge';
 import { Flex, Section } from './common/Page';
 import { Typography } from './common/Typography';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui';
 
 interface CreditBalanceProps {
   showPurchaseButton?: boolean;
   showUsageStats?: boolean;
   compact?: boolean;
   onPurchaseClick?: () => void;
+  className?: string;
 }
 
 interface CreditAllocation {

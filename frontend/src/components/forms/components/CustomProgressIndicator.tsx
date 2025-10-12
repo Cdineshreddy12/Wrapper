@@ -55,7 +55,7 @@ export const CustomProgressIndicator: React.FC<{ className?: string }> = ({ clas
             <span className="text-white font-bold text-lg">G</span>
           </div>
           <div>
-            <span className="text-xl font-bold text-gray-800">StartGlobal</span>
+            <span className="text-xl font-bold text-gray-800">Zopkit</span>
             <p className="text-xs text-gray-500">Business Setup</p>
           </div>
         </div>

@@ -16,7 +16,7 @@ import { Shield, ExternalLink } from "lucide-react";
 import { getApplicationIcon, getStatusColor } from "./applicationUtils";
 import { Flex, Grid } from "@/components/common/Page";
 import { IconBox } from "@/components/common/IconBox";
-import { GridItem } from "../common/Page/Grid";
+import { GridItem } from "@/components/common/Page/Grid";
 
 interface ApplicationDetailsModalProps {
   application: Application | null;

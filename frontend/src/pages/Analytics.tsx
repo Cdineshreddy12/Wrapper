@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { 
   BarChart, 
@@ -15,228 +15,228 @@ import {
 } from 'recharts'
 import { 
   Download, 
-  Filter, 
-  Calendar,
-  TrendingUp,
-  TrendingDown,
   Activity,
   Users,
-  Clock
+  BarChart3,
+  UserCheck,
+  Gauge
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TabNavigation, TabItem } from '@/components/common/TabNavigation'
 import { Badge } from '@/components/ui/badge'
-import { analyticsAPI } from '@/lib/api'
-import { formatNumber, formatDate } from '@/lib/utils'
-import { Typography } from '@/components/common/Typography'
-import { IconButton } from '@/components/common/LoadingButton'
+import { useNavigation } from '@/hooks/useNavigation'
+import { UnifiedLoading } from '@/components/common/UnifiedLoading'
+import { ChartCard, DevelopmentModeBanner, PeriodSelector, ReportsSection } from '@/features/analytics/components'
+import { SummaryCards } from '@/features/users/components'
+import { formatNumber } from '@/lib/utils'
+import api from '@/lib/api'
+
+// Analytics data types
+interface AnalyticsMetrics {
+  totalApiCalls: number;
+  activeUsers: number;
+  avgResponseTime: number;
+  errorRate: number;
+  peakUsage: number;
+  successRate: number;
+}
+
+// Mock data for development
+const mockAnalyticsData = {
+  api: {
+    total: 125000,
+    growth: 12.5,
+    peak: 15000,
+    peakGrowth: 8.2,
+    rateLimited: 1250
+  },
+  users: {
+    active: 2500,
+    growth: 15.3
+  },
+  performance: {
+    avgResponseTime: 245,
+    improvement: 18.5,
+    errorRate: 0.8,
+    errorRateChange: -0.3,
+    successRate: 99.2,
+    successRateChange: 0.5
+  },
+  apiUsage: [
+    { date: '2024-01-01', calls: 1200 },
+    { date: '2024-01-02', calls: 1350 },
+    { date: '2024-01-03', calls: 1100 },
+    { date: '2024-01-04', calls: 1600 },
+    { date: '2024-01-05', calls: 1400 },
+  ],
+  userActivity: [
+    { date: '2024-01-01', activeUsers: 150 },
+    { date: '2024-01-02', activeUsers: 180 },
+    { date: '2024-01-03', activeUsers: 165 },
+    { date: '2024-01-04', activeUsers: 200 },
+    { date: '2024-01-05', activeUsers: 190 },
+  ],
+  endpoints: [
+    { endpoint: '/api/users', calls: 5000 },
+    { endpoint: '/api/analytics', calls: 3000 },
+    { endpoint: '/api/reports', calls: 2000 },
+    { endpoint: '/api/health', calls: 1500 },
+  ],
+  userGrowth: [
+    { date: '2024-01-01', newUsers: 25 },
+    { date: '2024-01-02', newUsers: 30 },
+    { date: '2024-01-03', newUsers: 22 },
+    { date: '2024-01-04', newUsers: 35 },
+    { date: '2024-01-05', newUsers: 28 },
+  ],
+  responseTimes: [
+    { timestamp: '2024-01-01', avg: 200, p95: 300 },
+    { timestamp: '2024-01-02', avg: 220, p95: 320 },
+    { timestamp: '2024-01-03', avg: 190, p95: 280 },
+    { timestamp: '2024-01-04', avg: 250, p95: 350 },
+    { timestamp: '2024-01-05', avg: 210, p95: 310 },
+  ]
+}
+
+const mockReportsData = [
+  {
+    name: 'Monthly Analytics Report',
+    createdAt: new Date('2024-01-01')
+  },
+  {
+    name: 'API Usage Summary',
+    createdAt: new Date('2024-01-02')
+  }
+]
 
 export function Analytics() {
   const [selectedPeriod, setSelectedPeriod] = useState('30d')
   const [selectedMetric, setSelectedMetric] = useState('all')
+  const [useMockData, setUseMockData] = useState(false)
+  const navigation = useNavigation()
 
-  const { data: metricsData, isLoading } = useQuery({
+  const { data: metricsData, isLoading: metricsLoading, error: metricsError } = useQuery({
     queryKey: ['analytics-metrics', selectedPeriod],
-    queryFn: () => analyticsAPI.getMetrics(selectedPeriod).then(res => res.data),
+    queryFn: () => api.fetch(`/analytics/metrics?period=${selectedPeriod}`),
   })
 
-  const { data: performanceData } = useQuery({
+  const { data: performanceData, error: performanceError } = useQuery({
     queryKey: ['analytics-performance'],
-    queryFn: () => analyticsAPI.getPerformance().then(res => res.data),
+    queryFn: () => api.fetch('/analytics/performance'),
   })
 
-  const { data: reportsData } = useQuery({
+  const { data: reportsData, isLoading: reportsLoading, error: reportsError } = useQuery({
     queryKey: ['analytics-reports'],
-    queryFn: () => analyticsAPI.getReports().then(res => res.data),
+    queryFn: () => api.fetch('/analytics/reports'),
   })
 
-  const handleExport = async (type: string) => {
-    try {
-      const response = await analyticsAPI.exportData(type)
-      // Handle file download
-      const blob = new Blob([response.data], { type: 'text/csv' })
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `analytics-${type}-${new Date().toISOString().split('T')[0]}.csv`
-      a.click()
-      window.URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error('Export failed:', error)
+  // Auto-fallback to mock data in development if API fails
+  useEffect(() => {
+    if (metricsError && !useMockData) {
+      console.warn('API Error detected, falling back to mock data for development')
+      setUseMockData(true)
     }
+  }, [metricsError, useMockData])
+
+  // Use mock data if API fails or in development mode
+  const effectiveMetricsData = useMockData || metricsError ? mockAnalyticsData : (metricsData as any)
+  const effectivePerformanceData = useMockData || performanceError ? mockAnalyticsData : (performanceData as any)
+  const effectiveReportsData = useMockData || reportsError ? mockReportsData : (reportsData as any)
+
+  const apiMetrics = (effectiveMetricsData as any)?.api || {}
+  const userMetrics = (effectiveMetricsData as any)?.users || {}
+  const performanceMetrics = (effectivePerformanceData as any) || {}
+
+  // Prepare metrics for AnalyticsSummaryCards
+  const analyticsMetrics: AnalyticsMetrics = {
+    totalApiCalls: apiMetrics.total || 0,
+    activeUsers: userMetrics.active || 0,
+    avgResponseTime: performanceMetrics.avgResponseTime || 0,
+    errorRate: performanceMetrics.errorRate || 0,
+    peakUsage: apiMetrics.peak || 0,
+    successRate: performanceMetrics.successRate || 0,
   }
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-32 bg-gray-200 rounded"></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  const apiMetrics = metricsData?.api || {}
-  const userMetrics = metricsData?.users || {}
-  const performanceMetrics = performanceData || {}
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <Typography variant="h1">Analytics</Typography>
-          <Typography variant="muted">Detailed insights into your platform performance</Typography>
-        </div>
-        <div className="flex items-center gap-2">
-          <IconButton variant="outline" size="sm" startIcon={Filter}>
-            Filter
-          </IconButton>
-          <IconButton variant="outline" size="sm" startIcon={Download} onClick={() => handleExport('all')}>
-            Export
-          </IconButton>
-        </div>
-      </div>
-
-      {/* Period Selection */}
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">Period:</span>
-        {['7d', '30d', '90d', '1y'].map((period) => (
-          <Button
-            key={period}
-            variant={selectedPeriod === period ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setSelectedPeriod(period)}
-          >
-            {period}
-          </Button>
-        ))}
-      </div>
-
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <Typography variant="muted">Total API Calls</Typography>
-                <Typography variant="h2">{formatNumber(apiMetrics.total || 0)}</Typography>
-                <Typography variant="muted">
-                  <TrendingUp className="h-3 w-3 mr-1" />
-                  +{apiMetrics.growth || 0}% vs last period
-                </Typography>
-              </div>
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Activity className="h-6 w-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <Typography variant="muted">Active Users</Typography>
-                <Typography variant="h2">{formatNumber(userMetrics.active || 0)}</Typography>
-                <Typography variant="muted">
-                  <TrendingUp className="h-3 w-3 mr-1" />
-                  +{userMetrics.growth || 0}% vs last period
-                </Typography>
-              </div>
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Users className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <Typography variant="muted">Avg Response Time</Typography>
-                <Typography variant="h2">{performanceMetrics.avgResponseTime || 0}ms</Typography>
-                <Typography variant="muted">
-                  <TrendingDown className="h-3 w-3 mr-1" />
-                  -{performanceMetrics.improvement || 0}% improvement
-                </Typography>
-              </div>
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Clock className="h-6 w-6 text-purple-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charts */}
-      <Tabs value={selectedMetric} onValueChange={setSelectedMetric} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="all">Overview</TabsTrigger>
-          <TabsTrigger value="api">API Usage</TabsTrigger>
-          <TabsTrigger value="users">User Analytics</TabsTrigger>
-          <TabsTrigger value="performance">Performance</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all" className="space-y-6">
+  // Tab configuration for TabNavigation
+  const analyticsTabs: TabItem[] = [
+    {
+      id: 'all',
+      label: 'Overview',
+      icon: BarChart3,
+      content: (
+        <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>API Calls Over Time</CardTitle>
-                <CardDescription>Daily API usage for the selected period</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={metricsData?.apiUsage || []}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Area 
-                      type="monotone" 
-                      dataKey="calls" 
-                      stroke="#8884d8" 
-                      fill="#8884d8" 
-                      fillOpacity={0.3}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+            <ChartCard
+              title="API Calls Over Time"
+              description="Daily API usage for the selected period"
+              isLoading={metricsLoading && !useMockData}
+              isEmpty={!(effectiveMetricsData as any)?.apiUsage || (effectiveMetricsData as any)?.apiUsage.length === 0}
+              emptyTitle="No API data available"
+              emptyDescription="API usage data will appear here once it's available for the selected period."
+              emptyAction={
+                <Button variant="outline" size="sm">
+                  <Download className="h-4 w-4 mr-2" />
+                  Export Data
+                </Button>
+              }
+            >
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={(effectiveMetricsData as any)?.apiUsage}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
+                  <Area 
+                    type="monotone" 
+                    dataKey="calls" 
+                    stroke="#8884d8" 
+                    fill="#8884d8" 
+                    fillOpacity={0.3}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartCard>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>User Activity</CardTitle>
-                <CardDescription>Daily active users</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={metricsData?.userActivity || []}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Line 
-                      type="monotone" 
-                      dataKey="activeUsers" 
-                      stroke="#82ca9d" 
-                      strokeWidth={2}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+            <ChartCard
+              title="User Activity"
+              description="Daily active users"
+              isLoading={metricsLoading && !useMockData}
+              isEmpty={!(effectiveMetricsData as any)?.userActivity || (effectiveMetricsData as any).userActivity.length === 0}
+              emptyTitle="No user activity data"
+              emptyDescription="User activity data will appear here once users start engaging with your platform."
+              emptyAction={
+                <Button variant="outline" size="sm">
+                  <Users className="h-4 w-4 mr-2" />
+                  View Users
+                </Button>
+              }
+            >
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={(effectiveMetricsData as any)?.userActivity}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line 
+                    type="monotone" 
+                    dataKey="activeUsers" 
+                    stroke="#82ca9d" 
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartCard>
           </div>
-        </TabsContent>
-
-        <TabsContent value="api" className="space-y-6">
+        </div>
+      )
+    },
+    {
+      id: 'api',
+      label: 'API Usage',
+      icon: Activity,
+      content: (
+        <div className="space-y-6">
           <div className="grid grid-cols-1 gap-6">
             <Card>
               <CardHeader>
@@ -245,7 +245,7 @@ export function Analytics() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={metricsData?.endpoints || []} layout="horizontal">
+                  <BarChart data={(metricsData as any)?.endpoints || []} layout="horizontal">
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" />
                     <YAxis dataKey="endpoint" type="category" width={150} />
@@ -266,7 +266,7 @@ export function Analytics() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <div className="h-3 w-3 bg-green-500 rounded-full"></div>
+                        <div className="h-3 w-3 bg-chart-4 rounded-full"></div>
                         <span className="text-sm">2xx Success</span>
                       </div>
                       <span className="font-medium">95.2%</span>
@@ -280,7 +280,7 @@ export function Analytics() {
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <div className="h-3 w-3 bg-red-500 rounded-full"></div>
+                        <div className="h-3 w-3 bg-destructive rounded-full"></div>
                         <span className="text-sm">5xx Server Error</span>
                       </div>
                       <span className="font-medium">1.7%</span>
@@ -302,7 +302,7 @@ export function Analytics() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm">Rate Limited</span>
-                      <span className="font-medium text-red-600">{formatNumber(apiMetrics.rateLimited || 0)}</span>
+                      <span className="font-medium text-destructive">{formatNumber(apiMetrics.rateLimited || 0)}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm">Rate Limit %</span>
@@ -315,9 +315,15 @@ export function Analytics() {
               </Card>
             </div>
           </div>
-        </TabsContent>
-
-        <TabsContent value="users" className="space-y-6">
+        </div>
+      )
+    },
+    {
+      id: 'users',
+      label: 'User Analytics',
+      icon: UserCheck,
+      content: (
+        <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
@@ -326,7 +332,7 @@ export function Analytics() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={metricsData?.userGrowth || []}>
+                  <BarChart data={(metricsData as any)?.userGrowth || []}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="date" />
                     <YAxis />
@@ -347,8 +353,8 @@ export function Analytics() {
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Day 1</span>
                     <div className="flex items-center gap-2">
-                      <div className="h-2 w-32 bg-gray-200 rounded-full">
-                        <div className="h-2 bg-green-500 rounded-full" style={{ width: '85%' }}></div>
+                      <div className="h-2 w-32 bg-muted rounded-full">
+                        <div className="h-2 bg-chart-4 rounded-full" style={{ width: '85%' }}></div>
                       </div>
                       <span className="text-sm font-medium">85%</span>
                     </div>
@@ -375,9 +381,15 @@ export function Analytics() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-
-        <TabsContent value="performance" className="space-y-6">
+        </div>
+      )
+    },
+    {
+      id: 'performance',
+      label: 'Performance',
+      icon: Gauge,
+      content: (
+        <div className="space-y-6">
           <div className="grid grid-cols-1 gap-6">
             <Card>
               <CardHeader>
@@ -386,7 +398,7 @@ export function Analytics() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={performanceData?.responseTimes || []}>
+                  <LineChart data={(performanceData as any)?.responseTimes || []}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="timestamp" />
                     <YAxis />
@@ -410,36 +422,69 @@ export function Analytics() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-      </Tabs>
+        </div>
+      )
+    }
+  ]
 
-      {/* Recent Reports */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Generated Reports</CardTitle>
-          <CardDescription>Recent analytics reports</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {reportsData?.map((report: any, index: number) => (
-              <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                <div>
-                  <p className="font-medium">{report.name}</p>
-                  <p className="text-sm text-gray-600">
-                    Generated on {formatDate(report.createdAt)}
-                  </p>
-                </div>
-                <Button variant="outline" size="sm">
-                  <Download className="h-4 w-4 mr-2" />
-                  Download
-                </Button>
-              </div>
-            )) || (
-              <p className="text-gray-500 text-center py-4">No reports available</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+  return (
+    <UnifiedLoading
+      isLoading={metricsLoading && !useMockData}
+      error={metricsError}
+      isEmpty={!effectiveMetricsData}
+      loadingType="page"
+      loadingMessage="Loading analytics data..."
+      errorTitle="Failed to load analytics"
+      errorDescription="There was an error loading the analytics data. Please try again."
+      onRetry={() => navigation.refresh()}
+      emptyTitle="No analytics data"
+      emptyDescription="Analytics data will appear here once available."
+    >
+      <div className="space-y-6">
+        {/* Development Mode Banner */}
+        <DevelopmentModeBanner 
+          isVisible={useMockData}
+          onTryRealAPI={() => {
+            setUseMockData(false)
+            navigation.refresh()
+          }}
+        />
+
+        {/* Period Selection */}
+        <PeriodSelector 
+          selectedPeriod={selectedPeriod}
+          onPeriodChange={setSelectedPeriod}
+        />
+
+        {/* Analytics Summary Cards */}
+        <SummaryCards 
+          analytics={analyticsMetrics}
+          isLoading={metricsLoading}
+          variant="analytics"
+        />
+
+        {/* Charts */}
+        <TabNavigation
+          tabs={analyticsTabs}
+          value={selectedMetric}
+          onValueChange={setSelectedMetric}
+          variant="default"
+          size="md"
+          className="space-y-4"
+        />
+
+        {/* Recent Reports */}
+        <ReportsSection
+          reports={(effectiveReportsData as any) || []}
+          isLoading={reportsLoading}
+          error={reportsError}
+          onGenerateReport={() => {
+            // Handle generate report action
+            console.log('Generate report clicked');
+          }}
+          onRetry={() => navigation.refresh()}
+        />
+      </div>
+    </UnifiedLoading>
   )
 } 

@@ -1,8 +1,8 @@
 import React, { useMemo, useEffect, useState } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { Toaster as Sonner } from 'sonner'
-import { OnboardingApp, OnboardingForm } from '@/components/onboarding'
 
 import api from '@/lib/api'
 
@@ -14,7 +14,7 @@ import SilentAuthGuard from '@/components/auth/SilentAuthGuard'
 // User Context and Permission Refresh
 import { UserContextProvider } from './contexts/UserContextProvider'
 import { PermissionRefreshNotification } from './components/PermissionRefreshNotification'
-import { ThemeProvider } from './components/theme/ThemeProvider'
+import { LoadingProvider } from '@/contexts/LoadingContext'
 
 
 // Layout Components
@@ -27,6 +27,7 @@ import Landing from '@/pages/Landing'
 import { Login } from '@/pages/Login'
 import { AuthCallback } from '@/pages/AuthCallback'
 import { InviteAccept } from '@/pages/InviteAccept'
+import { Dashboard } from '@/pages/Dashboard'
 import { Analytics } from '@/pages/Analytics'
 import { UserManagementDashboard } from '@/components/users/UserManagementDashboard'
 import { Billing } from '@/pages/Billing'
@@ -37,10 +38,15 @@ import UserApplicationManagement from '@/pages/UserApplicationManagement'
 import SuiteDashboard from '@/pages/SuiteDashboard'
 import AdminDashboardPage from '@/pages/AdminDashboardPage'
 import MacbookTest from '@/pages/MacbookTest'
-import EcosystemDemo from '@/pages/EcosystemDemo'
 import TextEffectDemo from '@/pages/TextEffectDemo'
 import CompareDemo from '@/pages/CompareDemo'
 import ActivityLogs from '@/pages/ActivityLogs'
+import { OverviewPage } from './pages/OverviewPage'
+import { RoleManagementDashboard } from './components/roles/RoleManagementDashboard'
+import { AnalyticsPage } from './pages/AnalyticsPage'
+import { ApplicationPage } from './pages/ApplicationPage'
+import NotFound from './pages/NotFound'
+import OnboardingPage from './pages/Onboarding'
 
 // Create an optimized query client with better caching strategy
 const queryClient = new QueryClient({
@@ -76,84 +82,63 @@ const queryClient = new QueryClient({
 
 // Loading component
 const LoadingScreen = () => (
-  <div className="min-h-screen bg-background flex items-center justify-center">
-    <div className="text-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-blue mx-auto mb-4"></div>
-      <p className="text-light-grey text-small">Loading...</p>
-    </div>
-  </div>
-)
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    )
 
 // Auth initializer component
 const AuthInitializer: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Token getter is now handled by KindeProvider.tsx to avoid conflicts
   // The enhanced api.ts will automatically get tokens from the configured getter
-
+  
   return <>{children}</>;
 };
 
 function App() {
   return (
-    <>
-      <ThemeProvider defaultTheme="system" storageKey="zopkit-theme">
-        <KindeProvider>
-          <AuthInitializer>
-            <Router>
-              <SilentAuthGuard>
-                <UserContextProvider>
-                  <AppContent />
-                </UserContextProvider>
-              </SilentAuthGuard>
-            </Router>
-          </AuthInitializer>
-        </KindeProvider>
-      </ThemeProvider>
-
+    <QueryClientProvider client={queryClient}>
+      <KindeProvider>
+        <AuthInitializer>
+          <SilentAuthGuard>
+            <UserContextProvider>
+              <LoadingProvider>
+                <AppContent />
+              </LoadingProvider>
+            </UserContextProvider>
+          </SilentAuthGuard>
+        </AuthInitializer>
+      </KindeProvider>
+      
       {/* Toast notifications */}
       <Toaster
         position="top-right"
         toastOptions={{
           duration: 4000,
           style: {
-            background: 'var(--background-white)',
-            color: 'var(--text-dark)',
-            border: '1px solid var(--border-light-grey)',
-            borderRadius: 'var(--radius-md)',
-            boxShadow: 'var(--shadow-md)',
-            fontFamily: 'var(--font-family)',
-            fontSize: 'var(--font-size-small)',
-            fontWeight: 'var(--font-weight-regular)',
+            background: 'hsl(var(--muted))',
+            color: 'hsl(var(--muted-foreground))',
+            border: '1px solid hsl(var(--border))',
           },
           success: {
             style: {
-              background: 'var(--background-white)',
-              color: 'var(--text-dark)',
-              border: '1px solid var(--feedback-success)',
-              borderRadius: 'var(--radius-md)',
-              boxShadow: 'var(--shadow-md)',
-            },
-            iconTheme: {
-              primary: 'var(--feedback-success)',
-              secondary: 'var(--text-white)',
+              background: 'hsl(var(--primary))',
+              color: 'hsl(var(--primary-foreground))',
             },
           },
           error: {
             style: {
-              background: 'var(--background-white)',
-              color: 'var(--text-dark)',
-              border: '1px solid var(--accent-red)',
-              borderRadius: 'var(--radius-md)',
-              boxShadow: 'var(--shadow-md)',
-            },
-            iconTheme: {
-              primary: 'var(--accent-red)',
-              secondary: 'var(--text-white)',
+              background: 'hsl(var(--destructive))',
+              color: 'hsl(var(--destructive-foreground))',
             },
           },
         }}
       />
       <Sonner />
-    </>
+    </QueryClientProvider>
   )
 }
 
@@ -188,8 +173,8 @@ function AppContent() {
   return (
       <div className="App">
 
-      {/* Permission refresh notification - only show when authenticated */}
-      {authState.isAuthenticated && <PermissionRefreshNotification />}
+        {/* Permission refresh notification - only show when authenticated */}
+        {authState.isAuthenticated && <PermissionRefreshNotification />}
 
         <Routes>
           {/* Public Routes */}
@@ -215,7 +200,7 @@ function AppContent() {
           
           <Route
             path="/onboarding"
-            element={<OnboardingApp />}
+            element={<OnboardingPage />}
           />
           
           <Route 
@@ -229,25 +214,47 @@ function AppContent() {
           />
 
 
-        {/* Invitation Accept Route - Public (handles auth internally) */}
-        <Route
-          path="/invite/accept"
-          element={<InviteAccept />}
-        />
+          {/* Invitation Accept Route - Public (handles auth internally) */}
+          <Route 
+            path="/invite/accept" 
+            element={<InviteAccept />} 
+          />
 
+
+        
         {/* Business Suite Dashboard Route */}
-        <Route
-          path="/suite"
+        <Route 
+          path="/suite" 
           element={
             <ProtectedRoute>
               <SuiteDashboard />
             </ProtectedRoute>
-          }
+          } 
         />
+        
 
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
         {/* Protected dashboard routes with onboarding guard */}
-        <Route
-          path="/dashboard/*"
+        <Route 
+          path="/dashboard/*" 
           element={
             <ProtectedRoute>
               <OnboardingGuard>
@@ -256,17 +263,21 @@ function AppContent() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<RoleManagementDashboard />} />
+          <Route index element={<OverviewPage />} />
+          <Route path="applications" element={<ApplicationPage />} />
           <Route path="users" element={<UserManagementDashboard />} />
           <Route path="user-apps" element={<UserApplicationAccessPage />} />
           <Route path="user-application-management" element={<UserApplicationManagement />} />
+          <Route path="roles" element={<RoleManagementDashboard />} />
           <Route path="billing" element={<Billing />} />
-          <Route path="analytics" element={<Analytics />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="usage" element={<Usage />} />
           <Route path="permissions" element={<Permissions />} />
           <Route path="activity-logs" element={<ActivityLogs />} />
           <Route path="text-effect-demo" element={<TextEffectDemo />} />
           <Route path="compare-demo" element={<CompareDemo />} />
+          {/* Catch all for invalid dashboard routes */}
+          <Route path="*" element={<NotFound />} />
         </Route>
 
         {/* Standalone Admin Dashboard Route */}
@@ -280,8 +291,8 @@ function AppContent() {
         />
 
         {/* Organization-specific routes with onboarding guard */}
-        <Route
-          path="/org/:orgCode"
+        <Route 
+          path="/org/:orgCode" 
           element={
             <ProtectedRoute>
               <OnboardingGuard>
@@ -290,8 +301,7 @@ function AppContent() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<OverviewPage />} />
-          <Route path="overview" element={<OverviewPage />} />
+          <Route index element={<Dashboard />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="users" element={<UserManagementDashboard />} />
           <Route path="user-apps" element={<UserApplicationAccessPage />} />
@@ -300,24 +310,25 @@ function AppContent() {
           <Route path="usage" element={<Usage />} />
           <Route path="permissions" element={<Permissions />} />
           <Route path="activity-logs" element={<ActivityLogs />} />
+          {/* Catch all for invalid organization routes */}
+          <Route path="*" element={<NotFound />} />
         </Route>
 
-        {/* Catch all - redirect to landing if not authenticated */}
-        <Route
-          path="*"
-          element={
+          {/* Catch all - show NotFound page for invalid routes */}
+          <Route 
+            path="*" 
+            element={
             authState.isLoading ? (
               <LoadingScreen />
             ) : (
-              <Navigate to={authState.isAuthenticated ? "/dashboard" : "/landing"} replace />
+              <NotFound />
             )
-          }
-        />
-      </Routes>
-    </div>
+            } 
+          />
+        </Routes>
+      </div>
   )
 }
-
 
 
 
@@ -337,19 +348,19 @@ function RootRedirect() {
       // Check if this is a CRM authentication flow (from Kinde callback)
       const urlParams = new URLSearchParams(window.location.search);
       const stateParam = urlParams.get('state');
-
+      
       if (stateParam && isAuthenticated) {
         try {
           const stateData = JSON.parse(stateParam);
           console.log('🔍 RootRedirect: Detected CRM authentication flow:', stateData);
-
+          
           if (stateData.app_code && stateData.redirect_url) {
             console.log('🔄 RootRedirect: Processing CRM authentication flow');
-
+            
             // Get the token from Kinde
             const { getToken } = useKindeAuth();
             const token = await getToken();
-
+            
             if (token) {
               // Generate app-specific token using backend
               const backendUrl = 'https://wrapper.zopkit.com';
@@ -361,7 +372,7 @@ function RootRedirect() {
 
               if (response.ok) {
                 const validation = await response.json();
-
+                
                 if (validation.success) {
                   // Generate app-specific token
                   const appTokenResponse = await fetch(`${backendUrl}/auth/generate-app-token`, {
@@ -372,13 +383,13 @@ function RootRedirect() {
 
                   if (appTokenResponse.ok) {
                     const appTokenData = await appTokenResponse.json();
-
+                    
                     // Redirect to CRM with token
                     const redirectUrl = new URL(stateData.redirect_url);
                     redirectUrl.searchParams.set('token', appTokenData.token);
                     redirectUrl.searchParams.set('expires_at', appTokenData.expiresAt);
                     redirectUrl.searchParams.set('app_code', stateData.app_code);
-
+                    
                     console.log('🚀 RootRedirect: Redirecting to CRM:', redirectUrl.toString());
                     window.location.href = redirectUrl.toString();
                     return;
@@ -400,9 +411,9 @@ function RootRedirect() {
 
       try {
         console.log('🔍 RootRedirect: Checking onboarding status for authenticated user')
-        const response = await api.get('/admin/auth-status')
-        console.log('✅ RootRedirect: Auth status received:', response.data)
-        setOnboardingStatus(response.data)
+        const response = await api.fetch<any>('/admin/auth-status')
+        console.log('✅ RootRedirect: Auth status received:', response)
+        setOnboardingStatus(response)
       } catch (error: any) {
         console.error('❌ RootRedirect: Error checking auth status:', error)
         // If error checking status, redirect to landing
@@ -420,8 +431,8 @@ function RootRedirect() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-blue mx-auto"></div>
-          <p className="mt-2 text-small text-light-grey">Loading...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-2 text-sm text-muted-foreground">Loading...</p>
         </div>
       </div>
     )
@@ -445,8 +456,8 @@ function RootRedirect() {
 
   // Check if this is an invited user (they should never need onboarding)
   const isInvitedUser = onboardingStatus.authStatus?.userType === 'INVITED_USER' ||
-    onboardingStatus.authStatus?.isInvitedUser === true ||
-    onboardingStatus.authStatus?.onboardingCompleted === true
+                        onboardingStatus.authStatus?.isInvitedUser === true ||
+                        onboardingStatus.authStatus?.onboardingCompleted === true
 
   // DEBUG LOGGING: Log the decision-making process
   console.log('🔍 RootRedirect: Onboarding decision analysis:', {
@@ -460,21 +471,21 @@ function RootRedirect() {
       isInvitedUser: onboardingStatus.authStatus?.isInvitedUser
     }
   })
-
+  
   // Check if there's a pending invitation (user should complete invitation flow first)
   const hasPendingInvitation = localStorage.getItem('pendingInvitationToken')
-
+  
   if (needsOnboarding && !isInvitedUser && !hasPendingInvitation) {
     console.log('🔄 RootRedirect: User needs onboarding, redirecting to /onboarding')
     return <Navigate to="/onboarding" replace />
   }
-
+  
   // INVITED USERS: Always go to dashboard (they skip onboarding)
   if (isInvitedUser) {
     console.log('🔄 RootRedirect: Invited user detected, redirecting to dashboard (skipping onboarding)')
     return <Navigate to="/dashboard" replace />
   }
-
+  
   // If there's a pending invitation, redirect to invitation acceptance
   if (hasPendingInvitation) {
     console.log('🔄 RootRedirect: Pending invitation detected, redirecting to invitation acceptance')
@@ -489,4 +500,4 @@ function RootRedirect() {
 
 
 
-export default App 
+export default App

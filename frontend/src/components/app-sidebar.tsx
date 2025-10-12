@@ -57,27 +57,27 @@ const data = {
           },
           {
             title: "Applications",
-            url: "/applications",
+            url: "/dashboard/applications",
             icon: Building2,
           },
           {
             title: "Team",
-            url: "/users",
+            url: "/dashboard/users",
             icon: Users,
           },
           {
             title: "Roles",
-            url: "/roles",
+            url: "/dashboard/roles",
             icon: Crown,
           },
           {
             title: "App Management",
-            url: "/user-application-management",
+            url: "/dashboard/user-application-management",
             icon: Shield,
           },
           {
             title: "Analytics",
-            url: "/analytics",
+            url: "/dashboard/analytics",
             icon: Activity,
           },
     ],

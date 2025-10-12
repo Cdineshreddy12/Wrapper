@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { KindeProvider as OriginalKindeProvider, useKindeAuth } from '@kinde-oss/kinde-auth-react';
-import { setKindeTokenGetter } from '@/lib/api';
 import useSilentAuth from '@/hooks/useSilentAuth';
+import { setKindeTokenGetter } from '@/lib/api';
 
 interface KindeProviderProps {
   children: React.ReactNode;

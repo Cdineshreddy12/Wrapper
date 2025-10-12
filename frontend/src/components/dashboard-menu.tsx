@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryState } from 'nuqs'
+import { useNavigation } from '@/hooks/useNavigation'
 
 // Third-party libraries
 import { BarChart3, Coins, TrendingUp, DollarSign, Building, Package, Users, Shield, User, Activity, Crown, CheckCircle, AlertTriangle, Database, RefreshCw, ExternalLink, Settings, PieChart, Eye } from 'lucide-react'
@@ -81,6 +82,9 @@ export const DashboardMenu = ({
     const { user } = useKindeAuth()
     const { tenantId } = useOrganizationAuth()
     
+    // Navigation hook
+    const navigation = useNavigation()
+    
     // Dashboard data and state
     const {
         applications,
@@ -138,7 +142,7 @@ export const DashboardMenu = ({
                     </div>
                     <IconButton
                         variant="outline"
-                        onClick={() => window.location.href = '/billing?purchase=true'}
+                        onClick={() => navigation.goToBillingPurchase()}
                         startIcon={Coins}
                     >
                         Purchase Credits
@@ -150,7 +154,7 @@ export const DashboardMenu = ({
                     showUsageStats={true}
                     compact={false}
                     onPurchaseClick={() => {
-                        window.location.href = '/billing?purchase=true';
+                        navigation.goToBillingPurchase();
                     }}
                 />
 
@@ -165,7 +169,7 @@ export const DashboardMenu = ({
                             <Button
                                 variant="outline"
                                 className="h-20 flex flex-col items-center justify-center space-y-2"
-                                onClick={() => window.location.href = '/billing?purchase=true'}
+                                onClick={() => navigation.goToBillingPurchase()}
                             >
                                 <Coins className="h-6 w-6" />
                                 <span>Purchase Credits</span>
@@ -173,7 +177,7 @@ export const DashboardMenu = ({
                             <Button
                                 variant="outline"
                                 className="h-20 flex flex-col items-center justify-center space-y-2"
-                                onClick={() => window.location.href = '/billing?history=true'}
+                                onClick={() => navigation.goToBillingHistory()}
                             >
                                 <TrendingUp className="h-6 w-6" />
                                 <span>Usage History</span>
@@ -181,7 +185,7 @@ export const DashboardMenu = ({
                             <Button
                                 variant="outline"
                                 className="h-20 flex flex-col items-center justify-center space-y-2"
-                                onClick={() => window.location.href = '/billing'}
+                                onClick={() => navigation.goToBilling()}
                             >
                                 <DollarSign className="h-6 w-6" />
                                 <span>Billing & Plans</span>
@@ -403,7 +407,7 @@ function OverviewTab({
                     compact={false}
                     onPurchaseClick={() => {
                         // Navigate to billing page or open purchase modal
-                        window.location.href = '/billing?purchase=true';
+                        navigation.goToBillingPurchase();
                     }}
                 />
             </div>

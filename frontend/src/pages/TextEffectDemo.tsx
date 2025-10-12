@@ -1,7 +1,7 @@
 "use client";
 import React from 'react';
-import { BusinessTextEffect } from "@/components/ui";
 import { Button } from "@/components/ui/button";
+import { BusinessTextEffect } from '@/components/ui/business-text-effect';
 
 const TextEffectDemo = () => {
   return (

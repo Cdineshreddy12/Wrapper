@@ -16,10 +16,7 @@ import {
   RefreshCw,
   Plus
 } from 'lucide-react';
-import {
-  OrganizationTreeManagement,
-  OrganizationUserManagement,
-} from '@/components/OrganizationManagement';
+import { OrganizationTreeManagement, OrganizationUserManagement } from '@/components/organization';
 import LocationManagement from '@/components/LocationManagement';
 import { useOrganizationAuth } from '@/hooks/useOrganizationAuth';
 import toast from 'react-hot-toast';
@@ -57,18 +54,18 @@ export function OrganizationManagementPage() {
 
   const effectiveTenantId = authTenantId || tenantInfo?.tenantId || tenantId;
 
-  // Debug logging
-  console.log('🏗️ OrganizationManagementPage:', {
-    tenantId,
-    authTenantId,
-    tenantInfoTenantId: tenantInfo?.tenantId,
-    effectiveTenantId,
-    isAuthenticated,
-    authLoading,
-    userContext,
-    dashboardData,
-    loading
-  });
+  // // Debug logging
+  // console.log('🏗️ OrganizationManagementPage:', {
+  //   tenantId,
+  //   authTenantId,
+  //   tenantInfoTenantId: tenantInfo?.tenantId,
+  //   effectiveTenantId,
+  //   isAuthenticated,
+  //   authLoading,
+  //   userContext,
+  //   dashboardData,
+  //   loading
+  // });
 
   // Load dashboard data
   const loadDashboardData = async () => {
@@ -169,7 +166,6 @@ export function OrganizationManagementPage() {
   }
 
   const { employees, applications, isAdmin, tenantInfo } = dashboardData;
-  const effectiveTenantId = authTenantId || tenantInfo?.tenantId || tenantId;
 
   return (
     <div className="min-h-screen bg-gray-50">

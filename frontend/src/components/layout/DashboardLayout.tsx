@@ -12,6 +12,7 @@ import { useState, useEffect } from "react"
 import { useNavigate, useLocation, useSearchParams, useParams, Outlet, Link } from "react-router-dom"
 import { Card, CardContent, Button, Badge } from "../ui"
 import { cn } from "@/lib/utils"
+import { Footer } from "@/components/layout/Footer"
 
 interface TrialInfo {
   plan: string
@@ -140,8 +141,8 @@ export  function DashboardLayout() {
               'group flex items-center flex-1 text-sm font-medium rounded-md transition-colors',
               isChild ? 'pl-8 py-1.5' : 'px-2 py-2',
               active
-                ? 'bg-blue-100 text-blue-900'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
             )}
           >
             <item.icon className={cn('h-4 w-4', !sidebarCollapsed && 'mr-3')} />
@@ -189,25 +190,25 @@ export  function DashboardLayout() {
           {showTrialBanner && trialInfo && (
             <div className="bg-primary">
               <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <Card className="m-4 border-0 bg-white/95 backdrop-blur-sm">
+                <Card className="m-4 border-0 bg-background/95 backdrop-blur-sm">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4">
                         <div className="flex-shrink-0">
-                          <Zap className="h-8 w-8 text-blue-600" />
+                          <Zap className="h-8 w-8 text-primary-foreground" />
                         </div>
                         <div>
-                          <h3 className="text-lg font-semibold text-gray-900">
+                          <h3 className="text-lg font-semibold text-foreground">
                             Free Trial Active
                           </h3>
-                          <p className="text-sm text-gray-600">
+                          <p className="text-sm text-muted-foreground">
                             {trialInfo.daysRemaining > 0 ? (
                               <>
                                 <Clock className="inline h-4 w-4 mr-1" />
                                 {trialInfo.daysRemaining} days remaining on your {trialInfo.plan} trial
                               </>
                             ) : (
-                              <span className="text-orange-600 font-medium">
+                              <span className="text-destructive font-medium">
                                 Trial expired - upgrade to continue using all features
                               </span>
                             )}
@@ -215,7 +216,7 @@ export  function DashboardLayout() {
                         </div>
                       </div>
                       <div className="flex items-center space-x-3">
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
                           {trialInfo.plan.charAt(0).toUpperCase() + trialInfo.plan.slice(1)} Plan
                         </Badge>
                         <Button onClick={handleUpgradeNow} size="sm">
@@ -236,10 +237,11 @@ export  function DashboardLayout() {
             </div>
           )}
 
-            <div className="mx-auto  p-4 sm:p-6 lg:p-8">
-              <Outlet />
-            </div>
+          <div className="mx-auto p-4 sm:p-6 lg:p-8">
+            <Outlet />
+          </div>
         </main>
+        <Footer />
       </SidebarInset>
     </SidebarProvider>
   )

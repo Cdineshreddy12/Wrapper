@@ -96,7 +96,7 @@ export function useCreditStatus() {
       // CRITICAL FIX: Check if user needs onboarding first
       try {
         console.log('🔍 useCreditStatus: Checking onboarding status first...')
-        const onboardingResponse = await api.get('/onboarding/status')
+        const onboardingResponse = await api.fetch<any>('/onboarding/status')
         const onboardingData = onboardingResponse.data?.data
 
         // Check URL parameters for onboarding completion
