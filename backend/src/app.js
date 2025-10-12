@@ -670,14 +670,26 @@ async function registerRoutes() {
 
 // Graceful shutdown
 async function gracefulShutdown() {
-  console.log('Starting graceful shutdown...');
-  
+  console.log('🛑 Starting graceful shutdown...');
+
   try {
+    // Close Fastify server first
     await fastify.close();
-    console.log('Fastify server closed.');
+    console.log('✅ Fastify server closed.');
+
+    // Disconnect Redis connections
+    try {
+      const redisManager = (await import('./utils/redis.js')).default;
+      await redisManager.disconnect();
+      console.log('✅ Redis connections closed.');
+    } catch (redisError) {
+      console.warn('⚠️ Error closing Redis connections:', redisError.message);
+    }
+
+    console.log('✅ Graceful shutdown completed.');
     process.exit(0);
   } catch (error) {
-    console.error('Error during shutdown:', error);
+    console.error('❌ Error during shutdown:', error);
     process.exit(1);
   }
 }
@@ -719,8 +731,17 @@ async function start() {
       const redisManager = (await import('./utils/redis.js')).default;
       await redisManager.connect();
       console.log('✅ Redis sync services initialized');
+
+      // Verify Redis connection
+      if (!redisManager.isConnected) {
+        console.warn('⚠️ Redis connected but isConnected flag is false');
+      } else {
+        console.log('✅ Redis connection verified');
+      }
     } catch (error) {
       console.error('❌ Failed to initialize Redis services:', error);
+      console.error('Redis error details:', error.message);
+      // Don't fail startup for Redis issues, but log prominently
     }
     
     // Setup graceful shutdown

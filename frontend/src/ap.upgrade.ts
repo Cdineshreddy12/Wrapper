@@ -199,131 +199,23 @@ export const authAPI = {
 
 // Tenant API for backward compatibility
 export const tenantAPI = {
-  // Get current tenant details
-  getCurrentTenant: () => api.get<Tenant>('/api/tenants/current'),
-
-  // Get tenant users
-  getUsers: () => api.get<ApiResponse<UnifiedUser[]>>('/api/tenants/current/users'),
-
-  // Invite user to tenant
-  inviteUser: (data: {
-    email: string;
-    roleId: string;
-    message?: string;
-    organizationId?: string;
-    assignmentType?: 'primary' | 'secondary' | 'temporary' | 'guest';
-    priority?: number;
-  }) =>
-    api.post<ApiResponse<any>>('/api/tenants/current/users/invite', data),
-
-  // Remove user from tenant
-  removeUser: (userId: string) =>
-    api.delete<ApiResponse<any>>(`/api/tenants/current/users/${userId}`),
-
-  // Update user role
-  updateUserRole: (userId: string, roleId: string) =>
-    api.put<ApiResponse<any>>(`/api/tenants/current/users/${userId}/role`, { roleId }),
-
-  // Get tenant usage
-  getUsage: (params?: { period?: string; startDate?: string; endDate?: string }) =>
-    api.get<ApiResponse<any>>('/api/tenants/current/usage', { params }),
-
-  // Export users
-  exportUsers: () => api.get('/api/tenants/current/users/export'),
-
-  // Organization Assignment APIs
-  getOrganizationAssignments: () =>
-    api.get<ApiResponse<any[]>>('/api/tenants/current/organization-assignments'),
-
-  assignUserToOrganization: (userId: string, data: {
-    organizationId: string;
-    assignmentType?: 'primary' | 'secondary' | 'temporary' | 'guest';
-    priority?: number;
-    metadata?: any;
-  }) =>
-    api.post<ApiResponse<any>>(`/api/tenants/current/users/${userId}/assign-organization`, data),
-
-  updateUserOrganization: (userId: string, data: {
-    organizationId: string;
-    changes: {
-      assignmentType?: 'primary' | 'secondary' | 'temporary' | 'guest';
-      isActive?: boolean;
-      priority?: number;
-    };
-  }) =>
-    api.put<ApiResponse<any>>(`/api/tenants/current/users/${userId}/update-organization`, data),
-
-  removeUserFromOrganization: (userId: string, data: {
-    organizationId: string;
-    reason?: string;
-  }) =>
-    api.delete<ApiResponse<any>>(`/api/tenants/current/users/${userId}/remove-organization`, {
-      data: data // DELETE with body
-    }),
-
-  bulkAssignOrganizations: (data: {
-    assignments: Array<{
-      userId: string;
-      organizationId: string;
-      assignmentType?: 'primary' | 'secondary' | 'temporary' | 'guest';
-      priority?: number;
-    }>;
-  }) =>
-    api.post<ApiResponse<any>>('/api/tenants/current/users/bulk-assign-organizations', data),
+  getUsers: () => apiClient.fetch('/tenants/users'),
+  createUser: (userData: any) => apiClient.fetch('/tenants/users', { method: 'POST', body: JSON.stringify(userData) }),
 }
 
-// Subscription API
-export const subscriptionAPI = {
-  // Debug endpoint for testing authentication
-  debugAuth: () => api.get('/subscriptions/debug-auth'),
-
-  getCurrent: () => api.get('/subscriptions/current'),
-  getAvailablePlans: () => api.get('/subscriptions/plans'),
-  getBillingHistory: () => api.get('/subscriptions/billing-history'),
-  getConfigStatus: () => api.get('/subscriptions/config-status'),
-  createCheckout: (data: {
-    planId: string;
-    billingCycle: 'monthly' | 'yearly';
-    successUrl: string;
-    cancelUrl: string;
-  }) => api.post('/subscriptions/checkout', data),
-  checkProfileStatus: () => api.get('/api/payment-upgrade/profile-status'),
-  changePlan: (data: {
-    planId: string;
-    billingCycle?: 'monthly' | 'yearly';
-  }) => api.post('/subscriptions/change-plan', data),
-  cancelSubscription: () => api.post('/subscriptions/cancel'),
-  updatePaymentMethod: () => api.post('/subscriptions/update-payment-method'),
-  getUsage: () => api.get('/subscriptions/usage'),
-
-  // Enhanced payment management
-  immediateDowngrade: (data: { newPlan: string; reason?: string; refundRequested?: boolean }) =>
-    api.post('/subscriptions/immediate-downgrade', data),
-  processRefund: (data: { paymentId: string; amount?: number; reason?: string }) =>
-    api.post('/subscriptions/refund', data),
-  getPaymentDetails: (paymentId: string) =>
-    api.get(`/subscriptions/payment/${paymentId}`),
-  getSubscriptionActions: () =>
-    api.get('/subscriptions/actions'),
-  getPlanLimits: () =>
-    api.get('/subscriptions/plan-limits'),
-  cleanupDuplicatePayments: () =>
-    api.post('/subscriptions/cleanup-duplicate-payments'),
-  toggleTrialRestrictions: (disable: boolean) =>
-    api.post('/subscriptions/toggle-trial-restrictions', { disable }),
+// Invitation API for backward compatibility
+export const invitationAPI = {
+  sendInvitation: (invitationData: any) => apiClient.fetch('/invitations', { method: 'POST', body: JSON.stringify(invitationData) }),
+  getInvitations: () => apiClient.fetch('/invitations'),
 }
 
-// Analytics API
-export const analyticsAPI = {
-  getDashboard: () => api.get('/api/analytics/dashboard'),
-  getMetrics: (period?: string) =>
-    api.get('/api/analytics/metrics', { params: { period } }),
-  getPerformance: () => api.get('/api/analytics/performance'),
-  getReports: () => api.get('/api/analytics/reports'),
-  exportData: (type: string) => api.get(`/api/analytics/export/${type}`),
+// Permissions API for backward compatibility
+export const permissionsAPI = {
+  getUserPermissions: (userId: string) => apiClient.fetch(`/permissions/users/${userId}`),
+  updatePermissions: (userId: string, permissions: any) => apiClient.fetch(`/permissions/users/${userId}`, { method: 'PUT', body: JSON.stringify(permissions) }),
 }
 
-// Usage API
+// Usage API for backward compatibility
 export const usageAPI = {
   getCurrent: () => apiClient.fetch('/usage/current'),
   getMetrics: (period: string) => apiClient.fetch(`/usage/metrics?period=${period}`),

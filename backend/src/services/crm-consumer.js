@@ -47,7 +47,8 @@ class CRMConsumer {
         `crm:${this.tenantId}:credit-configs`,
         `crm:${this.tenantId}:roles`,
         `crm:${this.tenantId}:users`,
-        `crm:${this.tenantId}:hierarchy`
+        `crm:${this.tenantId}:hierarchy`,
+        `crm:${this.tenantId}:organization-assignments`
       ];
 
       console.log(`📡 Subscribing to channels: ${channels.join(', ')}`);
@@ -125,6 +126,9 @@ class CRMConsumer {
         break;
       case 'hierarchy':
         await this.handleHierarchyChange(event);
+        break;
+      case 'organization-assignments':
+        await this.handleOrganizationAssignmentChange(event);
         break;
       default:
         console.log(`⚠️ Unknown data type: ${dataType}`);
@@ -358,6 +362,28 @@ class CRMConsumer {
         error: error.message,
         timestamp: new Date().toISOString()
       };
+    }
+  }
+
+  /**
+   * Handle organization assignment changes
+   */
+  async handleOrganizationAssignmentChange(event) {
+    try {
+      console.log(`👥 CRM: Processing organization assignment change: ${event.eventType}`);
+
+      const assignmentData = event.data;
+
+      // Update local organization assignments tracking
+      // This could be used for local caching or business logic
+      console.log(`✅ CRM: Processed organization assignment for user ${assignmentData.userId} to org ${assignmentData.organizationId}`);
+
+      // Here you could implement local caching, business logic, or forwarding to CRM system
+      // For now, we just acknowledge receipt of the event
+
+    } catch (error) {
+      console.error('❌ Failed to handle organization assignment change:', error);
+      throw error;
     }
   }
 

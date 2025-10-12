@@ -85,6 +85,12 @@ class ActivityLogger {
     TENANT_USER_ACTIVATED: 'tenant.user_activated',
     TENANT_USER_DEACTIVATED: 'tenant.user_deactivated',
 
+    // Organization Assignment Activities
+    USER_ORGANIZATION_ASSIGNED: 'user.organization_assigned',
+    USER_ORGANIZATION_UPDATED: 'user.organization_updated',
+    USER_ORGANIZATION_REMOVED: 'user.organization_removed',
+    BULK_USER_ORGANIZATION_ASSIGNED: 'bulk.user.organization_assigned',
+
     // User Profile Activities
     USER_PROFILE_VIEWED: 'user.profile_viewed',
     USER_PROFILE_UPDATED: 'user.profile_updated',

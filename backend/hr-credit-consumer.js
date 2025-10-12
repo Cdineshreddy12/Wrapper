@@ -11,6 +11,7 @@
 
 import Redis from 'redis';
 import dotenv from 'dotenv';
+import { getRedis } from './src/utils/redis.js';
 import { crmSyncStreams } from './src/utils/redis.js';
 
 // Load environment variables
@@ -78,7 +79,7 @@ const hrDb = new HrCreditDatabase();
 
 class HrCreditConsumer {
   constructor() {
-    this.redis = Redis.createClient({ url: redisUrl });
+    this.redisManager = getRedis();
     this.consumerGroup = consumerGroup;
     this.consumerName = consumerName;
     this.streamKey = streamKey;
@@ -87,7 +88,7 @@ class HrCreditConsumer {
 
   async connect() {
     try {
-      await this.redis.connect();
+      await this.redisManager.connect();
       console.log('✅ HR Credit Consumer connected to Redis');
     } catch (error) {
       console.error('❌ Failed to connect to Redis:', error);
@@ -97,7 +98,7 @@ class HrCreditConsumer {
 
   async setupConsumerGroup() {
     try {
-      await this.redis.xGroupCreate(
+      await this.redisManager.client.xGroupCreate(
         this.streamKey,
         this.consumerGroup,
         '0', // Start from beginning
@@ -120,7 +121,7 @@ class HrCreditConsumer {
     // Only process events targeted at HR
     if (eventData.targetApplication !== 'hr') {
       // Acknowledge but don't process events not meant for HR
-      await this.redis.xAck(this.streamKey, this.consumerGroup, event.id);
+      await this.redisManager.client.xAck(this.streamKey, this.consumerGroup, event.id);
       return;
     }
 
@@ -154,7 +155,7 @@ class HrCreditConsumer {
       }
 
       // Acknowledge successful processing
-      await this.redis.xAck(this.streamKey, this.consumerGroup, event.id);
+      await this.redisManager.client.xAck(this.streamKey, this.consumerGroup, event.id);
       console.log(`✅ Acknowledged HR event: ${event.id}`);
 
     } catch (error) {
@@ -174,7 +175,7 @@ class HrCreditConsumer {
       }
 
       // Still acknowledge to prevent infinite retries
-      await this.redis.xAck(this.streamKey, this.consumerGroup, event.id);
+      await this.redisManager.client.xAck(this.streamKey, this.consumerGroup, event.id);
     }
   }
 
@@ -261,7 +262,7 @@ class HrCreditConsumer {
     while (this.isRunning) {
       try {
         // Read pending messages first
-        const pendingMessages = await this.redis.xReadGroup(
+        const pendingMessages = await this.redisManager.client.xReadGroup(
           this.streamKey,
           this.consumerGroup,
           this.consumerName,
@@ -278,7 +279,7 @@ class HrCreditConsumer {
         }
 
         // Then read new messages
-        const newMessages = await this.redis.xReadGroup(
+        const newMessages = await this.redisManager.client.xReadGroup(
           this.streamKey,
           this.consumerGroup,
           this.consumerName,
@@ -304,14 +305,14 @@ class HrCreditConsumer {
   async stop() {
     console.log('🛑 Stopping HR Credit Consumer...');
     this.isRunning = false;
-    await this.redis.quit();
+    await this.redisManager.disconnect();
   }
 
   async getStreamInfo() {
     try {
-      const info = await this.redis.xInfoStream(this.streamKey);
-      const groups = await this.redis.xInfoGroups(this.streamKey);
-      const pending = await this.redis.xPending(this.streamKey, this.consumerGroup);
+      const info = await this.redisManager.client.xInfoStream(this.streamKey);
+      const groups = await this.redisManager.client.xInfoGroups(this.streamKey);
+      const pending = await this.redisManager.client.xPending(this.streamKey, this.consumerGroup);
 
       return {
         streamLength: info.length,

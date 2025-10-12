@@ -768,7 +768,7 @@ export default async function internalRoutes(fastify, options) {
     }, async (request, reply) => {
       try {
         const { kinde_user_id, kinde_org_code } = request.body;
-        
+
         const tenant = await TenantService.getByKindeOrgId(kinde_org_code);
         if (!tenant) {
           return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
@@ -814,6 +814,68 @@ export default async function internalRoutes(fastify, options) {
       } catch (error) {
         fastify.log.error('Error fetching user tools:', error);
         return reply.code(500).send({ error: 'Failed to fetch user tools' });
+      }
+    });
+
+    // Service authentication endpoint for CRM to get API tokens
+    fastify.post('/service-auth', {
+      preHandler: [validateInternalApiKey],
+      schema: {
+        body: {
+          type: 'object',
+          required: ['service', 'tenant_id'],
+          properties: {
+            service: { type: 'string', enum: ['crm', 'hr', 'affiliate'] },
+            tenant_id: { type: 'string' },
+            permissions: { type: 'array', items: { type: 'string' } }
+          }
+        }
+      }
+    }, async (request, reply) => {
+      try {
+        const { service, tenant_id, permissions = ['read'] } = request.body;
+
+        console.log(`🔑 Service authentication request: ${service} for tenant ${tenant_id}`);
+
+        // Validate tenant exists
+        const tenant = await TenantService.getTenantDetails(tenant_id);
+        if (!tenant) {
+          return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+        }
+
+        // Generate a service token (JWT) for the requesting service
+        const { sign } = await import('jsonwebtoken');
+
+        const payload = {
+          service: service,
+          tenant_id: tenant_id,
+          permissions: permissions,
+          type: 'service_token',
+          iat: Math.floor(Date.now() / 1000),
+          exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 hours
+        };
+
+        const secret = process.env.JWT_SECRET || 'default-secret-change-in-production';
+        const token = sign(payload, secret);
+
+        console.log(`✅ Service token generated for ${service}`);
+
+        return {
+          success: true,
+          data: {
+            token: token,
+            service: service,
+            tenant_id: tenant_id,
+            permissions: permissions,
+            expires_in: 24 * 60 * 60, // 24 hours in seconds
+            token_type: 'service_jwt'
+          }
+        };
+
+      } catch (error) {
+        console.error('❌ Service authentication error:', error);
+        fastify.log.error('Service authentication error:', error);
+        return reply.code(500).send({ error: 'Failed to authenticate service' });
       }
     });
 }
