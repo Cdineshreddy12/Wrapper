@@ -599,7 +599,7 @@ export class WrapperSyncService {
       };
 
     } catch (error) {
-      console.error(`❌ Error getting sync status for ${tenantId}:`, error);
+      console.error(`❌ Error getting sync status for the ${tenantId}:`, error);
       throw error;
     }
   }
