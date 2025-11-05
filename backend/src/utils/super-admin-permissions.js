@@ -166,38 +166,19 @@ export function getSuperAdminDescription(planId) {
  * @returns {object} Role restrictions
  */
 export function getSuperAdminRestrictions(planId) {
-  const planAccess = PLAN_ACCESS_MATRIX[planId];
-  if (!planAccess || !planAccess.limitations) {
-    return {};
-  }
-  
   const restrictions = {
     planType: planId
   };
-  
-  // Add limitations based on plan
-  if (planAccess.limitations.users !== -1) {
-    restrictions.maxUsers = planAccess.limitations.users;
-  }
-  
-  if (planAccess.limitations.roles !== -1) {
-    restrictions.maxRoles = planAccess.limitations.roles;
-  }
-  
-  if (planAccess.limitations.storage !== 'unlimited') {
-    restrictions.storageLimit = planAccess.limitations.storage;
-  }
-  
-  if (planAccess.limitations.apiCalls !== -1) {
-    restrictions.apiCallLimit = planAccess.limitations.apiCalls;
-  }
-  
-  // Special handling for trial
+
+  // Since limitations have been removed, all plans now have unlimited access
+  // No user, role, storage, or API call restrictions
+
+  // Special handling for trial (only restriction left)
   if (planId === 'trial') {
     restrictions.limitedFeatures = true;
     restrictions.isTrialAccount = true;
   }
-  
+
   return restrictions;
 }
 

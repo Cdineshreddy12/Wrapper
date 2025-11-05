@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
+import { useLocation } from 'react-router-dom'
 import { api, subscriptionAPI, creditAPI } from '@/lib/api'
+import { useCreditStatusQuery } from '@/hooks/useSharedQueries'
 import toast from 'react-hot-toast'
 
 export interface CreditStatus {
@@ -48,6 +50,13 @@ export interface CreditExpiredData {
 
 export function useCreditStatus() {
   const { isAuthenticated, user } = useKindeAuth()
+  const location = useLocation()
+
+  // Don't make credit API calls during onboarding - user hasn't set up organization yet
+  const isOnboardingPage = location.pathname === '/onboarding' || location.pathname.startsWith('/onboarding/')
+  const enableCreditQueries = !!isAuthenticated && !!user && !isOnboardingPage
+
+  const { data: creditResponse, isLoading: creditLoading, error: creditError, refetch: refetchCredit } = useCreditStatusQuery(enableCreditQueries)
 
   // Initialize with localStorage check to prevent flash
   const [creditStatus, setCreditStatus] = useState<CreditStatus | null>(null)
@@ -67,6 +76,8 @@ export function useCreditStatus() {
   const [error, setError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const maxRetries = 3
+
+  const creditData = creditResponse?.data
 
   // Immediate localStorage check for expiry state
   useEffect(() => {
@@ -89,57 +100,15 @@ export function useCreditStatus() {
       return
     }
 
+    if (isOnboardingPage) {
+      console.log('⚠️ useCreditStatus: On onboarding page, skipping credit check')
+      setIsLoading(false)
+      return
+    }
+
     try {
       setError(null)
-      console.log('🔍 useCreditStatus: Checking credit status...')
-
-      // CRITICAL FIX: Check if user needs onboarding first
-      try {
-        console.log('🔍 useCreditStatus: Checking onboarding status first...')
-        const onboardingResponse = await api.get('/onboarding/status')
-        const onboardingData = onboardingResponse.data?.data
-
-        // Check URL parameters for onboarding completion
-        const urlParams = new URLSearchParams(window.location.search)
-        const onboardingComplete = urlParams.get('onboarding') === 'complete'
-
-        if (onboardingData?.needsOnboarding && !onboardingData?.isOnboarded && !onboardingComplete) {
-          console.log('🚫 useCreditStatus: User needs onboarding, skipping credit check')
-          setCreditStatus({
-            hasCredits: false,
-            isLowBalance: false,
-            plan: 'credit_based',
-            status: 'onboarding_required',
-            creditBalance: 0,
-            reservedCredits: 0,
-            availableCredits: 0,
-            totalCredits: 0,
-            lowBalanceThreshold: 100,
-            criticalBalanceThreshold: 10,
-            restrictionsActive: false,
-            usageThisPeriod: 0,
-            periodLimit: 0,
-            periodType: 'month',
-            alerts: []
-          })
-          setIsLoading(false)
-          return
-        }
-
-        // If onboarding was just completed, add a small delay for auth state to sync
-        if (onboardingComplete) {
-          console.log('🎯 useCreditStatus: Onboarding just completed, adding delay for auth sync')
-          await new Promise(resolve => setTimeout(resolve, 1500))
-        }
-      } catch (onboardingError) {
-        console.log('⚠️ useCreditStatus: Could not check onboarding status, proceeding with credit check')
-      }
-
-      // Primary check: Get current credit balance
-      console.log('📡 useCreditStatus: Calling credit API...')
-      const creditResponse = await creditAPI.getCurrentBalance()
-      console.log('📦 useCreditStatus: Received credit response')
-      const creditData = creditResponse.data?.data
+      console.log('🔍 useCreditStatus: Processing credit status from shared hook...')
 
       if (creditData) {
         console.log('💰 useCreditStatus: Credit balance:', {
@@ -279,7 +248,7 @@ export function useCreditStatus() {
           totalCredits: 0,
           lowBalanceThreshold: 100,
           criticalBalanceThreshold: 10,
-          restrictionsActive: true,
+          restrictionsActive: false,
           usageThisPeriod: 0,
           periodLimit: 0,
           periodType: 'month',
@@ -289,14 +258,7 @@ export function useCreditStatus() {
       }
 
     } catch (error: any) {
-      console.error('❌ useCreditStatus: Error checking status:', error)
-      console.error('🔍 useCreditStatus: Error details:', {
-        message: error.message,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        url: error.config?.url
-      })
+      console.error('❌ useCreditStatus: Error processing credit status:', error)
 
       // Handle different types of errors
       if (error.response?.status === 401) {
@@ -306,97 +268,6 @@ export function useCreditStatus() {
         setExpiredData(null)
         // Clear any stored credit data on auth errors
         localStorage.removeItem('creditExpired')
-      } else if (error.response?.status === 404) {
-        console.log('📭 useCreditStatus: No credit data found (404) - this is normal for new users')
-        const errorMessage = error.response?.data?.message || ''
-
-        // Check if this is the "User is not associated with any organization" error
-        if (errorMessage.includes('not associated with any organization') ||
-            errorMessage.includes('Organization Required') ||
-            error.response?.data?.requiresOnboarding) {
-
-          console.log('🏢 useCreditStatus: User needs to complete organization setup, setting onboarding status')
-
-          // Implement retry logic for organization setup
-          if (retryCount < maxRetries) {
-            console.log(`🔄 useCreditStatus: Retrying credit check in 2 seconds (attempt ${retryCount + 1}/${maxRetries})`)
-            setRetryCount(prev => prev + 1)
-
-            setTimeout(() => {
-              console.log('🔄 useCreditStatus: Retrying credit check after organization setup delay')
-              checkCreditStatus()
-            }, 2000) // Wait 2 seconds for potential onboarding completion
-
-            return // Don't set credit status yet, wait for retry
-          }
-
-          // Max retries reached, show organization setup message
-          setCreditStatus({
-            hasCredits: false,
-            isLowBalance: false,
-            plan: 'credit_based',
-            status: 'organization_required',
-            creditBalance: 0,
-            reservedCredits: 0,
-            availableCredits: 0,
-            totalCredits: 0,
-            lowBalanceThreshold: 100,
-            criticalBalanceThreshold: 10,
-            restrictionsActive: false, // Don't block app for onboarding users
-            usageThisPeriod: 0,
-            periodLimit: 0,
-            periodType: 'month',
-            alerts: [{
-              id: 'organization_required',
-              type: 'critical_balance',
-              severity: 'info',
-              title: 'Complete Organization Setup',
-              message: 'Please complete your organization setup to access credit features.',
-              threshold: 0,
-              currentValue: 0,
-              actionRequired: 'complete_onboarding'
-            }]
-          })
-        } else {
-          // Regular 404 for new users
-          setCreditStatus({
-            hasCredits: false,
-            isLowBalance: false,
-            plan: 'credit_based',
-            status: 'no_credits',
-            creditBalance: 0,
-            reservedCredits: 0,
-            availableCredits: 0,
-            totalCredits: 0,
-            lowBalanceThreshold: 100,
-            criticalBalanceThreshold: 10,
-            restrictionsActive: false, // Don't block app for new users
-            usageThisPeriod: 0,
-            periodLimit: 0,
-            periodType: 'month',
-            alerts: []
-          })
-        }
-        setExpiredData(null)
-      } else if (error.response?.status === 200 && (error.response.data as any)?.creditExpired && error.response?.data?.code === 'CREDIT_EXPIRED') {
-        const errorData = error.response.data
-        console.log('🚫 useCreditStatus: Received credit expired error from API')
-
-        const newExpiredData: CreditExpiredData = {
-          expired: true,
-          message: errorData.message || 'Your credits are insufficient',
-          creditBalance: errorData.data?.creditBalance || 0,
-          lowBalanceThreshold: errorData.data?.lowBalanceThreshold || 100,
-          purchaseUrl: '/billing?purchase=true',
-          blockAppLoading: false,
-          isLowBalance: errorData.data?.isLowBalance || false,
-          isCriticalBalance: errorData.data?.isCriticalBalance || false,
-          alerts: errorData.data?.alerts || []
-        }
-
-        setExpiredData(newExpiredData)
-        // Store in localStorage for immediate access
-        localStorage.setItem('creditExpired', JSON.stringify(newExpiredData))
       } else {
         console.log('⚠️ useCreditStatus: Unexpected error - treating as no credits')
         setError(error.message || 'Failed to check credit status')
@@ -407,7 +278,7 @@ export function useCreditStatus() {
     } finally {
       setIsLoading(false)
     }
-  }, [isAuthenticated, user])
+  }, [isAuthenticated, user, creditData, isOnboardingPage])
 
   // Check status on mount and auth changes
   useEffect(() => {

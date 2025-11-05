@@ -229,7 +229,6 @@ export class HierarchyManager {
           updatedAt: entities.updatedAt,
           // Credit information
           availableCredits: sql`coalesce(${credits.availableCredits}, 0)`,
-          reservedCredits: sql`coalesce(${credits.reservedCredits}, 0)`
         })
         .from(entities)
         .leftJoin(credits, and(

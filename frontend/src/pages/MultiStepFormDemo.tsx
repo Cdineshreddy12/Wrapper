@@ -1,6 +1,7 @@
 import React from 'react';
 import { OnboardingFormExample, CustomStyledOnboardingForm, CustomFieldComponentsExample } from '@/components/forms';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { GlassCard } from '@/components/ui/glass-card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -32,14 +33,14 @@ export const MultiStepFormDemo: React.FC = () => {
           </div>
 
           {/* Features Overview */}
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle>Features</CardTitle>
-              <CardDescription>
+          <GlassCard className="mb-8">
+            <div className="p-6 border-b border-white/10">
+              <CardTitle className="text-lg font-semibold">Features</CardTitle>
+              <CardDescription className="mt-2 text-sm text-muted-foreground">
                 Built with modern React patterns and best practices
               </CardDescription>
-            </CardHeader>
-            <CardContent>
+            </div>
+            <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <h4 className="font-semibold">Config-Driven</h4>
@@ -78,8 +79,8 @@ export const MultiStepFormDemo: React.FC = () => {
                   </p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </GlassCard>
 
           {/* Demo Tabs */}
           <Tabs defaultValue="basic" className="space-y-6">
@@ -90,57 +91,57 @@ export const MultiStepFormDemo: React.FC = () => {
             </TabsList>
 
             <TabsContent value="basic" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Basic Onboarding Form</CardTitle>
-                  <CardDescription>
+              <GlassCard>
+                <div className="p-6 border-b border-white/10">
+                  <CardTitle className="text-lg font-semibold">Basic Onboarding Form</CardTitle>
+                  <CardDescription className="mt-2 text-sm text-muted-foreground">
                     A simple 3-step onboarding form with personal info, address, and preferences
                   </CardDescription>
-                </CardHeader>
-                <CardContent>
+                </div>
+                <div className="p-6">
                   <OnboardingFormExample />
-                </CardContent>
-              </Card>
+                </div>
+              </GlassCard>
             </TabsContent>
 
             <TabsContent value="styled" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Custom Styled Form</CardTitle>
-                  <CardDescription>
+              <GlassCard>
+                <div className="p-6 border-b border-white/10">
+                  <CardTitle className="text-lg font-semibold">Custom Styled Form</CardTitle>
+                  <CardDescription className="mt-2 text-sm text-muted-foreground">
                     The same form with custom styling and gradient background
                   </CardDescription>
-                </CardHeader>
-                <CardContent>
+                </div>
+                <div className="p-6">
                   <CustomStyledOnboardingForm />
-                </CardContent>
-              </Card>
+                </div>
+              </GlassCard>
             </TabsContent>
 
             <TabsContent value="custom" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Custom Field Components</CardTitle>
-                  <CardDescription>
+              <GlassCard>
+                <div className="p-6 border-b border-white/10">
+                  <CardTitle className="text-lg font-semibold">Custom Field Components</CardTitle>
+                  <CardDescription className="mt-2 text-sm text-muted-foreground">
                     Form with custom field components and debug information
                   </CardDescription>
-                </CardHeader>
-                <CardContent>
+                </div>
+                <div className="p-6">
                   <CustomFieldComponentsExample />
-                </CardContent>
-              </Card>
+                </div>
+              </GlassCard>
             </TabsContent>
           </Tabs>
 
           {/* Code Examples */}
-          <Card className="mt-8">
-            <CardHeader>
-              <CardTitle>Usage Examples</CardTitle>
-              <CardDescription>
+          <GlassCard className="mt-8">
+            <div className="p-6 border-b border-white/10">
+              <CardTitle className="text-lg font-semibold">Usage Examples</CardTitle>
+              <CardDescription className="mt-2 text-sm text-muted-foreground">
                 How to use the MultiStepForm component in your projects
               </CardDescription>
-            </CardHeader>
-            <CardContent>
+            </div>
+            <div className="p-6">
               <div className="space-y-6">
                 <div>
                   <h4 className="font-semibold mb-2">Basic Usage</h4>
@@ -202,8 +203,8 @@ function MyForm() {
                   </pre>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </GlassCard>
         </div>
       </div>
     </div>

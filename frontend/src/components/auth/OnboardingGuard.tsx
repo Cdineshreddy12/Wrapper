@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
-import api from '@/lib/api'
+import { useAuthStatus, useOnboardingStatus } from '@/hooks/useSharedQueries'
+import AnimatedLoader from '@/components/common/AnimatedLoader'
 
 interface OnboardingGuardProps {
   children: React.ReactNode
@@ -16,129 +17,102 @@ interface OnboardingStatus {
   hasTenant: boolean
 }
 
-export function OnboardingGuard({ children, redirectTo = '/login' }: OnboardingGuardProps) {
+export const OnboardingGuard = React.memo(({ children, redirectTo = '/login' }: OnboardingGuardProps) => {
   const { isAuthenticated, isLoading: kindeLoading, user } = useKindeAuth()
+  const { data: authData, isLoading: authLoading } = useAuthStatus()
+  const { data: onboardingResponse, isLoading: onboardingLoading } = useOnboardingStatus()
+
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null)
-  const [isChecking, setIsChecking] = useState(true)
   const location = useLocation()
 
+  const onboardingData = onboardingResponse?.data
+  const backendAuthStatus = authData?.authStatus
+
   useEffect(() => {
-    async function checkOnboardingStatus() {
-      if (!isAuthenticated || kindeLoading) {
-        setIsChecking(false)
-        return
+    // Only run onboarding check when component mounts or when critical auth data changes
+    // Don't re-run on every pathname change within dashboard
+    const isDashboardPath = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/org/')
+
+    // Check if we just completed onboarding (URL parameter)
+    const urlParams = new URLSearchParams(location.search)
+    const justCompletedOnboarding = urlParams.get('onboarding') === 'complete'
+
+    // If onboarding was just completed, force a delay to allow auth state to sync
+    if (justCompletedOnboarding) {
+      console.log('🎯 OnboardingGuard: Onboarding just completed, adding delay for auth sync')
+      const timer = setTimeout(() => {
+        // After delay, determine status based on auth data
+        if (backendAuthStatus) {
+          const status: OnboardingStatus = {
+            needsOnboarding: backendAuthStatus.needsOnboarding ?? !backendAuthStatus.onboardingCompleted,
+            onboardingCompleted: backendAuthStatus.onboardingCompleted || false,
+            hasUser: !!backendAuthStatus.userId,
+            hasTenant: !!backendAuthStatus.tenantId
+          }
+
+          // Check if this is an invited user (they should never need onboarding)
+          const isInvitedUser = backendAuthStatus.userType === 'INVITED_USER' ||
+                                backendAuthStatus.isInvitedUser === true ||
+                                backendAuthStatus.onboardingCompleted === true
+
+          // INVITED USERS: Always skip onboarding
+          if (isInvitedUser) {
+            console.log('✅ OnboardingGuard - Invited user detected, skipping onboarding')
+            status.needsOnboarding = false
+            status.onboardingCompleted = true
+          }
+
+          console.log('✅ OnboardingGuard - Final computed status:', status)
+          setOnboardingStatus(status)
+        }
+      }, 2000)
+      return () => clearTimeout(timer)
+    } else if (onboardingData && backendAuthStatus && !isDashboardPath) {
+      // Only check onboarding status when NOT in dashboard (to avoid repeated checks)
+      // Use data from shared hooks to determine status
+      const status: OnboardingStatus = {
+        needsOnboarding: onboardingData.needsOnboarding ?? !onboardingData.isOnboarded,
+        onboardingCompleted: onboardingData.isOnboarded || false,
+        hasUser: !!onboardingData.user,
+        hasTenant: !!onboardingData.organization
       }
 
-      try {
-        console.log('🔍 OnboardingGuard - Checking onboarding status for user:', user?.email)
-        console.log('🔍 OnboardingGuard - Current URL:', location.pathname + location.search)
+      // Check if this is an invited user (they should never need onboarding)
+      const isInvitedUser = backendAuthStatus.userType === 'INVITED_USER' ||
+                            backendAuthStatus.isInvitedUser === true ||
+                            backendAuthStatus.onboardingCompleted === true ||
+                            onboardingData.user?.userType === 'INVITED_USER'
 
-        // Check if we just completed onboarding (URL parameter)
-        const urlParams = new URLSearchParams(location.search)
-        const justCompletedOnboarding = urlParams.get('onboarding') === 'complete'
-
-        // If onboarding was just completed, force a delay to allow auth state to sync
-        if (justCompletedOnboarding) {
-          console.log('🎯 OnboardingGuard: Onboarding just completed, adding delay for auth sync')
-          await new Promise(resolve => setTimeout(resolve, 2000))
-        }
-
-        // CRITICAL FIX: Check onboarding status first before other API calls
-        const response = await api.get('/onboarding/status')
-        console.log('🔍 OnboardingGuard - Raw onboarding status response:', response.data)
-
-        const onboardingData = response.data?.data
-
-        // If user needs onboarding, redirect immediately
-        if (onboardingData?.needsOnboarding && !onboardingData?.isOnboarded && !justCompletedOnboarding) {
-          console.log('🔄 OnboardingGuard - User needs onboarding, redirecting to /onboarding')
-          setOnboardingStatus({
-            needsOnboarding: true,
-            onboardingCompleted: false,
-            hasUser: !!onboardingData?.user,
-            hasTenant: !!onboardingData?.organization
-          })
-          return
-        }
-
-        // Now check admin auth status for additional context
-        let authData = null
-        try {
-          const authResponse = await api.get('/admin/auth-status')
-          console.log('🔍 OnboardingGuard - Raw auth status response:', authResponse.data)
-          authData = authResponse.data
-        } catch (authError) {
-          console.log('⚠️ OnboardingGuard - Could not get admin auth status, proceeding with onboarding data only')
-        }
-
-        const status: OnboardingStatus = {
-          needsOnboarding: onboardingData?.needsOnboarding ?? !onboardingData?.isOnboarded,
-          onboardingCompleted: onboardingData?.isOnboarded || false,
-          hasUser: !!onboardingData?.user,
-          hasTenant: !!onboardingData?.organization
-        }
-
-        // Check if this is an invited user (they should never need onboarding)
-        const isInvitedUser = authData?.authStatus?.userType === 'INVITED_USER' ||
-                              authData?.authStatus?.isInvitedUser === true ||
-                              authData?.authStatus?.onboardingCompleted === true ||
-                              onboardingData?.user?.userType === 'INVITED_USER'
-
-        // INVITED USERS: Always skip onboarding
-        if (isInvitedUser) {
-          console.log('✅ OnboardingGuard - Invited user detected, skipping onboarding')
-          status.needsOnboarding = false
-          status.onboardingCompleted = true
-        }
-
-        // If we just completed onboarding, override status to allow access
-        if (justCompletedOnboarding) {
-          console.log('✅ OnboardingGuard - Just completed onboarding, allowing access')
-          status.needsOnboarding = false
-          status.onboardingCompleted = true
-        }
-
-        console.log('✅ OnboardingGuard - Final computed status:', status)
-        setOnboardingStatus(status)
-      } catch (error) {
-        console.error('❌ OnboardingGuard - Error checking status:', error)
-        
-        // Check if we just completed onboarding via URL - allow access even on error
-        const urlParams = new URLSearchParams(location.search)
-        const justCompletedOnboarding = urlParams.get('onboarding') === 'complete'
-        
-        if (justCompletedOnboarding) {
-          console.log('✅ OnboardingGuard - Just completed onboarding (via URL), allowing access despite error')
-          setOnboardingStatus({
-            needsOnboarding: false,
-            onboardingCompleted: true,
-            hasUser: true,
-            hasTenant: true
-          })
-        } else {
-          // If we can't check status, assume they need onboarding
-          setOnboardingStatus({
-            needsOnboarding: true,
-            onboardingCompleted: false,
-            hasUser: false,
-            hasTenant: false
-          })
-        }
-      } finally {
-        setIsChecking(false)
+      // INVITED USERS: Always skip onboarding
+      if (isInvitedUser) {
+        console.log('✅ OnboardingGuard - Invited user detected, skipping onboarding')
+        status.needsOnboarding = false
+        status.onboardingCompleted = true
       }
+
+      console.log('✅ OnboardingGuard - Final computed status:', status)
+      setOnboardingStatus(status)
+    } else if (onboardingData && backendAuthStatus && isDashboardPath && !onboardingStatus) {
+      // Only set onboarding status for dashboard if we don't already have it
+      const status: OnboardingStatus = {
+        needsOnboarding: false, // Assume onboarded if in dashboard
+        onboardingCompleted: true,
+        hasUser: !!backendAuthStatus.userId,
+        hasTenant: !!backendAuthStatus.tenantId
+      }
+
+      console.log('✅ OnboardingGuard - Dashboard path, assuming onboarded:', status)
+      setOnboardingStatus(status)
     }
-
-    checkOnboardingStatus()
-  }, [isAuthenticated, kindeLoading, user?.email, location.pathname, location.search])
+  }, [isAuthenticated, kindeLoading, user?.email, onboardingData, backendAuthStatus])
 
   // Show loading while checking authentication and onboarding status
-  if (kindeLoading || isChecking) {
+  if (kindeLoading || (isAuthenticated && (authLoading || onboardingLoading))) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
-          <p className="mt-2 text-sm text-gray-600">Checking access...</p>
+          <AnimatedLoader size="lg" className="mb-6" />
+          <p className="text-gray-600 dark:text-gray-300 text-lg font-medium">Checking access...</p>
         </div>
       </div>
     )
@@ -165,11 +139,13 @@ export function OnboardingGuard({ children, redirectTo = '/login' }: OnboardingG
 
   // Fallback: show loading if we don't have clear status yet
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="text-center">
-        <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
-        <p className="mt-2 text-sm text-gray-600">Loading workspace...</p>
+        <AnimatedLoader size="lg" className="mb-6" />
+        <p className="text-gray-600 dark:text-gray-300 text-lg font-medium">Loading workspace...</p>
       </div>
     </div>
   )
-} 
+})
+
+OnboardingGuard.displayName = 'OnboardingGuard' 

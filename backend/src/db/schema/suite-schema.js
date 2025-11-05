@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, boolean, timestamp, jsonb, integer, decimal } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, boolean, timestamp, jsonb, integer, decimal, uniqueIndex } from 'drizzle-orm/pg-core';
 
 // Import existing tables for proper foreign key references
 import { tenants } from './tenants.js';
@@ -46,7 +46,10 @@ export const organizationApplications = pgTable('organization_applications', {
   expiresAt: timestamp('expires_at'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow()
-});
+}, (table) => ({
+  // Ensure no duplicate tenant-app combinations
+  tenantAppUnique: uniqueIndex('organization_applications_tenant_app_unique').on(table.tenantId, table.appId)
+}));
 
 // User application permissions
 export const userApplicationPermissions = pgTable('user_application_permissions', {

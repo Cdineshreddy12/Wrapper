@@ -336,7 +336,7 @@ export function Users() {
         const token = invitationUrl.split('token=')[1];
         console.log(`🧪 Testing ${user.email} with token: ${token.substring(0, 20)}...`);
         
-        const response = await fetch(`${window.location.origin.replace('3001', '3000')}/api/invitations/details-by-token?token=${token}`);
+        const response = await fetch(`/api/invitations/details-by-token?token=${token}`);
         
         if (response.ok) {
           const data = await response.json();
@@ -418,7 +418,7 @@ export function Users() {
       const token = invitationUrl.split('token=')[1];
       
       // Test the backend API endpoint
-      const response = await fetch(`${window.location.origin.replace('3001', '3000')}/api/invitations/details-by-token?token=${token}`);
+      const response = await fetch(`/api/invitations/details-by-token?token=${token}`);
       
       if (response.ok) {
         const data = await response.json();

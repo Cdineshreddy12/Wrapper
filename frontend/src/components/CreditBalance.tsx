@@ -1,15 +1,14 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Coins, AlertTriangle, TrendingUp, Calendar, RefreshCw } from 'lucide-react';
-import { creditAPI } from '@/lib/api';
 import { cn, formatDate } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import LoadingButton from './common/LoadingButton';
 import { ThemeBadge, ThemeBadgeProps } from './common/ThemeBadge';
+import { useCreditStatusQuery, useCreditUsageSummary } from '@/hooks/useSharedQueries';
 
 interface CreditBalanceProps {
   showPurchaseButton?: boolean;
@@ -28,33 +27,23 @@ export function CreditBalance({
 }: CreditBalanceProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Fetch credit balance
+  // Fetch credit balance using shared hook
   const {
-    data: creditData,
+    data: creditResponse,
     isLoading,
     error,
     refetch
-  } = useQuery({
-    queryKey: ['credit', 'balance'],
-    queryFn: async () => {
-      const response = await creditAPI.getCurrentBalance();
-      return response.data.data;
-    },
-    refetchInterval: 30000, // Refresh every 30 seconds
-  });
+  } = useCreditStatusQuery();
 
-  // Fetch usage summary
+  // Fetch usage summary using shared hook
   const {
-    data: usageData,
-    isLoading: usageLoading
-  } = useQuery({
-    queryKey: ['credit', 'usage'],
-    queryFn: async () => {
-      const response = await creditAPI.getUsageSummary();
-      return response.data.data;
-    },
-    enabled: showUsageStats
-  });
+    data: usageResponse
+  } = useCreditUsageSummary(showUsageStats ? {
+    period: 'month'
+  } : undefined);
+
+  const creditData = creditResponse?.data;
+  const usageData = usageResponse?.data;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -117,13 +106,15 @@ export function CreditBalance({
   const {
     availableCredits = 0,
     totalCredits = 0,
-    reservedCredits = 0,
+    freeCredits = 0,
+    paidCredits = 0,
     lowBalanceThreshold = 100,
     criticalBalanceThreshold = 10,
     creditExpiry,
     alerts = [],
     usageThisPeriod = 0,
-    periodType = 'month'
+    periodType = 'month',
+    allocations = [] // New field for credit allocations
   } = creditData;
 
   const usagePercentage = totalCredits > 0 ? (usageThisPeriod / totalCredits) * 100 : 0;
@@ -137,11 +128,23 @@ export function CreditBalance({
           <Coins className="h-6 w-6 text-amber-500" />
           <div>
             <p className="text-sm font-medium text-gray-900">
-              {availableCredits.toLocaleString()} credits
+              {availableCredits.toLocaleString()} credits available
             </p>
-            <p className="text-xs text-gray-500">
-              {totalCredits.toLocaleString()} total
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-xs text-gray-500">
+                {totalCredits.toLocaleString()} total
+              </p>
+              {paidCredits > 0 && (
+                <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200">
+                  {paidCredits} paid
+                </span>
+              )}
+              {allocations.length > 0 && (
+                <span className="text-xs text-blue-600">
+                  ({allocations.length} allocation{allocations.length !== 1 ? 's' : ''})
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <ThemeBadge variant={getStatusVariant(availableCredits, lowBalanceThreshold)}>
@@ -192,8 +195,16 @@ export function CreditBalance({
                 {totalCredits.toLocaleString()}
               </div>
               <div className="text-sm text-gray-600 mb-2">Total Credits</div>
-              <div className="text-xs text-gray-500">
-                {reservedCredits} reserved
+              <div className="space-y-1">
+                <div className="text-xs text-gray-500">
+                  {freeCredits} free
+                </div>
+                {paidCredits > 0 && (
+                  <div className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-md border border-green-200 inline-block">
+                    <Coins className="h-3 w-3 inline mr-1" />
+                    {paidCredits} paid
+                  </div>
+                )}
               </div>
             </div>
 
@@ -224,14 +235,86 @@ export function CreditBalance({
             </div>
           )}
 
-          {/* Credit Expiry */}
+          {/* Credit Expiry Details */}
           {creditExpiry && (
-            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-              <div className="flex items-center gap-2 text-blue-800">
-                <Calendar className="h-4 w-4" />
-                <span className="text-sm font-medium">
-                  Credits expire on {formatDate(creditExpiry)}
-                </span>
+            <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+              <div className="flex items-start gap-3">
+                <Calendar className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-semibold text-blue-900">
+                      Credit Expiry Details
+                    </span>
+                    {(() => {
+                      const expiryDate = new Date(creditExpiry);
+                      const now = new Date();
+                      const daysRemaining = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                      const isExpiringSoon = daysRemaining <= 30;
+                      const isExpired = daysRemaining < 0;
+
+                      return (
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                          isExpired ? 'bg-red-100 text-red-700' :
+                          isExpiringSoon ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-green-100 text-green-700'
+                        }`}>
+                          {isExpired ? `${Math.abs(daysRemaining)} days ago` :
+                           isExpiringSoon ? `${daysRemaining} days left` :
+                           `${daysRemaining} days remaining`}
+                        </span>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="space-y-2 text-sm text-blue-800">
+                    <div className="flex justify-between items-center">
+                      <span>Expiry Date:</span>
+                      <span className="font-medium">{formatDate(creditExpiry)}</span>
+                    </div>
+
+                    {allocations && allocations.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-blue-200">
+                        <div className="text-xs font-medium text-blue-900 mb-2">Allocation Breakdown:</div>
+                        <div className="space-y-1">
+                          {allocations
+                            .filter((alloc: any) => alloc.expiresAt)
+                            .sort((a: any, b: any) => new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime())
+                            .map((alloc: any, index: number) => {
+                              const allocExpiry = new Date(alloc.expiresAt);
+                              const now = new Date();
+                              const daysToExpiry = Math.ceil((allocExpiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                              const isExpired = daysToExpiry < 0;
+
+                              return (
+                                <div key={index} className="flex justify-between items-center text-xs">
+                                  <span className="flex items-center gap-1">
+                                    <div className={`w-2 h-2 rounded-full ${
+                                      alloc.creditType === 'paid' ? 'bg-green-500' :
+                                      alloc.creditType === 'free' ? 'bg-blue-500' : 'bg-gray-500'
+                                    }`}></div>
+                                    {alloc.allocationPurpose || 'Credits'}
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`font-medium ${
+                                      alloc.creditType === 'paid' ? 'text-green-700' : 'text-blue-700'
+                                    }`}>
+                                      {alloc.availableCredits}/{alloc.allocatedCredits}
+                                    </span>
+                                    <span className={`${
+                                      isExpired ? 'text-red-600' :
+                                      daysToExpiry <= 7 ? 'text-yellow-600' : 'text-gray-600'
+                                    }`}>
+                                      {isExpired ? 'Expired' : `${daysToExpiry}d`}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -251,6 +334,37 @@ export function CreditBalance({
           )}
         </CardContent>
       </Card>
+
+      {/* Paid Credits Highlight */}
+      {paidCredits > 0 && (
+        <Card className="border-green-200 bg-gradient-to-r from-green-50 to-emerald-50">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 rounded-full">
+                  <Coins className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-green-900">
+                    Paid Credits Active
+                  </h3>
+                  <p className="text-xs text-green-700">
+                    {paidCredits.toLocaleString()} premium credits available
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-bold text-green-600">
+                  {paidCredits.toLocaleString()}
+                </div>
+                <div className="text-xs text-green-600">
+                  Paid
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Alerts */}
       {alerts.length > 0 && (
@@ -312,6 +426,75 @@ export function CreditBalance({
                 </div>
                 <div className="text-sm text-gray-600">Net Balance</div>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Credit Allocations */}
+      {allocations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Credit Allocations
+            </CardTitle>
+            <CardDescription>
+              Detailed breakdown of your credit allocations
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {allocations.map((allocation: any) => (
+                <div key={allocation.allocationId} className="border rounded-lg p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Credit Amount */}
+                    <div className="text-center">
+                      <div className="text-lg font-semibold text-gray-900">
+                        {allocation.availableCredits.toLocaleString()} / {allocation.allocatedCredits.toLocaleString()}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Available / Allocated
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {allocation.creditType === 'free' ? 'Free Credits' : 'Paid Credits'}
+                      </div>
+                    </div>
+
+                    {/* Start Date */}
+                    <div className="text-center">
+                      <div className="text-sm font-medium text-gray-900">
+                        {allocation.allocatedAt ? formatDate(allocation.allocatedAt) : 'N/A'}
+                      </div>
+                      <div className="text-xs text-gray-500">Allocated On</div>
+                    </div>
+
+                    {/* Expiry Date */}
+                    <div className="text-center">
+                      <div className="text-sm font-medium text-gray-900">
+                        {allocation.expiresAt ? formatDate(allocation.expiresAt) : 'Never'}
+                      </div>
+                      <div className="text-xs text-gray-500">Expires On</div>
+                      {allocation.expiresAt && new Date(allocation.expiresAt) < new Date() && (
+                        <div className="text-xs text-red-600 mt-1">Expired</div>
+                      )}
+                      {allocation.expiresAt && new Date(allocation.expiresAt) > new Date() && (
+                        <div className="text-xs text-orange-600 mt-1">
+                          {Math.ceil((new Date(allocation.expiresAt).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days left
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Purpose */}
+                    <div className="text-center">
+                      <div className="text-sm font-medium text-gray-900">
+                        {allocation.allocationPurpose || allocation.allocationType}
+                      </div>
+                      <div className="text-xs text-gray-500">Purpose</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

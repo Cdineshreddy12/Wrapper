@@ -4,98 +4,193 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 
 import {
-  CreditCard,
   Download,
-  Calendar,
-  Check,
   X,
   AlertTriangle,
   ExternalLink,
-  CheckCircle,
   Crown,
   Zap,
   ArrowRight,
-  Star,
-  Users,
-  Database,
   Shield,
   Clock,
-  Coins
+  Coins,
+  Sparkles,
+  Settings,
+  UserCheck,
+  TrendingUp,
+  Calendar,
+  RefreshCw,
+  CheckCircle,
+  CreditCard as CreditCardLucide
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  CreditCard,
+  CreditCardFlipper,
+  CreditCardFront,
+  CreditCardBack,
+  CreditCardChip,
+  CreditCardLogo,
+  CreditCardServiceProvider,
+  CreditCardName,
+  CreditCardNumber,
+  CreditCardExpiry,
+  CreditCardCvv,
+  CreditCardMagStripe,
+} from '@/components/ui/shadcn-io/credit-card'
 import { subscriptionAPI, creditAPI, setKindeTokenGetter, api } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import toast from 'react-hot-toast'
 import { PaymentDetailsModal } from '@/components/PaymentDetailsModal'
 import { PaymentUpgradeModal } from '@/components/PaymentUpgradeModal'
+import PricingCard from '@/components/common/PricingCard'
+import { ApplicationPlan, CreditTopup } from '@/types/pricing'
+import {
+  CreditBalanceIcon,
+  UsageAnalyticsIcon,
+  PaymentHistoryIcon,
+  CreditPackagesIcon,
+  SubscriptionIcon,
+  BillingIcon,
+  WalletIcon,
+  ReceiptIcon,
+  StatsIcon,
+  SparklesIcon
+} from '@/components/common/BillingIcons'
 
-interface CreditPackage {
-  id: string
-  name: string
-  description: string
-  credits: number
-  price: number
-  currency: string
-  features: string[]
-  validityMonths: number
-  recommended?: boolean
-}
-
-const creditPackages: CreditPackage[] = [
+// Application Plans (Subscription-based)
+const applicationPlans: ApplicationPlan[] = [
   {
     id: 'starter',
-    name: 'Starter Package',
-    description: 'Perfect for small businesses getting started',
-    credits: 1000,
-    price: 49,
+    name: 'Starter',
+    description: 'Perfect for individuals and small teams',
+    monthlyPrice: 12,
+    annualPrice: 120,
     currency: 'USD',
-    validityMonths: 1,
+    freeCredits: 60000,
     features: [
-      '1,000 credits',
-      'Basic operations support',
+      'Basic CRM tools',
+      'Up to 5 users',
+      '60,000 annual credits',
       'Email support',
-      '1 month validity'
+      'Basic integrations'
     ]
   },
   {
-    id: 'professional',
-    name: 'Professional Package',
-    description: 'Ideal for growing businesses with regular operations',
-    credits: 5000,
-    price: 199,
+    id: 'premium',
+    name: 'Premium',
+    description: 'Ideal for growing businesses',
+    monthlyPrice: 20,
+    annualPrice: 240,
     currency: 'USD',
-    validityMonths: 3,
+    freeCredits: 300000,
+    features: [
+      'All modules + Affiliate',
+      '300,000 free credits/year',
+      'Priority support'
+    ]
+  },
+  {
+    id: 'enterprise',
+    name: 'Enterprise',
+    description: 'For large organizations',
+    monthlyPrice: 99,
+    annualPrice: 1188,
+    currency: 'USD',
+    freeCredits: 10000,
+    features: [
+      'Unlimited modules',
+      '10,000 free credits/month',
+      'Dedicated support'
+    ]
+  }
+];
+
+// Credit Top-up Plans (One-time purchases)
+const creditTopups: CreditTopup[] = [
+  {
+    id: 'credits_5000',
+    name: '5,000 Credits',
+    description: 'Perfect for light usage',
+    credits: 5000,
+    price: 5,
+    currency: 'USD',
     features: [
       '5,000 credits',
-      'Advanced operations support',
-      'Priority email support',
-      '3 months validity',
-      'Basic reporting'
+      'Never expires',
+      'Use anytime',
+      'No monthly fees'
+    ]
+  },
+  {
+    id: 'credits_10000',
+    name: '10,000 Credits',
+    description: 'Ideal for regular operations',
+    credits: 10000,
+    price: 10,
+    currency: 'USD',
+    features: [
+      '10,000 credits',
+      'Never expires',
+      'Best value',
+      'Priority support'
     ],
     recommended: true
   },
   {
-    id: 'enterprise',
-    name: 'Enterprise Package',
-    description: 'For large organizations with high-volume operations',
+    id: 'credits_15000',
+    name: '15,000 Credits',
+    description: 'For high-volume operations',
     credits: 15000,
-    price: 499,
+    price: 15,
     currency: 'USD',
-    validityMonths: 6,
     features: [
       '15,000 credits',
-      'Full operations support',
-      'Phone & email support',
-      '6 months validity',
-      'Advanced reporting',
-      'Custom integrations'
+      'Never expires',
+      'Maximum value',
+      'Premium support'
     ]
   }
 ];
+
+// Chase Logo Component
+const ChaseLogo = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 561.578 104.369"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <title>Chase Logo</title>
+    <path
+      d="m494.525 0a3.69 3.69 0 0 0 -3.691 3.686v25.83h68.244l-31.078-29.508zm67.053 37.33a3.677 3.677 0 0 0 -3.688-3.68h-25.828v68.242l29.504-31.086zm-37.342 67.039a3.688 3.688 0 0 0 3.678-3.688v-25.827h-68.241l31.073 29.508zm-67.056-37.326a3.687 3.687 0 0 0 3.686 3.688h25.83v-68.247l-29.512 31.078z"
+      fill="currentColor"
+    />
+    <path
+      d="m144.379 12.453v31.514h-43.91v-31.514l-15.987-.006v79.461h15.987v-34.137h43.91v34.137h16.016v-79.455zm212.744 0v79.441l70.164-.004-8.891-13.98h-45.23v-20.139h43.797v-13.472h-43.797v-18.188h45.156l8.711-13.658zm-332.08-.01c-16.639 0-25.043 10.106-25.043 24.823v29.665c0 17.026 10.824 24.979 24.957 24.979l50.164-.01-9.293-14.521h-37.775c-8.021 0-11.515-2.899-11.515-11.881v-26.91c0-8.684 2.939-12.072 11.729-12.072h37.955l8.928-14.072zm261.904-.023c-9.613 0-19.451 5.771-19.451 20.625v3.816c0 15.475 9.476 21.389 18.949 21.432h33.275c3.455 0 6.264.572 6.264 6.416l-.004 6.754c-.086 5.236-2.711 6.447-6.379 6.447h-43.771l-8.967 13.979h53.762c12.972 0 21.773-6.447 21.773-21.353v-5.476c0-14.408-8.176-21.207-20.859-21.207h-31.77c-3.525 0-5.976-.967-5.976-6.184l-.004-5.492c0-4.443 1.688-6.066 5.791-6.066l41.683-.016 8.715-13.69-53.031.015m-80.084.045-37.679 79.435h17.811l7.338-16.405h40.941l7.315 16.405h17.882l-37.765-79.436zm7.896 16.488 14.479 33.021h-28.867z"
+      fill="currentColor"
+    />
+  </svg>
+);
+
+// Chase Mark Component
+const ChaseMark = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 465 465"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <title>Chase Mark</title>
+    <path
+      d="M166.497 0.188111C162.143 0.186928 157.966 1.91465 154.885 4.99158C151.804 8.0685 150.071 12.2429 150.066 16.5972V131.586H453.871L315.519 0.223725L166.497 0.188111ZM465 166.372C465.002 164.217 464.578 162.083 463.753 160.092C462.928 158.101 461.718 156.293 460.193 154.771C458.668 153.249 456.857 152.043 454.864 151.222C452.872 150.402 450.737 149.983 448.582 149.989H333.602V453.785L464.946 315.398L465 166.372ZM298.763 464.812C303.11 464.8 307.274 463.065 310.344 459.987C313.413 456.91 315.137 452.74 315.137 448.394V333.419H11.3453L149.674 464.781L298.763 464.812ZM0.247071 298.646C0.246486 300.802 0.670457 302.936 1.49478 304.928C2.31909 306.919 3.52763 308.729 5.05136 310.254C6.57509 311.778 8.38414 312.988 10.3753 313.813C12.3665 314.639 14.5007 315.064 16.6562 315.064H131.645V11.2462L0.264868 149.597L0.247071 298.646Z"
+      fill="currentColor"
+    />
+  </svg>
+);
 
 export function Billing() {
   const navigate = useNavigate()
@@ -105,9 +200,29 @@ export function Billing() {
   const [activeTab, setActiveTab] = useState('subscription')
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly')
   const [isUpgrading, setIsUpgrading] = useState(false)
+  const [paymentMethods, setPaymentMethods] = useState([
+    {
+      id: '1',
+      type: 'visa' as const,
+      last4: '4242',
+      expiryMonth: 12,
+      expiryYear: 2025,
+      brand: 'Visa',
+      isDefault: true
+    },
+    {
+      id: '2',
+      type: 'mastercard' as const,
+      last4: '8888',
+      expiryMonth: 6,
+      expiryYear: 2026,
+      brand: 'Mastercard',
+      isDefault: false
+    }
+  ])
   const [authTestResult, setAuthTestResult] = useState<string | null>(null)
   const [needsOnboarding, setNeedsOnboarding] = useState(false)
-  const [showDowngradeDialog, setShowDowngradeDialog] = useState(false)
+  // showDowngradeDialog removed - immediate downgrades not allowed
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [selectedPaymentForRefund, setSelectedPaymentForRefund] = useState<string | null>(null)
   const [selectedPaymentForDetails, setSelectedPaymentForDetails] = useState<any>(null)
@@ -133,18 +248,26 @@ export function Billing() {
   const upgradeMode = searchParams.get('upgrade') === 'true'
   const paymentCancelled = searchParams.get('payment') === 'cancelled'
   const paymentSuccess = searchParams.get('payment') === 'success'
+
+  // Invalidate queries on component mount to ensure fresh data
+  useEffect(() => {
+    if (isAuthenticated && !isLoading) {
+      queryClient.invalidateQueries({ queryKey: ['subscription'] });
+      queryClient.invalidateQueries({ queryKey: ['credit'] });
+    }
+  }, [isAuthenticated, isLoading, queryClient]);
+  const paymentType = searchParams.get('type') // 'subscription' or 'credit_purchase'
+  const sessionId = searchParams.get('session_id')
   const upgradedPlan = searchParams.get('plan')
   const mockMode = searchParams.get('mock') === 'true' // For testing without backend
 
   useEffect(() => {
     if (paymentCancelled) {
-      toast.error('Payment was cancelled. You can try again anytime.', {
-        duration: 5000,
-      })
-      // Clean up URL
-      window.history.replaceState({}, '', window.location.pathname)
+      // Navigate to cancelled page with all parameters
+      const params = new URLSearchParams(window.location.search);
+      navigate(`/payment-cancelled?${params.toString()}`)
     }
-  }, [paymentCancelled])
+  }, [paymentCancelled, navigate])
 
   // Check authentication status and provide helpful feedback
   useEffect(() => {
@@ -212,41 +335,45 @@ export function Billing() {
     retry: 1
   });
 
-  // Fetch available credit packages
+  // Fetch available credit packages (currently using static data)
   const {
     data: packagesData,
     isLoading: packagesLoading
   } = useQuery({
     queryKey: ['credit', 'packages'],
     queryFn: async () => {
-      try {
-        const response = await creditAPI.getAvailablePackages();
-        return response.data.data; // Extract the actual packages array from the wrapper
-      } catch (error) {
-        console.warn('Failed to fetch credit packages from API, using local packages');
-        return creditPackages; // Fallback to local credit packages
-      }
+      // For now, always use static credit top-ups to ensure consistent IDs
+      // TODO: Integrate with backend credit packages when needed
+      return creditTopups;
     },
     enabled: !mockMode,
     retry: 1
   });
 
-  // Fetch configuration status
+
+  // Fetch current credit balance
   const {
-    data: configStatus,
-    isLoading: configLoading
+    data: creditBalance,
+    isLoading: creditBalanceLoading,
+    error: creditBalanceError,
+    refetch: refetchCreditBalance
   } = useQuery({
-    queryKey: ['subscription', 'config-status'],
+    queryKey: ['credit', 'current'],
     queryFn: async () => {
       try {
-        const response = await subscriptionAPI.getConfigStatus();
+        const response = await creditAPI.getCurrentBalance();
         return response.data.data;
-      } catch (error) {
-        console.warn('Failed to fetch config status');
-        return null;
+      } catch (error: any) {
+        console.warn('Failed to fetch credit balance:', error);
+        return {
+          availableCredits: 0,
+          freeCredits: 0,
+          paidCredits: 0,
+          totalCredits: 0
+        };
       }
     },
-    enabled: !mockMode,
+    enabled: isAuthenticated && !mockMode,
     retry: 1
   });
 
@@ -302,8 +429,8 @@ export function Billing() {
   console.log('Usage data loaded:', usageData, usageLoading);
   console.log('Plan limits loaded:', planLimitsData, planLimitsLoading);
 
-  // Use API data or fallback to mock data
-  const displayPackages = packagesData || creditPackages;
+  // Use API data or fallback to mock data for credit top-ups
+  const displayCreditTopups = packagesData || creditTopups;
   
   // Ensure subscription data has valid date
   const ensureValidSubscription = (sub: any) => {
@@ -331,14 +458,13 @@ export function Billing() {
   };
   const displayBillingHistory = billingHistory || [];
 
-  // Handle payment success after refetchSubscription is available
+  // Handle payment success - redirect to success page
   useEffect(() => {
     if (paymentSuccess) {
-      toast.success('🎉 Payment successful! Your subscription is now active with all features enabled.', {
-        duration: 6000,
-      })
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries()
 
-      // Clear trial expiry data from localStorage and trigger cleanup
+      // Clear trial expiry data from localStorage
       localStorage.removeItem('trialExpired')
 
       // Dispatch custom events to clear trial state
@@ -346,13 +472,11 @@ export function Billing() {
       window.dispatchEvent(new CustomEvent('subscriptionUpgraded'))
       window.dispatchEvent(new CustomEvent('profileCompleted'))
 
-      // Invalidate all queries to refresh data
-      queryClient.invalidateQueries()
-
-      // Clean up URL
-      window.history.replaceState({}, '', window.location.pathname)
+      // Navigate to success page with all parameters
+      const params = new URLSearchParams(window.location.search);
+      navigate(`/payment-success?${params.toString()}`)
     }
-  }, [paymentSuccess, queryClient])
+  }, [paymentSuccess, paymentType, queryClient, navigate])
 
   // Create Stripe checkout session mutation with better error handling
   const createCheckoutMutation = useMutation({
@@ -371,7 +495,7 @@ export function Billing() {
         const response = await subscriptionAPI.createCheckout({
           planId,
           billingCycle,
-          successUrl: `${window.location.origin}/billing?payment=success`,
+          successUrl: `${window.location.origin}/payment-success?type=credit_purchase&session_id={CHECKOUT_SESSION_ID}`,
           cancelUrl: `${window.location.origin}/billing?payment=cancelled`
         });
         
@@ -498,29 +622,7 @@ export function Billing() {
     }
   });
 
-  // Immediate downgrade mutation
-  const immediateDowngradeMutation = useMutation({
-    mutationFn: async ({ newPlan, reason, refundRequested }: { newPlan: string; reason?: string; refundRequested?: boolean }) => {
-      const response = await subscriptionAPI.immediateDowngrade({
-        newPlan,
-        reason,
-        refundRequested
-      });
-      return response.data;
-    },
-    onSuccess: (data) => {
-      toast.success('Downgrade completed successfully!', {
-        duration: 3000,
-      });
-      setShowDowngradeDialog(false);
-      refetchSubscription();
-      queryClient.invalidateQueries({ queryKey: ['subscription', 'billing-history'] });
-    },
-    onError: (error: any) => {
-      console.error('❌ Immediate downgrade failed:', error);
-      toast.error(error.response?.data?.message || 'Failed to process downgrade');
-    }
-  });
+  // Immediate downgrade functionality removed - all plan changes are scheduled
 
   // Refund processing mutation
   const refundMutation = useMutation({
@@ -551,7 +653,7 @@ export function Billing() {
       setIsCheckingProfile(true);
       console.log('🔍 Checking profile completion status...');
 
-      const response = await api.get('/payment-upgrade/profile-status');
+      const response = await api.get('/api/payment-upgrade/profile-status');
       const status = response.data;
 
       console.log('📋 Profile status:', status);
@@ -578,10 +680,10 @@ export function Billing() {
     setIsUpgrading(true);
 
     try {
-      // Find the selected package
-      const selectedPackage = displayPackages.find((pkg: any) => pkg.id === packageId);
+      // Find the selected credit top-up
+      const selectedPackage = displayCreditTopups.find((pkg: any) => pkg.id === packageId);
       if (!selectedPackage) {
-        throw new Error('Selected package not found');
+        throw new Error('Selected credit top-up not found');
       }
 
       console.log('Purchasing credit package:', selectedPackage);
@@ -606,6 +708,91 @@ export function Billing() {
     } catch (error: any) {
       console.error('Credit purchase error:', error);
       toast.error(error.response?.data?.message || 'Failed to purchase credits');
+    } finally {
+      setIsUpgrading(false);
+      setSelectedPlan(null);
+    }
+  };
+
+  const handlePlanPurchase = async (planId: string) => {
+    if (!isAuthenticated) {
+      login();
+      return;
+    }
+
+    setSelectedPlan(planId);
+    setIsUpgrading(true);
+
+    try {
+      // Find the selected application plan
+      const selectedPlan = applicationPlans.find(plan => plan.id === planId);
+      if (!selectedPlan) {
+        throw new Error('Selected plan not found');
+      }
+
+      console.log('Purchasing application plan:', selectedPlan);
+
+      // Check if user has existing subscription
+      const currentSubscription = { data: displaySubscription };
+      const hasActiveSubscription = currentSubscription?.data?.status === 'active';
+
+      if (hasActiveSubscription && currentSubscription.data.plan !== 'free') {
+        // User has active subscription - use changePlan for upgrades/downgrades
+        try {
+          const response = await subscriptionAPI.changePlan({
+            planId: planId,
+            billingCycle: 'yearly' // All plans are annual
+          });
+
+          if (response.data.data.checkoutUrl) {
+            // Redirect to Stripe checkout for subscription
+            window.location.href = response.data.data.checkoutUrl;
+          } else {
+            // Handle direct plan activation
+            toast.success('Plan changed successfully!');
+            queryClient.invalidateQueries({ queryKey: ['subscription'] });
+            queryClient.invalidateQueries({ queryKey: ['credit'] });
+          }
+        } catch (changePlanError) {
+          console.error('❌ changePlan failed, falling back to checkout:', changePlanError);
+          // Fall back to checkout if changePlan fails
+          const response = await subscriptionAPI.createCheckout({
+            planId: planId,
+            billingCycle: 'yearly',
+            successUrl: `${window.location.origin}/payment-success?type=subscription&session_id={CHECKOUT_SESSION_ID}`,
+            cancelUrl: `${window.location.origin}/billing?payment=cancelled&type=subscription`
+          });
+
+          if (response.data.data.checkoutUrl) {
+            window.location.href = response.data.data.checkoutUrl;
+          } else {
+            toast.success('Plan activated successfully!');
+            queryClient.invalidateQueries({ queryKey: ['subscription'] });
+            queryClient.invalidateQueries({ queryKey: ['credit'] });
+          }
+        }
+      } else {
+        // No active subscription or free tier - create new subscription via checkout
+        const response = await subscriptionAPI.createCheckout({
+          planId: planId,
+          billingCycle: 'yearly', // All plans are annual
+          successUrl: `${window.location.origin}/payment-success?type=subscription&session_id={CHECKOUT_SESSION_ID}`,
+          cancelUrl: `${window.location.origin}/billing?payment=cancelled&type=subscription`
+        });
+
+        if (response.data.data.checkoutUrl) {
+          // Redirect to Stripe checkout for new subscription
+          window.location.href = response.data.data.checkoutUrl;
+        } else {
+          // Handle direct plan activation (for non-Stripe payments)
+          toast.success('Plan activated successfully!');
+          queryClient.invalidateQueries({ queryKey: ['subscription'] });
+          queryClient.invalidateQueries({ queryKey: ['credit'] });
+        }
+      }
+    } catch (error: any) {
+      console.error('Plan purchase error:', error);
+      toast.error(error.response?.data?.message || 'Failed to purchase plan');
     } finally {
       setIsUpgrading(false);
       setSelectedPlan(null);
@@ -672,7 +859,7 @@ export function Billing() {
         selectedPlan: upgradeModalPlan
       };
 
-      const profileResponse = await api.post('/payment-upgrade/complete-profile', profileData);
+      const profileResponse = await api.post('/api/payment-upgrade/complete-profile', profileData);
 
       if (profileResponse.data.success) {
         console.log('✅ Profile completed successfully');
@@ -900,591 +1087,566 @@ export function Billing() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Billing & Subscription</h1>
-          <p className="text-gray-600">Manage your subscription and billing information</p>
-          {mockMode && (
-            <div className="mt-2">
-              <Badge className="bg-yellow-100 text-yellow-800">
-                🧪 Mock Mode - Testing UI without backend
-              </Badge>
-        </div>
-          )}
-          {!isLoading && (
-            <div className="mt-2 flex items-center gap-2">
-              <Badge className={isAuthenticated ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}>
-                {isAuthenticated ? (
-                  <>✅ Authenticated as {user?.email}</>
-                ) : (
-                  <>❌ Not Authenticated</>
-                )}
-              </Badge>
-              {configStatus && !configLoading && (
-                <Badge className={configStatus.stripeConfigured ? "bg-blue-100 text-blue-800" : "bg-orange-100 text-orange-800"}>
-                  {configStatus.stripeConfigured ? (
-                    <>🔧 Stripe: {configStatus.mode} mode</>
-                  ) : (
-                    <>⚠️ Stripe: Mock mode</>
-                  )}
-                </Badge>
-              )}
-      </div>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Test Auth Button */}
-          <Button variant="outline" onClick={testAuth} size="sm">
-            <Shield className="h-4 w-4 mr-2" />
-            Test Auth
-            {authTestResult && (
-              <span className="ml-2 text-xs">
-                {authTestResult}
-              </span>
-            )}
-          </Button>
-          
-          {/* Manual Token Test Button */}
-          <Button variant="outline" onClick={testWithManualToken} size="sm" className="text-xs">
-            🔧 Manual Token
-          </Button>
-          
-          {/* Login button if not authenticated */}
-          {!isAuthenticated && !mockMode && (
-            <Button 
-              variant="default" 
-              onClick={() => login()} 
-              size="sm"
-            >
-              🔐 Login
-            </Button>
-          )}
+      {/* Professional Header */}
+    
 
-          {!mockMode && authTestResult === '❌ 401 Unauthorized' && (
-            <Button 
-              variant="outline" 
-              onClick={() => window.location.href = '/billing?mock=true'} 
-              size="sm"
-              className="bg-yellow-50 border-yellow-300"
-            >
-              🧪 Try Mock Mode
-            </Button>
-          )}
-          {upgradeMode && (
-            <Badge className="bg-blue-100 text-blue-800">
-              <Zap className="h-3 w-3 mr-1" />
-              Upgrade Mode
-            </Badge>
-          )}
-        </div>
+
+      <div className="flex items-center justify-end gap-2 mb-6">
+       
+        {upgradeMode && (
+          <Badge className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800">
+            <Zap className="h-3 w-3 mr-1" />
+            Upgrade Mode
+          </Badge>
+        )}
       </div>
 
-      {/* Onboarding Notice for users without organizations */}
+      {/* Professional Alerts */}
       {needsOnboarding && !mockMode && isAuthenticated && (
-        <Alert className="border-orange-200 bg-orange-50">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription className="text-orange-800">
-            <strong>Setup Required:</strong> You need to complete onboarding to access subscription features.
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="ml-3"
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6 dark:bg-orange-900/10 dark:border-orange-800">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-orange-100 rounded-lg dark:bg-orange-900/30">
+              <Settings className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-orange-900 dark:text-orange-100">Setup Required</h3>
+              <p className="text-orange-700 dark:text-orange-200 mt-1">Complete onboarding to access all subscription features</p>
+            </div>
+            <Button
+              variant="default"
+              size="sm"
+              className="bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-600"
               onClick={() => navigate('/onboarding')}
             >
+              <ArrowRight className="h-4 w-4 mr-2" />
               Complete Setup
             </Button>
-          </AlertDescription>
-        </Alert>
+          </div>
+        </div>
       )}
 
-      {/* Upgrade CTA for free users */}
-      {(displaySubscription.plan === 'free' || upgradeMode) && (
-        <Alert className="border-green-200 bg-green-50">
-          <Crown className="h-4 w-4" />
-          <AlertDescription className="text-green-800">
-            <strong>Ready to unlock more power?</strong> Upgrade to a paid plan to access unlimited projects, 
-            advanced features, and priority support.
-            {authTestResult === '❌ 401 Unauthorized' && !mockMode && (
-              <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
-                <strong>Note:</strong> Authentication is required for upgrades. 
-                <button 
-                  onClick={() => window.location.href = '/billing?mock=true'}
-                  className="ml-2 underline hover:no-underline"
-                >
-                  Try mock mode
-                </button> to test the upgrade flow.
-              </div>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="subscription">Credit Balance</TabsTrigger>
-          <TabsTrigger value="plans">Credit Packages</TabsTrigger>
-          <TabsTrigger value="history">Purchase History</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="subscription" className="space-y-6">
-          {/* Current Credit Balance Card */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Credit Balance</CardTitle>
-                  <CardDescription>
-                    Your current credit balance and usage information
-                  </CardDescription>
+      {/* Professional Upgrade CTA */}
+      {/* {(displaySubscription.plan === 'free' || upgradeMode) && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6 mb-6 dark:from-blue-900/10 dark:to-indigo-900/10 dark:border-blue-800">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-blue-100 rounded-lg dark:bg-blue-900/30">
+              <Crown className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-gray-900 text-base dark:text-gray-100">Ready to unlock more power?</h3>
+              {authTestResult === '❌ 401 Unauthorized' && !mockMode && (
+                <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg dark:bg-yellow-900/20 dark:border-yellow-800">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+                    <span className="text-sm text-yellow-800 dark:text-yellow-200">Authentication required for upgrades. Try mock mode to test the flow.</span>
+                  </div>
                 </div>
-                
-                {/* Manual cleanup button for debugging */}
+              )}
+            </div>
+            <div className="flex gap-2">
+              {authTestResult === '❌ 401 Unauthorized' && !mockMode && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleManualCleanup}
-                  disabled={isCleaningUp}
-                  className="text-xs"
-                  title="Fix trial status and clean up duplicate payments"
+                  className="border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-900/20"
+                  onClick={() => window.location.href = '/billing?mock=true'}
                 >
-                  {isCleaningUp ? (
-                    <>
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-1"></div>
-                      Cleaning...
-                    </>
-                  ) : (
-                    <>
-                      🧹 Fix Issues
-                    </>
-                  )}
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Mock Mode
                 </Button>
+              )}
+              <Button
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-500 dark:hover:bg-blue-600"
+                onClick={() => setActiveTab('plans')}
+              >
+                <TrendingUp className="h-4 w-4 mr-2" />
+                View Plans
+              </Button>
+            </div>
+          </div>
+        </div>
+      )} */}
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3 bg-gray-100 p-1 h-12 dark:bg-gray-800">
+          <TabsTrigger value="subscription" className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:dark:bg-gray-700 transition-all">
+            <CreditBalanceIcon className="w-4 h-4" />
+            <span className="hidden sm:inline">Credit Balance</span>
+            <span className="sm:hidden">Balance</span>
+          </TabsTrigger>
+          <TabsTrigger value="plans" className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:dark:bg-gray-700 transition-all">
+            <CreditPackagesIcon className="w-4 h-4" />
+            <span className="hidden sm:inline">Credit Packages</span>
+            <span className="sm:hidden">Packages</span>
+          </TabsTrigger>
+          <TabsTrigger value="history" className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:dark:bg-gray-700 transition-all">
+            <PaymentHistoryIcon className="w-4 h-4" />
+            <span className="hidden sm:inline">Purchase History</span>
+            <span className="sm:hidden">History</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="subscription" className="space-y-8">
+          {/* Current Subscription Plan Card */}
+          {displaySubscription.plan !== 'free' && (
+            <Card className="border-0 shadow-xl bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
+              <CardHeader className="pb-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-green-500 rounded-xl text-white">
+                      <Crown className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg dark:text-white">Current Plan</CardTitle>
+                      <CardDescription className="dark:text-gray-300">
+                        {applicationPlans.find(p => p.id === displaySubscription.plan)?.name || displaySubscription.plan} Plan
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      ${displaySubscription.yearlyPrice || displaySubscription.monthlyPrice || '0.00'}
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 capitalize">
+                      per {displaySubscription.billingCycle || 'year'}
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    <span className="text-gray-700 dark:text-gray-300 capitalize">
+                      Status: {displaySubscription.status}
+                    </span>
+                  </div>
+                  {displaySubscription.currentPeriodEnd && (
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-gray-500" />
+                      <span className="text-gray-700 dark:text-gray-300">
+                        Renews: {formatDate(displaySubscription.currentPeriodEnd)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Modern Credit Balance Card */}
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900">
+            <CardHeader className="pb-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-blue-500 rounded-xl text-white">
+                    <CreditBalanceIcon className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg dark:text-white">Credit Balance</CardTitle>
+                  </div>
+                </div>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Available Credits</p>
-                    <div className="flex items-center gap-2">
-                      <Coins className="h-5 w-5 text-amber-500" />
-                      <p className="text-2xl font-bold">{displaySubscription.availableCredits || 0}</p>
-                      <Badge className={displaySubscription.availableCredits > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-                        {displaySubscription.availableCredits > 0 ? 'Active' : 'Insufficient'}
-                      </Badge>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Left Column - Stats */}
+                <div className="space-y-6">
+                  <div className="bg-white/60 backdrop-blur-sm rounded-xl p-6 border border-white/20 dark:bg-gray-700/60 dark:border-gray-600">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 bg-amber-100 rounded-lg dark:bg-amber-900/30">
+                        <Coins className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Available Credits</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xl font-bold text-gray-900 dark:text-white">{creditBalance?.availableCredits || 0}</p>
+                          <Badge className={
+                            (creditBalance?.availableCredits || 0) > 0
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800'
+                              : 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800'
+                          }>
+                            {(creditBalance?.availableCredits || 0) > 0 ? 'Active' : 'Insufficient'}
+                          </Badge>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total Credits</p>
-                    <p className="text-xl font-bold">
-                      {displaySubscription.totalCredits || 0}
-                    </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-white/20 dark:bg-gray-700/60 dark:border-gray-600">
+                      <div className="flex items-center gap-2 mb-2">
+                        <WalletIcon className="h-4 w-4 text-blue-500 dark:text-blue-400" />
+                        <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Total Credits</p>
+                      </div>
+                      <p className="text-lg font-bold text-gray-900 dark:text-white">{displaySubscription.totalCredits || 0}</p>
+                    </div>
+
+                    <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-white/20 dark:bg-gray-700/60 dark:border-gray-600">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Calendar className="h-4 w-4 text-purple-500 dark:text-purple-400" />
+                        <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Usage This Period</p>
+                      </div>
+                      <p className="text-base font-bold text-gray-900 dark:text-white">{displaySubscription.usageThisPeriod || 0}</p>
+                    </div>
                   </div>
 
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Credit Expiry</p>
-                    <p className="text-sm">
-                      {displaySubscription.creditExpiry ? formatDate(displaySubscription.creditExpiry) : 'No expiry'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Usage This Period</p>
-                    <p className="text-sm">
-                      {displaySubscription.usageThisPeriod || 0} credits used
+                  <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-white/20 dark:bg-gray-700/60 dark:border-gray-600">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Clock className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+                      <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Credit Expiry</p>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      {creditBalance?.creditExpiry ? formatDate(creditBalance.creditExpiry) : 'No expiry'}
                     </p>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600 mb-2">Credit Status</p>
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                        <span className="text-sm">{displaySubscription.availableCredits || 0} credits available</span>
+                {/* Right Column - Status & Actions */}
+                <div className="space-y-6">
+                  <div className="bg-white/60 backdrop-blur-sm rounded-xl p-6 border border-white/20 dark:bg-gray-700/60 dark:border-gray-600">
+                    <div className="flex items-center gap-2 mb-4">
+                      <StatsIcon className="h-5 w-5 text-green-500 dark:text-green-400" />
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Credit Status</p>
+                    </div>
+                    <div className="space-y-3">
+                      {/* Free Credits */}
+                      <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-800">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                            <span className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Free Credits</span>
+                          </div>
+                          <span className="font-semibold text-emerald-800 dark:text-emerald-300">{creditBalance?.freeCredits || 0}</span>
+                        </div>
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                          <Clock className="w-3 h-3 inline mr-1" />
+                          Expires with subscription plan
+                        </p>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                        <span className="text-sm">{displaySubscription.reservedCredits || 0} credits reserved</span>
+
+                      {/* Paid Credits */}
+                      <div className="p-3 bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg border-2 border-amber-200 dark:from-amber-900/20 dark:to-orange-900/20 dark:border-amber-800">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <Crown className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                            <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">Paid Credits</span>
+                          </div>
+                          <span className="font-bold text-amber-800 dark:text-amber-300">{creditBalance?.paidCredits || 0}</span>
+                        </div>
+                        <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                          <Shield className="w-3 h-3 inline mr-1" />
+                          Never expires • Permanent access
+                        </p>
                       </div>
                       {(displaySubscription.alerts || []).length > 0 && (
-                        <div className="flex items-center space-x-2">
-                          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                          <span className="text-sm text-amber-600">{displaySubscription.alerts.length} alerts</span>
+                        <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-100 dark:bg-amber-900/20 dark:border-amber-800">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                            <span className="text-sm text-amber-800 dark:text-amber-300">Alerts</span>
+                          </div>
+                          <span className="font-semibold text-amber-800 dark:text-amber-300">{displaySubscription.alerts.length}</span>
                         </div>
                       )}
                     </div>
                   </div>
 
                   {(displaySubscription.availableCredits || 0) < 100 && (
-                    <Button onClick={() => setActiveTab('plans')} className="w-full">
-                      <Coins className="h-4 w-4 mr-2" />
+                    <Button
+                      onClick={() => setActiveTab('plans')}
+                      className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 h-12 dark:from-blue-500 dark:to-purple-500 dark:hover:from-blue-600 dark:hover:to-purple-600"
+                    >
+                      <Coins className="h-5 w-5 mr-2" />
                       Purchase More Credits
+                      <ArrowRight className="h-4 w-4 ml-2" />
                     </Button>
                   )}
                 </div>
               </div>
             </CardContent>
           </Card>
-
-          {/* Usage Overview */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Plan Usage & Restrictions</CardTitle>
-              <CardDescription>Your current usage against plan limits</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {planLimitsData ? (
-                <div className="space-y-6">
-                  {/* Users */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Users</span>
-                      <span className="text-sm">
-                        {planLimitsData.currentUsage.users} / {planLimitsData.limits.users === -1 ? '∞' : planLimitsData.limits.users}
-                      </span>
-                    </div>
-                    {planLimitsData.limits.users !== -1 && (
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full ${
-                            planLimitsData.restrictions.canCreateUsers ? 'bg-green-600' : 'bg-red-600'
-                          }`} 
-                          style={{ 
-                            width: `${Math.min(100, (planLimitsData.currentUsage.users / planLimitsData.limits.users) * 100)}%` 
-                          }}
-                        ></div>
-                      </div>
-                    )}
-                    {!planLimitsData.restrictions.canCreateUsers && (
-                      <p className="text-xs text-red-600">⚠️ User limit reached - upgrade to add more users</p>
-                    )}
-                  </div>
-
-                  {/* Roles */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Custom Roles</span>
-                      <span className="text-sm">
-                        {planLimitsData.currentUsage.roles} / {planLimitsData.limits.roles === -1 ? '∞' : planLimitsData.limits.roles}
-                      </span>
-                    </div>
-                    {planLimitsData.limits.roles !== -1 && (
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full ${
-                            planLimitsData.restrictions.canCreateRoles ? 'bg-blue-600' : 'bg-red-600'
-                          }`} 
-                          style={{ 
-                            width: `${Math.min(100, (planLimitsData.currentUsage.roles / planLimitsData.limits.roles) * 100)}%` 
-                          }}
-                        ></div>
-                      </div>
-                    )}
-                    {!planLimitsData.restrictions.canCreateRoles && (
-                      <p className="text-xs text-red-600">⚠️ Role limit reached - upgrade to create more roles</p>
-                    )}
-                  </div>
-
-                  {/* Available Applications & Modules */}
-                  <div className="space-y-3">
-                    <p className="text-sm font-medium">Available Applications</p>
-                    <div className="flex flex-wrap gap-2">
-                      {planLimitsData?.allowedApplications?.map((app: string) => (
-                        <Badge key={app} variant="default" className="text-xs">
-                          {app.toUpperCase()}
-                        </Badge>
-                      ))}
-                    </div>
-                    
-                    {planLimitsData.allowedModules && Object.keys(planLimitsData.allowedModules).length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Available Modules</p>
-                        {Object.entries(planLimitsData.allowedModules).map(([app, modules]: [string, any]) => (
-                          <div key={app} className="space-y-1">
-                            <p className="text-xs font-medium text-gray-600">{app.toUpperCase()}:</p>
-                            <div className="flex flex-wrap gap-1">
-                              {Array.isArray(modules) ? 
-                                modules.map((module: string) => (
-                                  <Badge key={`${app}-${module}`} variant="secondary" className="text-xs">
-                                    {module.replace('_', ' ')}
-                                  </Badge>
-                                )) :
-                                modules === '*' ? (
-                                  <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
-                                    All Modules
-                                  </Badge>
-                                ) : null
-                              }
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {planLimitsData.currentPlan === 'trial' && (
-                      <p className="text-xs text-amber-600">
-                        ⏰ Trial period - Upgrade to continue access after expiration
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Upgrade Suggestion */}
-                  {(planLimitsData.currentPlan === 'free' || 
-                    !planLimitsData.restrictions.canCreateUsers || 
-                    !planLimitsData.restrictions.canCreateRoles) && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <div className="flex items-center gap-2">
-                        <Crown className="h-4 w-4 text-blue-600" />
-                        <span className="text-sm font-medium text-blue-800">
-                          Upgrade Recommended
-                        </span>
-                      </div>
-                      <p className="text-sm text-blue-700 mt-1">
-                        {planLimitsData.currentPlan === 'free' 
-                          ? 'Unlock more modules and increase your limits with a paid plan.'
-                          : 'You\'ve reached your plan limits. Upgrade for more capacity.'
-                        }
-                      </p>
-                      <Button 
-                        size="sm" 
-                        className="mt-2"
-                        onClick={() => setActiveTab('plans')}
-                      >
-                        View Plans
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Loading usage data...</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-gray-400 h-2 rounded-full animate-pulse" style={{ width: '50%' }}></div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </TabsContent>
 
-        <TabsContent value="plans" className="space-y-6">
-          {/* Billing Cycle Toggle */}
-          <div className="flex items-center justify-center space-x-4 p-4 bg-gray-50 rounded-lg">
-            <span className={billingCycle === 'monthly' ? 'font-medium' : 'text-gray-600'}>Monthly</span>
-            <button
-              onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'yearly' : 'monthly')}
-              className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  billingCycle === 'yearly' ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
-            <span className={billingCycle === 'yearly' ? 'font-medium' : 'text-gray-600'}>
-              Yearly <Badge className="ml-1 bg-green-100 text-green-800">Save 17%</Badge>
-            </span>
+        <TabsContent value="plans" className="space-y-12">
+          {/* Section 1: Credit Top-ups */}
+          <div className="space-y-8">
+            <div className="text-center max-w-2xl mx-auto">
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+                Credit Top-ups
+              </h2>
+              <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
+                Need more credits? Purchase additional credits that never expire and use them anytime for your business operations.
+              </p>
+            </div>
+
+            {/* Professional grid layout for credit top-ups */}
+            <div className="max-w-7xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-10">
+                {creditTopups.map((topup, index) => (
+                  <div
+                    key={topup.id}
+                    className="flex justify-center animate-slide-in-up"
+                    style={{
+                      animationDelay: `${index * 150}ms`
+                    }}
+                  >
+                    <PricingCard
+                      name={topup.name}
+                      description={topup.description}
+                      credits={topup.credits}
+                      price={topup.price}
+                      currency={topup.currency}
+                      features={topup.features}
+                      recommended={topup.recommended}
+                      type="topup"
+                      onPurchase={() => handleCreditPurchase(topup.id)}
+                      isLoading={isUpgrading && selectedPlan === topup.id}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Plans Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {displayPackages.map((pkg: any) => {
-              return (
-                <Card
-                  key={pkg.id}
-                  className={`relative ${
-                    pkg.recommended ? 'ring-2 ring-purple-500' : ''
-                  }`}
-                >
-                  {pkg.recommended && (
-                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                      <Badge className="bg-purple-500">
-                        <Star className="h-3 w-3 mr-1" />
-                        Recommended
-                      </Badge>
-                    </div>
-                  )}
+          {/* Visual separator */}
+          <div className="flex items-center justify-center">
+            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 dark:via-gray-600 to-transparent"></div>
+            <div className="px-6">
+              <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full"></div>
+            </div>
+            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 dark:via-gray-600 to-transparent"></div>
+          </div>
 
-                  <CardHeader className="text-center">
-                    <CardTitle className="text-xl flex items-center justify-center gap-2">
-                      <Coins className="h-5 w-5 text-amber-500" />
-                      {pkg.name}
-                    </CardTitle>
-                    <div className="space-y-1">
-                      <div className="text-3xl font-bold">
-                        ${pkg.price}
-                        <span className="text-lg font-normal text-gray-600">
-                          /{pkg.currency}
-                        </span>
-                      </div>
-                    </div>
-                    <CardDescription>{pkg.description}</CardDescription>
-                  </CardHeader>
+          {/* Section 2: Application Plans */}
+          <div className="space-y-8">
+            <div className="text-center max-w-2xl mx-auto">
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+                Application Plans
+              </h2>
+              <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
+                Choose a plan that fits your business needs with included free credits and access to premium features.
+              </p>
+            </div>
 
-                  <CardContent className="space-y-4">
-                    <div className="text-center">
-                      <div className="text-2xl font-semibold text-blue-600">
-                        {pkg.credits.toLocaleString()}
-                      </div>
-                      <div className="text-sm text-gray-600">Credits Included</div>
-                    </div>
-
-                    <div className="space-y-2">
-                      {pkg.features.map((feature: any, index: number) => (
-                        <div key={index} className="flex items-center space-x-2">
-                          <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                          <span className="text-sm">{feature}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="pt-4">
-                      <Button
-                        onClick={() => handleCreditPurchase(pkg.id)}
-                        disabled={isUpgrading && selectedPlan === pkg.id || isCheckingProfile}
-                        className="w-full"
-                        variant={pkg.recommended ? "default" : "outline"}
-                      >
-                        {isCheckingProfile ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                            Checking...
-                          </>
-                        ) : isUpgrading && selectedPlan === pkg.id ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            <Coins className="h-4 w-4 mr-2" />
-                            Purchase Credits
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
+            {/* Professional grid layout for application plans */}
+            <div className="max-w-7xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-10">
+                {applicationPlans.map((plan, index) => (
+                  <div
+                    key={plan.id}
+                    className="flex justify-center animate-slide-in-up"
+                    style={{
+                      animationDelay: `${index * 150}ms`
+                    }}
+                  >
+                    <PricingCard
+                      name={plan.name}
+                      description={plan.description}
+                      monthlyPrice={plan.monthlyPrice}
+                      annualPrice={plan.annualPrice}
+                      currency={plan.currency}
+                      features={plan.features}
+                      freeCredits={plan.freeCredits}
+                      recommended={plan.popular}
+                      type="application"
+                      onPurchase={() => handlePlanPurchase(plan.id)}
+                      isLoading={isUpgrading && selectedPlan === plan.id}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </TabsContent>
 
         <TabsContent value="history" className="space-y-6">
-          {/* Payment History */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-medium">Payment History</h3>
-              <div className="text-sm text-gray-500">
-                Your billing and payment records
+          {/* Modern Payment History Header */}
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-6 border border-emerald-100 dark:border-gray-700">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-emerald-500 rounded-xl text-white">
+                <PaymentHistoryIcon className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Payment History</h3>
               </div>
             </div>
-            
-            {billingHistoryLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                  <p className="text-sm text-gray-500">Loading payment history...</p>
-                </div>
+          </div>
+
+          {billingHistoryLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-emerald-500 mx-auto mb-4"></div>
+                <p className="text-lg text-gray-600 dark:text-gray-400">Loading payment history...</p>
               </div>
-            ) : !displayBillingHistory || displayBillingHistory.length === 0 ? (
-              <div className="text-center py-8">
-                <CreditCard className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">No payment history yet</p>
+            </div>
+          ) : !displayBillingHistory || displayBillingHistory.length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700">
+              <div className="p-4 bg-gray-100 dark:bg-gray-700 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                <ReceiptIcon className="h-8 w-8 text-gray-400" />
               </div>
-            ) : (
+              <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No payment history yet</h4>
+              <p className="text-gray-600 dark:text-gray-400">Your completed transactions will appear here</p>
+            </div>
+          ) : (
               <div className="space-y-4">
                 {displayBillingHistory.map((payment: any) => (
-                  <Card key={payment.id} className="hover:shadow-md transition-shadow">
+                  <Card key={payment.id} className="hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-gradient-to-r from-white to-gray-50 dark:from-gray-800 dark:to-gray-900">
                     <CardContent className="p-6">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-start space-x-4">
-                          <div className={`rounded-full p-2 ${
-                            payment.status === 'succeeded' ? 'bg-green-100' : 
-                            payment.status === 'failed' ? 'bg-red-100' : 'bg-yellow-100'
+                        <div className="flex items-start gap-4">
+                          <div className={`rounded-xl p-3 ${
+                            payment.status === 'succeeded' || payment.status === 'completed' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                            payment.status === 'failed' ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' : 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400'
                           }`}>
-                            {payment.status === 'succeeded' ? (
-                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            {payment.status === 'succeeded' || payment.status === 'completed' ? (
+                              <CheckCircle className="h-5 w-5" />
                             ) : payment.status === 'failed' ? (
-                              <X className="h-4 w-4 text-red-600" />
+                              <X className="h-5 w-5" />
                             ) : (
-                              <Clock className="h-4 w-4 text-yellow-600" />
+                              <Clock className="h-5 w-5" />
                             )}
                           </div>
-                          
+
                           <div className="flex-1">
-                            <div className="flex items-center space-x-2">
-                              <h4 className="font-medium text-gray-900">
-                                {payment.description || `${payment.paymentType} payment`}
+                            <div className="flex items-center gap-3 mb-2">
+                              <h4 className="font-semibold text-gray-900 dark:text-white text-lg">
+                                {payment.description || `${
+                                  payment.type === 'subscription' ? 'Subscription' :
+                                  payment.type === 'credit_purchase' ? 'Credit Purchase' :
+                                  payment.type === 'credit_usage' ? 'Credit Usage' : 'Payment'
+                                }`}
                               </h4>
-                              <Badge variant={
-                                payment.status === 'succeeded' ? 'default' : 
-                                payment.status === 'failed' ? 'destructive' : 'secondary'
+                              <Badge className={
+                                payment.status === 'succeeded' || payment.status === 'completed' ? 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800' :
+                                payment.status === 'failed' ? 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800' : 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800'
                               }>
-                                {payment.status === 'succeeded' ? 'Paid' : 
-                                 payment.status === 'failed' ? 'Failed' : 'Pending'}
+                                {(payment.status === 'succeeded' || payment.status === 'completed') ? (
+                                  <>
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                    {payment.type === 'credit_purchase' ? 'Purchased' :
+                                     payment.type === 'credit_usage' ? 'Used' : 'Paid'}
+                                  </>
+                                ) :
+                                 payment.status === 'failed' ? (
+                                  <>
+                                    <X className="w-3 h-3 mr-1" />
+                                    Failed
+                                  </>
+                                ) : (
+                                  <>
+                                    <Clock className="w-3 h-3 mr-1" />
+                                    Pending
+                                  </>
+                                )}
                               </Badge>
+                              {payment.type && (
+                                <Badge variant="outline" className="text-xs">
+                                  {payment.type === 'subscription' ? 'Subscription' :
+                                   payment.type === 'credit_purchase' ? 'Credit Purchase' :
+                                   payment.type === 'credit_usage' ? 'Credit Usage' : payment.type}
+                                </Badge>
+                              )}
                             </div>
-                            
-                            <div className="mt-1 space-y-1">
-                              <p className="text-sm text-gray-600">
-                                {formatDate(payment.paidAt || payment.createdAt)} 
-                                {payment.billingReason && ` • ${payment.billingReason.replace(/_/g, ' ')}`}
-                              </p>
-                              
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4 text-gray-400" />
+                                <span className="text-sm text-gray-600 dark:text-gray-400">
+                                  {formatDate(payment.paidAt || payment.createdAt)}
+                                  {payment.billingReason && ` • ${payment.billingReason.replace(/_/g, ' ')}`}
+                                </span>
+                              </div>
+
                               {payment.paymentMethodDetails?.card && (
-                                <p className="text-sm text-gray-500">
-                                  **** **** **** {payment.paymentMethodDetails.card.last4} • {payment.paymentMethodDetails.card.brand?.toUpperCase()}
-                                </p>
-                              )}
-                              
-                              {payment.invoiceNumber && (
-                                <p className="text-sm text-gray-500">
-                                  Invoice #{payment.invoiceNumber}
-                                </p>
-                              )}
-                              
-                              {/* Stripe Payment Details */}
-                              {payment.stripePaymentIntentId && (
-                                <div className="text-xs text-gray-400 space-y-1">
-                                  <p>Payment ID: {payment.stripePaymentIntentId}</p>
-                                  {payment.stripeChargeId && payment.stripeChargeId !== payment.stripePaymentIntentId && (
-                                    <p>Charge ID: {payment.stripeChargeId}</p>
-                                  )}
-                                  {payment.stripeInvoiceId && (
-                                    <p>Invoice ID: {payment.stripeInvoiceId}</p>
-                                  )}
+                                <div className="flex items-center gap-2">
+                                  <CreditCardLucide className="h-4 w-4 text-gray-400" />
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                                    **** **** **** {payment.paymentMethodDetails.card.last4} • {payment.paymentMethodDetails.card.brand?.toUpperCase()}
+                                  </span>
                                 </div>
                               )}
                             </div>
+
+                            {payment.invoiceNumber && (
+                              <div className="flex items-center gap-2 mb-3">
+                                <ReceiptIcon className="h-4 w-4 text-gray-400" />
+                                <span className="text-sm text-gray-600 dark:text-gray-400">
+                                  Invoice #{payment.invoiceNumber}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Stripe Payment Details */}
+                            {payment.stripePaymentIntentId && (
+                              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-xs text-gray-500 dark:text-gray-400">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                  <div>
+                                    <span className="font-medium">Payment ID:</span>
+                                    <div className="font-mono">{payment.stripePaymentIntentId}</div>
+                                  </div>
+                                  {payment.stripeChargeId && payment.stripeChargeId !== payment.stripePaymentIntentId && (
+                                    <div>
+                                      <span className="font-medium">Charge ID:</span>
+                                      <div className="font-mono">{payment.stripeChargeId}</div>
+                                    </div>
+                                  )}
+                                  {payment.stripeInvoiceId && (
+                                    <div>
+                                      <span className="font-medium">Invoice ID:</span>
+                                      <div className="font-mono">{payment.stripeInvoiceId}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
-                        
-                        <div className="text-right">
-                          <div className="text-lg font-semibold text-gray-900">
-                            {formatCurrency(payment.amount * 100, payment.currency || 'USD')}
+
+                        <div className="text-right flex flex-col items-end gap-3">
+                          <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-4 py-3 border border-emerald-200 dark:border-emerald-800">
+                            <div className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
+                              {formatCurrency(payment.amount)}
+                            </div>
+                            <div className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">
+                              {payment.type === 'credit_purchase' ? 'Purchase Amount' : 'Total Amount'}
+                            </div>
                           </div>
-                          {payment.taxAmount > 0 && (
-                            <div className="text-sm text-gray-500">
-                              Tax: {formatCurrency(payment.taxAmount * 100, payment.currency || 'USD')}
+
+                          {payment.creditsPurchased && (
+                            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg px-4 py-2 border border-blue-200 dark:border-blue-800">
+                              <div className="text-sm font-semibold text-blue-700 dark:text-blue-400">
+                                +{payment.creditsPurchased.toLocaleString()} credits
+                              </div>
+                              <div className="text-xs text-blue-600 dark:text-blue-500">
+                                Credits Added
+                              </div>
                             </div>
                           )}
-                          {payment.processingFees > 0 && (
-                            <div className="text-sm text-gray-500">
-                              Fees: {formatCurrency(payment.processingFees * 100, payment.currency || 'USD')}
+
+                          {(payment.taxAmount > 0 || payment.processingFees > 0) && (
+                            <div className="text-xs text-gray-500 space-y-1">
+                              {payment.taxAmount > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <span>Tax:</span>
+                                  <span className="font-medium">{formatCurrency(payment.taxAmount)}</span>
+                                </div>
+                              )}
+                              {payment.processingFees > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <span>Fees:</span>
+                                  <span className="font-medium">{formatCurrency(payment.processingFees)}</span>
+                                </div>
+                              )}
                             </div>
                           )}
-                          
-                          <div className="flex items-center space-x-2 mt-2">
+
+                          <div className="flex items-center gap-2">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => setSelectedPaymentForDetails(payment)}
+                              className="border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"
                             >
                               <ExternalLink className="h-3 w-3 mr-1" />
                               Details
@@ -1493,6 +1655,7 @@ export function Billing() {
                               variant="outline"
                               size="sm"
                               onClick={() => window.open(`data:text/plain;charset=utf-8,${encodeURIComponent(JSON.stringify(payment, null, 2))}`, '_blank')}
+                              className="border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"
                             >
                               <Download className="h-3 w-3 mr-1" />
                               Receipt
@@ -1505,105 +1668,53 @@ export function Billing() {
                 ))}
               </div>
             )}
-          </div>
 
-          {/* Enhanced Plan Management */}
-          {displaySubscription.plan !== 'free' && (
-          <Card>
-            <CardHeader>
-                <CardTitle>Plan Management</CardTitle>
-                <CardDescription>Manage your current subscription</CardDescription>
-            </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                    <h4 className="font-medium">Immediate Downgrade</h4>
-                    <p className="text-sm text-gray-600">
-                      Downgrade to a lower plan with optional prorated refund
-                    </p>
-                    </div>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowDowngradeDialog(true)}
-                    className="text-orange-600 border-orange-300 hover:bg-orange-50"
-                  >
-                    <ArrowRight className="h-4 w-4 mr-2 rotate-90" />
-                    Downgrade
-                  </Button>
-                </div>
-
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
-                    <h4 className="font-medium">Cancel Subscription</h4>
-                    <p className="text-sm text-gray-600">
-                      Cancel your subscription (effective at end of billing period)
-                    </p>
+            {/* Modern Plan Management */}
+            {displaySubscription.plan !== 'free' && (
+            <Card className="border-0 shadow-xl bg-gradient-to-r from-slate-50 to-gray-50 dark:from-gray-800 dark:to-gray-900">
+              <CardHeader className="pb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-slate-500 rounded-xl text-white">
+                    <Settings className="w-6 h-6" />
                   </div>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowCancelDialog(true)}
-                    className="text-red-600 border-red-300 hover:bg-red-50"
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    Cancel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-          )}
+                  <div>
+                    <CardTitle className="text-lg dark:text-white">Plan Management</CardTitle>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+               
+
+                <div className="bg-white/60 backdrop-blur-sm rounded-xl p-6 border border-red-200 hover:shadow-md transition-all dark:bg-gray-700/60 dark:border-red-800">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-red-100 rounded-lg dark:bg-red-900/30">
+                        <X className="h-5 w-5 text-red-600 dark:text-red-400" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900 dark:text-white">Cancel Subscription</h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                          Cancel your subscription (effective at end of billing period)
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowCancelDialog(true)}
+                      className="border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            )}
         </TabsContent>
       </Tabs>
 
-      {/* Immediate Downgrade Dialog */}
-      {showDowngradeDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Immediate Downgrade</h3>
-            <p className="text-gray-600 mb-4">
-              You're about to downgrade from the {displaySubscription.plan} plan. This action will:
-            </p>
-            <ul className="list-disc list-inside text-sm text-gray-600 mb-4 space-y-1">
-              <li>Immediately switch you to the Free plan</li>
-              <li>Remove access to premium features</li>
-              <li>Optionally provide a prorated refund</li>
-            </ul>
-            
-            <div className="mb-4">
-              <label className="flex items-center">
-                <input 
-                  type="checkbox" 
-                  className="mr-2" 
-                  onChange={(e) => setRefundRequested(e.target.checked)}
-                />
-                <span className="text-sm">Request prorated refund</span>
-              </label>
-            </div>
-
-            <div className="flex gap-3">
-              <Button 
-                variant="outline" 
-                onClick={() => setShowDowngradeDialog(false)}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={() => {
-                  immediateDowngradeMutation.mutate({
-                    newPlan: 'free',
-                    reason: 'customer_request',
-                    refundRequested: refundRequested
-                  });
-                }}
-                className="flex-1 bg-orange-600 hover:bg-orange-700"
-                disabled={immediateDowngradeMutation.isPending}
-              >
-                {immediateDowngradeMutation.isPending ? 'Processing...' : 'Confirm Downgrade'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Immediate Downgrade Dialog - Removed - all plan changes are scheduled */}
 
       {/* Cancel Subscription Dialog */}
       {showCancelDialog && (

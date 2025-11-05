@@ -87,6 +87,22 @@ export class PaymentService {
     }
   }
 
+  // Check if payment exists by payment intent ID
+  static async getPaymentByIntentId(paymentIntentId) {
+    try {
+      const [payment] = await db
+        .select()
+        .from(payments)
+        .where(eq(payments.stripePaymentIntentId, paymentIntentId))
+        .limit(1);
+
+      return payment || null;
+    } catch (error) {
+      console.error('❌ Failed to get payment by intent ID:', error);
+      throw error;
+    }
+  }
+
   // Record a comprehensive refund
   static async recordRefund(originalPaymentId, refundAmount, reason) {
     try {

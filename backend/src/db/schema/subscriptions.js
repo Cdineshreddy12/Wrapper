@@ -7,45 +7,19 @@ export const subscriptions = pgTable('subscriptions', {
   subscriptionId: uuid('subscription_id').primaryKey().defaultRandom(),
   tenantId: uuid('tenant_id').references(() => tenants.tenantId).notNull(),
 
-  // Entity Context for Multi-Entity Billing - FIXED REFERENCES
-  entityId: uuid('entity_id').references(() => entities.entityId), // References unified entities table
-  parentEntityId: uuid('parent_entity_id').references(() => entities.entityId), // Parent entity for billing hierarchy
-  billingEntityType: varchar('billing_entity_type', { length: 20 }).default('organization'), // For compatibility
-
   // Plan information
   plan: varchar('plan', { length: 50 }).notNull(),
   status: varchar('status', { length: 20 }).notNull(), // 'active', 'past_due', 'canceled', 'trialing', 'suspended'
-  
+
   // Stripe subscription details
   stripeSubscriptionId: varchar('stripe_subscription_id', { length: 255 }),
   stripeCustomerId: varchar('stripe_customer_id', { length: 255 }),
-  stripePriceId: varchar('stripe_price_id', { length: 255 }),
-  
+
   // Trial information
-  trialStart: timestamp('trial_start'),
-  trialEnd: timestamp('trial_end'),
   isTrialUser: boolean('is_trial_user').default(false),
-  
-  // Upgrade tracking - NEW FIELDS
+
+  // Upgrade tracking
   hasEverUpgraded: boolean('has_ever_upgraded').default(false), // Track if user ever had a paid plan
-  firstUpgradeAt: timestamp('first_upgrade_at'), // When they first upgraded from trial
-  lastDowngradeAt: timestamp('last_downgrade_at'), // When they last downgraded
-  trialToggledOff: boolean('trial_toggled_off').default(false), // Manually disable trial restrictions
-  
-  // Trial monitoring fields
-  lastReminderSentAt: timestamp('last_reminder_sent_at'), // When last reminder was sent
-  reminderCount: integer('reminder_count').default(0), // How many reminders sent
-  restrictionsAppliedAt: timestamp('restrictions_applied_at'), // When restrictions were applied
-  
-  // Credit System Integration
-  billingModel: varchar('billing_model', { length: 20 }).default('bulk_then_per_usage'), // 'bulk', 'per_usage', 'hybrid'
-  creditAllocation: jsonb('credit_allocation').default({}), // Credit allocation per entity
-  overageLimits: jsonb('overage_limits').default({
-    period: 'day',
-    maxOps: 10000,
-    allowOverage: true
-  }),
-  discountTiersKey: varchar('discount_tiers_key', { length: 100 }), // Reference to discount configuration
 
   // Usage and limits
   subscribedTools: jsonb('subscribed_tools').default([]),
@@ -53,95 +27,58 @@ export const subscriptions = pgTable('subscriptions', {
 
   // Billing cycle and pricing
   billingCycle: varchar('billing_cycle', { length: 20 }).default('monthly'), // 'monthly', 'yearly'
-  monthlyPrice: decimal('monthly_price', { precision: 10, scale: 2 }).default('0'),
   yearlyPrice: decimal('yearly_price', { precision: 10, scale: 2 }).default('0'),
-  
+
   // Current period information
   currentPeriodStart: timestamp('current_period_start'),
   currentPeriodEnd: timestamp('current_period_end'),
-  
+
   // Cancellation information
   cancelAt: timestamp('cancel_at'),
   canceledAt: timestamp('canceled_at'),
   suspendedAt: timestamp('suspended_at'),
   suspendedReason: text('suspended_reason'),
-  
-  // Add-ons and customizations
-  addOns: jsonb('add_ons').default([]),
-  
+
   // Timestamps
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-// Payment history - CLEANED UP (no more trial tracking here)
+// Payment history - STREAMLINED
 export const payments = pgTable('payments', {
   paymentId: uuid('payment_id').primaryKey().defaultRandom(),
   tenantId: uuid('tenant_id').references(() => tenants.tenantId).notNull(),
   subscriptionId: uuid('subscription_id').references(() => subscriptions.subscriptionId),
-  
+
   // Stripe Payment Details
   stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }),
   stripeInvoiceId: varchar('stripe_invoice_id', { length: 255 }),
   stripeChargeId: varchar('stripe_charge_id', { length: 255 }),
-  stripeRefundId: varchar('stripe_refund_id', { length: 255 }),
-  stripeDisputeId: varchar('stripe_dispute_id', { length: 255 }),
-  
+
   // Payment Info
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
-  amountRefunded: decimal('amount_refunded', { precision: 10, scale: 2 }).default('0'),
-  amountDisputed: decimal('amount_disputed', { precision: 10, scale: 2 }).default('0'),
   currency: varchar('currency', { length: 3 }).default('USD'),
-  status: varchar('status', { length: 20 }).notNull(), // 'succeeded', 'failed', 'pending', 'refunded', 'partially_refunded', 'disputed', 'canceled'
+  status: varchar('status', { length: 20 }).notNull(), // 'succeeded', 'failed', 'pending', 'canceled'
   paymentMethod: varchar('payment_method', { length: 50 }), // 'card', 'bank_transfer', etc.
   paymentMethodDetails: jsonb('payment_method_details').default({}), // Card brand, last4, etc.
-  
-  // Payment Type & Context (NO MORE TRIAL TYPES)
-  paymentType: varchar('payment_type', { length: 30 }).default('subscription'), // 'subscription', 'setup', 'refund', 'proration', 'overage'
-  billingReason: varchar('billing_reason', { length: 50 }), // 'subscription_cycle', 'subscription_create', 'subscription_update', etc.
-  
+
+  // Payment Type & Context
+  paymentType: varchar('payment_type', { length: 30 }).default('subscription'), // 'subscription', 'credit_purchase'
+  billingReason: varchar('billing_reason', { length: 50 }), // 'subscription_cycle', 'credit_topup'
+
   // Invoice Details
   invoiceNumber: varchar('invoice_number', { length: 50 }),
   description: text('description'),
-  
-  // Proration & Credits
-  prorationAmount: decimal('proration_amount', { precision: 10, scale: 2 }).default('0'),
-  creditAmount: decimal('credit_amount', { precision: 10, scale: 2 }).default('0'),
-  
-  // Refund Information
-  refundReason: varchar('refund_reason', { length: 100 }),
-  refundRequestedBy: uuid('refund_requested_by').references(() => tenants.tenantId),
-  isPartialRefund: boolean('is_partial_refund').default(false),
-  
-  // Dispute Information
-  disputeReason: varchar('dispute_reason', { length: 100 }),
-  disputeStatus: varchar('dispute_status', { length: 30 }), // 'warning_needs_response', 'under_review', 'charge_refunded', 'lost', 'won'
-  disputeEvidenceSubmitted: boolean('dispute_evidence_submitted').default(false),
-  
+
   // Tax Information
   taxAmount: decimal('tax_amount', { precision: 10, scale: 2 }).default('0'),
-  taxRate: decimal('tax_rate', { precision: 5, scale: 4 }).default('0'),
-  taxRegion: varchar('tax_region', { length: 50 }),
-  
-  // Processing Information
-  processingFees: decimal('processing_fees', { precision: 10, scale: 2 }).default('0'),
-  netAmount: decimal('net_amount', { precision: 10, scale: 2 }), // Amount after fees and taxes
-  
-  // Risk & Fraud
-  riskLevel: varchar('risk_level', { length: 20 }), // 'normal', 'elevated', 'highest'
-  riskScore: integer('risk_score'),
-  fraudDetails: jsonb('fraud_details').default({}),
-  
-  // Comprehensive metadata
+
+  // Metadata
   metadata: jsonb('metadata').default({}),
   stripeRawData: jsonb('stripe_raw_data').default({}), // Full Stripe event data for debugging
-  
+
   // Dates
   paidAt: timestamp('paid_at'),
-  failedAt: timestamp('failed_at'),
-  refundedAt: timestamp('refunded_at'),
-  disputedAt: timestamp('disputed_at'),
-  settledAt: timestamp('settled_at'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });

@@ -488,110 +488,498 @@ export const BUSINESS_SUITE_MATRIX = {
     }
   },
   
-  // 🤝 **AFFILIATE APPLICATION**
-  affiliate: {
+  // 🤝 **AFFILIATE CONNECT APPLICATION**
+  affiliateConnect: {
     appInfo: {
-      appCode: 'affiliate',
-      appName: 'Affiliate Management',
-      description: 'Manage affiliate partners and commission tracking',
+      appCode: 'affiliate_connect',
+      appName: 'Affiliate Connect Platform',
+      description: 'Comprehensive multi-tenant SaaS platform for affiliate and influencer marketing management',
       icon: '🤝',
-      baseUrl: 'http://localhost:3004',
+      baseUrl: 'https://affiliate-connect.railway.app',
       version: '1.0.0',
-      isCore: false,
+      isCore: true,
       sortOrder: 3
     },
     modules: {
-      // 🤝 PARTNERS MODULE
-      partners: {
-        moduleCode: 'partners',
-        moduleName: 'Partner Management',
-        description: 'Manage affiliate partners and relationships',
+
+
+      // 📊 DASHBOARD MODULE
+      dashboard: {
+        moduleCode: 'dashboard',
+        moduleName: 'Dashboard & Analytics',
+        description: 'Main dashboard with analytics and performance metrics',
         isCore: true,
         permissions: [
-          { code: 'read', name: 'View Partners', description: 'View partner information' },
-          { code: 'create', name: 'Add Partners', description: 'Add new affiliate partners' },
-          { code: 'update', name: 'Edit Partners', description: 'Modify partner information' },
-          { code: 'delete', name: 'Remove Partners', description: 'Remove affiliate partners' },
-          { code: 'approve', name: 'Approve Partners', description: 'Approve new partner applications' },
-          { code: 'export', name: 'Export Partner Data', description: 'Export partner data' }
+          { code: 'view_dashboard', name: 'View Dashboard', description: 'Access main dashboard interface' },
+          { code: 'view_analytics', name: 'View Analytics', description: 'View performance analytics and metrics' },
+          { code: 'view_reports', name: 'View Reports', description: 'Access reporting and insights' },
+          { code: 'export_data', name: 'Export Data', description: 'Export dashboard data to various formats' },
+          { code: 'view_all_tenants', name: 'View All Tenants', description: 'View analytics across all tenants (Super Admin)' },
+          { code: 'view_tenant_analytics', name: 'View Tenant Analytics', description: 'View analytics for specific tenant' },
+          { code: 'view_affiliate_analytics', name: 'View Affiliate Analytics', description: 'View affiliate-specific analytics' },
+          { code: 'view_influencer_analytics', name: 'View Influencer Analytics', description: 'View influencer-specific analytics' }
+        ]
+      },
+
+      // 🛍️ PRODUCTS MODULE
+      products: {
+        moduleCode: 'products',
+        moduleName: 'Product Management',
+        description: 'Product catalog management with commission settings',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Products', description: 'View and browse product information' },
+          { code: 'read_all', name: 'View All Products', description: 'View all products in organization' },
+          { code: 'create', name: 'Create Products', description: 'Add new products to the catalog' },
+          { code: 'update', name: 'Edit Products', description: 'Modify existing product information' },
+          { code: 'delete', name: 'Delete Products', description: 'Remove products from the catalog' },
+          { code: 'update_commission', name: 'Update Commission', description: 'Update product commission rates' },
+          { code: 'upload_images', name: 'Upload Images', description: 'Upload product images' },
+          { code: 'export', name: 'Export Products', description: 'Export product data' },
+          { code: 'import', name: 'Import Products', description: 'Import products from external files' },
+          { code: 'manage_categories', name: 'Manage Categories', description: 'Manage product categories' }
+        ]
+      },
+
+      // 👥 AFFILIATES MODULE
+      affiliates: {
+        moduleCode: 'affiliates',
+        moduleName: 'Affiliate Management',
+        description: 'Affiliate onboarding, management, and tier assignment',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Affiliates', description: 'View and browse affiliate information' },
+          { code: 'read_all', name: 'View All Affiliates', description: 'View all affiliates in organization' },
+          { code: 'create', name: 'Create Affiliates', description: 'Add new affiliates to the system' },
+          { code: 'update', name: 'Edit Affiliates', description: 'Modify existing affiliate information' },
+          { code: 'delete', name: 'Delete Affiliates', description: 'Remove affiliates from the system' },
+          { code: 'invite', name: 'Invite Affiliates', description: 'Send affiliate invitations via email' },
+          { code: 'approve', name: 'Approve Affiliates', description: 'Approve affiliate applications' },
+          { code: 'reject', name: 'Reject Affiliates', description: 'Reject affiliate applications' },
+          { code: 'assign_tier', name: 'Assign Tier', description: 'Assign commission tiers to affiliates' },
+          { code: 'view_pending', name: 'View Pending', description: 'View pending affiliate applications' },
+          { code: 'view_details', name: 'View Details', description: 'View detailed affiliate information' },
+          { code: 'update_details', name: 'Update Details', description: 'Update affiliate profile details' },
+          { code: 'view_commissions', name: 'View Commissions', description: 'View affiliate commission data' },
+          { code: 'update_commissions', name: 'Update Commissions', description: 'Update affiliate commission settings' }
+        ]
+      },
+
+      // 🔗 TRACKING MODULE
+      tracking: {
+        moduleCode: 'tracking',
+        moduleName: 'Link Tracking & Analytics',
+        description: 'Affiliate link generation, tracking, and conversion analytics',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Tracking Links', description: 'View and browse tracking links' },
+          { code: 'read_all', name: 'View All Tracking Links', description: 'View all tracking links in organization' },
+          { code: 'create', name: 'Create Tracking Links', description: 'Generate new tracking links' },
+          { code: 'update', name: 'Edit Tracking Links', description: 'Modify existing tracking links' },
+          { code: 'delete', name: 'Delete Tracking Links', description: 'Remove tracking links' },
+          { code: 'track_clicks', name: 'Track Clicks', description: 'Track link click events' },
+          { code: 'track_conversions', name: 'Track Conversions', description: 'Track conversion events' },
+          { code: 'view_analytics', name: 'View Analytics', description: 'View tracking analytics and reports' },
+          { code: 'export_analytics', name: 'Export Analytics', description: 'Export tracking analytics data' },
+          { code: 'manage_utm', name: 'Manage UTM', description: 'Manage UTM parameters for links' }
         ]
       },
       
       // 💰 COMMISSIONS MODULE
       commissions: {
         moduleCode: 'commissions',
-        moduleName: 'Commission Tracking',
-        description: 'Track and manage affiliate commissions',
+        moduleName: 'Commission Management',
+        description: 'Commission structure, tiers, and rule management',
         isCore: true,
         permissions: [
-          { code: 'read', name: 'View Commissions', description: 'View commission information' },
-          { code: 'calculate', name: 'Calculate Commissions', description: 'Calculate commission amounts' },
-          { code: 'approve', name: 'Approve Commissions', description: 'Approve commission payments' },
-          { code: 'pay', name: 'Process Payments', description: 'Process commission payments' },
-          { code: 'dispute', name: 'Handle Disputes', description: 'Manage commission disputes' },
-          { code: 'export', name: 'Export Commission Data', description: 'Export commission reports' }
+          { code: 'read_tiers', name: 'View Commission Tiers', description: 'View commission tier information' },
+          { code: 'create_tiers', name: 'Create Commission Tiers', description: 'Create new commission tiers' },
+          { code: 'update_tiers', name: 'Edit Commission Tiers', description: 'Modify commission tier settings' },
+          { code: 'delete_tiers', name: 'Delete Commission Tiers', description: 'Remove commission tiers' },
+          { code: 'read_rules', name: 'View Commission Rules', description: 'View commission rule configurations' },
+          { code: 'create_rules', name: 'Create Commission Rules', description: 'Create new commission rules' },
+          { code: 'update_rules', name: 'Edit Commission Rules', description: 'Modify commission rules' },
+          { code: 'delete_rules', name: 'Delete Commission Rules', description: 'Remove commission rules' },
+          { code: 'view_products', name: 'View Product Commissions', description: 'View product-specific commission rates' },
+          { code: 'update_products', name: 'Update Product Commissions', description: 'Update product commission rates' },
+          { code: 'calculate_commissions', name: 'Calculate Commissions', description: 'Calculate commission amounts' },
+          { code: 'view_affiliate_commissions', name: 'View Affiliate Commissions', description: 'View affiliate commission data' }
         ]
-      }
+      },
+
+      // 🎯 CAMPAIGNS MODULE
+      campaigns: {
+        moduleCode: 'campaigns',
+        moduleName: 'Campaign Management',
+        description: 'Marketing campaign creation, management, and influencer participation',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Campaigns', description: 'View and browse campaign information' },
+          { code: 'read_all', name: 'View All Campaigns', description: 'View all campaigns in organization' },
+          { code: 'create', name: 'Create Campaigns', description: 'Create new marketing campaigns' },
+          { code: 'update', name: 'Edit Campaigns', description: 'Modify existing campaign information' },
+          { code: 'delete', name: 'Delete Campaigns', description: 'Remove campaigns from the system' },
+          { code: 'join_campaign', name: 'Join Campaign', description: 'Join campaigns as influencer' },
+          { code: 'view_participants', name: 'View Participants', description: 'View campaign participants' },
+          { code: 'manage_participants', name: 'Manage Participants', description: 'Manage campaign participants' },
+          { code: 'view_progress', name: 'View Progress', description: 'View campaign progress and metrics' },
+          { code: 'submit_content', name: 'Submit Content', description: 'Submit campaign content' },
+          { code: 'approve_content', name: 'Approve Content', description: 'Approve submitted content' },
+          { code: 'view_contract', name: 'View Contract', description: 'View campaign contracts' },
+          { code: 'accept_contract', name: 'Accept Contract', description: 'Accept campaign contracts' },
+          { code: 'manage_versions', name: 'Manage Versions', description: 'Manage campaign versions' },
+          { code: 'view_analytics', name: 'View Campaign Analytics', description: 'View campaign performance analytics' }
+        ]
+      },
+
+      // 🌟 INFLUENCERS MODULE
+      influencers: {
+        moduleCode: 'influencers',
+        moduleName: 'Influencer Management',
+        description: 'Influencer profiles, social media integration, and analytics',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Influencers', description: 'View and browse influencer information' },
+          { code: 'read_all', name: 'View All Influencers', description: 'View all influencers in organization' },
+          { code: 'create', name: 'Create Influencers', description: 'Add new influencers to the system' },
+          { code: 'update', name: 'Edit Influencers', description: 'Modify existing influencer information' },
+          { code: 'delete', name: 'Delete Influencers', description: 'Remove influencers from the system' },
+          { code: 'connect_instagram', name: 'Connect Instagram', description: 'Connect Instagram accounts for analytics' },
+          { code: 'connect_youtube', name: 'Connect YouTube', description: 'Connect YouTube accounts for analytics' },
+          { code: 'connect_twitter', name: 'Connect Twitter', description: 'Connect Twitter accounts for analytics' },
+          { code: 'view_analytics', name: 'View Analytics', description: 'View social media analytics' },
+          { code: 'view_media_kit', name: 'View Media Kit', description: 'View influencer media kits' },
+          { code: 'update_media_kit', name: 'Update Media Kit', description: 'Update media kit information' },
+          { code: 'view_ratings', name: 'View Ratings', description: 'View influencer ratings and reviews' },
+          { code: 'manage_ratings', name: 'Manage Ratings', description: 'Manage rating and review system' }
+        ]
+      },
+
+      // 💳 PAYMENTS MODULE
+      payments: {
+        moduleCode: 'payments',
+        moduleName: 'Payment Processing',
+        description: 'Payment processing, payouts, and transaction management',
+        isCore: true,
+        permissions: [
+          { code: 'read_payouts', name: 'View Payouts', description: 'View payout information and history' },
+          { code: 'create_payouts', name: 'Create Payouts', description: 'Create new payout transactions' },
+          { code: 'update_payouts', name: 'Update Payouts', description: 'Update payout status and information' },
+          { code: 'view_methods', name: 'View Payment Methods', description: 'View payment method information' },
+          { code: 'add_methods', name: 'Add Payment Methods', description: 'Add new payment methods' },
+          { code: 'update_methods', name: 'Update Payment Methods', description: 'Update payment method details' },
+          { code: 'delete_methods', name: 'Delete Payment Methods', description: 'Remove payment methods' },
+          { code: 'view_history', name: 'View Payment History', description: 'View payment transaction history' },
+          { code: 'process_payments', name: 'Process Payments', description: 'Process payment transactions' },
+          { code: 'view_affiliate_payments', name: 'View Affiliate Payments', description: 'View affiliate payment information' }
+        ]
+      },
+
+      // 📈 ANALYTICS MODULE
+      analytics: {
+        moduleCode: 'analytics',
+        moduleName: 'Analytics & Reporting',
+        description: 'Performance analytics, custom reports, and data visualization',
+        isCore: true,
+        permissions: [
+          { code: 'view_dashboard', name: 'View Dashboard Analytics', description: 'View dashboard analytics and metrics' },
+          { code: 'view_campaign_analytics', name: 'View Campaign Analytics', description: 'View campaign performance analytics' },
+          { code: 'view_affiliate_analytics', name: 'View Affiliate Analytics', description: 'View affiliate performance analytics' },
+          { code: 'view_revenue_analytics', name: 'View Revenue Analytics', description: 'View revenue and financial analytics' },
+          { code: 'create_reports', name: 'Create Custom Reports', description: 'Create custom analytics reports' },
+          { code: 'view_reports', name: 'View Reports', description: 'View existing analytics reports' },
+          { code: 'export_analytics', name: 'Export Analytics', description: 'Export analytics data' },
+          { code: 'view_all_tenants', name: 'View All Tenants Analytics', description: 'View analytics across all tenants' },
+          { code: 'view_tenant_analytics', name: 'View Tenant Analytics', description: 'View tenant-specific analytics' }
+        ]
+      },
+
+      // 🛡️ FRAUD PREVENTION MODULE
+      fraud: {
+        moduleCode: 'fraud',
+        moduleName: 'Fraud Prevention',
+        description: 'Fraud detection, monitoring, and prevention systems',
+        isCore: false,
+        permissions: [
+          { code: 'read_rules', name: 'View Fraud Rules', description: 'View fraud detection rules' },
+          { code: 'create_rules', name: 'Create Fraud Rules', description: 'Create new fraud detection rules' },
+          { code: 'update_rules', name: 'Edit Fraud Rules', description: 'Modify fraud detection rules' },
+          { code: 'delete_rules', name: 'Delete Fraud Rules', description: 'Remove fraud detection rules' },
+          { code: 'view_alerts', name: 'View Fraud Alerts', description: 'View fraud detection alerts' },
+          { code: 'update_alerts', name: 'Update Alert Status', description: 'Update fraud alert status' },
+          { code: 'view_monitoring', name: 'View Fraud Monitoring', description: 'View fraud monitoring dashboard' },
+          { code: 'manage_detection', name: 'Manage Detection', description: 'Manage fraud detection settings' }
+        ]
+      },
+
+      // 📧 COMMUNICATIONS MODULE
+      communications: {
+        moduleCode: 'communications',
+        moduleName: 'Communications & Notifications',
+        description: 'Email templates, notifications, and messaging system',
+        isCore: false,
+        permissions: [
+          { code: 'read_templates', name: 'View Templates', description: 'View notification templates' },
+          { code: 'create_templates', name: 'Create Templates', description: 'Create new notification templates' },
+          { code: 'update_templates', name: 'Edit Templates', description: 'Modify notification templates' },
+          { code: 'delete_templates', name: 'Delete Templates', description: 'Remove notification templates' },
+          { code: 'send_notifications', name: 'Send Notifications', description: 'Send notifications to users' },
+          { code: 'view_notifications', name: 'View Notifications', description: 'View notification history' },
+          { code: 'update_notification_status', name: 'Update Notification Status', description: 'Update notification status' },
+          { code: 'manage_messaging', name: 'Manage Messaging', description: 'Manage messaging system settings' }
+        ]
+      },
+
+      // 🔌 INTEGRATIONS MODULE
+      integrations: {
+        moduleCode: 'integrations',
+        moduleName: 'Third-party Integrations',
+        description: 'API keys, webhooks, and external service integrations',
+        isCore: false,
+        permissions: [
+          { code: 'read_api_keys', name: 'View API Keys', description: 'View API key information' },
+          { code: 'create_api_keys', name: 'Create API Keys', description: 'Create new API keys' },
+          { code: 'update_api_keys', name: 'Update API Keys', description: 'Update API key settings' },
+          { code: 'delete_api_keys', name: 'Delete API Keys', description: 'Remove API keys' },
+          { code: 'read_webhooks', name: 'View Webhooks', description: 'View webhook configurations' },
+          { code: 'create_webhooks', name: 'Create Webhooks', description: 'Create new webhook endpoints' },
+          { code: 'update_webhooks', name: 'Update Webhooks', description: 'Update webhook settings' },
+          { code: 'delete_webhooks', name: 'Delete Webhooks', description: 'Remove webhook endpoints' },
+          { code: 'manage_integrations', name: 'Manage Integrations', description: 'Manage third-party integrations' }
+        ]
+      },
+
+      // ⚙️ SETTINGS MODULE
+      settings: {
+        moduleCode: 'settings',
+        moduleName: 'System Settings',
+        description: 'Tenant settings, user management, and system configuration',
+        isCore: true,
+        permissions: [
+          { code: 'read_tenant_settings', name: 'View Tenant Settings', description: 'View tenant configuration settings' },
+          { code: 'update_tenant_settings', name: 'Update Tenant Settings', description: 'Update tenant configuration' },
+          { code: 'read_users', name: 'View Users', description: 'View user information' },
+          { code: 'create_users', name: 'Create Users', description: 'Create new user accounts' },
+          { code: 'update_users', name: 'Update Users', description: 'Update user information' },
+          { code: 'delete_users', name: 'Delete Users', description: 'Remove user accounts' },
+          { code: 'read_roles', name: 'View Roles', description: 'View role information' },
+          { code: 'create_roles', name: 'Create Roles', description: 'Create new user roles' },
+          { code: 'update_roles', name: 'Update Roles', description: 'Update role permissions' },
+          { code: 'delete_roles', name: 'Delete Roles', description: 'Remove user roles' },
+          { code: 'manage_permissions', name: 'Manage Permissions', description: 'Manage role-based permissions' }
+        ]
+      },
+
+      // 🎫 SUPPORT MODULE
+      support: {
+        moduleCode: 'support',
+        moduleName: 'Customer Support',
+        description: 'Support ticket management and knowledge base',
+        isCore: false,
+        permissions: [
+          { code: 'read_tickets', name: 'View Support Tickets', description: 'View support ticket information' },
+          { code: 'create_tickets', name: 'Create Support Tickets', description: 'Create new support tickets' },
+          { code: 'update_tickets', name: 'Update Support Tickets', description: 'Update support ticket status' },
+          { code: 'view_knowledge_base', name: 'View Knowledge Base', description: 'Access knowledge base articles' },
+          { code: 'search_knowledge_base', name: 'Search Knowledge Base', description: 'Search knowledge base content' },
+          { code: 'manage_tickets', name: 'Manage Tickets', description: 'Manage support ticket workflow' },
+          { code: 'view_all_tickets', name: 'View All Tickets', description: 'View all support tickets (Admin)' }
+        ]
+      },
+
     }
   }
 };
 
 // 🎯 **PLAN-BASED ACCESS CONTROL**
 export const PLAN_ACCESS_MATRIX = {
+  free: {
+    applications: ['crm'],
+    modules: {
+      crm: ['leads', 'contacts', 'dashboard']
+    },
+    permissions: {
+      crm: {
+        leads: ['read', 'create', 'update', 'delete'],
+        contacts: ['read', 'create', 'update', 'delete'],
+        dashboard: ['read']
+      }
+    },
+    credits: {
+      free: 500,         // Free tier gets recurring credits (monthly)
+      paid: 0,           // Can purchase additional credits
+      expiryDays: 30     // Monthly renewal cycle
+    }
+  },
+
   trial: {
     applications: ['crm'],
     modules: {
       crm: ['leads', 'contacts', 'dashboard']
     },
-    limitations: {
-      users: 2,
-      roles: 2,
-      storage: '1GB',
-      apiCalls: 1000
+    permissions: {
+      crm: {
+        leads: ['read', 'create', 'update', 'delete', 'export', 'import'],
+        contacts: ['read', 'create', 'update', 'delete', 'export', 'import'],
+        dashboard: ['read']
+      }
+    },
+    credits: {
+      free: 1000,        // Trial credits (expire with trial)
+      paid: 0,           // No paid credits for trial
+      expiryDays: 30     // Trial credits expire in 30 days
     }
   },
-  
+
   starter: {
     applications: ['crm', 'hr'],
     modules: {
       crm: ['leads', 'contacts', 'accounts', 'opportunities', 'dashboard'],
       hr: ['employees', 'leave', 'dashboard']
     },
-    limitations: {
-      users: 10,
-      roles: 10,
-      storage: '10GB',
-      apiCalls: 10000
+    permissions: {
+      crm: {
+        leads: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import', 'assign', 'convert'],
+        contacts: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
+        accounts: ['read', 'read_all', 'create', 'update', 'delete', 'view_contacts', 'export', 'import', 'assign'],
+        opportunities: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import', 'close', 'assign'],
+        dashboard: ['read']
+      },
+      hr: {
+        employees: ['read', 'create', 'update', 'delete'],
+        leave: ['read', 'create', 'update', 'approve'],
+        dashboard: ['read']
+      }
+    },
+    credits: {
+      free: 60000,       // Annual free credits (matches Stripe config)
+      paid: 0,           // Additional paid credits can be purchased
+      expiryDays: 365    // Annual renewal cycle
     }
   },
-  
+
   professional: {
-    applications: ['crm', 'hr', 'affiliate'],
+    applications: ['crm', 'hr'],
     modules: {
-      crm: ['leads', 'contacts', 'accounts', 'opportunities', 'quotations', 'invoices', 'inventory', 'product_orders', 'tickets', 'communications', 'calendar', 'dashboard', 'system'],
-      hr: ['employees', 'payroll', 'leave', 'dashboard'],
-      affiliate: ['partners', 'commissions']
+      crm: ['leads', 'contacts', 'accounts', 'opportunities', 'quotations', 'invoices', 'inventory', 'product_orders', 'tickets', 'communications', 'calendar', 'dashboard'],
+      hr: ['employees', 'payroll', 'leave', 'dashboard']
     },
-    limitations: {
-      users: 50,
-      roles: 25,
-      storage: '100GB',
-      apiCalls: 50000
+    permissions: {
+      crm: {
+        leads: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import', 'assign', 'convert'],
+        contacts: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
+        accounts: ['read', 'read_all', 'create', 'update', 'delete', 'view_contacts', 'export', 'import', 'assign'],
+        opportunities: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import', 'close', 'assign'],
+        quotations: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'approve'],
+        invoices: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'send'],
+        inventory: ['read', 'create', 'update', 'delete', 'adjust'],
+        product_orders: ['read', 'create', 'update', 'delete', 'fulfill'],
+        tickets: ['read', 'read_all', 'create', 'update', 'delete', 'assign', 'close'],
+        communications: ['read', 'create', 'update', 'delete', 'send'],
+        calendar: ['read', 'create', 'update', 'delete'],
+        dashboard: ['read']
+      },
+      hr: {
+        employees: ['read', 'read_all', 'create', 'update', 'delete', 'manage_roles'],
+        payroll: ['read', 'create', 'update', 'process'],
+        leave: ['read', 'read_all', 'create', 'update', 'approve', 'reject'],
+        dashboard: ['read']
+      }
+    },
+    credits: {
+      free: 300000,      // Annual free credits (matches Stripe config)
+      paid: 0,           // Additional paid credits can be purchased
+      expiryDays: 365    // Annual renewal cycle
     }
   },
-  
-  enterprise: {
-    applications: ['crm', 'hr', 'affiliate'],
+
+  basic: {
+    applications: ['crm', 'hr'],
     modules: {
-      crm: '*', // All modules
-      hr: '*',
-      affiliate: '*'
+      crm: ['leads', 'contacts', 'accounts', 'opportunities', 'quotations', 'invoices', 'inventory', 'product_orders', 'tickets', 'communications', 'calendar', 'dashboard'],
+      hr: ['employees', 'payroll', 'leave', 'documents', 'dashboard']
     },
-    limitations: {
-      users: -1, // Unlimited
-      roles: -1,
-      storage: 'unlimited',
-      apiCalls: -1
+    permissions: {
+      crm: {
+        leads: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import', 'assign', 'convert'],
+        contacts: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
+        accounts: ['read', 'read_all', 'create', 'update', 'delete', 'view_contacts', 'export', 'import', 'assign'],
+        opportunities: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import', 'close', 'assign'],
+        quotations: ['read', 'read_all', 'create', 'update', 'delete', 'generate_pdf', 'send', 'approve', 'assign'],
+        invoices: ['read', 'read_all', 'create', 'update', 'delete', 'send', 'mark_paid', 'generate_pdf', 'export', 'import'],
+        inventory: ['read', 'read_all', 'create', 'update', 'delete', 'adjust', 'movement', 'export', 'import', 'low_stock_alerts'],
+        product_orders: ['read', 'read_all', 'create', 'update', 'delete', 'process', 'export', 'import'],
+        tickets: ['read', 'read_all', 'create', 'update', 'delete', 'assign', 'resolve', 'escalate', 'export', 'import'],
+        communications: ['read', 'read_all', 'create', 'update', 'delete', 'send', 'schedule', 'export', 'import'],
+        calendar: ['read', 'read_all', 'create', 'update', 'delete', 'share', 'export', 'import'],
+        dashboard: ['view', 'customize', 'export']
+      },
+      hr: {
+        employees: ['read', 'read_all', 'create', 'update', 'delete', 'view_salary', 'export'],
+        payroll: ['read', 'process', 'approve', 'export', 'generate_reports'],
+        leave: ['read', 'create', 'approve', 'reject', 'cancel', 'export'],
+        documents: ['read', 'create', 'update', 'delete', 'export'],
+        dashboard: ['view', 'customize', 'export']
+      }
+    },
+    credits: {
+      free: 250000,      // Basic plan free credits
+      paid: 0,           // Additional paid credits can be purchased
+      expiryDays: 365    // Annual renewal cycle
+    }
+  },
+
+  enterprise: {
+    applications: ['crm', 'hr', 'affiliateConnect'],
+    modules: {
+      crm: ['leads', 'accounts', 'contacts', 'opportunities', 'quotations', 'invoices', 'inventory', 'product_orders', 'tickets', 'communications', 'calendar', 'ai_insights', 'dashboard', 'system'],
+      hr: ['employees', 'payroll', 'leave', 'dashboard'],
+      affiliateConnect: ['dashboard', 'products', 'affiliates', 'tracking', 'commissions', 'campaigns', 'influencers', 'payments', 'analytics', 'fraud', 'communications', 'integrations', 'settings', 'support']
+    },
+    permissions: {
+      crm: {
+        leads: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import', 'assign', 'convert'],
+        accounts: ['read', 'read_all', 'create', 'update', 'delete', 'view_contacts', 'export', 'import', 'assign'],
+        contacts: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
+        opportunities: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import', 'close', 'assign'],
+        quotations: ['read', 'read_all', 'create', 'update', 'delete', 'generate_pdf', 'send', 'approve', 'assign'],
+        invoices: ['read', 'read_all', 'create', 'update', 'delete', 'send', 'mark_paid', 'generate_pdf', 'export', 'import'],
+        inventory: ['read', 'read_all', 'create', 'update', 'delete', 'adjust', 'movement', 'export', 'import', 'low_stock_alerts'],
+        product_orders: ['read', 'read_all', 'create', 'update', 'delete', 'process', 'export', 'import'],
+        tickets: ['read', 'read_all', 'create', 'update', 'delete', 'assign', 'resolve', 'escalate', 'export', 'import'],
+        communications: ['read', 'read_all', 'create', 'update', 'delete', 'send', 'schedule', 'export', 'import'],
+        calendar: ['read', 'read_all', 'create', 'update', 'delete', 'share', 'export', 'import'],
+        ai_insights: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'schedule'],
+        dashboard: ['view', 'customize', 'export'],
+        system: ['settings_read', 'settings_update', 'settings_manage', 'configurations_read', 'configurations_create', 'configurations_update', 'configurations_delete', 'configurations_manage', 'tenant_config_read', 'tenant_config_update', 'admin.tenants.read', 'tenant_config_manage', 'credit_config.view', 'credit_config.edit', 'credit_config.reset', 'credit_config.bulk_update', 'credit_config.apply_templates', 'system_config_read', 'system_config_update', 'system_config_manage', 'dropdowns_read', 'dropdowns_create', 'dropdowns_update', 'dropdowns_delete', 'dropdowns_manage', 'integrations_read', 'integrations_create', 'integrations_update', 'integrations_delete', 'integrations_manage', 'backup_read', 'backup_create', 'backup_restore', 'backup_manage', 'maintenance_read', 'maintenance_perform', 'maintenance_schedule', 'users_read', 'users_read_all', 'users_create', 'users_update', 'users_delete', 'users_activate', 'users_reset_password', 'users_export', 'users_import', 'roles_read', 'roles_read_all', 'roles_create', 'roles_update', 'roles_delete', 'roles_assign', 'roles_export', 'reports_read', 'reports_read_all', 'reports_create', 'reports_update', 'reports_delete', 'reports_export', 'reports_schedule', 'audit_read', 'audit_read_all', 'audit_export', 'audit_view_details', 'audit_filter_by_user', 'audit_filter_by_action', 'audit_filter_by_date_range', 'audit_filter_by_module', 'audit_filter_by_status', 'audit_generate_reports', 'audit_archive_logs', 'audit_purge_old_logs', 'audit_trail_export', 'activity_logs_read', 'activity_logs_read_all', 'activity_logs_export', 'activity_logs_view_details', 'activity_logs_filter_by_user', 'activity_logs_filter_by_action', 'activity_logs_filter_by_date_range', 'activity_logs_filter_by_module', 'activity_logs_filter_by_status', 'activity_logs_generate_reports', 'activity_logs_archive_logs', 'activity_logs_purge_old_logs', 'activity_logs_audit_trail_export', 'user_activity_read', 'user_activity_read_all', 'user_activity_export', 'user_activity_view_details', 'user_activity_track_login_logout', 'user_activity_track_page_views', 'user_activity_track_actions', 'user_activity_track_data_changes', 'user_activity_generate_user_reports', 'user_activity_filter_by_user', 'user_activity_filter_by_date_range', 'data_changes_read', 'data_changes_read_all', 'data_changes_export', 'data_changes_view_details', 'data_changes_track_creates', 'data_changes_track_updates', 'data_changes_track_deletes', 'data_changes_track_field_changes', 'data_changes_track_relationship_changes', 'data_changes_generate_change_reports', 'data_changes_filter_by_table', 'data_changes_filter_by_user', 'data_changes_filter_by_date_range']
+      },
+      hr: {
+        employees: ['read', 'read_all', 'create', 'update', 'delete', 'view_salary', 'export'],
+        payroll: ['read', 'process', 'approve', 'export', 'generate_reports'],
+        leave: ['read', 'create', 'approve', 'reject', 'cancel', 'export'],
+        dashboard: ['view', 'customize', 'export']
+      },
+      affiliateConnect: {
+        dashboard: ['view_dashboard', 'view_analytics', 'view_reports', 'export_data', 'view_all_tenants', 'view_tenant_analytics', 'view_affiliate_analytics', 'view_influencer_analytics'],
+        products: ['read', 'read_all', 'create', 'update', 'delete', 'update_commission', 'upload_images', 'export', 'import', 'manage_categories'],
+        affiliates: ['read', 'read_all', 'create', 'update', 'delete', 'invite', 'approve', 'reject', 'assign_tier', 'view_pending', 'view_details', 'update_details', 'view_commissions', 'update_commissions'],
+        tracking: ['read', 'read_all', 'create', 'update', 'delete', 'track_clicks', 'track_conversions', 'view_analytics', 'export_analytics', 'manage_utm'],
+        commissions: ['read_tiers', 'create_tiers', 'update_tiers', 'delete_tiers', 'read_rules', 'create_rules', 'update_rules', 'delete_rules', 'view_products', 'update_products', 'calculate_commissions', 'view_affiliate_commissions'],
+        campaigns: ['read', 'read_all', 'create', 'update', 'delete', 'join_campaign', 'view_participants', 'manage_participants', 'view_progress', 'submit_content', 'approve_content', 'view_contract', 'accept_contract', 'manage_versions', 'view_analytics'],
+        influencers: ['read', 'read_all', 'create', 'update', 'delete', 'connect_instagram', 'connect_youtube', 'connect_twitter', 'view_analytics', 'view_media_kit', 'update_media_kit', 'view_ratings', 'manage_ratings'],
+        payments: ['read_payouts', 'create_payouts', 'update_payouts', 'view_methods', 'add_methods', 'update_methods', 'delete_methods', 'view_history', 'process_payments', 'view_affiliate_payments'],
+        analytics: ['view_dashboard', 'view_campaign_analytics', 'view_affiliate_analytics', 'view_revenue_analytics', 'create_reports', 'view_reports', 'export_analytics', 'view_all_tenants', 'view_tenant_analytics'],
+        fraud: ['read_rules', 'create_rules', 'update_rules', 'delete_rules', 'view_alerts', 'update_alerts', 'view_monitoring', 'manage_detection'],
+        communications: ['read_templates', 'create_templates', 'update_templates', 'delete_templates', 'send_notifications', 'view_notifications', 'update_notification_status', 'manage_messaging'],
+        integrations: ['read_api_keys', 'create_api_keys', 'update_api_keys', 'delete_api_keys', 'read_webhooks', 'create_webhooks', 'update_webhooks', 'delete_webhooks', 'manage_integrations'],
+        settings: ['read_tenant_settings', 'update_tenant_settings', 'read_users', 'create_users', 'update_users', 'delete_users', 'read_roles', 'create_roles', 'update_roles', 'delete_roles', 'manage_permissions'],
+        support: ['read_tickets', 'create_tickets', 'update_tickets', 'view_knowledge_base', 'search_knowledge_base', 'manage_tickets', 'view_all_tickets']
+      }
+    },
+    credits: {
+      free: 1200000,     // Annual free credits (100000/month × 12)
+      paid: 0,           // Additional paid credits can be purchased
+      expiryDays: 365    // Annual renewal cycle
     }
   }
 };
@@ -639,29 +1027,70 @@ export class PermissionMatrixUtils {
   static getPlanPermissions(planId) {
     const planAccess = PLAN_ACCESS_MATRIX[planId];
     if (!planAccess) return [];
-    
+
     const permissions = [];
-    
+
     planAccess.applications.forEach(appCode => {
-      const appModules = planAccess.modules[appCode];
-      
-      if (appModules === '*') {
-        // All modules for this app
+      const appPermissions = planAccess.permissions[appCode];
+
+      if (appPermissions === '*') {
+        // All permissions for all modules in this app
         const allModules = this.getApplicationModules(appCode);
         allModules.forEach(module => {
           const modulePermissions = this.getModulePermissions(appCode, module.moduleCode);
           permissions.push(...modulePermissions);
         });
-      } else if (Array.isArray(appModules)) {
-        // Specific modules
-        appModules.forEach(moduleCode => {
-          const modulePermissions = this.getModulePermissions(appCode, moduleCode);
-          permissions.push(...modulePermissions);
+      } else if (typeof appPermissions === 'object') {
+        // Specific permissions per module
+        Object.keys(appPermissions).forEach(moduleCode => {
+          const modulePermCodes = appPermissions[moduleCode];
+
+          if (modulePermCodes === '*') {
+            // All permissions for this module
+            const modulePermissions = this.getModulePermissions(appCode, moduleCode);
+            permissions.push(...modulePermissions);
+          } else if (Array.isArray(modulePermCodes)) {
+            // Specific permissions for this module
+            modulePermCodes.forEach(permCode => {
+              permissions.push({
+                code: permCode,
+                name: this.getPermissionName(appCode, moduleCode, permCode),
+                description: this.getPermissionDescription(appCode, moduleCode, permCode),
+                fullCode: `${appCode}.${moduleCode}.${permCode}`,
+                appCode,
+                moduleCode
+              });
+            });
+          }
         });
       }
     });
-    
+
     return permissions;
+  }
+
+  // Helper method to get permission name from BUSINESS_SUITE_MATRIX
+  static getPermissionName(appCode, moduleCode, permCode) {
+    const module = BUSINESS_SUITE_MATRIX[appCode]?.modules[moduleCode];
+    if (!module) return permCode;
+
+    const permission = module.permissions?.find(p => p.code === permCode);
+    return permission?.name || permCode;
+  }
+
+  // Helper method to get permission description from BUSINESS_SUITE_MATRIX
+  static getPermissionDescription(appCode, moduleCode, permCode) {
+    const module = BUSINESS_SUITE_MATRIX[appCode]?.modules[moduleCode];
+    if (!module) return '';
+
+    const permission = module.permissions?.find(p => p.code === permCode);
+    return permission?.description || '';
+  }
+
+  // Get credits configuration for a plan
+  static getPlanCredits(planId) {
+    const planAccess = PLAN_ACCESS_MATRIX[planId];
+    return planAccess?.credits || { free: 0, paid: 0, expiryDays: 30 };
   }
   
   // Validate permission matrix

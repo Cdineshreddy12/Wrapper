@@ -34,8 +34,7 @@ class SubscriptionConsistencyManager {
       // 2. Create new subscription record
       const subscriptionId = await this.createNewSubscription(tenantId, newPlan, subscriptionData);
       
-      // 3. Update organization applications to match new plan
-      await this.updateOrganizationApplicationsForPlan(tenantId, newPlan);
+      // 3. Organization applications are handled by subscription service
       
       // 4. Commit transaction
       await db.execute('COMMIT');
@@ -67,112 +66,6 @@ class SubscriptionConsistencyManager {
     return subscriptionId;
   }
   
-  /**
-   * 🏢 **UPDATE ORGANIZATION APPLICATIONS**
-   * Enhanced version that prevents duplicates and handles race conditions
-   */
-  static async updateOrganizationApplicationsForPlan(tenantId, plan) {
-    try {
-      console.log(`🔒 Updating organization applications for tenant ${tenantId} to ${plan} plan...`);
-      
-      // Import plan matrix
-      const { PLAN_ACCESS_MATRIX } = await import('../data/permission-matrix.js');
-      const planAccess = PLAN_ACCESS_MATRIX[plan];
-      
-      if (!planAccess) {
-        throw new Error(`Plan ${plan} not found in access matrix`);
-      }
-      
-      // 🔍 **CHECK FOR EXISTING UPDATES** - Prevent duplicate processing
-      const existingUpdate = await db
-        .select({ count: count() })
-        .from(organizationApplications)
-        .where(eq(organizationApplications.tenantId, tenantId));
-      
-      const hasExistingUpdate = existingUpdate.length > 0 && existingUpdate[0].count > 0;
-      
-      if (hasExistingUpdate) {
-        console.log(`   ⏭️ Organization applications already updated to ${plan} plan, skipping...`);
-        return { skipped: true, reason: 'already_updated', plan };
-      }
-      
-      // 🔒 **ATOMIC UPDATE** - Update subscription tier for all organization applications
-      await db
-        .update(organizationApplications)
-        .set({
-          subscriptionTier: plan,
-          maxUsers: planAccess.limitations.users === -1 ? null : planAccess.limitations.users,
-          updatedAt: new Date()
-        })
-        .where(eq(organizationApplications.tenantId, tenantId));
-      
-      console.log(`   🏢 Updated organization applications to ${plan} plan (max users: ${planAccess.limitations.users})`);
-      
-      // 📦 **UPDATE ENABLED MODULES** based on plan with duplicate prevention
-      for (const appCode of planAccess.applications) {
-        const enabledModules = planAccess.modules[appCode] || [];
-        
-        // Get the app ID for this app code
-        const [app] = await db
-          .select({ appId: applications.appId })
-          .from(applications)
-          .where(eq(applications.appCode, appCode))
-          .limit(1);
-        
-        if (app) {
-          // Use UPSERT pattern to prevent duplicates
-          try {
-            await db
-              .insert(organizationApplications)
-              .values({
-                tenantId,
-                appId: app.appId,
-                enabledModules: enabledModules,
-                subscriptionTier: plan,
-                maxUsers: planAccess.limitations.users === -1 ? null : planAccess.limitations.users,
-                createdAt: new Date(),
-                updatedAt: new Date()
-              });
-            
-            console.log(`   📦 Added new access to: ${appCode} with modules: ${enabledModules.join(', ')}`);
-          } catch (insertError) {
-            // If insert fails due to duplicate, update instead
-            if (insertError.message.includes('duplicate') || 
-                insertError.message.includes('unique') || 
-                insertError.message.includes('constraint')) {
-              
-              await db
-                .update(organizationApplications)
-                .set({
-                  enabledModules: enabledModules,
-                  subscriptionTier: plan,
-                  maxUsers: planAccess.limitations.users === -1 ? null : planAccess.limitations.users,
-                  updatedAt: new Date()
-                })
-                .where(and(
-                  eq(organizationApplications.tenantId, tenantId),
-                  eq(organizationApplications.appId, app.appId)
-                ));
-              
-              console.log(`   📦 Updated existing access to: ${appCode} with modules: ${enabledModules.join(', ')}`);
-            } else {
-              throw insertError;
-            }
-          }
-        }
-      }
-      
-      // 🧹 **CLEANUP DUPLICATES** - Remove any duplicates that might have been created
-      await this.cleanupDuplicateApplications(tenantId);
-      
-      console.log(`✅ Organization applications updated successfully to ${plan} plan`);
-      return { success: true, plan, updated: true };
-      
-    } catch (error) {
-      console.error(`❌ Failed to update organization applications for plan ${plan}:`, error);
-      throw error;
-    }
-  }
   
   /**
    * 🧹 **CLEANUP DUPLICATE APPLICATIONS**

@@ -65,48 +65,60 @@ class KindeService {
   async getUserInfo(accessToken) {
     try {
       console.log('🔍 getUserInfo - Starting with token validation...');
-      
-      // Strategy 1: Try user_profile endpoint
+
+      // Decode JWT payload to get user ID
+      let userId = null;
+      if (accessToken.includes('.')) {
+        try {
+          const parts = accessToken.split('.');
+          if (parts.length === 3) {
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+            userId = payload.sub;
+            console.log('🔍 Extracted user ID from token:', userId);
+          }
+        } catch (decodeError) {
+          console.log('⚠️ Could not decode token to get user ID:', decodeError.message);
+        }
+      }
+
+      if (!userId) {
+        throw new Error('Could not extract user ID from token');
+      }
+
+      // Strategy: Use Management API with M2M token
       try {
-        const response = await axios.get(`${this.baseURL}/oauth2/user_profile`, {
+        const m2mToken = await this.getM2MToken();
+        console.log('🔑 Got M2M token for user lookup');
+
+        const response = await axios.get(`${this.baseURL}/api/v1/user`, {
           headers: {
-            'Authorization': `Bearer ${accessToken}`,
+            'Authorization': `Bearer ${m2mToken}`,
             'Accept': 'application/json'
+          },
+          params: {
+            id: userId
           }
         });
-        
-        console.log('✅ getUserInfo - Success via user_profile endpoint');
-        return response.data;
-      } catch (profileError) {
-        console.log('⚠️ getUserInfo - user_profile failed, trying introspect...');
+
+        console.log('✅ getUserInfo - Success via management API');
+        const userData = response.data;
+
+        // Transform to expected format
+        return {
+          id: userData.id,
+          sub: userData.id,
+          email: userData.email || userData.preferred_email,
+          name: userData.full_name || userData.first_name + ' ' + userData.last_name,
+          first_name: userData.first_name,
+          last_name: userData.last_name,
+          picture: userData.picture,
+          preferred_email: userData.preferred_email,
+          org_code: userData.organizations?.[0]?.code || null,
+          org_codes: userData.organizations?.map(org => org.code) || []
+        };
+      } catch (mgmtError) {
+        console.log('⚠️ getUserInfo - Management API failed:', mgmtError.response?.status, mgmtError.response?.data || mgmtError.message);
       }
-
-      // Strategy 2: Try introspect endpoint (no auth header needed)
-      try {
-        const introspectResponse = await axios.post(`${this.baseURL}/oauth2/introspect`, 
-          `token=${encodeURIComponent(accessToken)}`, 
-          {
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded'
-            }
-          }
-        );
-        
-        if (introspectResponse.data.active) {
-          console.log('✅ getUserInfo - Success via introspect endpoint');
-          return {
-            id: introspectResponse.data.sub || 'unknown',
-            email: introspectResponse.data.email || 'unknown@example.com',
-            name: introspectResponse.data.name || 'Unknown User',
-            org_code: introspectResponse.data.org_code || null,
-            org_codes: introspectResponse.data.org_codes || []
-          };
-        }
-      } catch (introspectError) {
-        console.log('⚠️ getUserInfo - introspect failed');
-      }
-
-
 
       throw new Error('All authentication strategies failed');
       
@@ -176,6 +188,28 @@ class KindeService {
 
       console.log('🔑 Token validation - Token length:', token.length);
       console.log('🔑 Token validation - Token format check:', token.includes('.') ? 'JWT format' : 'Unknown format');
+
+      // Debug: Try to decode JWT payload (without verification)
+      if (token.includes('.')) {
+        try {
+          const parts = token.split('.');
+          if (parts.length === 3) {
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+            const now = Math.floor(Date.now() / 1000);
+            console.log('🔍 Token payload info:', {
+              iss: payload.iss,
+              aud: payload.aud,
+              exp: payload.exp,
+              iat: payload.iat,
+              sub: payload.sub,
+              expired: payload.exp < now,
+              expires_in: payload.exp - now
+            });
+          }
+        } catch (decodeError) {
+          console.log('⚠️ Could not decode token payload:', decodeError.message);
+        }
+      }
 
       // Get user info (this handles all the fallback strategies)
       const userInfo = await this.getEnhancedUserInfo(token);
@@ -1121,6 +1155,154 @@ class KindeService {
         error: error.message
       };
     }
+  }
+
+  /**
+   * 🏢 **ENHANCED ORGANIZATION ASSIGNMENT WITH RETRIES**
+   * Comprehensive method to assign users to organizations with fallback strategies
+   */
+  async assignUserToOrganizationWithRetries(userId, orgCode, userEmail, userName, options = {}) {
+    const {
+      maxRetries = 3,
+      verifyAssignment = true,
+      createUserIfNeeded = true
+    } = options;
+
+    console.log(`🔄 Starting enhanced organization assignment:`, {
+      userId,
+      orgCode,
+      userEmail,
+      userName,
+      maxRetries,
+      verifyAssignment,
+      createUserIfNeeded
+    });
+
+    let lastError = null;
+    let finalUserId = userId;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`🔄 Organization assignment attempt ${attempt}/${maxRetries}...`);
+
+      try {
+        // Strategy 1: Create user in Kinde if needed
+        if (createUserIfNeeded) {
+          console.log('📋 Strategy 1: Creating user in Kinde if needed...');
+          try {
+            const createdUser = await this.createUser({
+              profile: {
+                given_name: userName.split(' ')[0] || '',
+                family_name: userName.split(' ').slice(1).join(' ') || ''
+              },
+              identities: [{
+                type: 'email',
+                details: {
+                  email: userEmail
+                }
+              }],
+              organization_code: orgCode
+            });
+
+            console.log('✅ User created in Kinde:', createdUser.id);
+
+            // Update the userId for subsequent operations if we got a real Kinde user
+            if (createdUser.id && !createdUser.created_with_fallback) {
+              finalUserId = createdUser.id;
+            }
+          } catch (createError) {
+            console.log('⚠️ User creation failed (user might already exist):', createError.message);
+          }
+        }
+
+        // Strategy 2: Add user to organization
+        console.log('📋 Strategy 2: Adding user to organization...');
+        const result = await this.addUserToOrganization(
+          finalUserId,
+          orgCode,
+          { exclusive: true }
+        );
+
+        if (result.success) {
+          console.log('✅ User successfully added to organization:', result);
+
+          // Strategy 3: Verify assignment if requested
+          if (verifyAssignment) {
+            console.log('🔍 Verifying organization assignment...');
+            let verificationSuccess = false;
+
+            for (let verifyAttempt = 1; verifyAttempt <= 3; verifyAttempt++) {
+              try {
+                const userOrgs = await this.getUserOrganizations(finalUserId);
+                const ourOrg = userOrgs.organizations?.find(org => org.code === orgCode);
+
+                if (ourOrg) {
+                  console.log('✅ Organization assignment verified:', {
+                    orgCode: ourOrg.code,
+                    orgName: ourOrg.name,
+                    verifyAttempt
+                  });
+                  verificationSuccess = true;
+                  break;
+                } else {
+                  console.log(`⚠️ Verification attempt ${verifyAttempt}: Organization not found in user's list`);
+                  if (verifyAttempt < 3) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                  }
+                }
+              } catch (verifyError) {
+                console.log(`⚠️ Verification attempt ${verifyAttempt} failed:`, verifyError.message);
+                if (verifyAttempt < 3) {
+                  await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+              }
+            }
+
+            if (!verificationSuccess) {
+              console.warn('⚠️ Could not verify organization assignment, but assignment commands succeeded');
+            }
+          }
+
+          return {
+            success: true,
+            method: 'exclusive_assignment',
+            attempt,
+            userId: finalUserId,
+            orgCode,
+            verified: verifyAssignment ? verificationSuccess : null,
+            details: result
+          };
+        } else {
+          throw new Error('Assignment returned success=false');
+        }
+
+      } catch (error) {
+        console.log(`❌ Failed to assign user to organization (attempt ${attempt}):`, error.message);
+        lastError = error;
+
+        if (attempt < maxRetries) {
+          const waitTime = attempt * 2000;
+          console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
+    }
+
+    console.error('❌ Failed to assign user to organization after all retries:', {
+      error: lastError?.message,
+      attempts: maxRetries,
+      userId: finalUserId,
+      orgCode,
+      recommendation: 'User can be manually assigned later using the fix script'
+    });
+
+    return {
+      success: false,
+      lastError,
+      attempts: maxRetries,
+      userId: finalUserId,
+      orgCode,
+      recommendation: 'User can be manually assigned later using the fix script'
+    };
   }
 }
 

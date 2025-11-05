@@ -14,6 +14,7 @@ import { EntityManagement } from './EntityManagement';
 import { CreditManagement } from './CreditManagement';
 import ApplicationAssignmentManager from './ApplicationAssignmentManager';
 import CreditOperationCostManager from './credit-configuration/CreditOperationCostManager';
+import SeasonalCreditsManagement from './SeasonalCreditsManagement';
 
 interface DashboardStats {
   tenantStats: {
@@ -155,13 +156,14 @@ const AdminDashboard: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="tenants">Tenants</TabsTrigger>
           <TabsTrigger value="entities">Entities</TabsTrigger>
           <TabsTrigger value="credits">Credits</TabsTrigger>
           <TabsTrigger value="applications">Applications</TabsTrigger>
           <TabsTrigger value="operation-costs">Operation Costs</TabsTrigger>
+          <TabsTrigger value="seasonal-credits">Seasonal Credits</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -266,6 +268,10 @@ const AdminDashboard: React.FC = () => {
 
         <TabsContent value="operation-costs">
           <CreditOperationCostManager />
+        </TabsContent>
+
+        <TabsContent value="seasonal-credits">
+          <SeasonalCreditsManagement />
         </TabsContent>
       </Tabs>
       </div>

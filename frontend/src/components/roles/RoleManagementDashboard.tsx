@@ -39,6 +39,7 @@ import {
 
 // Import shadcn components
 import { Button } from '@/components/ui/button';
+import { PearlButton } from '@/components/ui/pearl-button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -73,6 +74,8 @@ import { usePermissionRefreshTrigger } from '../PermissionRefreshNotification';
 import { cache, CACHE_KEYS, cacheHelpers } from '../../lib/cache';
 import { useQueryClient } from '@tanstack/react-query';
 import { EnhancedPermissionSummary } from './EnhancedPermissionSummary';
+import { useTheme } from '@/components/theme/ThemeProvider';
+import Pattern from '@/components/ui/pattern-background';
 
 // Use the enhanced Role interface from api.ts - no need for separate DashboardRole
 type DashboardRole = Role;
@@ -213,6 +216,7 @@ const getPermissionSummary = (permissions: Record<string, any> | string[]) => {
 };
 
 export function RoleManagementDashboard() {
+  const { actualTheme, glassmorphismEnabled } = useTheme();
   const queryClient = useQueryClient();
   const { triggerRefresh } = usePermissionRefreshTrigger();
   const [roles, setRoles] = useState<DashboardRole[]>([]);
@@ -240,27 +244,48 @@ export function RoleManagementDashboard() {
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
-  // Load roles
-  useEffect(() => {
-    loadRoles();
-  }, [currentPage, pageSize, searchQuery, typeFilter, sortBy, sortOrder]);
-
+  // Load roles function
   const loadRoles = async () => {
     setLoading(true);
-    
+
     // Create cache key based on current filters
     const cacheKey = `${CACHE_KEYS.ROLES}_${searchQuery}_${typeFilter}_${currentPage}_${pageSize}_${sortBy}_${sortOrder}`;
-    
+
     // Try to get from cache first
     const cachedData = cache.get<any>(cacheKey);
     if (cachedData) {
       console.log('📦 Loading roles from cache');
-      setRoles(cachedData.roles || []);
+      console.log('📦 Cached data:', cachedData);
+      setRoles(cachedData.data || []);
       setTotalCount(cachedData.total || 0);
-      setTotalPages(cachedData.pagination?.totalPages || 1);
+      setTotalPages(cachedData.totalPages || 1);
       setLoading(false);
       return;
     }
+
+    // Fallback: Load roles directly if API fails
+    const loadFallbackRoles = async () => {
+      console.log('🔄 Loading fallback roles...');
+      try {
+        const response = await api.get('/permissions/roles', {
+          params: {
+            page: 1,
+            limit: 100, // Load more for fallback
+            search: searchQuery,
+            type: typeFilter !== 'all' ? typeFilter : undefined
+          }
+        });
+
+        if (response.data.success) {
+          const data = response.data.data || {};
+          console.log('✅ Fallback roles loaded:', data.data?.length || 0);
+          return data;
+        }
+      } catch (fallbackError) {
+        console.error('❌ Fallback roles loading failed:', fallbackError);
+      }
+      return null;
+    };
     
     try {
       console.log('🌐 Loading roles from API');
@@ -274,25 +299,62 @@ export function RoleManagementDashboard() {
           order: sortOrder
         }
       });
-      
+
       if (response.data.success) {
         const data = response.data.data || {};
-        setRoles(data.roles || []);
+        console.log('🔍 RoleManagementDashboard - API Response:', response.data);
+        console.log('🔍 RoleManagementDashboard - Data object:', data);
+        console.log('🔍 RoleManagementDashboard - Roles array:', data.data);
+        console.log('🔍 RoleManagementDashboard - Roles length:', data.data?.length || 0);
+
+        setRoles(data.data || []);
         setTotalCount(data.total || 0);
-        setTotalPages(data.pagination?.totalPages || 1);
-        
+        setTotalPages(data.totalPages || 1);
+
         // Cache the data for 5 minutes
         cache.set(cacheKey, data, 5 * 60 * 1000);
       } else {
-        toast.error('Failed to load roles');
+        // Try fallback if primary API fails
+        console.log('⚠️ Primary API failed, trying fallback...');
+        const fallbackData = await loadFallbackRoles();
+        if (fallbackData) {
+          setRoles(fallbackData.data || []);
+          setTotalCount(fallbackData.total || 0);
+          setTotalPages(fallbackData.totalPages || 1);
+          console.log('✅ Roles loaded via fallback');
+        } else {
+          toast.error('Failed to load roles');
+          setRoles([]);
+          setTotalCount(0);
+          setTotalPages(1);
+        }
       }
     } catch (error) {
       console.error('Failed to load roles:', error);
-      toast.error('Failed to connect to server');
+
+      // Try fallback on error
+      console.log('⚠️ Primary API error, trying fallback...');
+      const fallbackData = await loadFallbackRoles();
+      if (fallbackData) {
+        setRoles(fallbackData.data || []);
+        setTotalCount(fallbackData.total || 0);
+        setTotalPages(fallbackData.totalPages || 1);
+        console.log('✅ Roles loaded via fallback after error');
+      } else {
+        toast.error('Failed to connect to server');
+        setRoles([]);
+        setTotalCount(0);
+        setTotalPages(1);
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  // Load roles effect
+  useEffect(() => {
+    loadRoles();
+  }, [currentPage, pageSize, searchQuery, typeFilter, sortBy, sortOrder]);
 
   const handleCreateRole = () => {
     setEditingRole(null);
@@ -590,13 +652,18 @@ export function RoleManagementDashboard() {
   }, []);
 
   const filteredRoles = useMemo(() => {
+    console.log('🔍 filteredRoles - Raw roles:', roles);
+    console.log('🔍 filteredRoles - Roles length:', roles?.length || 0);
+    console.log('🔍 filteredRoles - Search query:', searchQuery);
+    console.log('🔍 filteredRoles - Type filter:', typeFilter);
+
     return (roles || []).filter(role => {
       // Search filter
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         const matchesName = role.roleName.toLowerCase().includes(query);
         const matchesDescription = role.description?.toLowerCase().includes(query);
-        
+
         if (!matchesName && !matchesDescription) {
           return false;
         }
@@ -611,6 +678,8 @@ export function RoleManagementDashboard() {
       return true;
     });
   }, [roles, searchQuery, typeFilter]);
+
+  console.log('🔍 RoleManagementDashboard - Filtered roles length:', filteredRoles.length);
 
   if (showAppModuleBuilder) {
     return (
@@ -640,23 +709,19 @@ export function RoleManagementDashboard() {
   }
 
   // Enhanced Role Row Component with better permission display
-  const RoleRow = ({ 
-    role, 
-    isSelected, 
-    onToggleSelect, 
-    onEdit, 
-    onView, 
-    onClone, 
-    onDelete 
+  const RoleRow = ({
+    role,
+    isSelected,
+    onToggleSelect
   }: {
     role: Role;
     isSelected: boolean;
     onToggleSelect: () => void;
-    onEdit: () => void;
-    onView: () => void;
-    onClone: () => void;
-    onDelete: () => void;
   }) => {
+    console.log('🔍 RoleRow - Role data:', role);
+    console.log('🔍 RoleRow - Role name:', role?.roleName);
+    console.log('🔍 RoleRow - Role ID:', role?.roleId);
+
     const permissionSummary = getPermissionSummary(role.permissions);
 
     // Use computed fields from API if available, otherwise fall back to calculation
@@ -665,15 +730,28 @@ export function RoleManagementDashboard() {
     const displayApps = (role as any).applicationCount || permissionSummary.mainModules;
 
     return (
-      <div className="grid grid-cols-12 gap-4 p-6 hover:bg-gray-50 transition-colors">
+      <div className={`grid grid-cols-12 gap-4 p-6 transition-colors ${
+        actualTheme === 'dark'
+          ? 'hover:bg-purple-500/10'
+          : actualTheme === 'monochrome'
+          ? 'hover:bg-gray-500/10'
+          : 'hover:bg-gray-50'
+      }`}>
         <div className="flex items-center">
           <Checkbox
             checked={isSelected}
             onCheckedChange={onToggleSelect}
+            className={
+              actualTheme === 'dark'
+                ? 'border-purple-500/30 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600'
+                : actualTheme === 'monochrome'
+                ? 'border-gray-500/30 data-[state=checked]:bg-gray-600 data-[state=checked]:border-gray-600'
+                : ''
+            }
           />
         </div>
-        
-        <div className="col-span-5 flex items-center gap-4">
+
+        <div className="col-span-4 flex items-center gap-4">
           <div 
             className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-semibold"
             style={{ backgroundColor: `${role.color}20`, color: role.color }}
@@ -681,27 +759,81 @@ export function RoleManagementDashboard() {
             {role.metadata?.icon || '👤'}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="font-semibold text-gray-900 truncate">{role.roleName}</div>
-            <div className="text-sm text-gray-500 truncate">
+            <div className={`font-semibold truncate max-w-[200px] ${
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-100'
+                : 'text-gray-900'
+            }`} title={role.roleName}>{role.roleName}</div>
+            <div className={`text-sm truncate max-w-[200px] ${
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-300'
+                : 'text-gray-500'
+            }`} title={role.description}>
               {role.description}
             </div>
           </div>
         </div>
         
-        <div className="col-span-4 space-y-2">
+        <div className="col-span-3 space-y-2">
           <div className="space-y-2">
             {/* Users and Modules Summary */}
             <div className="flex items-center gap-4 text-sm">
               <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-gray-400" />
-                <span className="font-medium">{role.userCount || 0}</span>
-                <span className="text-gray-500">users</span>
+                <Users className={`w-4 h-4 ${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-400'
+                    : 'text-gray-400'
+                }`} />
+                <span className={`font-medium ${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-100'
+                    : 'text-gray-900'
+                }`}>{role.userCount || 0}</span>
+                <span className={`${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-300'
+                    : 'text-gray-500'
+                }`}>users</span>
               </div>
               <div className="flex items-center gap-2">
-                <Package className="w-4 h-4 text-blue-500" />
-                <span className="font-medium text-blue-600">{displayModules}</span>
-                <span className="text-gray-500">modules</span>
-                <span className="text-xs text-gray-400">({displayApps} apps)</span>
+                <Package className={`w-4 h-4 ${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-400'
+                    : 'text-blue-500'
+                }`} />
+                <span className={`font-medium ${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-300'
+                    : 'text-blue-600'
+                }`}>{displayModules}</span>
+                <span className={`${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-300'
+                    : 'text-gray-500'
+                }`}>modules</span>
+                <span className={`text-xs ${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-400'
+                    : 'text-gray-400'
+                }`}>({displayApps} apps)</span>
               </div>
             </div>
             
@@ -711,41 +843,77 @@ export function RoleManagementDashboard() {
                 <div className="flex items-center gap-1">
                   <div className="w-2 h-2 bg-red-500 rounded-full"></div>
                   <span className="text-xs font-medium text-red-700">{permissionSummary.admin}</span>
-                  <span className="text-xs text-gray-500">admin</span>
+                  <span className={`text-xs ${
+                    actualTheme === 'dark'
+                      ? 'text-white'
+                      : actualTheme === 'monochrome'
+                      ? 'text-gray-300'
+                      : 'text-gray-500'
+                  }`}>admin</span>
                 </div>
               )}
               {permissionSummary.write > 0 && (
                 <div className="flex items-center gap-1">
                   <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
                   <span className="text-xs font-medium text-orange-700">{permissionSummary.write}</span>
-                  <span className="text-xs text-gray-500">write</span>
+                  <span className={`text-xs ${
+                    actualTheme === 'dark'
+                      ? 'text-white'
+                      : actualTheme === 'monochrome'
+                      ? 'text-gray-300'
+                      : 'text-gray-500'
+                  }`}>write</span>
                 </div>
               )}
               {permissionSummary.read > 0 && (
                 <div className="flex items-center gap-1">
                   <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                   <span className="text-xs font-medium text-green-700">{permissionSummary.read}</span>
-                  <span className="text-xs text-gray-500">read</span>
+                  <span className={`text-xs ${
+                    actualTheme === 'dark'
+                      ? 'text-white'
+                      : actualTheme === 'monochrome'
+                      ? 'text-gray-300'
+                      : 'text-gray-500'
+                  }`}>read</span>
                 </div>
               )}
             </div>
             
             {/* Total Operations */}
-            <div className="text-xs text-gray-400">
+            <div className={`text-xs ${
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-400'
+                : 'text-gray-400'
+            }`}>
               {displayCount} total permissions
             </div>
             
             {/* Module Names Preview */}
             {permissionSummary.moduleNames.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1">
-                {permissionSummary.moduleNames.slice(0, 3).map((module, index) => (
-                  <Badge key={index} variant="outline" className="text-xs">
+              <div className="flex flex-wrap gap-1 mt-1 max-w-[180px]">
+                {permissionSummary.moduleNames.slice(0, 2).map((module, index) => (
+                  <Badge key={index} variant="outline" className={`text-xs truncate max-w-[70px] ${
+                    actualTheme === 'dark'
+                      ? 'border-purple-500/30 text-purple-300'
+                      : actualTheme === 'monochrome'
+                      ? 'border-gray-500/30 text-gray-300'
+                      : ''
+                  }`} title={module.split('.')[0]}>
                     {module.split('.')[0]}
                   </Badge>
                 ))}
-                {permissionSummary.moduleNames.length > 3 && (
-                  <Badge variant="outline" className="text-xs">
-                    +{permissionSummary.moduleNames.length - 3} more
+                {permissionSummary.moduleNames.length > 2 && (
+                  <Badge variant="outline" className={`text-xs ${
+                    actualTheme === 'dark'
+                      ? 'border-purple-500/30 text-purple-300'
+                      : actualTheme === 'monochrome'
+                      ? 'border-gray-500/30 text-gray-300'
+                      : ''
+                  }`}>
+                    +{permissionSummary.moduleNames.length - 2}
                   </Badge>
                 )}
               </div>
@@ -763,36 +931,108 @@ export function RoleManagementDashboard() {
                 <Badge variant="outline">Default</Badge>
               )}
             </div>
-            <div className="text-xs text-gray-500">
+            <div className={`text-xs ${
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-300'
+                : 'text-gray-500'
+            }`}>
               Created: {new Date(role.createdAt).toLocaleDateString()}
             </div>
           </div>
         </div>
-        
-        <div className="flex items-center justify-end">
+
+        <div className="col-span-2 flex items-center justify-center">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <MoreVertical className="h-4 w-4" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-700"
+                title="More actions"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreVertical className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={onView}>
+            <DropdownMenuContent
+              align="end"
+              className={`z-50 ${
+                actualTheme === 'dark'
+                  ? 'bg-slate-800/95 border-purple-500/30'
+                  : actualTheme === 'monochrome'
+                  ? 'bg-gray-800/95 border-gray-500/30'
+                  : ''
+              }`}
+            >
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleViewRole(role);
+                }}
+                className={
+                  actualTheme === 'dark'
+                    ? 'text-purple-300 focus:text-purple-200 focus:bg-purple-500/20'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-300 focus:text-gray-200 focus:bg-gray-500/20'
+                    : ''
+                }
+              >
                 <Eye className="h-4 w-4 mr-2" />
                 View Details
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onEdit}>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleEditRole(role);
+                }}
+                className={
+                  actualTheme === 'dark'
+                    ? 'text-purple-300 focus:text-purple-200 focus:bg-purple-500/20'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-300 focus:text-gray-200 focus:bg-gray-500/20'
+                    : ''
+                }
+              >
                 <Edit className="h-4 w-4 mr-2" />
                 Edit Role
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onClone}>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCloneRole(role);
+                }}
+                className={
+                  actualTheme === 'dark'
+                    ? 'text-purple-300 focus:text-purple-200 focus:bg-purple-500/20'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-300 focus:text-gray-200 focus:bg-gray-500/20'
+                    : ''
+                }
+              >
                 <Copy className="h-4 w-4 mr-2" />
                 Clone Role
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem 
-                onClick={onDelete}
-                className="text-red-600 hover:text-red-700"
+              <DropdownMenuSeparator className={
+                actualTheme === 'dark'
+                  ? 'bg-purple-500/30'
+                  : actualTheme === 'monochrome'
+                  ? 'bg-gray-500/30'
+                  : ''
+              } />
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteRole(role.roleId, role.roleName);
+                }}
+                className={
+                  actualTheme === 'dark'
+                    ? 'text-red-400 focus:text-red-300 focus:bg-red-500/20'
+                    : actualTheme === 'monochrome'
+                    ? 'text-red-400 focus:text-red-300 focus:bg-red-500/20'
+                    : 'text-red-600 hover:text-red-700'
+                }
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete Role
@@ -800,42 +1040,129 @@ export function RoleManagementDashboard() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
       </div>
     );
   };
 
   return (
+    <div className={`min-h-screen rounded-xl relative ${
+      actualTheme === 'dark'
+        ? glassmorphismEnabled
+          ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white'
+          : 'bg-black text-white'
+        : actualTheme === 'monochrome'
+        ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-gray-100'
+        : 'bg-gray-50 text-gray-900'
+    }`}>
+      {/* Background */}
+      <div className={`absolute inset-0 ${glassmorphismEnabled ? 'bg-gradient-to-br from-violet-100/30 via-purple-100/15 to-indigo-100/10 dark:from-slate-950/40 dark:via-slate-900/25 dark:to-slate-950/40 backdrop-blur-3xl' : ''}`}></div>
+
+      {/* Purple gradient glassy effect */}
+      {glassmorphismEnabled && (
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-200/12 via-violet-200/8 to-indigo-200/10 dark:from-purple-500/10 dark:via-violet-500/6 dark:to-indigo-500/8 backdrop-blur-3xl"></div>
+      )}
+
+      {/* Background Pattern */}
+      {(actualTheme === 'dark' || actualTheme === 'monochrome') && (
+        <div className="absolute inset-0 opacity-30">
+          <Pattern />
+        </div>
+      )}
+
+      {/* Floating decorative elements for glassy mode */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className={`absolute top-16 left-16 w-48 h-48 rounded-full blur-3xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-purple-200/20 to-violet-200/20 dark:from-purple-400/12 dark:to-violet-400/12 backdrop-blur-3xl border border-purple-300/30 dark:border-purple-600/30' : 'hidden'}`}></div>
+        <div className={`absolute top-32 right-32 w-44 h-44 rounded-full blur-3xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-violet-200/20 to-indigo-200/20 dark:from-violet-400/10 dark:to-indigo-400/10 backdrop-blur-3xl border border-violet-300/30 dark:border-violet-600/30' : 'hidden'}`} style={{animationDelay: '1.5s'}}></div>
+        <div className={`absolute bottom-48 left-20 w-36 h-36 rounded-full blur-3xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-indigo-200/20 to-purple-200/20 dark:from-indigo-400/8 dark:to-purple-400/8 backdrop-blur-3xl border border-indigo-300/30 dark:border-indigo-600/30' : 'hidden'}`} style={{animationDelay: '3s'}}></div>
+        <div className={`absolute top-1/2 right-16 w-28 h-28 rounded-full blur-2xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-pink-200/15 to-purple-200/15 dark:from-pink-400/6 dark:to-purple-400/6 backdrop-blur-3xl border border-pink-300/30 dark:border-pink-600/30' : 'hidden'}`} style={{animationDelay: '4.5s'}}></div>
+
+        {/* Purple gradient glassy floating elements */}
+        {glassmorphismEnabled && (
+          <>
+            <div className="absolute top-1/4 left-1/3 w-32 h-32 rounded-full blur-2xl animate-pulse bg-gradient-to-r from-purple-200/12 to-violet-200/8 dark:from-purple-400/6 dark:to-violet-400/4 backdrop-blur-3xl border border-purple-300/40 dark:border-purple-600/25" style={{animationDelay: '2s'}}></div>
+            <div className="absolute bottom-1/4 right-1/3 w-24 h-24 rounded-full blur-xl animate-pulse bg-gradient-to-r from-violet-200/10 to-indigo-200/6 dark:from-violet-400/5 dark:to-indigo-400/3 backdrop-blur-3xl border border-violet-300/35 dark:border-violet-600/20" style={{animationDelay: '5.5s'}}></div>
+            <div className="absolute top-3/4 left-1/2 w-20 h-20 rounded-full blur-lg animate-pulse bg-gradient-to-r from-indigo-200/8 to-purple-200/6 dark:from-indigo-400/4 dark:to-purple-400/3 backdrop-blur-3xl border border-indigo-300/30 dark:border-indigo-600/15" style={{animationDelay: '7s'}}></div>
+          </>
+        )}
+      </div>
+
+      {/* Content with enhanced glassmorphism card effect */}
+      <div className="relative z-10">
+        {/* Purple gradient glassy effect */}
+        {glassmorphismEnabled && (
+          <div className="absolute inset-0 backdrop-blur-3xl bg-gradient-to-br from-purple-200/8 via-violet-200/5 to-indigo-200/6 dark:from-purple-500/6 dark:via-violet-500/3 dark:to-indigo-500/4 rounded-3xl"></div>
+        )}
+        <div className={`${glassmorphismEnabled ? 'backdrop-blur-3xl bg-purple-100/2 dark:bg-purple-900/3 border border-purple-300/60 dark:border-purple-600/50 rounded-3xl shadow-2xl ring-1 ring-purple-300/35 dark:ring-purple-600/25' : ''}`}>
     <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Role Management</h1>
-          <p className="text-gray-600 mt-1">Manage roles, permissions, and access control</p>
+          <h1 className={`text-2xl md:text-3xl font-bold ${
+            actualTheme === 'dark'
+              ? 'text-white'
+              : actualTheme === 'monochrome'
+              ? 'text-gray-100'
+              : 'text-gray-900'
+          }`}>Role Management</h1>
+          <p className={`mt-1 ${
+            actualTheme === 'dark'
+              ? 'text-purple-200'
+              : actualTheme === 'monochrome'
+              ? 'text-gray-300'
+              : 'text-gray-600'
+          }`}>Manage roles, permissions, and access control</p>
         </div>
         
         <div className="flex items-center gap-3">
-          <Button onClick={handleCreateRole} className="gap-2">
+          <PearlButton onClick={handleCreateRole}>
             <Building className="w-4 h-4" />
             <span className="hidden sm:inline">Build Role from Apps</span>
             <span className="sm:hidden">New Role</span>
-          </Button>
+          </PearlButton>
         </div>
       </div>
 
       {/* Enhanced Filters and Search */}
-      <Card>
+      <Card className={
+        actualTheme === 'dark'
+          ? glassmorphismEnabled
+            ? 'bg-slate-900 border-purple-500/30'
+            : 'bg-slate-900 border-slate-700'
+          : actualTheme === 'monochrome'
+          ? 'bg-gray-900 border-gray-500/30'
+          : ''
+      }>
         <CardContent className="p-6 space-y-6">
           {/* Search Bar */}
           <div className="flex flex-col lg:flex-row gap-4">
             <div className="flex-1 space-y-2">
-              <label className="text-sm font-medium text-gray-700">Search Roles</label>
+              <label className={`text-sm font-medium ${
+                actualTheme === 'dark'
+                  ? 'text-white'
+                  : actualTheme === 'monochrome'
+                  ? 'text-gray-200'
+                  : 'text-gray-700'
+              }`}>Search Roles</label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 ${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-400'
+                    : 'text-gray-400'
+                }`} />
                 <Input
                   placeholder="Search by role name, description, or department..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-11"
+                  className={`pl-11 ${
+                    actualTheme === 'dark'
+                      ? 'bg-slate-800/50 border-purple-500/30 text-white placeholder-purple-300 focus:ring-purple-500'
+                      : actualTheme === 'monochrome'
+                      ? 'bg-gray-800/50 border-gray-500/30 text-gray-100 placeholder-gray-400 focus:ring-gray-400'
+                      : ''
+                  }`}
                 />
               </div>
             </div>
@@ -856,9 +1183,21 @@ export function RoleManagementDashboard() {
           {/* Filter Row */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Role Type</label>
+              <label className={`text-sm font-medium ${
+                actualTheme === 'dark'
+                  ? 'text-white'
+                  : actualTheme === 'monochrome'
+                  ? 'text-gray-200'
+                  : 'text-gray-700'
+              }`}>Role Type</label>
               <Select value={typeFilter} onValueChange={(value: string) => setTypeFilter(value as 'all' | 'custom' | 'system')}>
-                <SelectTrigger>
+                <SelectTrigger className={
+                  actualTheme === 'dark'
+                    ? 'bg-slate-800/50 border-purple-500/30 text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'bg-gray-800/50 border-gray-500/30 text-gray-100'
+                    : ''
+                }>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -870,7 +1209,13 @@ export function RoleManagementDashboard() {
             </div>
             
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Sort By</label>
+              <label className={`text-sm font-medium ${
+                actualTheme === 'dark'
+                  ? 'text-white'
+                  : actualTheme === 'monochrome'
+                  ? 'text-gray-200'
+                  : 'text-gray-700'
+              }`}>Sort By</label>
               <Select 
                 value={`${sortBy}-${sortOrder}`} 
                 onValueChange={(value: string) => {
@@ -879,7 +1224,13 @@ export function RoleManagementDashboard() {
                   setSortOrder(order as any);
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger className={
+                  actualTheme === 'dark'
+                    ? 'bg-slate-800/50 border-purple-500/30 text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'bg-gray-800/50 border-gray-500/30 text-gray-100'
+                    : ''
+                }>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -909,15 +1260,39 @@ export function RoleManagementDashboard() {
           
           {/* Active Filters Display */}
           {(searchQuery || typeFilter !== 'all') && (
-            <div className="flex flex-wrap gap-3 pt-4 border-t">
-              <span className="text-sm font-medium text-gray-600">Active filters:</span>
+            <div className={`flex flex-wrap gap-3 pt-4 border-t ${
+              actualTheme === 'dark'
+                ? 'border-purple-500/30'
+                : actualTheme === 'monochrome'
+                ? 'border-gray-500/30'
+                : 'border-gray-200'
+            }`}>
+              <span className={`text-sm font-medium ${
+                actualTheme === 'dark'
+                  ? 'text-white'
+                  : actualTheme === 'monochrome'
+                  ? 'text-gray-300'
+                  : 'text-gray-600'
+              }`}>Active filters:</span>
               {searchQuery && (
-                <Badge variant="secondary">
+                <Badge variant="secondary" className={
+                  actualTheme === 'dark'
+                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                    : actualTheme === 'monochrome'
+                    ? 'bg-gray-500/20 text-gray-300 border-gray-500/30'
+                    : ''
+                }>
                   Search: "{searchQuery}"
                 </Badge>
               )}
               {typeFilter !== 'all' && (
-                <Badge variant="secondary">
+                <Badge variant="secondary" className={
+                  actualTheme === 'dark'
+                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                    : actualTheme === 'monochrome'
+                    ? 'bg-gray-500/20 text-gray-300 border-gray-500/30'
+                    : ''
+                }>
                   Type: {typeFilter}
                 </Badge>
               )}
@@ -928,14 +1303,32 @@ export function RoleManagementDashboard() {
 
       {/* Bulk Operations */}
       {selectedRoles.size > 0 && (
-        <Card className="border-blue-200 bg-blue-50">
+        <Card className={
+          actualTheme === 'dark'
+            ? 'border-purple-500/30 bg-purple-900'
+            : actualTheme === 'monochrome'
+            ? 'border-gray-500/30 bg-gray-900'
+            : 'border-blue-200 bg-blue-50'
+        }>
           <CardContent className="p-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-center gap-6">
-                <span className="text-sm font-medium text-blue-900">
+                <span className={`text-sm font-medium ${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-200'
+                    : 'text-blue-900'
+                }`}>
                   {selectedRoles.size} role{selectedRoles.size !== 1 ? 's' : ''} selected
                 </span>
-                <span className="text-sm text-blue-700">
+                <span className={`text-sm ${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-300'
+                    : 'text-blue-700'
+                }`}>
                   from {filteredRoles.length} filtered roles
                 </span>
               </div>
@@ -945,7 +1338,13 @@ export function RoleManagementDashboard() {
                   variant="outline"
                   size="sm"
                   onClick={() => handleBulkAction('export', Array.from(selectedRoles))}
-                  className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                  className={
+                    actualTheme === 'dark'
+                      ? 'border-purple-500/30 text-purple-300 hover:bg-purple-500/20'
+                      : actualTheme === 'monochrome'
+                      ? 'border-gray-500/30 text-gray-300 hover:bg-gray-500/20'
+                      : 'border-blue-300 text-blue-700 hover:bg-blue-100'
+                  }
                 >
                   <Download className="w-4 h-4 mr-2" />
                   Export Selected
@@ -955,6 +1354,13 @@ export function RoleManagementDashboard() {
                   variant="outline" 
                   size="sm"
                   onClick={() => handleBulkAction('deactivate', Array.from(selectedRoles))}
+                  className={
+                    actualTheme === 'dark'
+                      ? 'border-purple-500/30 text-purple-300 hover:bg-purple-500/20'
+                      : actualTheme === 'monochrome'
+                      ? 'border-gray-500/30 text-gray-300 hover:bg-gray-500/20'
+                      : ''
+                  }
                 >
                   <Archive className="w-4 h-4 mr-2" />
                   Deactivate
@@ -964,6 +1370,13 @@ export function RoleManagementDashboard() {
                   variant="destructive"
                   size="sm"
                   onClick={() => handleBulkAction('delete', Array.from(selectedRoles))}
+                  className={
+                    actualTheme === 'dark'
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : actualTheme === 'monochrome'
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : ''
+                  }
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Delete
@@ -983,37 +1396,100 @@ export function RoleManagementDashboard() {
       )}
 
       {/* Roles List */}
-      <Card>
+      <Card className={
+        actualTheme === 'dark'
+          ? glassmorphismEnabled
+            ? 'bg-slate-900 border-purple-500/30'
+            : 'bg-slate-900 border-slate-700'
+          : actualTheme === 'monochrome'
+          ? 'bg-gray-900 border-gray-500/30'
+          : ''
+      }>
         {loading ? (
           <CardContent className="p-12 text-center">
-            <RefreshCw className="w-8 h-8 animate-spin mx-auto text-gray-400" />
-            <p className="text-gray-600 mt-3 font-medium">Loading roles...</p>
+            <RefreshCw className={`w-8 h-8 animate-spin mx-auto ${
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-400'
+                : 'text-gray-400'
+            }`} />
+            <p className={`mt-3 font-medium ${
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-300'
+                : 'text-gray-600'
+            }`}>Loading roles...</p>
           </CardContent>
         ) : (
           <>
             {/* Table Header */}
-            <div className="border-b bg-gray-50 p-6">
-              <div className="grid grid-cols-12 gap-4 text-sm font-semibold text-gray-700">
+            <div className={`border-b p-6 ${
+              actualTheme === 'dark'
+                ? 'bg-slate-800 border-purple-500/30'
+                : actualTheme === 'monochrome'
+                ? 'bg-gray-800 border-gray-500/30'
+                : 'bg-gray-50 border-gray-200'
+            }`}>
+              <div className={`grid grid-cols-12 gap-4 text-sm font-semibold ${
+                actualTheme === 'dark'
+                  ? 'text-white'
+                  : actualTheme === 'monochrome'
+                  ? 'text-gray-200'
+                  : 'text-gray-700'
+              }`}>
                 <div className="flex items-center gap-3">
                   <Checkbox
                     checked={selectedRoles.size === roles.length && roles.length > 0}
                     onCheckedChange={selectedRoles.size === roles.length ? clearSelection : selectAllRoles}
+                    className={
+                      actualTheme === 'dark'
+                        ? 'border-purple-500/30 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600'
+                        : actualTheme === 'monochrome'
+                        ? 'border-gray-500/30 data-[state=checked]:bg-gray-600 data-[state=checked]:border-gray-600'
+                        : ''
+                    }
                   />
                 </div>
-                <div className="col-span-5">Role & Description</div>
-                <div className="col-span-4">Permissions & Modules</div>
+                <div className="col-span-4">Role & Description</div>
+                <div className="col-span-3">Permissions & Modules</div>
                 <div className="col-span-2">Type & Status</div>
-                <div className="text-right">Actions</div>
+                <div className="col-span-2 text-center">Actions</div>
               </div>
             </div>
 
             {/* Roles List */}
-            <div className="divide-y divide-gray-200">
+            <div className={`divide-y ${
+              actualTheme === 'dark'
+                ? 'divide-purple-500/30'
+                : actualTheme === 'monochrome'
+                ? 'divide-gray-500/30'
+                : 'divide-gray-200'
+            }`}>
               {filteredRoles.length === 0 ? (
                 <div className="p-12 text-center">
-                  <Shield className="w-12 h-12 mx-auto text-gray-400" />
-                  <h3 className="text-lg font-semibold text-gray-900 mt-4">No roles found</h3>
-                  <p className="text-gray-600 mt-2">
+                  <Shield className={`w-12 h-12 mx-auto ${
+                    actualTheme === 'dark'
+                      ? 'text-white'
+                      : actualTheme === 'monochrome'
+                      ? 'text-gray-400'
+                      : 'text-gray-400'
+                  }`} />
+                  <h3 className={`text-lg font-semibold mt-4 ${
+                    actualTheme === 'dark'
+                      ? 'text-white'
+                      : actualTheme === 'monochrome'
+                      ? 'text-gray-100'
+                      : 'text-gray-900'
+                  }`}>No roles found</h3>
+                  <p className={`mt-2 ${
+                    actualTheme === 'dark'
+                      ? 'text-white'
+                      : actualTheme === 'monochrome'
+                      ? 'text-gray-300'
+                      : 'text-gray-600'
+                  }`}>
                     {searchQuery || typeFilter !== 'all' 
                       ? 'Try adjusting your search filters or create a new role.' 
                       : 'Get started by creating your first role.'
@@ -1031,10 +1507,6 @@ export function RoleManagementDashboard() {
                     role={role}
                     isSelected={selectedRoles.has(role.roleId)}
                     onToggleSelect={() => toggleRoleSelection(role.roleId)}
-                    onEdit={() => handleEditRole(role)}
-                    onView={() => handleViewRole(role)}
-                    onClone={() => handleCloneRole(role)}
-                    onDelete={() => handleDeleteRole(role.roleId, role.roleName)}
                   />
                 ))
               )}
@@ -1045,19 +1517,51 @@ export function RoleManagementDashboard() {
 
       {/* Delete Confirmation Modal */}
       <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
-        <DialogContent>
+        <DialogContent className={
+          actualTheme === 'dark'
+            ? glassmorphismEnabled
+              ? 'bg-slate-900 border-purple-500/30 text-white'
+              : 'bg-slate-900 border-slate-700 text-white'
+            : actualTheme === 'monochrome'
+            ? 'bg-gray-900 border-gray-500/30 text-gray-100'
+            : ''
+        }>
           <DialogHeader>
-            <DialogTitle>Delete Role</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className={
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-100'
+                : ''
+            }>Delete Role</DialogTitle>
+            <DialogDescription className={
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-300'
+                : ''
+            }>
               Are you sure you want to delete the role "{deletingRole?.name}"? This action cannot be undone.
               Users with this role will lose their permissions.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
+            <Button variant="outline" onClick={() => setShowDeleteModal(false)} className={
+              actualTheme === 'dark'
+                ? 'border-purple-500/30 text-purple-200 hover:bg-purple-500/10'
+                : actualTheme === 'monochrome'
+                ? 'border-gray-500/30 text-gray-200 hover:bg-gray-500/10'
+                : ''
+            }>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={confirmDeleteRole}>
+            <Button variant="destructive" onClick={confirmDeleteRole} className={
+              actualTheme === 'dark'
+                ? 'bg-red-600 hover:bg-red-700'
+                : actualTheme === 'monochrome'
+                ? 'bg-red-600 hover:bg-red-700'
+                : ''
+            }>
               Delete Role
             </Button>
           </DialogFooter>
@@ -1066,18 +1570,42 @@ export function RoleManagementDashboard() {
 
       {/* Role Details Modal */}
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className={`max-w-6xl max-h-[80vh] overflow-y-auto ${
+          actualTheme === 'dark'
+            ? 'bg-black text-white border-gray-700'
+            : actualTheme === 'monochrome'
+            ? 'bg-gray-900 text-gray-100 border-gray-600'
+            : 'bg-white text-gray-900 border-gray-300'
+        }`}>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              <div 
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-semibold"
-                style={{ backgroundColor: `${viewingRole?.color}20`, color: viewingRole?.color }}
+            <DialogTitle className={`flex items-center gap-3 ${
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-100'
+                : 'text-gray-900'
+            }`}>
+              <div
+                className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-semibold ${
+                  actualTheme === 'dark'
+                    ? 'bg-gray-800'
+                    : actualTheme === 'monochrome'
+                    ? 'bg-gray-700'
+                    : 'bg-gray-100'
+                }`}
+                style={{ color: viewingRole?.color }}
               >
                 {viewingRole?.metadata?.icon || '👤'}
               </div>
               {viewingRole?.roleName}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className={
+              actualTheme === 'dark'
+                ? 'text-gray-300'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-400'
+                : 'text-gray-600'
+            }>
               View detailed information about this role and its permissions
             </DialogDescription>
           </DialogHeader>
@@ -1086,41 +1614,170 @@ export function RoleManagementDashboard() {
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-2">Basic Information</h4>
+                  <h4 className={`font-semibold mb-2 ${
+                    actualTheme === 'dark'
+                      ? 'text-white'
+                      : actualTheme === 'monochrome'
+                      ? 'text-gray-100'
+                      : 'text-gray-900'
+                  }`}>Basic Information</h4>
                   <div className="space-y-2 text-sm">
-                    <div><span className="font-medium">Name:</span> {viewingRole.roleName}</div>
-                    <div><span className="font-medium">Type:</span> {viewingRole.isSystemRole ? 'System' : 'Custom'}</div>
-                    <div><span className="font-medium">Created:</span> {new Date(viewingRole.createdAt).toLocaleDateString()}</div>
-                    <div><span className="font-medium">Updated:</span> {new Date(viewingRole.updatedAt).toLocaleDateString()}</div>
+                    <div><span className={`font-medium ${
+                      actualTheme === 'dark'
+                        ? 'text-gray-300'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-400'
+                        : 'text-gray-600'
+                    }`}>Name:</span> <span className={
+                      actualTheme === 'dark'
+                        ? 'text-white'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-100'
+                        : 'text-gray-900'
+                    }>{viewingRole.roleName}</span></div>
+                    <div><span className={`font-medium ${
+                      actualTheme === 'dark'
+                        ? 'text-gray-300'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-400'
+                        : 'text-gray-600'
+                    }`}>Type:</span> <span className={
+                      actualTheme === 'dark'
+                        ? 'text-white'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-100'
+                        : 'text-gray-900'
+                    }>{viewingRole.isSystemRole ? 'System' : 'Custom'}</span></div>
+                    <div><span className={`font-medium ${
+                      actualTheme === 'dark'
+                        ? 'text-gray-300'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-400'
+                        : 'text-gray-600'
+                    }`}>Created:</span> <span className={
+                      actualTheme === 'dark'
+                        ? 'text-white'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-100'
+                        : 'text-gray-900'
+                    }>{new Date(viewingRole.createdAt).toLocaleDateString()}</span></div>
+                    <div><span className={`font-medium ${
+                      actualTheme === 'dark'
+                        ? 'text-gray-300'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-400'
+                        : 'text-gray-600'
+                    }`}>Updated:</span> <span className={
+                      actualTheme === 'dark'
+                        ? 'text-white'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-100'
+                        : 'text-gray-900'
+                    }>{new Date(viewingRole.updatedAt).toLocaleDateString()}</span></div>
                   </div>
-                  
+
                   {viewingRole.description && (
                     <div className="mt-4">
-                      <h4 className="font-semibold text-gray-900 mb-2">Description</h4>
-                      <p className="text-sm text-gray-600">{viewingRole.description}</p>
+                      <h4 className={`font-semibold mb-2 ${
+                        actualTheme === 'dark'
+                          ? 'text-white'
+                          : actualTheme === 'monochrome'
+                          ? 'text-gray-100'
+                          : 'text-gray-900'
+                      }`}>Description</h4>
+                      <p className={`text-sm ${
+                        actualTheme === 'dark'
+                          ? 'text-gray-300'
+                          : actualTheme === 'monochrome'
+                          ? 'text-gray-400'
+                          : 'text-gray-600'
+                      }`}>{viewingRole.description}</p>
                     </div>
                   )}
                 </div>
-                
+
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-2">Permission Summary</h4>
+                  <h4 className={`font-semibold mb-2 ${
+                    actualTheme === 'dark'
+                      ? 'text-white'
+                      : actualTheme === 'monochrome'
+                      ? 'text-gray-100'
+                      : 'text-gray-900'
+                  }`}>Permission Summary</h4>
                   <div className="space-y-2 text-sm">
-                    <div><span className="font-medium">Total Permissions:</span> {getPermissionSummary(viewingRole.permissions).total}</div>
-                    <div><span className="font-medium">Applications:</span> {getPermissionSummary(viewingRole.permissions).applicationCount}</div>
-                    <div><span className="font-medium">Modules:</span> {getPermissionSummary(viewingRole.permissions).moduleCount}</div>
-                    <div><span className="font-medium">Users:</span> {viewingRole.userCount || 0}</div>
+                    <div><span className={`font-medium ${
+                      actualTheme === 'dark'
+                        ? 'text-gray-300'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-400'
+                        : 'text-gray-600'
+                    }`}>Total Permissions:</span> <span className={
+                      actualTheme === 'dark'
+                        ? 'text-white'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-100'
+                        : 'text-gray-900'
+                    }>{getPermissionSummary(viewingRole.permissions).total}</span></div>
+                    <div><span className={`font-medium ${
+                      actualTheme === 'dark'
+                        ? 'text-gray-300'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-400'
+                        : 'text-gray-600'
+                    }`}>Applications:</span> <span className={
+                      actualTheme === 'dark'
+                        ? 'text-white'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-100'
+                        : 'text-gray-900'
+                    }>{getPermissionSummary(viewingRole.permissions).applicationCount}</span></div>
+                    <div><span className={`font-medium ${
+                      actualTheme === 'dark'
+                        ? 'text-gray-300'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-400'
+                        : 'text-gray-600'
+                    }`}>Modules:</span> <span className={
+                      actualTheme === 'dark'
+                        ? 'text-white'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-100'
+                        : 'text-gray-900'
+                    }>{getPermissionSummary(viewingRole.permissions).moduleCount}</span></div>
+                    <div><span className={`font-medium ${
+                      actualTheme === 'dark'
+                        ? 'text-gray-300'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-400'
+                        : 'text-gray-600'
+                    }`}>Users:</span> <span className={
+                      actualTheme === 'dark'
+                        ? 'text-white'
+                        : actualTheme === 'monochrome'
+                        ? 'text-gray-100'
+                        : 'text-gray-900'
+                    }>{viewingRole.userCount || 0}</span></div>
                   </div>
                 </div>
               </div>
 
               {/* Enhanced Permission Details */}
-              <EnhancedPermissionSummary 
-                permissions={viewingRole.permissions}
-                roleName={viewingRole.roleName}
-                restrictions={viewingRole.restrictions}
-                isSystemRole={viewingRole.isSystemRole}
-                userCount={viewingRole.userCount || 0}
-              />
+              <div className={`rounded-lg p-4 border ${
+                actualTheme === 'dark'
+                  ? 'bg-gray-900 border-gray-700'
+                  : actualTheme === 'monochrome'
+                  ? 'bg-gray-800 border-gray-600'
+                  : 'bg-gray-50 border-gray-200'
+              }`}>
+                <EnhancedPermissionSummary
+                  permissions={viewingRole.permissions}
+                  roleName={viewingRole.roleName}
+                  restrictions={viewingRole.restrictions}
+                  isSystemRole={viewingRole.isSystemRole}
+                  userCount={viewingRole.userCount || 0}
+                  className="bg-transparent"
+                />
+              </div>
             </div>
           )}
         </DialogContent>
@@ -1137,6 +1794,9 @@ export function RoleManagementDashboard() {
           initialRole={editingRole}
         />
       )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 } 

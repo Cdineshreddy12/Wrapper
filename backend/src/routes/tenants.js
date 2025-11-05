@@ -925,6 +925,66 @@ export default async function tenantRoutes(fastify, options) {
     }
   });
 
+  // Get organization assignments for current tenant
+  fastify.get('/current/organization-assignments', async (request, reply) => {
+    if (!request.userContext?.isAuthenticated) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+
+    try {
+      const tenantId = request.userContext.tenantId;
+
+      if (!tenantId) {
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+      }
+
+      // Get organization assignments from database
+      const { organizationMemberships } = await import('../db/schema/organization_memberships.js');
+      const { entities } = await import('../db/schema/unified-entities.js');
+      const { db } = await import('../db/index.js');
+      const { eq, and } = await import('drizzle-orm');
+
+      const assignments = await db
+        .select({
+          membershipId: organizationMemberships.membershipId,
+          userId: organizationMemberships.userId,
+          entityId: organizationMemberships.entityId,
+          entityType: organizationMemberships.entityType,
+          roleName: organizationMemberships.roleName,
+          membershipStatus: organizationMemberships.membershipStatus,
+          accessLevel: organizationMemberships.accessLevel,
+          isPrimary: organizationMemberships.isPrimary,
+          department: organizationMemberships.department,
+          team: organizationMemberships.team,
+          jobTitle: organizationMemberships.jobTitle,
+          joinedAt: organizationMemberships.joinedAt,
+          // Include entity details
+          entityName: entities.entityName,
+          entityCode: entities.entityCode,
+          entityParentId: entities.parentEntityId,
+        })
+        .from(organizationMemberships)
+        .innerJoin(entities, eq(organizationMemberships.entityId, entities.entityId))
+        .where(
+          and(
+            eq(organizationMemberships.tenantId, tenantId),
+            eq(organizationMemberships.membershipStatus, 'active'),
+            eq(entities.entityType, 'organization')
+          )
+        )
+        .orderBy(organizationMemberships.createdAt);
+
+      return {
+        success: true,
+        data: assignments,
+        message: 'Organization assignments retrieved successfully'
+      };
+    } catch (error) {
+      request.log.error('Error fetching organization assignments:', error);
+      return reply.code(500).send({ error: 'Failed to fetch organization assignments' });
+    }
+  });
+
   // Export users
   fastify.get('/current/users/export', async (request, reply) => {
     if (!request.userContext?.isAuthenticated) {

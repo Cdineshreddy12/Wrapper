@@ -97,7 +97,6 @@ export default async function entityRoutes(fastify, options) {
               address: entity.address,
               // Include credit information
               availableCredits: entity.availableCredits,
-              reservedCredits: entity.reservedCredits,
               children: []
             };
             
@@ -169,7 +168,6 @@ export default async function entityRoutes(fastify, options) {
                 address: entity.address,
                 // Include credit information (fallback to 0 if not available)
                 availableCredits: entity.availableCredits || "0.0000",
-                reservedCredits: entity.reservedCredits || "0.0000",
                 children: [] // No hierarchy in fallback
               });
             }

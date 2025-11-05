@@ -29,6 +29,8 @@ import toast from 'react-hot-toast'
 import { cn } from '@/lib/utils'
 import { useTrialStatus } from '@/hooks/useTrialStatus'
 import { TrialStatusWidget } from '@/components/trial/TrialStatusWidget'
+import { SeasonalCreditNotification, useSeasonalCreditNotifications } from '@/components/SeasonalCreditNotification'
+import { NotificationManager } from '@/components/notifications'
 
 interface TrialInfo {
   plan: string
@@ -81,6 +83,9 @@ export function DashboardLayout2() {
   const params = useParams()
   const { user, logout } = useKindeAuth()
 
+  // Seasonal credit notifications
+  useSeasonalCreditNotifications()
+
   // Determine which navigation to use based on current route
   const isOrganizationRoute = location.pathname.startsWith('/org/')
   const orgCode = params.orgCode
@@ -100,7 +105,7 @@ export function DashboardLayout2() {
       const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
       
       setTrialInfo({
-        plan: plan || 'professional',
+        plan: plan || 'free', // Changed from 'professional' to 'free' for consistency
         endDate,
         daysRemaining,
         checkoutUrl: pendingCheckoutUrl || undefined
@@ -258,10 +263,8 @@ export function DashboardLayout2() {
             </Button>
 
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon">
-                <Bell className="h-5 w-5" />
-              </Button>
-              
+              <NotificationManager />
+
               <div className="flex items-center gap-3">
                 <div className="text-right">
                   <div className="text-sm font-medium">{user?.givenName} {user?.familyName}</div>
@@ -316,9 +319,6 @@ export function DashboardLayout2() {
                         </div>
                       </div>
                       <div className="flex items-center space-x-3">
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                          {trialInfo.plan.charAt(0).toUpperCase() + trialInfo.plan.slice(1)} Plan
-                        </Badge>
                         <Button onClick={handleUpgradeNow} size="sm">
                           {trialInfo.daysRemaining > 0 ? 'Setup Payment' : 'Upgrade Now'}
                         </Button>
@@ -344,6 +344,9 @@ export function DashboardLayout2() {
           </div>
         </main>
       </div>
+
+      {/* Seasonal Credit Notifications */}
+      <SeasonalCreditNotification />
     </div>
   )
 }

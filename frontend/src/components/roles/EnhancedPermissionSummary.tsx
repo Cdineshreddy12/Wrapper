@@ -367,133 +367,133 @@ export function EnhancedPermissionSummary({
   };
 
   return (
-    <Card className={`w-full ${className}`}>
-      <CardHeader className="pb-3">
+    <Card className={`w-full bg-transparent border-0 ${className}`}>
+      <CardHeader className="pb-3 bg-transparent">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-blue-600" />
-            <CardTitle className="text-lg">Permission Details</CardTitle>
-            {isSystemRole && <Badge variant="outline">System Role</Badge>}
+            <Shield className="w-5 h-5 text-blue-400" />
+            <CardTitle className="text-lg text-white">Permission Details</CardTitle>
+            {isSystemRole && <Badge variant="outline" className="border-gray-600 text-gray-300">System Role</Badge>}
           </div>
-          <div className="flex items-center gap-2 text-sm text-gray-600">
+          <div className="flex items-center gap-2 text-sm text-gray-300">
             {userCount > 0 && <span>{userCount} users</span>}
           </div>
         </div>
-        
+
         {/* Summary Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-          <div className="text-center p-3 bg-gray-50 rounded-lg">
-            <div className="text-2xl font-bold text-gray-900">{analysis.totalPermissions}</div>
-            <div className="text-xs text-gray-600">Total Permissions</div>
+          <div className="text-center p-3 bg-gray-800 rounded-lg border border-gray-700">
+            <div className="text-2xl font-bold text-white">{analysis.totalPermissions}</div>
+            <div className="text-xs text-gray-300">Total Permissions</div>
           </div>
-          <div className="text-center p-3 bg-red-50 rounded-lg">
-            <div className="text-2xl font-bold text-red-700">{analysis.adminCount}</div>
-            <div className="text-xs text-red-600">Admin Permissions</div>
+          <div className="text-center p-3 bg-red-900/20 rounded-lg border border-red-800">
+            <div className="text-2xl font-bold text-red-400">{analysis.adminCount}</div>
+            <div className="text-xs text-red-400">Admin Permissions</div>
           </div>
-          <div className="text-center p-3 bg-orange-50 rounded-lg">
-            <div className="text-2xl font-bold text-orange-700">{analysis.writeCount}</div>
-            <div className="text-xs text-orange-600">Write Permissions</div>
+          <div className="text-center p-3 bg-orange-900/20 rounded-lg border border-orange-800">
+            <div className="text-2xl font-bold text-orange-400">{analysis.writeCount}</div>
+            <div className="text-xs text-orange-400">Write Permissions</div>
           </div>
-          <div className="text-center p-3 bg-green-50 rounded-lg">
-            <div className="text-2xl font-bold text-green-700">{analysis.readCount}</div>
-            <div className="text-xs text-green-600">Read Permissions</div>
+          <div className="text-center p-3 bg-green-900/20 rounded-lg border border-green-800">
+            <div className="text-2xl font-bold text-green-400">{analysis.readCount}</div>
+            <div className="text-xs text-green-400">Read Permissions</div>
           </div>
         </div>
 
         {/* Risk Assessment */}
         {analysis.adminCount > 10 && (
-          <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg mt-3">
-            <AlertTriangle className="w-4 h-4 text-amber-600" />
-            <span className="text-sm text-amber-800">
+          <div className="flex items-center gap-2 p-3 bg-yellow-900/20 border border-yellow-800 rounded-lg mt-3">
+            <AlertTriangle className="w-4 h-4 text-yellow-400" />
+            <span className="text-sm text-yellow-200">
               <strong>High-Risk Role:</strong> This role has {analysis.adminCount} administrative permissions. Use with caution.
             </span>
           </div>
         )}
       </CardHeader>
 
-      <CardContent className="pt-0">
+      <CardContent className="pt-0 bg-transparent">
         {/* Application Breakdown */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-gray-900">Applications & Modules</h4>
-            <Badge variant="outline">{analysis.applicationCount} apps, {analysis.moduleCount} modules</Badge>
+            <h4 className="text-sm font-semibold text-white">Applications & Modules</h4>
+            <Badge variant="outline" className="border-gray-600 text-gray-300">{analysis.applicationCount} apps, {analysis.moduleCount} modules</Badge>
           </div>
 
           {Object.entries(analysis.applications).map(([appKey, app]: [string, any]) => (
-            <div key={appKey} className="border border-gray-200 rounded-lg">
-              <div 
-                className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50"
+            <div key={appKey} className="border border-gray-700 rounded-lg bg-gray-800/50">
+              <div
+                className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-700/50"
                 onClick={() => toggleAppExpansion(appKey)}
               >
                 <div className="flex items-center gap-3">
-                  {expandedApps.has(appKey) ? 
-                    <ChevronDown className="w-4 h-4 text-gray-500" /> : 
-                    <ChevronRight className="w-4 h-4 text-gray-500" />
+                  {expandedApps.has(appKey) ?
+                    <ChevronDown className="w-4 h-4 text-gray-300" /> :
+                    <ChevronRight className="w-4 h-4 text-gray-300" />
                   }
                   {app.icon}
                   <div>
-                    <div className="font-medium text-gray-900">{app.name}</div>
-                    <div className="text-xs text-gray-500">
+                    <div className="font-medium text-white">{app.name}</div>
+                    <div className="text-xs text-gray-400">
                       {Object.keys(app.modules).length} modules • {app.totalPerms} permissions
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {app.adminPerms > 0 && <Badge variant="outline" className="text-red-600">Admin: {app.adminPerms}</Badge>}
-                  {app.writePerms > 0 && <Badge variant="outline" className="text-orange-600">Write: {app.writePerms}</Badge>}
-                  {app.readPerms > 0 && <Badge variant="outline" className="text-green-600">Read: {app.readPerms}</Badge>}
+                  {app.adminPerms > 0 && <Badge variant="outline" className="border-red-800 text-red-400">Admin: {app.adminPerms}</Badge>}
+                  {app.writePerms > 0 && <Badge variant="outline" className="border-orange-800 text-orange-400">Write: {app.writePerms}</Badge>}
+                  {app.readPerms > 0 && <Badge variant="outline" className="border-green-800 text-green-400">Read: {app.readPerms}</Badge>}
                 </div>
               </div>
 
               {expandedApps.has(appKey) && (
-                <div className="border-t border-gray-100 bg-gray-50">
+                <div className="border-t border-gray-700 bg-gray-900/50">
                   {Object.entries(app.modules).map(([moduleId, module]: [string, any]) => (
-                    <div key={moduleId} className="border-b border-gray-100 last:border-b-0">
-                      <div 
-                        className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-100"
+                    <div key={moduleId} className="border-b border-gray-700 last:border-b-0">
+                      <div
+                        className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-800/50"
                         onClick={() => toggleModuleExpansion(moduleId)}
                       >
                         <div className="flex items-center gap-3 ml-6">
-                          {expandedModules.has(moduleId) ? 
-                            <ChevronDown className="w-3 h-3 text-gray-400" /> : 
-                            <ChevronRight className="w-3 h-3 text-gray-400" />
+                          {expandedModules.has(moduleId) ?
+                            <ChevronDown className="w-3 h-3 text-gray-300" /> :
+                            <ChevronRight className="w-3 h-3 text-gray-300" />
                           }
-                          <Layers className="w-3 h-3 text-gray-600" />
+                          <Layers className="w-3 h-3 text-gray-400" />
                           <div>
-                            <div className="font-medium text-gray-800 text-sm">{module.name}</div>
-                            <div className="text-xs text-gray-500">{module.permissionCount} permissions</div>
+                            <div className="font-medium text-gray-200 text-sm">{module.name}</div>
+                            <div className="text-xs text-gray-400">{module.permissionCount} permissions</div>
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
-                          {module.adminPerms > 0 && <Badge variant="outline" className="text-xs text-red-600">A:{module.adminPerms}</Badge>}
-                          {module.writePerms > 0 && <Badge variant="outline" className="text-xs text-orange-600">W:{module.writePerms}</Badge>}
-                          {module.readPerms > 0 && <Badge variant="outline" className="text-xs text-green-600">R:{module.readPerms}</Badge>}
+                          {module.adminPerms > 0 && <Badge variant="outline" className="text-xs border-red-800 text-red-400">A:{module.adminPerms}</Badge>}
+                          {module.writePerms > 0 && <Badge variant="outline" className="text-xs border-orange-800 text-orange-400">W:{module.writePerms}</Badge>}
+                          {module.readPerms > 0 && <Badge variant="outline" className="text-xs border-green-800 text-green-400">R:{module.readPerms}</Badge>}
                         </div>
                       </div>
 
                       {expandedModules.has(moduleId) && (
-                        <div className="bg-white p-3 ml-12">
+                        <div className="bg-gray-800 p-3 ml-12 border-l-2 border-gray-600">
                           <div className="grid grid-cols-1 gap-2">
                             {module.permissionDetails && module.permissionDetails.slice(0, showAllPermissions ? undefined : 5).map((perm: any, index: number) => (
-                              <div key={index} className={`flex items-center gap-2 p-2 rounded border ${perm.color}`}>
+                              <div key={index} className={`flex items-center gap-2 p-2 rounded border ${perm.color} bg-gray-700/50`}>
                                 {perm.icon}
-                                <span className="text-sm font-mono">{perm.name}</span>
-                                <Badge variant="outline" className={`text-xs ${
-                                  perm.risk === 'high' ? 'border-red-300 text-red-700' :
-                                  perm.risk === 'medium' ? 'border-orange-300 text-orange-700' :
-                                  'border-green-300 text-green-700'
+                                <span className="text-sm font-mono text-gray-200">{perm.name}</span>
+                                <Badge variant="outline" className={`text-xs border-gray-600 ${
+                                  perm.risk === 'high' ? 'text-red-400' :
+                                  perm.risk === 'medium' ? 'text-orange-400' :
+                                  'text-green-400'
                                 }`}>
                                   {perm.risk}
                                 </Badge>
-                                <span className="text-xs text-gray-500 ml-auto">{perm.description}</span>
+                                <span className="text-xs text-gray-400 ml-auto">{perm.description}</span>
                               </div>
                             ))}
                             {module.permissionDetails && module.permissionDetails.length > 5 && !showAllPermissions && (
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => setShowAllPermissions(true)}
-                                className="text-xs"
+                                className="text-xs text-gray-300 hover:bg-gray-700"
                               >
                                 Show {module.permissionDetails.length - 5} more permissions...
                               </Button>
@@ -510,8 +510,8 @@ export function EnhancedPermissionSummary({
         </div>
 
         {Object.keys(analysis.applications).length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            <Shield className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+          <div className="text-center py-8 text-gray-400">
+            <Shield className="w-12 h-12 mx-auto mb-3 text-gray-600" />
             <p>No permissions assigned to this role</p>
           </div>
         )}

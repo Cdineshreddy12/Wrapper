@@ -1,6 +1,6 @@
 import { db, systemDbConnection } from '../db/index.js';
 import { credits, creditTransactions, creditPurchases, creditConfigurations, applications as applicationsTable, applicationModules } from '../db/schema/index.js';
-import { eq, and, desc, gte, lte, sql, or, isNull, inArray } from 'drizzle-orm';
+import { eq, and, desc, gte, lte, sql, or, isNull, isNotNull, inArray } from 'drizzle-orm';
 import Stripe from 'stripe';
 import { randomUUID } from 'crypto';
 
@@ -73,7 +73,6 @@ export class CreditService {
             tenantId,
             entityId: searchEntityId,
             availableCredits: initialCredits.toString(),
-            reservedCredits: '0',
             isActive: true,
             lastUpdatedAt: new Date(),
             createdAt: new Date()
@@ -142,18 +141,257 @@ export class CreditService {
         ))
         .limit(1);
 
-      if (!creditBalance) {
-        // Return default structure for entities without credit records
+      let hasCreditRecord = !!creditBalance;
+
+      // Calculate free and paid credits from allocations (only needed for normal credit record case)
+      const { creditAllocations } = await import('../db/schema/index.js');
+      const creditTypeSummary = await db
+        .select({
+          creditType: creditAllocations.creditType,
+          totalCredits: sql`sum(${creditAllocations.availableCredits}::numeric)`
+        })
+        .from(creditAllocations)
+        .where(and(
+          eq(creditAllocations.tenantId, tenantId),
+          eq(creditAllocations.sourceEntityId, searchEntityId),
+          eq(creditAllocations.isActive, true)
+        ))
+        .groupBy(creditAllocations.creditType);
+
+      let freeCredits = 0;
+      let paidCredits = 0;
+
+      if (hasCreditRecord) {
+        // Only calculate these for existing credit records
+        creditTypeSummary.forEach(summary => {
+          const amount = parseFloat(summary.totalCredits) || 0;
+          if (summary.creditType === 'free') {
+            freeCredits = amount;
+          } else if (summary.creditType === 'paid') {
+            paidCredits = amount;
+          }
+        });
+      }
+
+      // Calculate alerts based on current balance (only for existing credit records)
+      const alerts = [];
+
+      if (hasCreditRecord) {
+        if (creditBalance.availableCredits <= creditBalance.criticalBalanceThreshold) {
+          alerts.push({
+            id: 'critical_balance',
+            type: 'critical_balance',
+            severity: 'critical',
+            title: 'Critical Credit Balance',
+            message: `You have only ${creditBalance.availableCredits} credits remaining`,
+            threshold: creditBalance.criticalBalanceThreshold,
+            currentValue: creditBalance.availableCredits,
+            actionRequired: 'purchase_credits'
+          });
+        } else if (creditBalance.availableCredits <= creditBalance.lowBalanceThreshold) {
+          alerts.push({
+            id: 'low_balance',
+            type: 'low_balance',
+            severity: 'warning',
+            title: 'Low Credit Balance',
+            message: `You have ${creditBalance.availableCredits} credits remaining`,
+            threshold: creditBalance.lowBalanceThreshold,
+            currentValue: creditBalance.availableCredits,
+            actionRequired: 'purchase_credits'
+          });
+        }
+
+        // Check for expiry warnings
+        if (creditBalance.creditExpiry) {
+          const daysUntilExpiry = Math.floor(
+            (new Date(creditBalance.creditExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+          );
+
+          if (daysUntilExpiry <= 30 && daysUntilExpiry > 0) {
+            alerts.push({
+              id: 'expiry_warning',
+              type: 'expiry_warning',
+              severity: daysUntilExpiry <= 7 ? 'critical' : 'warning',
+              title: 'Credits Expiring Soon',
+              message: `${creditBalance.availableCredits} credits expire in ${daysUntilExpiry} days`,
+              threshold: daysUntilExpiry,
+              currentValue: creditBalance.availableCredits,
+              actionRequired: 'purchase_credits'
+            });
+          }
+        }
+      }
+
+      // Get the earliest expiry date from active allocations
+      const earliestExpiryResult = await db
+        .select({ expiryDate: creditAllocations.expiresAt })
+        .from(creditAllocations)
+        .where(and(
+          eq(creditAllocations.tenantId, tenantId),
+          eq(creditAllocations.sourceEntityId, searchEntityId),
+          eq(creditAllocations.isActive, true),
+          isNotNull(creditAllocations.expiresAt)
+        ))
+        .orderBy(creditAllocations.expiresAt)
+        .limit(1);
+
+      const creditExpiry = earliestExpiryResult[0]?.expiryDate || null;
+
+      // Get detailed allocation information
+      const allocations = await db
+        .select({
+          allocationId: creditAllocations.allocationId,
+          allocatedCredits: creditAllocations.allocatedCredits,
+          usedCredits: creditAllocations.usedCredits,
+          availableCredits: creditAllocations.availableCredits,
+          creditType: creditAllocations.creditType,
+          allocationType: creditAllocations.allocationType,
+          allocationPurpose: creditAllocations.allocationPurpose,
+          allocatedAt: creditAllocations.allocatedAt,
+          expiresAt: creditAllocations.expiresAt,
+          isActive: creditAllocations.isActive
+        })
+        .from(creditAllocations)
+        .where(and(
+          eq(creditAllocations.tenantId, tenantId),
+          eq(creditAllocations.sourceEntityId, searchEntityId),
+          eq(creditAllocations.isActive, true)
+        ))
+        .orderBy(desc(creditAllocations.allocatedAt));
+
+      // If no credit record exists but allocations do exist, create a virtual credit balance
+      if (!hasCreditRecord && allocations.length > 0) {
+        console.log('⚠️ No credit record found, but allocations exist. Creating virtual balance from allocations.');
+
+        // Calculate totals from allocations
+        const totalAvailableCredits = allocations.reduce((sum, alloc) => sum + parseFloat(alloc.availableCredits || '0'), 0);
+        const totalAllocatedCredits = allocations.reduce((sum, alloc) => sum + parseFloat(alloc.allocatedCredits || '0'), 0);
+        const totalUsedCredits = allocations.reduce((sum, alloc) => sum + parseFloat(alloc.usedCredits || '0'), 0);
+
+        // Calculate free and paid credits
+        const freeCreditsFromAllocations = allocations
+          .filter(alloc => alloc.creditType === 'free')
+          .reduce((sum, alloc) => sum + parseFloat(alloc.availableCredits || '0'), 0);
+        const paidCreditsFromAllocations = allocations
+          .filter(alloc => alloc.creditType === 'paid')
+          .reduce((sum, alloc) => sum + parseFloat(alloc.availableCredits || '0'), 0);
+
+        // Generate alerts based on virtual balance
+        const virtualAlerts = [];
+        if (totalAvailableCredits <= 10) {
+          virtualAlerts.push({
+            id: 'critical_balance',
+            type: 'critical_balance',
+            severity: 'critical',
+            title: 'Critical Credit Balance',
+            message: `You have only ${totalAvailableCredits} credits remaining`,
+            threshold: 10,
+            currentValue: totalAvailableCredits,
+            actionRequired: 'purchase_credits'
+          });
+        } else if (totalAvailableCredits <= 100) {
+          virtualAlerts.push({
+            id: 'low_balance',
+            type: 'low_balance',
+            severity: 'warning',
+            title: 'Low Credit Balance',
+            message: `You have ${totalAvailableCredits} credits remaining`,
+            threshold: 100,
+            currentValue: totalAvailableCredits,
+            actionRequired: 'purchase_credits'
+          });
+        }
+
+        // Check for expiring credits from allocations
+        const now = new Date();
+        const expiringSoon = allocations.filter(alloc => {
+          if (!alloc.expiresAt) return false;
+          const expiryDate = new Date(alloc.expiresAt);
+          const daysUntilExpiry = Math.floor((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          return daysUntilExpiry <= 30 && daysUntilExpiry > 0;
+        });
+
+        expiringSoon.forEach(alloc => {
+          const expiryDate = new Date(alloc.expiresAt);
+          const daysUntilExpiry = Math.floor((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          virtualAlerts.push({
+            id: `expiry_${alloc.allocationId}`,
+            type: 'expiry_warning',
+            severity: daysUntilExpiry <= 7 ? 'critical' : 'warning',
+            title: 'Credits Expiring Soon',
+            message: `${parseFloat(alloc.availableCredits)} credits expire in ${daysUntilExpiry} days`,
+            threshold: daysUntilExpiry,
+            currentValue: parseFloat(alloc.availableCredits),
+            actionRequired: 'purchase_credits'
+          });
+        });
+
+        // Get actual subscription plan instead of hardcoding 'credit_based'
+        const { subscriptions } = await import('../db/schema/index.js');
+        const [subscription] = await db
+          .select({ plan: subscriptions.plan })
+          .from(subscriptions)
+          .where(eq(subscriptions.tenantId, tenantId))
+          .orderBy(subscriptions.createdAt)
+          .limit(1);
+
+        return {
+          tenantId: tenantId,
+          entityId: searchEntityId,
+          availableCredits: totalAvailableCredits,
+          totalCredits: totalAvailableCredits, // For backward compatibility
+          freeCredits: freeCreditsFromAllocations,
+          paidCredits: paidCreditsFromAllocations,
+          lowBalanceThreshold: 100,
+          criticalBalanceThreshold: 10,
+          lastPurchase: allocations.length > 0 ? allocations[0].allocatedAt : null,
+          creditExpiry: earliestExpiryResult[0]?.expiryDate || null,
+          plan: subscription?.plan || 'free',
+          status: totalAvailableCredits > 0 ? 'active' : 'insufficient_credits',
+          usageThisPeriod: 0,
+          periodLimit: 0,
+          periodType: 'month',
+          alerts: virtualAlerts,
+          createdAt: allocations.length > 0 ? allocations[0].allocatedAt : new Date(),
+          updatedAt: new Date(),
+          // Include detailed allocation information
+          allocations: allocations.map(alloc => ({
+            allocationId: alloc.allocationId,
+            allocatedCredits: parseFloat(alloc.allocatedCredits),
+            usedCredits: parseFloat(alloc.usedCredits),
+            availableCredits: parseFloat(alloc.availableCredits),
+            creditType: alloc.creditType,
+            allocationType: alloc.allocationType,
+            allocationPurpose: alloc.allocationPurpose,
+            allocatedAt: alloc.allocatedAt,
+            expiresAt: alloc.expiresAt,
+            isActive: alloc.isActive
+          }))
+        };
+      }
+
+      // If no credit record and no allocations, return default
+      if (!hasCreditRecord && allocations.length === 0) {
+        // Get actual subscription plan
+        const { subscriptions } = await import('../db/schema/index.js');
+        const [subscription] = await db
+          .select({ plan: subscriptions.plan })
+          .from(subscriptions)
+          .where(eq(subscriptions.tenantId, tenantId))
+          .orderBy(subscriptions.createdAt)
+          .limit(1);
+
         return {
           tenantId: tenantId,
           entityId: searchEntityId,
           availableCredits: 0,
-          reservedCredits: 0,
+          freeCredits: 0,
+          paidCredits: 0,
           lowBalanceThreshold: 100,
           criticalBalanceThreshold: 10,
           lastPurchase: null,
           creditExpiry: null,
-          plan: 'credit_based',
+          plan: subscription?.plan || 'free',
           status: 'no_credits',
           usageThisPeriod: 0,
           periodLimit: 0,
@@ -167,72 +405,53 @@ export class CreditService {
             threshold: 0,
             currentValue: 0,
             actionRequired: 'initialize_credits'
-          }]
+          }],
+          allocations: []
         };
       }
 
-      // Calculate alerts based on current balance
-      const alerts = [];
+      // Get actual subscription plan
+      const { subscriptions } = await import('../db/schema/index.js');
+      const [subscription] = await db
+        .select({ plan: subscriptions.plan })
+        .from(subscriptions)
+        .where(eq(subscriptions.tenantId, tenantId))
+        .orderBy(subscriptions.createdAt)
+        .limit(1);
 
-      if (creditBalance.availableCredits <= creditBalance.criticalBalanceThreshold) {
-        alerts.push({
-          id: 'critical_balance',
-          type: 'critical_balance',
-          severity: 'critical',
-          title: 'Critical Credit Balance',
-          message: `You have only ${creditBalance.availableCredits} credits remaining`,
-          threshold: creditBalance.criticalBalanceThreshold,
-          currentValue: creditBalance.availableCredits,
-          actionRequired: 'purchase_credits'
-        });
-      } else if (creditBalance.availableCredits <= creditBalance.lowBalanceThreshold) {
-        alerts.push({
-          id: 'low_balance',
-          type: 'low_balance',
-          severity: 'warning',
-          title: 'Low Credit Balance',
-          message: `You have ${creditBalance.availableCredits} credits remaining`,
-          threshold: creditBalance.lowBalanceThreshold,
-          currentValue: creditBalance.availableCredits,
-          actionRequired: 'purchase_credits'
-        });
-      }
-
-      // Check for expiring credits
-      if (creditBalance.creditExpiry) {
-        const daysUntilExpiry = Math.floor(
-          (new Date(creditBalance.creditExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-        );
-
-        if (daysUntilExpiry <= 30 && daysUntilExpiry > 0) {
-          alerts.push({
-            id: 'expiry_warning',
-            type: 'expiry_warning',
-            severity: daysUntilExpiry <= 7 ? 'critical' : 'warning',
-            title: 'Credits Expiring Soon',
-            message: `${creditBalance.availableCredits} credits expire in ${daysUntilExpiry} days`,
-            threshold: daysUntilExpiry,
-            currentValue: creditBalance.availableCredits,
-            actionRequired: 'purchase_credits'
-          });
-        }
-      }
-
+      // Normal case: credit record exists
       return {
         tenantId: creditBalance.tenantId,
         entityId: creditBalance.entityId,
         availableCredits: parseFloat(creditBalance.availableCredits),
-        reservedCredits: parseFloat(creditBalance.reservedCredits),
+        totalCredits: parseFloat(creditBalance.availableCredits), // For backward compatibility
+        freeCredits: freeCredits,
+        paidCredits: paidCredits,
         lowBalanceThreshold: 100,
         criticalBalanceThreshold: 10,
         lastPurchase: creditBalance.lastUpdatedAt,
-        creditExpiry: null,
-        plan: 'credit_based',
+        creditExpiry: creditExpiry,
+        plan: subscription?.plan || 'free',
         status: creditBalance.availableCredits > 0 ? 'active' : 'insufficient_credits',
         usageThisPeriod: 0,
         periodLimit: 0,
         periodType: 'month',
-        alerts
+        alerts,
+        createdAt: creditBalance.createdAt,
+        updatedAt: creditBalance.updatedAt,
+        // Include detailed allocation information
+        allocations: allocations.map(alloc => ({
+          allocationId: alloc.allocationId,
+          allocatedCredits: parseFloat(alloc.allocatedCredits),
+          usedCredits: parseFloat(alloc.usedCredits),
+          availableCredits: parseFloat(alloc.availableCredits),
+          creditType: alloc.creditType,
+          allocationType: alloc.allocationType,
+          allocationPurpose: alloc.allocationPurpose,
+          allocatedAt: alloc.allocatedAt,
+          expiresAt: alloc.expiresAt,
+          isActive: alloc.isActive
+        }))
       };
     } catch (error) {
       console.error('Error fetching current credit balance:', error);
@@ -313,7 +532,9 @@ export class CreditService {
     entityType = 'organization', // New parameter for hierarchical support
     entityId = null, // New parameter for hierarchical support
     isWebhookCompletion = false, // Flag for webhook completion
-    sessionId = null // Stripe session ID for webhook completion
+    sessionId = null, // Stripe session ID for webhook completion
+    customerEmail = null, // Customer email for Stripe checkout
+    customerName = null // Customer name for Stripe checkout
   }) {
     try {
       console.log('💰 Processing credit purchase:', {
@@ -324,9 +545,43 @@ export class CreditService {
         sessionId
       });
 
-      // Calculate unit price (example pricing)
-      const unitPrice = 0.10; // $0.10 per credit
-      const totalAmount = creditAmount * unitPrice;
+      // Get tenant information for customer details
+      const { db } = await import('../db/index.js');
+      const { tenants } = await import('../db/schema/index.js');
+      const { eq } = await import('drizzle-orm');
+
+      const [tenant] = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.tenantId, tenantId))
+        .limit(1);
+
+      if (!tenant) {
+        throw new Error('Tenant not found');
+      }
+
+      // Get user information for customer details
+      const { tenantUsers } = await import('../db/schema/index.js');
+      const [user] = userId ? await db
+        .select()
+        .from(tenantUsers)
+        .where(eq(tenantUsers.userId, userId))
+        .limit(1) : [null];
+
+      // Use provided customer details or get from user/tenant
+      const finalCustomerEmail = customerEmail || user?.email || tenant.adminEmail;
+      const finalCustomerName = customerName || user?.name || tenant.companyName;
+
+      // Get credit package configuration from subscription service
+      const { SubscriptionService } = await import('./subscription-service.js');
+      const packageId = `credits_${creditAmount}`;
+      const packageConfig = SubscriptionService.STRIPE_PLAN_CONFIG.credit_topups[packageId];
+
+      if (!packageConfig) {
+        throw new Error(`Invalid credit amount: ${creditAmount}. Supported amounts: 5000, 10000, 15000`);
+      }
+
+      const totalAmount = packageConfig.amount / 100; // Convert from cents to dollars
 
       let purchase;
 
@@ -348,18 +603,18 @@ export class CreditService {
             .set({
               status: 'completed',
               paymentStatus: 'completed',
-              completedAt: new Date(),
-              processedBy: userId || '00000000-0000-0000-0000-000000000001'
+              paidAt: new Date(),
+              creditedAt: new Date()
             })
             .where(eq(creditPurchases.purchaseId, existingPurchase.purchaseId));
-          
+
           // Create updated purchase object with correct status
           purchase = {
             ...existingPurchase,
             status: 'completed',
             paymentStatus: 'completed',
-            completedAt: new Date(),
-            processedBy: userId || '00000000-0000-0000-0000-000000000001'
+            paidAt: new Date(),
+            creditedAt: new Date()
           };
         } else {
           console.log('⚠️ No existing purchase found, creating new one for webhook completion');
@@ -374,35 +629,22 @@ export class CreditService {
           .insert(creditPurchases)
           .values({
             tenantId,
-            entityType,
             entityId,
             creditAmount: creditAmount.toString(),
-            currency,
-            unitPrice: unitPrice.toString(),
+            unitPrice: (totalAmount / creditAmount).toFixed(4), // Price per credit
             totalAmount: totalAmount.toString(),
-            finalAmount: totalAmount.toString(), // Required field
             batchId: randomUUID(), // Required UUID field
             paymentMethod,
             status: isWebhookCompletion ? 'completed' : 'pending',
             paymentStatus: isWebhookCompletion ? 'completed' : 'pending',
             requestedBy: userId || '00000000-0000-0000-0000-000000000001', // System user UUID fallback
-            processedBy: isWebhookCompletion ? (userId || '00000000-0000-0000-0000-000000000001') : null,
-            completedAt: isWebhookCompletion ? new Date() : null,
-            notes
+            paidAt: isWebhookCompletion ? new Date() : null,
+            creditedAt: isWebhookCompletion ? new Date() : null,
+            stripePaymentIntentId: sessionId || null
           })
           .returning();
 
         purchase = newPurchase;
-
-        // Update with Stripe session ID if provided
-        if (sessionId) {
-          await db
-            .update(creditPurchases)
-            .set({
-              stripePaymentIntentId: sessionId
-            })
-            .where(eq(creditPurchases.purchaseId, purchase.purchaseId));
-        }
       }
 
       // Add credits to the appropriate entity balance (always do this for completed purchases)
@@ -414,26 +656,60 @@ export class CreditService {
       });
 
       if (purchase.status === 'completed') {
-        console.log('💰 Adding credits to entity balance - CALLING addCreditsToEntity...');
+        console.log('💰 Adding credits to entity balance - using CreditAllocationService...');
         console.log('📋 Purchase details for credit allocation:', {
           purchaseId: purchase.purchaseId,
           stripePaymentIntentId: purchase.stripePaymentIntentId,
-          sourceId: purchase.stripePaymentIntentId || purchase.purchaseId
+          creditAmount,
+          creditType: 'paid'
         });
+
         try {
-          await this.addCreditsToEntity({
+          // Import CreditAllocationService dynamically
+          const { CreditAllocationService } = await import('./credit-allocation-service.js');
+          const allocationService = new CreditAllocationService();
+
+          // Validate entityId
+          if (!entityId) {
+            throw new Error('Invalid entity ID for credit allocation');
+          }
+
+          // Ensure creditAmount is a number
+          const numericCreditAmount = typeof creditAmount === 'string' ? parseFloat(creditAmount) : creditAmount;
+
+          // Allocate paid credits with no expiry
+          await allocationService.allocateOperationalCredits({
             tenantId,
-            entityType,
-            entityId,
-            creditAmount,
-            source: 'purchase',
-            sourceId: purchase.stripePaymentIntentId || purchase.purchaseId,
-            description: `Credit purchase: ${creditAmount} credits`,
-            initiatedBy: userId || '00000000-0000-0000-0000-000000000001'
+            sourceEntityId: entityId,
+            creditAmount: numericCreditAmount,
+            creditType: 'paid',
+            allocationType: 'bulk',
+            expiresAt: null, // Paid credits don't expire
+            allocatedBy: userId || '00000000-0000-0000-0000-000000000001',
+            purpose: `Credit purchase: ${numericCreditAmount} credits`
           });
-          console.log('✅ addCreditsToEntity completed successfully');
+
+          console.log('✅ CreditAllocationService completed successfully');
+
+          // Create notification for successful credit purchase
+          try {
+            const { NotificationService } = await import('./notification-service.js');
+            const notificationService = new NotificationService();
+
+            await notificationService.createPurchaseNotification(tenantId, {
+              itemName: `${creditAmount.toLocaleString()} Credits`,
+              amount: totalAmount,
+              currency: currency || 'USD',
+              purchaseId: purchase.purchaseId
+            });
+
+            console.log('📧 Created purchase notification for tenant:', tenantId);
+          } catch (notificationError) {
+            console.warn('Failed to create purchase notification:', notificationError.message);
+            // Don't fail the purchase if notification creation fails
+          }
         } catch (creditError) {
-          console.error('❌ addCreditsToEntity failed:', creditError.message);
+          console.error('❌ CreditAllocationService failed:', creditError.message);
           throw creditError;
         }
       } else {
@@ -442,23 +718,17 @@ export class CreditService {
 
       // If using Stripe and not webhook completion, create checkout session
       if (paymentMethod === 'stripe' && !isWebhookCompletion) {
-        console.log('💳 Creating Stripe checkout session...');
-        const checkoutSession = await stripe.checkout.sessions.create({
+        console.log('💳 Creating Stripe checkout session using predefined price...');
+
+        const sessionConfig = {
           payment_method_types: ['card'],
           line_items: [{
-            price_data: {
-              currency: currency.toLowerCase(),
-              product_data: {
-                name: `${creditAmount} Credits`,
-                description: `Purchase ${creditAmount} credits for your account`
-              },
-              unit_amount: Math.round(totalAmount * 100) // Convert to cents
-            },
+            price: packageConfig.stripePriceId, // Use predefined Stripe price ID
             quantity: 1
           }],
           mode: 'payment',
-          success_url: `${process.env.FRONTEND_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${process.env.FRONTEND_URL}/billing/cancel`,
+          success_url: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment-success?type=credit_purchase&session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/billing?payment=cancelled&type=credit_purchase`,
           metadata: {
             tenantId,
             userId,
@@ -466,10 +736,25 @@ export class CreditService {
             creditAmount: creditAmount.toString(),
             entityType,
             entityId: entityId || tenantId, // Use tenantId as fallback
-            unitPrice: unitPrice.toString(),
+            unitPrice: (totalAmount / creditAmount).toFixed(4),
             totalAmount: totalAmount.toString()
           }
-        });
+        };
+
+        // Add customer information if available
+        if (tenant.stripeCustomerId) {
+          sessionConfig.customer = tenant.stripeCustomerId;
+          console.log('🔍 Using existing Stripe customer:', tenant.stripeCustomerId);
+        } else if (finalCustomerEmail) {
+          sessionConfig.customer_email = finalCustomerEmail;
+          if (finalCustomerName) {
+            sessionConfig.customer_creation = 'always';
+            // Note: customer name will be collected during checkout
+          }
+          console.log('🔍 Using customer email for new customer:', finalCustomerEmail);
+        }
+
+        const checkoutSession = await stripe.checkout.sessions.create(sessionConfig);
 
         // Update purchase with Stripe session ID
         await db
@@ -1429,7 +1714,7 @@ export class CreditService {
         .from(credits)
         .where(and(
           eq(credits.tenantId, tenantId),
-          entityId ? eq(credits.entityId, entityId) : sql`${credits.entityId} IS NULL`
+          entityId ? eq(credits.entityId, entityId) : isNull(credits.entityId)
         ))
         .limit(1);
 
@@ -1442,7 +1727,6 @@ export class CreditService {
         entityType: entityType, // Derived from parameter since not stored in table
         entityId: creditBalance.entityId,
         availableCredits: parseFloat(creditBalance.availableCredits),
-        reservedCredits: parseFloat(creditBalance.reservedCredits),
         lowBalanceThreshold: 100,
         criticalBalanceThreshold: 10,
         lastPurchase: creditBalance.lastUpdatedAt,
@@ -1498,7 +1782,7 @@ export class CreditService {
           })
           .where(and(
             eq(credits.tenantId, tenantId),
-            entityId ? eq(credits.entityId, entityId) : sql`${credits.entityId} IS NULL`,
+            entityId ? eq(credits.entityId, entityId) : isNull(credits.entityId),
             eq(credits.isActive, true)
           ))
           .orderBy(desc(credits.lastUpdatedAt))
@@ -1720,7 +2004,6 @@ export class CreditService {
               tenantId: tenantId, // Same tenant, different entity
               entityId: toEntityId,
               availableCredits: creditAmount.toString(),
-              reservedCredits: '0',
               isActive: true,
               lastUpdatedAt: new Date(),
               createdAt: new Date()
@@ -2145,7 +2428,7 @@ export class CreditService {
         .from(creditConfigurations)
         .where(and(
           eq(creditConfigurations.operationCode, operationCode),
-          tenantId ? eq(creditConfigurations.tenantId, tenantId) : sql`${creditConfigurations.tenantId} IS NULL`
+          tenantId ? eq(creditConfigurations.tenantId, tenantId) : isNull(creditConfigurations.tenantId)
         ))
         .limit(1);
 
@@ -2778,6 +3061,34 @@ export class CreditService {
     } catch (error) {
       console.error('Error fetching credit statistics:', error);
       throw error;
+    }
+  }
+
+  // Debug credit allocation issues
+  static async debugCreditAllocations(tenantId) {
+    try {
+      const { db } = await import('../db/index.js');
+      const { creditAllocations } = await import('../db/schema/index.js');
+      const { eq, and } = await import('drizzle-orm');
+
+      // Get all allocations for this tenant
+      const allocations = await db
+        .select()
+        .from(creditAllocations)
+        .where(and(
+          eq(creditAllocations.tenantId, tenantId),
+          eq(creditAllocations.isActive, true)
+        ));
+
+      console.log('🔍 Credit allocations for tenant:', tenantId);
+      allocations.forEach(alloc => {
+        console.log(`  - ${alloc.allocationId}: ${alloc.allocatedCredits} ${alloc.creditType} credits (${alloc.allocationPurpose})`);
+      });
+
+      return allocations;
+    } catch (error) {
+      console.error('Error debugging credit allocations:', error);
+      return [];
     }
   }
 }

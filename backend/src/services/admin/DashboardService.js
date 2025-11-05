@@ -38,7 +38,6 @@ export class DashboardService {
       const creditStats = await db
         .select({
           totalCredits: sum(credits.availableCredits),
-          totalReserved: sum(credits.reservedCredits),
           activeEntities: sql<number>`count(case when ${credits.isActive} = true then 1 end)`
         })
         .from(credits);

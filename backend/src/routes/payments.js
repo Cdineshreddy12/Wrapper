@@ -376,12 +376,32 @@ async function handlePaymentIntentProcessing(paymentIntent) {
 
 async function handlePaymentIntentSucceeded(paymentIntent) {
   console.log('✅ Payment Intent Succeeded:', paymentIntent.id);
-  
+
   const tenantId = await findTenantByCustomer(paymentIntent.customer);
   if (!tenantId) {
-    // Create new payment record if not exists
+    console.warn('⚠️ Payment intent succeeded but no tenant found for customer:', paymentIntent.customer);
+    return;
+  }
+
+  // Check if payment record already exists
+  const existingPayment = await PaymentService.getPaymentByIntentId(paymentIntent.id);
+
+  if (existingPayment) {
+    // Update existing payment
+    await PaymentService.updatePaymentStatus(
+      paymentIntent.id,
+      'succeeded',
+      {
+        succeeded_at: new Date().toISOString(),
+        latest_charge: paymentIntent.latest_charge,
+        processing_fees: paymentIntent.application_fee_amount || 0,
+        net_amount: paymentIntent.amount - (paymentIntent.application_fee_amount || 0)
+      }
+    );
+  } else {
+    // Create new payment record
     await PaymentService.recordPayment({
-      tenantId: await findTenantByCustomer(paymentIntent.customer),
+      tenantId,
       stripePaymentIntentId: paymentIntent.id,
       stripeCustomerId: paymentIntent.customer,
       stripeChargeId: paymentIntent.latest_charge,
@@ -397,18 +417,6 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
       stripeRawData: paymentIntent,
       paidAt: new Date()
     });
-  } else {
-    // Update existing payment
-    await PaymentService.updatePaymentStatus(
-      paymentIntent.id, 
-      'succeeded',
-      { 
-        succeeded_at: new Date().toISOString(),
-        latest_charge: paymentIntent.latest_charge,
-        processing_fees: paymentIntent.application_fee_amount || 0,
-        net_amount: paymentIntent.amount - (paymentIntent.application_fee_amount || 0)
-      }
-    );
   }
 }
 
@@ -716,24 +724,69 @@ async function handleSubscriptionCreated(subscription) {
   console.log('🔄 Subscription Created:', subscription.id);
 
   try {
-    const tenantId = await findTenantByCustomer(subscription.customer);
-    if (!tenantId) return;
+    let tenantId = await findTenantByCustomer(subscription.customer);
 
-    // Update subscription status in our database
+    // If tenant not found by customer ID, try to find by subscription ID first
+    if (!tenantId) {
+      const { db } = await import('../db/index.js');
+      const { subscriptions } = await import('../db/schema/index.js');
+      const { eq } = await import('drizzle-orm');
+
+      const [existingSubscription] = await db
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.stripeSubscriptionId, subscription.id))
+        .limit(1);
+
+      if (existingSubscription) {
+        tenantId = existingSubscription.tenantId;
+        console.log(`✅ Found tenant ${tenantId} by existing subscription ${subscription.id}`);
+      }
+    }
+
+    if (!tenantId) {
+      console.warn(`⚠️ No tenant found for subscription ${subscription.id} with customer ${subscription.customer}`);
+      return;
+    }
+
+    // Update tenant with customer ID if not already set
     const { db } = await import('../db/index.js');
-    const { subscriptions } = await import('../db/schema/index.js');
+    const { tenants, subscriptions } = await import('../db/schema/index.js');
     const { eq } = await import('drizzle-orm');
 
+    // Check if tenant already has customer ID
+    const [tenant] = await db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.tenantId, tenantId))
+      .limit(1);
+
+    if (tenant && !tenant.stripeCustomerId) {
+      await db
+        .update(tenants)
+        .set({
+          stripeCustomerId: subscription.customer,
+          updatedAt: new Date()
+        })
+        .where(eq(tenants.tenantId, tenantId));
+
+      console.log(`✅ Updated tenant ${tenantId} with Stripe customer ID: ${subscription.customer}`);
+    }
+
+    // Update subscription status in our database
     await db
       .update(subscriptions)
       .set({
         stripeSubscriptionId: subscription.id,
+        stripeCustomerId: subscription.customer,
         status: subscription.status,
         currentPeriodStart: subscription.current_period_start ? new Date(subscription.current_period_start * 1000) : null,
         currentPeriodEnd: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
         updatedAt: new Date()
       })
       .where(eq(subscriptions.tenantId, tenantId));
+
+    console.log(`✅ Updated subscription for tenant ${tenantId} with Stripe IDs`);
   } catch (error) {
     console.error('❌ Error handling subscription creation:', error);
   }
@@ -826,6 +879,78 @@ async function handleCustomerDeleted(customer) {
 
 async function handleCheckoutSessionCompleted(session) {
   console.log('🛒 Checkout Session Completed:', session.id);
+
+  try {
+    const tenantId = session.metadata?.tenantId;
+    if (!tenantId) {
+      console.warn('⚠️ No tenantId in checkout session metadata');
+      return;
+    }
+
+    // Get plan details from metadata
+    const planId = session.metadata?.planId || session.metadata?.packageId;
+    const billingCycle = session.metadata?.billingCycle || 'yearly';
+    if (!planId) {
+      console.warn('⚠️ No planId in checkout session metadata');
+      return;
+    }
+
+    // Import SubscriptionService for processing
+    const { SubscriptionService } = await import('../services/subscription-service.js');
+
+    // Get plan configuration from available plans
+    const availablePlans = await SubscriptionService.getAvailablePlans();
+    const planDetails = availablePlans.find(p => p.id === planId);
+    if (!planDetails) {
+      console.warn(`⚠️ Could not find plan details for planId: ${planId}`);
+      return;
+    }
+
+    // Create compatible planConfig object for processApplicationPlanSubscription
+    const planConfig = {
+      id: planDetails.id,
+      amount: billingCycle === 'yearly' ? planDetails.yearlyPrice * 100 : planDetails.monthlyPrice * 100, // Convert dollars to cents
+      credits: planDetails.freeCredits || 0,
+      billingCycle: billingCycle
+    };
+
+    // Update tenant with customer ID if available
+    if (session.customer) {
+      const { db } = await import('../db/index.js');
+      const { tenants } = await import('../db/schema/index.js');
+      const { eq } = await import('drizzle-orm');
+
+      await db
+        .update(tenants)
+        .set({
+          stripeCustomerId: session.customer,
+          updatedAt: new Date()
+        })
+        .where(eq(tenants.tenantId, tenantId));
+
+      console.log(`✅ Updated tenant ${tenantId} with Stripe customer ID: ${session.customer}`);
+    }
+
+    // Create or update subscription record
+    if (session.mode === 'subscription') {
+      // For subscription mode, create/update subscription record
+      await SubscriptionService.processApplicationPlanSubscription(
+        tenantId,
+        planConfig,
+        session.subscription,
+        session.customer
+      );
+
+      console.log(`✅ Subscription record created/updated for tenant ${tenantId}, plan ${planId}`);
+    } else if (session.mode === 'payment') {
+      // For payment mode (credit purchases), the credit processing happens via invoice payment webhook
+      console.log(`💳 Credit purchase session completed for tenant ${tenantId}, plan ${planId}`);
+    }
+
+  } catch (error) {
+    console.error('❌ Error handling checkout session completion:', error);
+    throw error;
+  }
 }
 
 async function handleCheckoutSessionExpired(session) {

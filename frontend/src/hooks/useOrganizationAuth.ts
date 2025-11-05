@@ -1,18 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import { useUserContext } from '@/contexts/UserContextProvider';
-
-interface UserContext {
-  userId: string;
-  internalUserId?: string;
-  tenantId: string;
-  roles?: string[];
-  permissions?: string[];
-}
+import { useAuthStatus } from '@/hooks/useSharedQueries';
+import axios from 'axios';
 
 export function useOrganizationAuth() {
   const { user, tenant, isAuthenticated, loading: contextLoading } = useUserContext();
-  const [userContext, setUserContext] = useState<UserContext | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: authData, isLoading: authLoading } = useAuthStatus();
+
+  // Create user context from shared auth data
+  const userContext = useMemo(() => {
+    if (!user || !authData?.authStatus) return null;
+
+    return {
+      userId: user.kindeUserId || user.userId,
+      internalUserId: authData.authStatus.userId,
+      tenantId: authData.authStatus.tenantId || user.tenantId || tenant?.tenantId || 'c27a0bd8-6f4f-48b1-9fc2-8bb58874c8ad',
+      roles: authData.authStatus.userRoles || [],
+      permissions: authData.authStatus.userPermissions || authData.authStatus.legacyPermissions || []
+    };
+  }, [user, authData, tenant]);
 
   // Get the current tenant ID - use the one from user context first
   const tenantId = userContext?.tenantId || user?.tenantId || tenant?.tenantId || 'c27a0bd8-6f4f-48b1-9fc2-8bb58874c8ad';
@@ -24,7 +30,7 @@ export function useOrganizationAuth() {
     finalTenantId: tenantId
   });
 
-  // Enhanced request function with proper headers
+  // Enhanced request function with proper headers using axios instead of fetch
   const makeRequest = async (endpoint: string, options: RequestInit = {}) => {
     const baseURL = import.meta.env.VITE_API_URL || '';
 
@@ -48,89 +54,38 @@ export function useOrganizationAuth() {
       tenantId
     });
 
-    const response = await fetch(fullURL, {
-      ...options,
+    // Use axios for better CORS handling and consistency
+    const response = await axios(fullURL, {
       headers: {
         ...defaultHeaders,
         ...options.headers,
       },
-      credentials: 'include',
+      withCredentials: true,
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: 'Request failed' }));
-      console.error('❌ Request failed:', {
-        url: fullURL,
-        status: response.status,
-        error: errorData
-      });
-      throw new Error(errorData.message || `HTTP ${response.status}`);
-    }
-
-    const result = await response.json();
     console.log('✅ Request successful:', {
       url: fullURL,
-      result
+      result: response.data
     });
 
-    return result;
+    return response.data;
   };
 
-  // Load user context
-  useEffect(() => {
-    const loadUserContext = async () => {
-      if (!isAuthenticated || !user) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        console.log('🔄 Loading user context for:', user.kindeUserId || user.email);
-
-        // Try to get user context from API using existing auth-status endpoint
-        const contextResponse = await makeRequest('/admin/auth-status', {
-          headers: { 'X-Application': 'crm' }
-        });
-
-        console.log('✅ User context loaded:', contextResponse);
-
-        setUserContext({
-          userId: user.kindeUserId || user.userId,
-          internalUserId: contextResponse.authStatus?.userId,
-          tenantId: contextResponse.authStatus?.tenantId || user.tenantId || tenant?.tenantId,
-          roles: contextResponse.authStatus?.roles || [],
-          permissions: contextResponse.authStatus?.permissions || []
-        });
-      } catch (error) {
-        console.warn('Could not load user context from API, using fallback:', error);
-
-        // Fallback to basic context with available tenant info
-        const fallbackTenantId = user.tenantId || tenant?.tenantId || 'c27a0bd8-6f4f-48b1-9fc2-8bb58874c8ad';
-
-        console.log('🔄 Using fallback tenant ID:', fallbackTenantId);
-
-        setUserContext({
-          userId: user.kindeUserId || user.userId,
-          tenantId: fallbackTenantId,
-          roles: [],
-          permissions: []
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadUserContext();
-  }, [isAuthenticated, user, tenant]);
+  // Permission checking function
+  const hasPermission = (permission: string): boolean => {
+    if (!userContext?.permissions) return false;
+    if (user?.isTenantAdmin) return true; // Admin has all permissions
+    return userContext.permissions.includes(permission);
+  };
 
   return {
     userContext,
     tenantId,
     isAuthenticated,
-    loading: contextLoading || loading,
+    loading: contextLoading || authLoading,
     makeRequest,
     isAdmin: user?.isTenantAdmin || false,
-    hasPermission: (permission: string) => false // TODO: implement permission checking
+    hasPermission
   };
 }
 

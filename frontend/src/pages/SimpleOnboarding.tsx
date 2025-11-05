@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import { setKindeTokenGetter } from '@/lib/api';
 import { toast } from 'react-hot-toast';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CardDescription, CardTitle } from '@/components/ui/card';
+import { GlassCard } from '@/components/ui/glass-card';
+import { PearlButton } from '@/components/ui/pearl-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Building2,Info, User, Mail, Globe, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
+import { Building2, Info, Mail, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface OnboardingFormData {
@@ -227,13 +229,10 @@ const SimpleOnboarding: React.FC = () => {
       if (response.data.success) {
         toast.success('🎉 Organization setup completed successfully!');
 
-        // Handle immediate login if provided
-        if (response.data.data.immediateLoginUrl) {
-          console.log('🔗 Redirecting to immediate login...');
-          window.location.href = response.data.data.immediateLoginUrl;
-        } else if (response.data.data.loginUrl) {
-          console.log('🔗 Redirecting to login page...');
-          window.location.href = response.data.data.loginUrl;
+        // Handle redirect URL if provided
+        if (response.data.data.redirectUrl) {
+          console.log('🔗 Redirecting to:', response.data.data.redirectUrl);
+          window.location.href = response.data.data.redirectUrl;
         } else {
           // Fallback to dashboard
           navigate('/dashboard');
@@ -340,8 +339,8 @@ const SimpleOnboarding: React.FC = () => {
 
         {/* Debug Info (only show in development) */}
         {process.env.NODE_ENV === 'development' && (
-          <Card className="mb-4 bg-gray-50">
-            <CardContent className="p-4">
+          <GlassCard className="mb-4" variant="subtle">
+            <div className="p-4">
               <details className="text-xs">
                 <summary className="cursor-pointer font-semibold text-gray-700 mb-2">
                   🔍 Debug Info (Development Only)
@@ -356,26 +355,26 @@ const SimpleOnboarding: React.FC = () => {
                   <div>User Keys: {user ? Object.keys(user).join(', ') : 'No user'}</div>
                 </div>
               </details>
-            </CardContent>
-          </Card>
+            </div>
+          </GlassCard>
         )}
 
         {/* Main Form */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Building2 className="w-6 h-6 text-blue-600" />
+        <GlassCard variant="purple" className="mb-8">
+          <div className="p-6 border-b border-white/10">
+            <CardTitle className="flex items-center space-x-2 text-lg font-semibold">
+              <Building2 className="w-6 h-6 text-purple-600" />
               <span>Organization Setup</span>
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="mt-2 text-sm text-muted-foreground">
               Enter your company details to get started. Your organization will be set up automatically.
             </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
+          </div>
+          <div className="p-6 space-y-6">
             {/* Company Name */}
             <div className="space-y-2">
               <Label htmlFor="companyName" className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-blue-600" />
+                <Building2 className="h-4 w-4 text-purple-600" />
                 Organization Name <Badge variant="destructive" className="text-xs ml-1">Required</Badge>
               </Label>
               <Input
@@ -398,7 +397,7 @@ const SimpleOnboarding: React.FC = () => {
             {/* Admin Email (Auto-filled from Kinde) */}
             <div className="space-y-2">
               <Label htmlFor="adminEmail" className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-purple-600" />
+                <Mail className="h-4 w-4 text-purple-500" />
                 Admin Email
                 {isLoadingUser ? (
                   <Badge variant="outline" className="text-xs ml-1">
@@ -516,7 +515,7 @@ const SimpleOnboarding: React.FC = () => {
             </div>
 
             {/* Info Section */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <GlassCard variant="subtle" className="bg-blue-50/80 border-blue-200/50">
               <div className="flex items-start gap-3">
                 <Info className="h-5 w-5 text-blue-600 mt-0.5" />
                 <div className="text-sm">
@@ -531,16 +530,16 @@ const SimpleOnboarding: React.FC = () => {
                   </ul>
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </GlassCard>
+          </div>
+        </GlassCard>
 
         {/* Submit Button */}
         <div className="flex justify-center">
-          <Button
+          <PearlButton
             onClick={handleSubmit}
             disabled={isLoading || !isUserAuthenticated || !formData.companyName.trim() || !formData.adminEmail.trim() || !formData.adminMobile.trim() || !formData.gstin.trim() || gstinValid === false}
-            className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+            className="px-8 py-3"
             size="lg"
           >
             {isLoading ? (
@@ -560,7 +559,7 @@ const SimpleOnboarding: React.FC = () => {
                 <ArrowRight className="h-5 w-5" />
               </div>
             )}
-          </Button>
+          </PearlButton>
         </div>
 
         {/* Footer */}

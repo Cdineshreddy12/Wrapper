@@ -1,0 +1,159 @@
+title Multi-Tenant SaaS Wrapper Platform with AWS Load Balancer and 5 Business Applications
+
+// External clients and tenants
+Clients [icon: users, label: "External Clients & Tenants"]
+
+// AWS Cloud container
+AWS Cloud [icon: aws-cloud, label: "AWS Cloud Infrastructure"] {
+
+  // Application Load Balancer for routing
+  ALB [icon: aws-elb, label: "Application Load Balancer (ALB)"]
+
+  // Wrapper Platform Core Services
+  Wrapper Core [icon: server, label: "Wrapper Platform Core"] {
+    Auth Service [icon: lock, label: "Authentication & SSO Service"]
+    Tenant Service [icon: building, label: "Multi-Tenant Management"]
+    Permission Service [icon: shield, label: "Permission & Role Management"]
+    Subscription Service [icon: credit-card, label: "Billing & Subscription Management"]
+    Analytics Service [icon: bar-chart, label: "Usage Analytics & Monitoring"]
+    Core Database [icon: database, label: "Wrapper Core Database (PostgreSQL)"]
+  }
+
+  // CRM Application Stack
+  CRM App [icon: server, label: "CRM Application"] {
+    CRM Service [icon: microservice, label: "CRM Microservice"]
+    CRM Database [icon: database, label: "CRM Database (RDS PostgreSQL)"]
+    CRM Target Group [icon: aws-target-group, label: "CRM Target Group"]
+    CRM Auto Scaling Group [icon: aws-ec2-auto-scaling, label: "CRM Auto Scaling Group"]
+    CRM Monitoring [icon: activity, label: "CRM Health & Metrics"]
+  }
+
+  // HR Application Stack
+  HR App [icon: server, label: "HR Application"] {
+    HR Service [icon: microservice, label: "HR Management Service"]
+    HR Database [icon: database, label: "HR Database (RDS PostgreSQL)"]
+    HR Target Group [icon: aws-target-group, label: "HR Target Group"]
+    HR Auto Scaling Group [icon: aws-ec2-auto-scaling, label: "HR Auto Scaling Group"]
+    HR Monitoring [icon: activity, label: "HR Health & Metrics"]
+  }
+
+  // Accounting Application Stack
+  Accounting App [icon: server, label: "Accounting Application"] {
+    Accounting Service [icon: microservice, label: "Accounting & Finance Service"]
+    Accounting Database [icon: database, label: "Accounting Database (RDS PostgreSQL)"]
+    Accounting Target Group [icon: aws-target-group, label: "Accounting Target Group"]
+    Accounting Auto Scaling Group [icon: aws-ec2-auto-scaling, label: "Accounting Auto Scaling Group"]
+    Accounting Monitoring [icon: activity, label: "Accounting Health & Metrics"]
+  }
+
+  // Inventory Application Stack
+  Inventory App [icon: server, label: "Inventory Application"] {
+    Inventory Service [icon: microservice, label: "Inventory Management Service"]
+    Inventory Database [icon: database, label: "Inventory Database (RDS PostgreSQL)"]
+    Inventory Target Group [icon: aws-target-group, label: "Inventory Target Group"]
+    Inventory Auto Scaling Group [icon: aws-ec2-auto-scaling, label: "Inventory Auto Scaling Group"]
+    Inventory Monitoring [icon: activity, label: "Inventory Health & Metrics"]
+  }
+
+  // Affiliate Application Stack
+  Affiliate App [icon: server, label: "Affiliate Application"] {
+    Affiliate Service [icon: microservice, label: "Affiliate Marketing Service"]
+    Affiliate Database [icon: database, label: "Affiliate Database (RDS PostgreSQL)"]
+    Affiliate Target Group [icon: aws-target-group, label: "Affiliate Target Group"]
+    Affiliate Auto Scaling Group [icon: aws-ec2-auto-scaling, label: "Affiliate Auto Scaling Group"]
+    Affiliate Monitoring [icon: activity, label: "Affiliate Health & Metrics"]
+  }
+
+  // Shared Infrastructure
+  Shared Infrastructure [icon: server, label: "Shared AWS Services"] {
+    Redis Cache [icon: database, label: "Redis Cache Cluster"]
+    S3 Storage [icon: aws-s3, label: "S3 Document Storage"]
+    CloudWatch [icon: aws-cloudwatch, label: "CloudWatch Monitoring"]
+    Route53 [icon: aws-route53, label: "Route 53 DNS"]
+    WAF [icon: aws-waf, label: "Web Application Firewall"]
+  }
+}
+
+// Traffic Flow: Clients to Load Balancer
+Clients > ALB: incoming tenant traffic
+
+// ALB routes to Target Groups based on path/subdomain rules
+ALB > CRM Target Group: route /crm/* (CRM app)
+ALB > HR Target Group: route /hr/* (HR app)
+ALB > Accounting Target Group: route /accounting/* (Accounting app)
+ALB > Inventory Target Group: route /inventory/* (Inventory app)
+ALB > Affiliate Target Group: route /affiliate/* (Affiliate app)
+
+// Target Groups forward to Auto Scaling Groups
+CRM Target Group > CRM Auto Scaling Group
+HR Target Group > HR Auto Scaling Group
+Accounting Target Group > Accounting Auto Scaling Group
+Inventory Target Group > Inventory Auto Scaling Group
+Affiliate Target Group > Affiliate Auto Scaling Group
+
+// Auto Scaling Groups connect to Application Services
+CRM Auto Scaling Group > CRM Service
+HR Auto Scaling Group > HR Service
+Accounting Auto Scaling Group > Accounting Service
+Inventory Auto Scaling Group > Inventory Service
+Affiliate Auto Scaling Group > Affiliate Service
+
+// Services connect to their respective tenant-isolated databases
+CRM Service > CRM Database: tenant-scoped read/write
+HR Service > HR Database: tenant-scoped read/write
+Accounting Service > Accounting Database: tenant-scoped read/write
+Inventory Service > Inventory Database: tenant-scoped read/write
+Affiliate Service > Affiliate Database: tenant-scoped read/write
+
+// Core services integration
+Auth Service > Core Database: authentication data
+Tenant Service > Core Database: tenant management
+Permission Service > Core Database: permissions & roles
+Subscription Service > Core Database: billing & subscriptions
+Analytics Service > Core Database: usage metrics
+
+// All services use shared infrastructure
+CRM Service > Redis Cache: session & data caching
+HR Service > Redis Cache: session & data caching
+Accounting Service > Redis Cache: session & data caching
+Inventory Service > Redis Cache: session & data caching
+Affiliate Service > Redis Cache: session & data caching
+Auth Service > Redis Cache: token caching
+
+CRM Service > S3 Storage: file uploads & documents
+HR Service > S3 Storage: employee documents
+Accounting Service > S3 Storage: financial reports
+Inventory Service > S3 Storage: product images
+Affiliate Service > S3 Storage: campaign assets
+
+// Monitoring and Health Checks
+CRM Monitoring --> CRM Auto Scaling Group: application metrics
+HR Monitoring --> HR Auto Scaling Group: application metrics
+Accounting Monitoring --> Accounting Auto Scaling Group: application metrics
+Inventory Monitoring --> Inventory Auto Scaling Group: application metrics
+Affiliate Monitoring --> Affiliate Auto Scaling Group: application metrics
+
+ALB <-- CRM Monitoring: health status
+ALB <-- HR Monitoring: health status
+ALB <-- Accounting Monitoring: health status
+ALB <-- Inventory Monitoring: health status
+ALB <-- Affiliate Monitoring: health status
+
+CloudWatch <-- CRM Monitoring: detailed metrics
+CloudWatch <-- HR Monitoring: detailed metrics
+CloudWatch <-- Accounting Monitoring: detailed metrics
+CloudWatch <-- Inventory Monitoring: detailed metrics
+CloudWatch <-- Affiliate Monitoring: detailed metrics
+CloudWatch <-- Core Database: database metrics
+CloudWatch <-- Redis Cache: cache metrics
+
+// Tenant Isolation (RLS - Row Level Security)
+CRM Database -.-> Tenant Service: tenant isolation policies
+HR Database -.-> Tenant Service: tenant isolation policies
+Accounting Database -.-> Tenant Service: tenant isolation policies
+Inventory Database -.-> Tenant Service: tenant isolation policies
+Affiliate Database -.-> Tenant Service: tenant isolation policies
+
+// Security Layer
+WAF --> ALB: security filtering
+Route53 --> ALB: DNS resolution

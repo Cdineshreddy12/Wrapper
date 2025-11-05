@@ -1,5 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
+import { PearlButton } from '@/components/ui/pearl-button';
 import { StepNavigationProps } from '../types';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
@@ -26,38 +27,41 @@ export const StepNavigation: React.FC<StepNavigationProps> = ({
       {/* Back button */}
       <div>
         {!isFirstStep && allowBack && (
-          <Button
+          <PearlButton
             type="button"
             onClick={onPrev}
             disabled={isSubmitting}
-            variant="ghost"
+            variant="outline"
+            className="px-4 py-2"
           >
             <ChevronLeft className="w-4 h-4" />
             <span>PREVIOUS</span>
-          </Button>
+          </PearlButton>
         )}
       </div>
 
       {/* Next/Submit button */}
       <div>
         {isLastStep ? (
-          <Button
+          <PearlButton
             type="button"
             onClick={onSubmit}
             disabled={!isCurrentStepValid || isSubmitting}
+            className="px-6 py-3"
           >
             {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
             <span>{isSubmitting ? 'Submitting...' : 'Submit'}</span>
-          </Button>
+          </PearlButton>
         ) : (
-          <Button
+          <PearlButton
             type="button"
             onClick={onNext}
             disabled={!isCurrentStepValid || isSubmitting}
+            className="px-6 py-3"
           >
             <span>NEXT</span>
             <ChevronRight className="w-4 h-4" />
-          </Button>
+          </PearlButton>
         )}
       </div>
     </div>

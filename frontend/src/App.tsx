@@ -1,9 +1,18 @@
-import React, { useMemo, useEffect, useState } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+
+// React Router future flags to suppress deprecation warnings
+const router = {
+  future: {
+    v7_startTransition: true,
+    v7_relativeSplatPath: true,
+  },
+}
 import { Toaster } from 'react-hot-toast'
 import { Toaster as Sonner } from 'sonner'
 
-import api from '@/lib/api'
+import { useAuthStatus } from '@/hooks/useSharedQueries'
+import AnimatedLoader from '@/components/common/AnimatedLoader'
 
 // Kinde Authentication
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
@@ -12,7 +21,7 @@ import SilentAuthGuard from '@/components/auth/SilentAuthGuard'
 
 // User Context and Permission Refresh
 import { UserContextProvider } from './contexts/UserContextProvider'
-import { PermissionRefreshNotification } from './components/PermissionRefreshNotification'
+import { EntityScopeProvider } from './contexts/EntityScopeContext'
 import { ThemeProvider } from './components/theme/ThemeProvider'
 
 // Trial Management Components
@@ -22,13 +31,13 @@ import { TrialExpiryBanner, TrialBannerSpacer } from './components/trial/TrialEx
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { OnboardingGuard } from '@/components/auth/OnboardingGuard'
+import { OnboardingPageGuard } from '@/components/auth/OnboardingPageGuard'
 
 // Pages
 import Landing from '@/pages/Landing'
 import { Login } from '@/pages/Login'
 import { AuthCallback } from '@/pages/AuthCallback'
 import { InviteAccept } from '@/pages/InviteAccept'
-import { Dashboard } from '@/pages/Dashboard'
 import { Analytics } from '@/pages/Analytics'
 import { UserManagementDashboard } from '@/components/users/UserManagementDashboard'
 import { Billing } from '@/pages/Billing'
@@ -38,43 +47,40 @@ import UserApplicationAccessPage from '@/pages/UserApplicationAccess'
 import UserApplicationManagement from '@/pages/UserApplicationManagement'
 import SuiteDashboard from '@/pages/SuiteDashboard'
 import AdminDashboardPage from '@/pages/AdminDashboardPage'
-import OnboardingPage from '@/pages/Onboarding'
-import SimpleOnboarding from '@/pages/SimpleOnboarding'
 import { OverviewPage } from './pages/OverviewPage'
+import { ApplicationPage } from './pages/ApplicationPage'
+import { RolesPage } from './pages/RolesPage'
+import { Settings } from './pages/Settings'
+import { OrganizationPage } from './pages/OrganizationPage'
+import OnboardingPage from './pages/Onboarding'
+import PaymentSuccess from './pages/PaymentSuccess'
+import PaymentCancelled from './pages/PaymentCancelled'
 
-
-// Loading component
+// Professional Loading component using AnimatedLoader
 const LoadingScreen = () => (
-  <div className="min-h-screen bg-background flex items-center justify-center">
+  <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
     <div className="text-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-      <p className="text-muted-foreground">Loading...</p>
+      <AnimatedLoader size="md" className="mb-6" />
+      <p className="text-gray-600 dark:text-gray-300 text-base font-medium">Your data is loading...</p>
     </div>
   </div>
 )
 
-// Auth initializer component
-const AuthInitializer: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Token getter is now handled by KindeProvider.tsx to avoid conflicts
-  // The enhanced api.ts will automatically get tokens from the configured getter
-
-  return <>{children}</>;
-};
 
 function App() {
   return (
     <>
       <ThemeProvider defaultTheme="system" storageKey="zopkit-theme">
         <KindeProvider>
-          <AuthInitializer>
-            <Router>
-              <SilentAuthGuard>
-                <UserContextProvider>
+          <Router future={router.future}>
+            <SilentAuthGuard>
+              <UserContextProvider>
+                <EntityScopeProvider>
                   <AppContent />
-                </UserContextProvider>
-              </SilentAuthGuard>
-            </Router>
-          </AuthInitializer>
+                </EntityScopeProvider>
+              </UserContextProvider>
+            </SilentAuthGuard>
+          </Router>
         </KindeProvider>
       </ThemeProvider>
 
@@ -114,32 +120,17 @@ function AppContent() {
     isLoading: !!isLoading
   }), [isAuthenticated, isLoading])
 
-  // Debug logging for authentication state changes
-  useEffect(() => {
-    console.log('🔍 App.tsx - Auth State Change:', {
-      isAuthenticated: authState.isAuthenticated,
-      isLoading: authState.isLoading,
-      timestamp: new Date().toISOString(),
-      pathname: window.location.pathname
-    })
-  }, [authState.isAuthenticated, authState.isLoading])
-
   // Show loading spinner while authentication is being determined
   if (authState.isLoading) {
-    console.log('🔄 App.tsx - Showing loading screen')
     return <LoadingScreen />
   }
-
-  console.log('🚀 App.tsx - Rendering routes with auth state:', authState)
 
   return (
     <div className="App">
       {/* Trial Expiry Banner Only */}
-      <TrialExpiryBanner />
-      <TrialBannerSpacer />
+      {/* <TrialExpiryBanner />
+      <TrialBannerSpacer /> */}
 
-      {/* Permission refresh notification - only show when authenticated */}
-      {authState.isAuthenticated && <PermissionRefreshNotification />}
 
       <Routes>
         {/* Public Routes */}
@@ -160,35 +151,12 @@ function AppContent() {
 
         <Route
           path="/onboarding"
-          element={<SimpleOnboarding />}
-        // element={<OnboardingPage />}
-        // element={<FlowSelectorMultiStepExample />}
+          element={
+            <OnboardingPageGuard>
+              <OnboardingPage />
+            </OnboardingPageGuard>
+          }
         />
-
-        {/* <Route
-          path="/form-demo"
-          element={<FormComponentsDemo />}
-        />
-
-        <Route
-          path="/context-demo"
-          element={<ContextDemo />}
-        />
-
-        <Route
-          path="/perfect-form"
-          element={<PerfectFormDemo />}
-        />
-
-        <Route
-          path="/form-layout-test"
-          element={<FormLayoutTest />}
-        />
-
-        <Route
-          path="/form-error-test"
-          element={<FormErrorTest />}
-        /> */}
 
         <Route
           path="/login"
@@ -206,6 +174,25 @@ function AppContent() {
           element={<InviteAccept />}
         />
 
+        {/* Payment Status Routes - Protected */}
+        <Route
+          path="/payment-success"
+          element={
+            <ProtectedRoute>
+              <PaymentSuccess />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/payment-cancelled"
+          element={
+            <ProtectedRoute>
+              <PaymentCancelled />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Business Suite Dashboard Route */}
         <Route
           path="/suite"
@@ -218,7 +205,7 @@ function AppContent() {
 
         {/* Protected dashboard routes with onboarding guard */}
         <Route
-          path="/dashboard/*"
+          path="/dashboard"
           element={
             <ProtectedRoute>
               <OnboardingGuard>
@@ -227,14 +214,19 @@ function AppContent() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<OverviewPage />} />
+          <Route index element={<ApplicationPage />} />
+          <Route path="overview" element={<OverviewPage />} />
+          <Route path="applications" element={<ApplicationPage />} />
           <Route path="users" element={<UserManagementDashboard />} />
+          <Route path="organization" element={<OrganizationPage />} />
+          <Route path="roles" element={<RolesPage />} />
           <Route path="user-apps" element={<UserApplicationAccessPage />} />
           <Route path="user-application-management" element={<UserApplicationManagement />} />
           <Route path="billing" element={<Billing />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="usage" element={<Usage />} />
           <Route path="permissions" element={<Permissions />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
 
         {/* Standalone Admin Dashboard Route */}
@@ -247,7 +239,7 @@ function AppContent() {
           }
         />
 
-        {/* Organization-specific routes with onboarding guard */}
+        {/* Organization-specific routes with onboarding guard
         <Route
           path="/org/:orgCode"
           element={
@@ -267,7 +259,8 @@ function AppContent() {
           <Route path="billing" element={<Billing />} />
           <Route path="usage" element={<Usage />} />
           <Route path="permissions" element={<Permissions />} />
-        </Route>
+          <Route path="settings" element={<Settings />} />
+        </Route> */}
 
         {/* Catch all - redirect to landing if not authenticated */}
         <Route
@@ -292,13 +285,16 @@ function AppContent() {
 // Root redirect component to handle initial route decisions
 function RootRedirect() {
   const { isAuthenticated, isLoading } = useKindeAuth()
-  const [onboardingStatus, setOnboardingStatus] = useState<any>(null)
+  const { data: authData, isLoading: authLoading } = useAuthStatus()
   const [isChecking, setIsChecking] = useState(true)
+  const [onboardingStatus, setOnboardingStatus] = useState<any>(null)
+
+  const backendAuthStatus = authData?.authStatus
 
   useEffect(() => {
     async function checkStatus() {
-      if (isLoading) {
-        return // Wait for Kinde to finish loading
+      if (isLoading || authLoading) {
+        return // Wait for Kinde and auth status to finish loading
       }
 
       // Check if this is a CRM authentication flow (from Kinde callback)
@@ -308,11 +304,8 @@ function RootRedirect() {
       if (stateParam && isAuthenticated) {
         try {
           const stateData = JSON.parse(stateParam);
-          console.log('🔍 RootRedirect: Detected CRM authentication flow:', stateData);
 
           if (stateData.app_code && stateData.redirect_url) {
-            console.log('🔄 RootRedirect: Processing CRM authentication flow');
-
             // Get the token from Kinde
             const { getToken } = useKindeAuth();
             const token = await getToken();
@@ -346,7 +339,6 @@ function RootRedirect() {
                     redirectUrl.searchParams.set('expires_at', appTokenData.expiresAt);
                     redirectUrl.searchParams.set('app_code', stateData.app_code);
 
-                    console.log('🚀 RootRedirect: Redirecting to CRM:', redirectUrl.toString());
                     window.location.href = redirectUrl.toString();
                     return;
                   }
@@ -355,40 +347,35 @@ function RootRedirect() {
             }
           }
         } catch (error) {
-          console.error('❌ RootRedirect: Error processing CRM authentication:', error);
+          console.error('Error processing CRM authentication:', error);
         }
       }
 
       if (!isAuthenticated) {
-        console.log('🔄 RootRedirect: Not authenticated, redirecting to landing')
         setIsChecking(false)
         return
       }
 
-      try {
-        console.log('🔍 RootRedirect: Checking onboarding status for authenticated user')
-        const response = await api.get('/admin/auth-status')
-        console.log('✅ RootRedirect: Auth status received:', response.data)
-        setOnboardingStatus(response.data)
-      } catch (error: any) {
-        console.error('❌ RootRedirect: Error checking auth status:', error)
-        // If error checking status, redirect to landing
+      // Use auth data from shared hook
+      if (backendAuthStatus) {
+        setOnboardingStatus({ authStatus: backendAuthStatus })
+      } else {
         setOnboardingStatus({ hasUser: false, hasTenant: false })
-      } finally {
-        setIsChecking(false)
       }
+
+      setIsChecking(false)
     }
 
     checkStatus()
-  }, [isAuthenticated, isLoading])
+  }, [isAuthenticated, isLoading, authLoading, backendAuthStatus])
 
   // Show loading while checking
-  if (isLoading || isChecking) {
+  if (isLoading || authLoading || isChecking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-sm text-muted-foreground">Loading...</p>
+          <AnimatedLoader size="sm" className="mb-4" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
         </div>
       </div>
     )
@@ -396,18 +383,15 @@ function RootRedirect() {
 
   // Not authenticated - go to landing
   if (!isAuthenticated) {
-    console.log('🔄 RootRedirect: Not authenticated, redirecting to landing')
     return <Navigate to="/landing" replace />
   }
 
   // Authenticated but no onboarding status yet
   if (!onboardingStatus) {
-    console.log('🔄 RootRedirect: No onboarding status, redirecting to landing')
     return <Navigate to="/landing" replace />
   }
 
   // Check if user needs onboarding based on the actual backend response structure
-  // INVITED USERS: Always skip onboarding (they should have onboardingCompleted=true)
   const needsOnboarding = onboardingStatus.authStatus?.needsOnboarding ?? !onboardingStatus.authStatus?.onboardingCompleted
 
   // Check if this is an invited user (they should never need onboarding)
@@ -415,45 +399,26 @@ function RootRedirect() {
     onboardingStatus.authStatus?.isInvitedUser === true ||
     onboardingStatus.authStatus?.onboardingCompleted === true
 
-  // DEBUG LOGGING: Log the decision-making process
-  console.log('🔍 RootRedirect: Onboarding decision analysis:', {
-    needsOnboarding,
-    isInvitedUser,
-    hasPendingInvitation: !!localStorage.getItem('pendingInvitationToken'),
-    authStatus: {
-      needsOnboarding: onboardingStatus.authStatus?.needsOnboarding,
-      onboardingCompleted: onboardingStatus.authStatus?.onboardingCompleted,
-      userType: onboardingStatus.authStatus?.userType,
-      isInvitedUser: onboardingStatus.authStatus?.isInvitedUser
-    }
-  })
-
   // Check if there's a pending invitation (user should complete invitation flow first)
   const hasPendingInvitation = localStorage.getItem('pendingInvitationToken')
 
   if (needsOnboarding && !isInvitedUser && !hasPendingInvitation) {
-    console.log('🔄 RootRedirect: User needs onboarding, redirecting to /onboarding')
     return <Navigate to="/onboarding" replace />
   }
 
   // INVITED USERS: Always go to dashboard (they skip onboarding)
   if (isInvitedUser) {
-    console.log('🔄 RootRedirect: Invited user detected, redirecting to dashboard (skipping onboarding)')
     return <Navigate to="/dashboard" replace />
   }
 
   // If there's a pending invitation, redirect to invitation acceptance
   if (hasPendingInvitation) {
-    console.log('🔄 RootRedirect: Pending invitation detected, redirecting to invitation acceptance')
     const token = localStorage.getItem('pendingInvitationToken')
     return <Navigate to={`/invite/accept?token=${token}`} replace />
   }
 
   // User is authenticated and onboarded - go to dashboard
-  console.log('🔄 RootRedirect: User is onboarded, redirecting to dashboard')
   return <Navigate to="/dashboard" replace />
 }
 
-
-
-export default App 
+export default App

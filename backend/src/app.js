@@ -23,6 +23,7 @@ import enhancedInternalRoutes from './routes/internal-enhanced.js';
 import webhookRoutes from './routes/webhooks.js';
 import proxyRoutes from './routes/proxy.js';
 import onboardingRoutes from './routes/onboarding-router.js';
+import validationRoutes from './routes/validation.js';
 import dnsManagementRoutes from './routes/dns-management.js';
 import adminRoutes from './routes/admin.js';
 import adminCreditConfigurationRoutes from './routes/admin/credit-configuration.js';
@@ -33,6 +34,8 @@ import adminDashboardRoutes from './routes/admin/dashboard.js';
 import adminTenantManagementRoutes from './routes/admin/tenant-management.js';
 import adminEntityManagementRoutes from './routes/admin/entity-management.js';
 import adminCreditOverviewRoutes from './routes/admin/credit-overview.js';
+import adminSeasonalCreditsRoutes from './routes/admin/seasonal-credits.js';
+import seasonalCreditsPublicRoutes from './routes/seasonal-credits-public.js';
 import invitationRoutes from './routes/invitations.js';
 import suiteRoutes from './routes/suite.js';
 import paymentRoutes from './routes/payments.js';
@@ -42,6 +45,7 @@ import customRolesRoutes from './routes/custom-roles.js';
 import adminPromotionRoutes from './routes/admin-promotion.js';
 import permissionMatrixRoutes from './routes/permission-matrix.js';
 import enhancedCrmIntegrationRoutes from './routes/enhanced-crm-integration.js';
+import crmIntegrationRoutes from './routes/crm-integration.js';
 import healthRoutes from './routes/health.js';
 import permissionSyncRoutes from './routes/permission-sync.js';
 import userSyncRoutes from './routes/user-sync.js';
@@ -49,8 +53,10 @@ import userApplicationRoutes from './routes/user-applications.js';
 import organizationRoutes from './routes/organizations.js';
 import locationRoutes from './routes/locations.js';
 import entityRoutes from './routes/entities.js';
+import entityScopeRoutes from './routes/entity-scope.js';
 import paymentUpgradeRoutes from './routes/payment-upgrade.js';
 import creditRoutes from './routes/credits.js';
+import notificationRoutes from './routes/notifications.js';
 // import { createRLSRoutes } from './routes/rls-examples.js'; // Temporarily disabled
 
 
@@ -135,12 +141,13 @@ async function registerPlugins() {
     credentials: true, // Required so browser can send cookies
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: [
-      'Content-Type', 
-      'Authorization', 
+      'Content-Type',
+      'Authorization',
       'X-Requested-With',
       'X-Application',
       'X-Kinde-User-ID',      // CRM sends this
       'X-Organization-ID',    // CRM sends this
+      'X-Tenant-ID',          // Entity scope middleware sends this
       'Origin',               // Browser sends this
       'Accept',               // Browser sends this
       'Accept-Language',      // Browser sends this
@@ -374,6 +381,7 @@ async function registerRoutes() {
   await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
   await fastify.register(proxyRoutes, { prefix: '/api/proxy' });
   await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
+  await fastify.register(validationRoutes, { prefix: '/api' });
   await fastify.register(dnsManagementRoutes, { prefix: '/api/dns' });
   await fastify.register(adminRoutes, { prefix: '/api/admin' });
   await fastify.register(adminCreditConfigurationRoutes, { prefix: '/api/admin/credit-configurations' });
@@ -385,6 +393,8 @@ async function registerRoutes() {
   await fastify.register(adminTenantManagementRoutes, { prefix: '/api/admin/tenants' });
   await fastify.register(adminEntityManagementRoutes, { prefix: '/api/admin/entities' });
   await fastify.register(adminCreditOverviewRoutes, { prefix: '/api/admin/credits' });
+  await fastify.register(adminSeasonalCreditsRoutes, { prefix: '/api/admin/seasonal-credits' });
+  await fastify.register(seasonalCreditsPublicRoutes, { prefix: '/api/seasonal-credits' });
   await fastify.register(suiteRoutes, { prefix: '/api/suite' });
   await fastify.register(paymentRoutes, { prefix: '/api/payments' });
   await fastify.register(activityRoutes, { prefix: '/api/activity' });
@@ -400,8 +410,13 @@ async function registerRoutes() {
   console.log('📋 Registering entities routes...');
   await fastify.register(entityRoutes, { prefix: '/api/entities' });
   console.log('✅ Entities routes registered successfully');
+  console.log('📋 Registering entity-scope routes...');
+  await fastify.register(entityScopeRoutes, { prefix: '/api/admin' });
+  console.log('✅ Entity-scope routes registered successfully');
   await fastify.register(paymentUpgradeRoutes, { prefix: '/api/payment-upgrade' });
   await fastify.register(creditRoutes, { prefix: '/api/credits' });
+  await fastify.register(notificationRoutes, { prefix: '/api/notifications' });
+  await fastify.register(crmIntegrationRoutes, { prefix: '/api/wrapper' });
   await fastify.register(enhancedCrmIntegrationRoutes, { prefix: '/api/enhanced-crm-integration' });
 await fastify.register(healthRoutes, { prefix: '/api' });
 
@@ -705,12 +720,7 @@ async function start() {
     // await initializeTrialSystem();
     
     // Initialize demo cache data for distributed caching demonstration
-    try {
-      const { initializeDemoCache } = await import('./utils/redis.js');
-      await initializeDemoCache();
-    } catch (error) {
-      console.error('❌ Failed to initialize demo cache:', error);
-    }
+    // Note: initializeDemoCache function not implemented yet - skipping for now
     
     // Setup graceful shutdown
     process.on('SIGTERM', gracefulShutdown);

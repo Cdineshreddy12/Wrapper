@@ -38,7 +38,6 @@ export class EntityAdminService {
           updatedAt: entities.updatedAt,
           companyName: tenants.companyName,
           availableCredits: sql`coalesce(${credits.availableCredits}, 0)`,
-          reservedCredits: sql`coalesce(${credits.reservedCredits}, 0)`,
           responsiblePerson: tenantUsers.firstName
         })
         .from(entities)
@@ -157,7 +156,6 @@ export class EntityAdminService {
           locationType: entities.locationType,
           organizationType: entities.organizationType,
           availableCredits: sql`coalesce(${credits.availableCredits}, 0)`,
-          reservedCredits: sql`coalesce(${credits.reservedCredits}, 0)`
         })
         .from(entities)
         .leftJoin(credits, eq(entities.entityId, credits.entityId))
@@ -256,7 +254,6 @@ export class EntityAdminService {
           isActive: entities.isActive,
           createdAt: entities.createdAt,
           availableCredits: sql`coalesce(${credits.availableCredits}, 0)`,
-          reservedCredits: sql`coalesce(${credits.reservedCredits}, 0)`
         })
         .from(entities)
         .leftJoin(credits, eq(entities.entityId, credits.entityId))

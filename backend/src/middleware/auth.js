@@ -374,18 +374,23 @@ export function requirePermission(permission) {
 }
 
 function isPublicRoute(url) {
+  // Routes ending with /current should not be treated as public
+  if (url.endsWith('/current')) {
+    return false;
+  }
+
   return PUBLIC_ROUTES.some(route => {
     if (route.endsWith('*')) {
       return url.startsWith(route.slice(0, -1));
     }
-    
+
     // Handle parameterized routes like /api/entities/hierarchy/:tenantId
     if (route.includes(':')) {
       const pathPattern = route.replace(/:[^/]+/g, '[^/]+');
       const regex = new RegExp(`^${pathPattern.replace(/\//g, '\\/')}`);
       return regex.test(url);
     }
-    
+
     return url.startsWith(route);
   });
 }

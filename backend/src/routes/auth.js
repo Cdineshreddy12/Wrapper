@@ -14,7 +14,7 @@ export default async function authRoutes(fastify, options) {
       // Generate provider-specific auth URL if provider is specified
       if (provider) {
         authUrl = kindeService.getSocialAuthUrl(provider, {
-          redirectUri: redirect_uri || `${process.env.FRONTEND_URL}/onboarding`,
+          redirectUri: redirect_uri || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/onboarding`,
           state: state || 'onboarding',
           prompt,
           loginHint: login_hint,
@@ -26,7 +26,7 @@ export default async function authRoutes(fastify, options) {
       } else {
         // Generate generic Kinde auth URL for onboarding flow
         authUrl = kindeService.generateSocialLoginUrl({
-          redirectUri: redirect_uri || `${process.env.FRONTEND_URL}/onboarding`,
+          redirectUri: redirect_uri || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/onboarding`,
           state: state || 'onboarding',
           prompt,
           loginHint: login_hint
@@ -55,7 +55,7 @@ export default async function authRoutes(fastify, options) {
 
     try {
       const authUrl = kindeService.generateGoogleLoginUrl({
-        redirectUri: redirect_uri || `${process.env.FRONTEND_URL}/onboarding`,
+        redirectUri: redirect_uri || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/onboarding`,
         state: state || 'onboarding',
         prompt,
         additionalParams: {
@@ -83,7 +83,7 @@ export default async function authRoutes(fastify, options) {
 
     try {
       const authUrl = kindeService.generateGithubLoginUrl({
-        redirectUri: redirect_uri || `${process.env.FRONTEND_URL}/onboarding`,
+        redirectUri: redirect_uri || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/onboarding`,
         state: state || 'onboarding'
       });
 
@@ -106,7 +106,7 @@ export default async function authRoutes(fastify, options) {
 
     try {
       const authUrl = kindeService.generateMicrosoftLoginUrl({
-        redirectUri: redirect_uri || `${process.env.FRONTEND_URL}/onboarding`,
+        redirectUri: redirect_uri || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/onboarding`,
         state: state || 'onboarding',
         prompt
       });
@@ -130,7 +130,7 @@ export default async function authRoutes(fastify, options) {
 
     try {
       const authUrl = kindeService.generateAppleLoginUrl({
-        redirectUri: redirect_uri || `${process.env.FRONTEND_URL}/onboarding`,
+        redirectUri: redirect_uri || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/onboarding`,
         state: state || 'onboarding'
       });
 
@@ -153,7 +153,7 @@ export default async function authRoutes(fastify, options) {
 
     try {
       const authUrl = kindeService.generateLinkedInLoginUrl({
-        redirectUri: redirect_uri || `${process.env.FRONTEND_URL}/onboarding`,
+        redirectUri: redirect_uri || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/onboarding`,
         state: state || 'onboarding'
       });
 
@@ -243,7 +243,7 @@ export default async function authRoutes(fastify, options) {
         return reply.redirect(errorUrl.toString());
       } else {
         // Onboarding error - redirect to onboarding
-        const errorRedirectUrl = new URL(`${process.env.FRONTEND_URL}/onboarding`);
+        const errorRedirectUrl = new URL(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/onboarding`);
         errorRedirectUrl.searchParams.set('error', 'auth_failed');
         errorRedirectUrl.searchParams.set('error_description', 'Authentication failed');
         return reply.redirect(errorRedirectUrl.toString());
@@ -268,7 +268,7 @@ export default async function authRoutes(fastify, options) {
         return reply.redirect(errorUrl.toString());
       } else {
         // Onboarding error - redirect to onboarding
-        const errorRedirectUrl = new URL(`${process.env.FRONTEND_URL}/onboarding`);
+        const errorRedirectUrl = new URL(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/onboarding`);
         errorRedirectUrl.searchParams.set('error', 'no_code');
         return reply.redirect(errorRedirectUrl.toString());
       }
@@ -360,7 +360,7 @@ export default async function authRoutes(fastify, options) {
         return reply.redirect(orgDashboardUrl);
       } else {
         // Onboarding flow - redirect to frontend with user data
-        const redirectUrl = new URL(`${process.env.FRONTEND_URL}/onboarding`);
+        const redirectUrl = new URL(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/onboarding`);
         redirectUrl.searchParams.set('email', userInfo.email);
         redirectUrl.searchParams.set('name', `${userInfo.given_name} ${userInfo.family_name}`.trim());
         redirectUrl.searchParams.set('step', '2'); // Skip to company info step
@@ -393,7 +393,7 @@ export default async function authRoutes(fastify, options) {
         return reply.redirect(errorUrl.toString());
       } else {
         // Onboarding error - redirect to onboarding
-        const errorRedirectUrl = new URL(`${process.env.FRONTEND_URL}/onboarding`);
+        const errorRedirectUrl = new URL(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/onboarding`);
         errorRedirectUrl.searchParams.set('error', 'callback_failed');
         errorRedirectUrl.searchParams.set('error_description', 'Failed to process authentication');
         return reply.redirect(errorRedirectUrl.toString());
@@ -445,7 +445,7 @@ export default async function authRoutes(fastify, options) {
 
       // Generate Kinde logout URL
       const logoutUrl = kindeService.generateLogoutUrl(
-        redirect_uri || `${process.env.FRONTEND_URL}/login`
+        redirect_uri || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/login`
       );
 
       return reply.send({
@@ -823,7 +823,7 @@ export default async function authRoutes(fastify, options) {
       // Direct redirect to app or default location
       const finalRedirectUrl = redirect_url ||
         getDefaultRedirectUrl(app_code) ||
-        `${process.env.FRONTEND_URL}/login`;
+        `${process.env.FRONTEND_URL || 'http://localhost:3001'}/login`;
 
       console.log('✅ Logout completed, redirecting to:', finalRedirectUrl);
       return reply.redirect(finalRedirectUrl);
@@ -832,7 +832,7 @@ export default async function authRoutes(fastify, options) {
       console.error('❌ Logout error:', error);
 
       // Even if logout fails, redirect to a safe location
-      const fallbackUrl = `${process.env.FRONTEND_URL}/login`;
+      const fallbackUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/login`;
       return reply.redirect(fallbackUrl);
     }
   });

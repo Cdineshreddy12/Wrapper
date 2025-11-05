@@ -304,7 +304,7 @@ class EnhancedOnboardingService {
         adminUser,
         organization,
         adminRole,
-        redirectUrl: `https://${subdomain}.zopkit.com/dashboard`
+        redirectUrl: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/dashboard`
       };
 
     } catch (error) {
@@ -316,43 +316,70 @@ class EnhancedOnboardingService {
   // 🔧 **UTILITY METHODS**
 
   static generateAdminPermissions(plan) {
-    // For credit-based system, provide comprehensive permissions
-    if (plan === 'credit-based') {
+    // Import PLAN_ACCESS_MATRIX
+    const { PLAN_ACCESS_MATRIX, PermissionMatrixUtils } = require('../data/permission-matrix.js');
+
+    // Map credit package to plan
+    const creditPackageToPlanMap = {
+      basic: 'trial',
+      standard: 'starter',
+      premium: 'professional',
+      enterprise: 'enterprise'
+    };
+
+    // Convert credit-based and credit packages to proper plan
+    const actualPlan = plan === 'credit-based' ? 'professional' :
+                      creditPackageToPlanMap[plan] || plan;
+
+    console.log(`🔐 Generating permissions for plan: ${plan} → ${actualPlan}`);
+
+    // Use PermissionMatrixUtils to get plan permissions
+    try {
+      const planPermissions = PermissionMatrixUtils.getPlanPermissions(actualPlan);
+
+      // Convert flat permission structure to nested structure expected by role creation
+      const permissionsByModule = {};
+
+      planPermissions.forEach(permission => {
+        // Parse module from fullCode (format: appCode.moduleCode.permissionCode)
+        const parts = permission.fullCode.split('.');
+        if (parts.length === 3) {
+          const [appCode, moduleCode, permissionCode] = parts;
+
+          if (!permissionsByModule[appCode]) {
+            permissionsByModule[appCode] = {};
+          }
+          if (!permissionsByModule[appCode][moduleCode]) {
+            permissionsByModule[appCode][moduleCode] = [];
+          }
+
+          // Add permission code if not already present
+          if (!permissionsByModule[appCode][moduleCode].includes(permissionCode)) {
+            permissionsByModule[appCode][moduleCode].push(permissionCode);
+          }
+        }
+      });
+
+      console.log(`✅ Generated permissions for ${Object.keys(permissionsByModule).length} applications`);
+      return permissionsByModule;
+
+    } catch (error) {
+      console.error(`❌ Error generating permissions for plan ${actualPlan}:`, error);
+      console.log('🔄 Falling back to basic permissions...');
+
+      // Fallback permissions if matrix lookup fails
       return {
         crm: {
           leads: ['read', 'create', 'update', 'delete'],
           accounts: ['read', 'create', 'update', 'delete'],
-          contacts: ['read', 'create', 'update', 'delete'],
-          opportunities: ['read', 'create', 'update', 'delete'],
-          quotations: ['read', 'create', 'update', 'delete'],
-          tickets: ['read', 'create', 'update', 'delete']
+          contacts: ['read', 'create', 'update', 'delete']
         },
         system: {
-          users: ['read', 'create', 'update', 'delete'],
-          roles: ['read', 'create', 'update', 'delete'],
-          audit: ['read'],
-          settings: ['read', 'update']
-        },
-        credits: {
-          view: ['read'],
-          manage: ['read', 'create', 'update']
+          users: ['read', 'create', 'update'],
+          roles: ['read', 'create', 'update']
         }
       };
     }
-
-    // Fallback for legacy plans
-    const basePermissions = {
-      crm: { leads: ['read', 'create', 'update'], accounts: ['read', 'create'] },
-      system: { users: ['read', 'create', 'update'], roles: ['read', 'create'] }
-    };
-
-    // Add plan-specific permissions
-    if (plan === 'professional') {
-      basePermissions.crm.deals = ['read', 'create', 'update'];
-      basePermissions.system.audit = ['read'];
-    }
-
-    return basePermissions;
   }
 
   static getInitialCreditsForPlan(plan) {
@@ -375,5 +402,7 @@ class EnhancedOnboardingService {
     return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
   }
 }
+
+export default EnhancedOnboardingService;
 
 export default EnhancedOnboardingService;

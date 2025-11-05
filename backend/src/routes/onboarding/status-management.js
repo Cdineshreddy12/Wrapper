@@ -1,9 +1,8 @@
 import { authenticateToken } from '../../middleware/auth.js';
 import { db } from '../../db/index.js';
-import { tenants, tenantUsers, customRoles, tenantInvitations } from '../../db/schema/index.js';
+import { tenants, tenantUsers, customRoles } from '../../db/schema/index.js';
 import { eq } from 'drizzle-orm';
 import { TenantService } from '../../services/tenant-service.js';
-import { SubscriptionService } from '../../services/subscription-service.js';
 import kindeService from '../../services/kinde-service.js';
 
 /**
@@ -200,7 +199,7 @@ export default async function statusManagementRoutes(fastify, options) {
             kindeUserId,
             userId,
             email,
-            hasOrganization: !!kindeUser.organization
+            hasTenant: !!kindeUser.organization
           });
         }
       } catch (authError) {
@@ -303,7 +302,9 @@ export default async function statusManagementRoutes(fastify, options) {
         console.log('✅ Tenant found:', {
           tenantId: tenant.tenantId,
           companyName: tenant.companyName,
-          subdomain: tenant.subdomain
+          subdomain: tenant.subdomain,
+          hasInitialSetupData: !!tenant.initialSetupData,
+          initialSetupDataKeys: tenant.initialSetupData ? Object.keys(tenant.initialSetupData) : []
         });
       } else {
         console.log('⚠️ No tenant found for user');
@@ -311,7 +312,38 @@ export default async function statusManagementRoutes(fastify, options) {
 
       // Extract onboarding data from preferences
       const onboardingData = user.preferences?.onboarding || {};
-      const formData = onboardingData.formData || {};
+      let formData = onboardingData.formData || {};
+
+      // If no form data exists, try to populate from tenant initial setup data
+      if (Object.keys(formData).length === 0 && tenant?.initialSetupData) {
+        console.log('🔄 No form data found, populating from tenant initial setup data');
+        console.log('📋 Initial setup data:', tenant.initialSetupData);
+        const setupData = tenant.initialSetupData;
+        formData = {
+          businessType: setupData.businessType || undefined,
+          companySize: setupData.companySize || undefined,
+          country: setupData.country || undefined,
+          timezone: setupData.timezone || undefined,
+          currency: setupData.currency || undefined,
+          hasGstin: setupData.hasGstin || undefined,
+          gstin: setupData.gstin || undefined,
+          selectedPlan: setupData.selectedPlan || undefined,
+          planName: setupData.planName || undefined,
+          maxUsers: setupData.maxUsers || undefined,
+          maxProjects: setupData.maxProjects || undefined
+        };
+        // Remove undefined values
+        Object.keys(formData).forEach(key => {
+          if (formData[key] === undefined) {
+            delete formData[key];
+          }
+        });
+        console.log('📋 Populated form data:', formData);
+      } else if (Object.keys(formData).length === 0) {
+        console.log('⚠️ No form data found and no initial setup data available');
+      }
+
+
 
       const result = {
         success: true,
@@ -321,10 +353,9 @@ export default async function statusManagementRoutes(fastify, options) {
           onboardingStep: user.onboardingStep || (user.onboardingCompleted ? 'completed' : '1'),
           savedFormData: formData,
           onboardingProgress: onboardingData,
-          organization: tenant ? {
+          tenant: tenant ? {
             id: tenant.tenantId,
             name: tenant.companyName,
-            domain: tenant.domain,
             subdomain: tenant.subdomain
           } : null,
           user: {
@@ -339,7 +370,7 @@ export default async function statusManagementRoutes(fastify, options) {
       console.log('✅ Final onboarding status result:', {
         isOnboarded: result.data.isOnboarded,
         needsOnboarding: result.data.needsOnboarding,
-        hasOrganization: !!result.data.organization,
+        hasTenant: !!result.data.tenant,
         userExists: !!result.data.user
       });
 

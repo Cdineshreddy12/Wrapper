@@ -520,7 +520,7 @@ class TrialManager {
           plan: subscriptions.plan,
           stripeSubscriptionId: subscriptions.stripeSubscriptionId,
           hasEverUpgraded: subscriptions.hasEverUpgraded,
-          trialToggledOff: subscriptions.trialToggledOff,
+          // trialToggledOff: subscriptions.trialToggledOff, // Removed - field doesn't exist
         })
         .from(subscriptions)
         .where(eq(subscriptions.tenantId, tenantId))
@@ -531,15 +531,12 @@ class TrialManager {
         return { expired: false, reason: 'no_subscription' };
       }
 
-      // Check if trial restrictions are manually disabled
-      if (subscription.trialToggledOff) {
-        return { 
-          expired: false, 
-          reason: 'trial_manually_disabled',
-          trialEnd: subscription.trialEnd,
-          plan: subscription.plan
-        };
-      }
+      // Trial restrictions are no longer used - always return false
+      return {
+        expired: false,
+        reason: 'trial_disabled',
+        plan: subscription.plan
+      };
 
       // Check if user has ever upgraded (never show trial restrictions again)
       if (subscription.hasEverUpgraded) {
@@ -631,7 +628,7 @@ class TrialManager {
           stripeSubscriptionId: subscriptions.stripeSubscriptionId,
           currentPeriodEnd: subscriptions.currentPeriodEnd,
           hasEverUpgraded: subscriptions.hasEverUpgraded,
-          trialToggledOff: subscriptions.trialToggledOff,
+          // trialToggledOff: subscriptions.trialToggledOff, // Removed - field doesn't exist
         })
         .from(subscriptions)
         .where(eq(subscriptions.tenantId, tenantId))
@@ -640,8 +637,7 @@ class TrialManager {
 
       if (!subscription) return false;
 
-      // If trial manually toggled off, consider as "has paid subscription"
-      if (subscription.trialToggledOff) return true;
+      // Trial restrictions are no longer used
 
       // If user has ever upgraded, don't show trial restrictions
       if (subscription.hasEverUpgraded) return true;
@@ -716,7 +712,7 @@ class TrialManager {
       await db
         .update(subscriptions)
         .set({
-          trialToggledOff: true,
+          // trialToggledOff: true, // Removed - field doesn't exist
           hasEverUpgraded: true,
           updatedAt: new Date()
         })

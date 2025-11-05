@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQueryState } from 'nuqs'
 
 // Third-party libraries
-import { BarChart3, Coins, TrendingUp, DollarSign, Building, Package, Users, Shield, User, Activity, Crown, CheckCircle, AlertTriangle, Database, RefreshCw, ExternalLink, Settings, PieChart, Eye } from 'lucide-react'
+import { BarChart3, Coins, TrendingUp, DollarSign, Package, Users, Shield, User, Activity, Crown, CheckCircle, AlertTriangle, Database, RefreshCw, ExternalLink, Settings, PieChart, Eye } from 'lucide-react'
 import { ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Bar, Line, LineChart, BarChart } from 'recharts'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import toast from 'react-hot-toast'
@@ -30,7 +30,6 @@ import { ThemeBadge } from './common/ThemeBadge'
 // Feature components
 import { ActivityDashboard } from './activity/ActivityDashboard'
 import { CreditBalance } from './CreditBalance'
-import OrganizationManagement from './OrganizationManagement'
 import { RoleManagementDashboard } from './roles/RoleManagementDashboard'
 import { UserApplicationAccess } from './users/UserApplicationAccess'
 import { UserManagementDashboard } from './users/UserManagementDashboard'
@@ -92,7 +91,7 @@ export const DashboardMenu = ({
     } = useDashboardData()
 
     // Tab navigation state
-    const [_selectedTab, setSelectedTab] = useQueryState('tab', { defaultValue: 'overview' })
+    const [_selectedTab, setSelectedTab] = useQueryState('tab', { defaultValue: 'applications' })
 
     /**
      * Handle tab navigation changes
@@ -138,6 +137,7 @@ export const DashboardMenu = ({
                     </div>
                     <IconButton
                         variant="outline"
+                        className="border-border/50 hover:bg-accent hover:text-accent-foreground dark:border-border dark:hover:bg-accent dark:hover:text-accent-foreground"
                         onClick={() => window.location.href = '/billing?purchase=true'}
                         startIcon={Coins}
                     >
@@ -164,7 +164,7 @@ export const DashboardMenu = ({
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <Button
                                 variant="outline"
-                                className="h-20 flex flex-col items-center justify-center space-y-2"
+                                className="h-20 flex flex-col items-center justify-center space-y-2 border-border/50 hover:bg-accent hover:text-accent-foreground dark:border-border dark:hover:bg-accent dark:hover:text-accent-foreground"
                                 onClick={() => window.location.href = '/billing?purchase=true'}
                             >
                                 <Coins className="h-6 w-6" />
@@ -172,7 +172,7 @@ export const DashboardMenu = ({
                             </Button>
                             <Button
                                 variant="outline"
-                                className="h-20 flex flex-col items-center justify-center space-y-2"
+                                className="h-20 flex flex-col items-center justify-center space-y-2 border-border/50 hover:bg-accent hover:text-accent-foreground dark:border-border dark:hover:bg-accent dark:hover:text-accent-foreground"
                                 onClick={() => window.location.href = '/billing?history=true'}
                             >
                                 <TrendingUp className="h-6 w-6" />
@@ -180,7 +180,7 @@ export const DashboardMenu = ({
                             </Button>
                             <Button
                                 variant="outline"
-                                className="h-20 flex flex-col items-center justify-center space-y-2"
+                                className="h-20 flex flex-col items-center justify-center space-y-2 border-border/50 hover:bg-accent hover:text-accent-foreground dark:border-border dark:hover:bg-accent dark:hover:text-accent-foreground"
                                 onClick={() => window.location.href = '/billing'}
                             >
                                 <DollarSign className="h-6 w-6" />
@@ -189,68 +189,6 @@ export const DashboardMenu = ({
                         </div>
                     </CardContent>
                 </Card>
-            </TabContentWrapper>
-        },
-        {
-            id: 'organizations',
-            label: 'Organizations',
-            icon: Building,
-            content: <TabContentWrapper>
-                <OrganizationManagement
-                    employees={employees || []}
-                    applications={applications || []}
-                    isAdmin={isAdmin || false}
-                    tenantId={tenantId}
-                    makeRequest={async (endpoint: string, options?: RequestInit) => {
-                        // Use enhanced api.ts for proper authentication and error handling
-                        try {
-                            // Vite proxy handles /api routing, so just ensure proper endpoint format
-                            const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-                            // Axios baseURL already includes /api, so don't add it again
-                            const apiPath = normalizedEndpoint;
-
-                            // Configure request with proper headers and convert body to data for axios
-                            // Build axios-compatible headers object
-                            const headers: Record<string, string> = { 'X-Application': 'crm' };
-                            if (options?.headers) {
-                                const h: any = options.headers as any;
-                                if (typeof Headers !== 'undefined' && h instanceof Headers) {
-                                    h.forEach((value: any, key: string) => { headers[key] = String(value); });
-                                } else if (Array.isArray(h)) {
-                                    h.forEach(([key, value]: [string, any]) => { headers[key] = String(value); });
-                                } else {
-                                    Object.assign(headers, h as Record<string, string>);
-                                }
-                            }
-
-                            const axiosConfig: any = {
-                                method: options?.method,
-                                headers,
-                                withCredentials: true,
-                            };
-
-                            // Convert fetch-style body to axios-style data
-                            if (options?.body) {
-                                try {
-                                    axiosConfig.data = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
-                                } catch {
-                                    axiosConfig.data = options.body;
-                                }
-                            }
-
-                            const response = await api(apiPath, axiosConfig);
-                            return response.data;
-                        } catch (error: any) {
-                            console.error('API request failed:', error);
-                            throw error;
-                        }
-                    }}
-                    loadDashboardData={refreshDashboard}
-                    inviteEmployee={() => {
-                        // Implement invite employee function
-                        console.log('Invite employee clicked');
-                    }}
-                />
             </TabContentWrapper>
         },
         {
@@ -321,7 +259,7 @@ export const DashboardMenu = ({
     return (
         <TabNavigation
             tabs={getTabsConfig()}
-            defaultValue="overview"
+            defaultValue="applications"
             onValueChange={handleTabChange}
             variant='underline'
             size="md"
@@ -384,29 +322,6 @@ function OverviewTab({
                 />
             </Grid>
 
-            {/* Credit Balance Section */}
-            <div className="mt-8">
-                <div className="flex items-center justify-between mb-6">
-                    <Typography variant="h3">Credit Balance</Typography>
-                    <IconButton
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigate('/dashboard?tab=credits')}
-                        startIcon={Eye}
-                    >
-                        View Details
-                    </IconButton>
-                </div>
-                <CreditBalance
-                    showPurchaseButton={true}
-                    showUsageStats={true}
-                    compact={false}
-                    onPurchaseClick={() => {
-                        // Navigate to billing page or open purchase modal
-                        window.location.href = '/billing?purchase=true';
-                    }}
-                />
-            </div>
 
             {/* Charts and Recent Activity */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -471,6 +386,7 @@ function OverviewTab({
                         </IconButton>
                         <IconButton
                             variant="outline"
+                            className="border-border/50 hover:bg-accent hover:text-accent-foreground dark:border-border dark:hover:bg-accent dark:hover:text-accent-foreground"
                             onClick={() => navigate('/dashboard?tab=user-apps')}
                             startIcon={Database}
                         >

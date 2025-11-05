@@ -6,6 +6,7 @@
 
 import { db } from '../db/index.js';
 import { entities } from '../db/schema/unified-entities.js';
+import { tenantUsers } from '../db/schema/index.js';
 import { eq, and, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import HierarchyManager from '../utils/hierarchy-manager.js';
@@ -39,6 +40,36 @@ export class LocationService {
     }
 
     const entityId = uuidv4();
+    const tenantId = parentEntity[0].tenantId;
+
+    // Determine responsible person
+    let finalResponsiblePersonId = responsiblePersonId;
+    if (!finalResponsiblePersonId) {
+      // If no responsible person specified, use tenant admin
+      try {
+        const [tenantAdmin] = await db
+          .select({ userId: tenantUsers.userId })
+          .from(tenantUsers)
+          .where(and(
+            eq(tenantUsers.tenantId, tenantId),
+            eq(tenantUsers.isTenantAdmin, true),
+            eq(tenantUsers.isActive, true)
+          ))
+          .limit(1);
+
+        if (tenantAdmin) {
+          finalResponsiblePersonId = tenantAdmin.userId;
+          console.log('👑 Using tenant admin as default responsible person for location:', tenantAdmin.userId);
+        } else {
+          console.log('⚠️ No tenant admin found, using creator as responsible person for location');
+          finalResponsiblePersonId = createdBy;
+        }
+      } catch (error) {
+        console.error('❌ Error finding tenant admin for location, using creator:', error);
+        finalResponsiblePersonId = createdBy;
+      }
+    }
+
     const addressData = {
       street: address || '',
       city: city || '',
@@ -51,14 +82,14 @@ export class LocationService {
     // Insert location as entity
     const location = await db.insert(entities).values({
       entityId,
-      tenantId: parentEntity[0].tenantId,
+      tenantId,
       entityType: 'location',
       parentEntityId: organizationId, // Link to parent organization
       entityName: name,
       entityCode: `LOC_${entityId.substring(0, 8)}`, // Generate code for locations
       locationType: 'office', // Default location type
       address: addressData,
-      responsiblePersonId: responsiblePersonId || null,
+      responsiblePersonId: finalResponsiblePersonId,
       isActive: true,
       createdBy: createdBy,
       createdAt: new Date()

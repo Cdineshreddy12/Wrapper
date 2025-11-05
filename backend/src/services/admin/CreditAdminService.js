@@ -29,7 +29,7 @@ export class CreditAdminService {
           tenantId: tenants.tenantId,
           companyName: tenants.companyName,
           totalCredits: sql<number>`coalesce(sum(${credits.availableCredits}), 0)`,
-          reservedCredits: sql<number>`coalesce(sum(${credits.reservedCredits}), 0)`,
+,
           entityCount: sql<number>`count(distinct ${credits.entityId})`
         })
         .from(credits)

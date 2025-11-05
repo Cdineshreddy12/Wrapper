@@ -37,8 +37,8 @@
 import axios, { AxiosError } from 'axios'
 import toast from 'react-hot-toast'
 
-// Use empty baseURL since Vite proxy handles /api routing
-const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+// Point directly to backend since all routes are registered under /api/*
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 
 // Store for Kinde token getter function
 let kindeTokenGetter: (() => Promise<string | null>) | null = null;
@@ -617,82 +617,83 @@ export interface AuditLogEntry {
 
 // Auth API
 export const authAPI = {
-  getLoginUrl: (subdomain: string) => api.get(`/api/auth/login/${subdomain}`),
+  getLoginUrl: (subdomain: string) => api.get(`/auth/login/${subdomain}`),
   handleCallback: (code: string, state?: string) =>
-    api.get('/api/auth/callback', { params: { code, state } }),
-  getUserInfo: () => api.get<User>('/api/auth/me'),
-  logout: () => api.post('/api/auth/logout'),
-  refreshToken: () => api.post('/api/auth/refresh'),
-  getProviders: () => api.get('/api/auth/providers'),
+    api.get('/auth/callback', { params: { code, state } }),
+  getUserInfo: () => api.get<User>('/auth/me'),
+  logout: () => api.post('/auth/logout'),
+  refreshToken: () => api.post('/auth/refresh'),
+  getProviders: () => api.get('/auth/providers'),
 }
 
 // Tenant API
 export const tenantAPI = {
   // Get current tenant details
-  getCurrentTenant: () => api.get<Tenant>('/api/tenants/current'),
+  getCurrentTenant: () => api.get<Tenant>('/tenants/current'),
 
   // Get tenant users
-  getUsers: () => api.get<ApiResponse<UnifiedUser[]>>('/api/tenants/current/users'),
+  getUsers: () => api.get<ApiResponse<UnifiedUser[]>>('/tenants/current/users'),
 
   // Invite user to tenant
   inviteUser: (data: { email: string; roleId: string; message?: string }) =>
-    api.post<ApiResponse<any>>('/api/tenants/current/users/invite', data),
+    api.post<ApiResponse<any>>('/tenants/current/users/invite', data),
 
   // Remove user from tenant
   removeUser: (userId: string) =>
-    api.delete<ApiResponse<any>>(`/api/tenants/current/users/${userId}`),
+    api.delete<ApiResponse<any>>(`/tenants/current/users/${userId}`),
 
   // Update user role
   updateUserRole: (userId: string, roleId: string) =>
-    api.put<ApiResponse<any>>(`/api/tenants/current/users/${userId}/role`, { roleId }),
+    api.put<ApiResponse<any>>(`/tenants/current/users/${userId}/role`, { roleId }),
 
   // Get tenant usage
   getUsage: (params?: { period?: string; startDate?: string; endDate?: string }) =>
-    api.get<ApiResponse<any>>('/api/tenants/current/usage', { params }),
+    api.get<ApiResponse<any>>('/tenants/current/usage', { params }),
 
   // Export users
-  exportUsers: () => api.get('/api/tenants/current/users/export'),
+  exportUsers: () => api.get('/tenants/current/users/export'),
 }
 
 // Subscription API
 export const subscriptionAPI = {
   // Debug endpoint for testing authentication
-  debugAuth: () => api.get('/subscriptions/debug-auth'),
+  debugAuth: () => api.get('/api/subscriptions/debug-auth'),
 
-  getCurrent: () => api.get('/subscriptions/current'),
-  getAvailablePlans: () => api.get('/subscriptions/plans'),
-  getBillingHistory: () => api.get('/subscriptions/billing-history'),
-  getConfigStatus: () => api.get('/subscriptions/config-status'),
+  getCurrent: () => api.get('/api/subscriptions/current'),
+  getAvailablePlans: () => api.get('/api/subscriptions/plans'),
+  getBillingHistory: () => api.get('/api/subscriptions/billing-history'),
+  getConfigStatus: () => api.get('/api/subscriptions/config-status'),
   createCheckout: (data: {
     planId: string;
     billingCycle: 'monthly' | 'yearly';
     successUrl: string;
     cancelUrl: string;
-  }) => api.post('/subscriptions/checkout', data),
+  }) => api.post('/api/subscriptions/checkout', data),
   checkProfileStatus: () => api.get('/api/payment-upgrade/profile-status'),
   changePlan: (data: {
     planId: string;
     billingCycle?: 'monthly' | 'yearly';
-  }) => api.post('/subscriptions/change-plan', data),
-  cancelSubscription: () => api.post('/subscriptions/cancel'),
-  updatePaymentMethod: () => api.post('/subscriptions/update-payment-method'),
-  getUsage: () => api.get('/subscriptions/usage'),
+  }) => api.post('/api/subscriptions/change-plan', data),
+  cancelSubscription: () => api.post('/api/subscriptions/cancel'),
+  updatePaymentMethod: () => api.post('/api/subscriptions/update-payment-method'),
+  getUsage: () => api.get('/api/subscriptions/usage'),
 
   // Enhanced payment management
   immediateDowngrade: (data: { newPlan: string; reason?: string; refundRequested?: boolean }) =>
-    api.post('/subscriptions/immediate-downgrade', data),
+    api.post('/api/subscriptions/immediate-downgrade', data),
   processRefund: (data: { paymentId: string; amount?: number; reason?: string }) =>
-    api.post('/subscriptions/refund', data),
-  getPaymentDetails: (paymentId: string) =>
-    api.get(`/subscriptions/payment/${paymentId}`),
+    api.post('/api/subscriptions/refund', data),
+  getPaymentDetailsById: (paymentId: string) =>
+    api.get(`/api/subscriptions/payment/${paymentId}`),
   getSubscriptionActions: () =>
-    api.get('/subscriptions/actions'),
+    api.get('/api/subscriptions/actions'),
   getPlanLimits: () =>
-    api.get('/subscriptions/plan-limits'),
+    api.get('/api/subscriptions/plan-limits'),
   cleanupDuplicatePayments: () =>
-    api.post('/subscriptions/cleanup-duplicate-payments'),
+    api.post('/api/subscriptions/cleanup-duplicate-payments'),
+  getPaymentDetailsBySession: (sessionId: string) => api.get(`/api/subscriptions/payment/${sessionId}`),
   toggleTrialRestrictions: (disable: boolean) =>
-    api.post('/subscriptions/toggle-trial-restrictions', { disable }),
+    api.post('/api/subscriptions/toggle-trial-restrictions', { disable }),
 }
 
 // Analytics API
@@ -1018,7 +1019,10 @@ export const creditAPI = {
   getAvailablePackages: () => api.get('/credits/packages'),
 
   // Get credit statistics
-  getCreditStats: () => api.get('/credits/stats')
+  getCreditStats: () => api.get('/credits/stats'),
+
+  // Get payment details by session ID
+  getPaymentDetails: (sessionId: string) => api.get(`/credits/payment/${sessionId}`)
 }
 
 // Application Assignment Management API

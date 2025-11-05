@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { AlertTriangle, Clock, Crown, X, CreditCard, RefreshCw, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useTrialStatus } from '@/hooks/useTrialStatus'
 import { subscriptionAPI } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -14,6 +14,7 @@ export function TrialExpiryBanner() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [localExpiredData, setLocalExpiredData] = useState(null)
   const navigate = useNavigate()
+  const location = useLocation()
 
   // Listen for immediate trial expiry events
   useEffect(() => {
@@ -47,6 +48,13 @@ export function TrialExpiryBanner() {
       window.removeEventListener('apiTrialExpired', handleApiTrialExpiry)
     }
   }, [])
+
+  // Don't show banner during onboarding - user hasn't set up organization yet
+  const isOnboardingPage = location.pathname === '/onboarding' || location.pathname.startsWith('/onboarding/')
+  if (isOnboardingPage) {
+    console.log('🚫 TrialExpiryBanner: Not showing during onboarding')
+    return null
+  }
 
   // Use local expired data if available, otherwise fall back to hook data
   const currentExpiredData = localExpiredData || expiredData

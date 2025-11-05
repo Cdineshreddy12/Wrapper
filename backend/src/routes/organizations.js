@@ -28,11 +28,11 @@ export default async function organizationRoutes(fastify, options) {
   fastify.addHook('preHandler', async (request, reply) => {
     // Skip authentication for public routes that don't require it
     const publicRoutes = [
-      'GET /api/organizations/hierarchy',  // Allow hierarchy viewing with fallback auth
-      'GET /api/organizations/parent',     // Allow parent organization viewing with fallback auth
-      'POST /api/organizations/parent',    // Allow parent organization creation with fallback auth
-      'POST /api/organizations/sub',       // Allow sub-organization creation with fallback auth
-      'POST /api/organizations/bulk',      // Allow bulk organization creation with fallback auth
+      'GET /api/organizations/hierarchy',   // Allow hierarchy viewing with fallback auth
+      'GET /api/organizations/parent',      // Allow parent organization viewing with fallback auth
+      'POST /api/organizations/parent',     // Allow parent organization creation with fallback auth
+      'POST /api/organizations/sub',        // Allow sub-organization creation with fallback auth
+      'POST /api/organizations/bulk',       // Allow bulk organization creation with fallback auth
     ];
 
     const routeKey = `${request.method} ${request.url}`;
@@ -41,6 +41,10 @@ export default async function organizationRoutes(fastify, options) {
       const routeParts = route.split(' ');
       const method = routeParts[0];
       const path = routeParts[1];
+      // Skip public route check for /current routes - they handle their own auth
+      if (request.url.endsWith('/current')) {
+        return false;
+      }
       return request.method === method && request.url.includes(path);
     });
 
@@ -411,6 +415,82 @@ export default async function organizationRoutes(fastify, options) {
         success: false,
         error: 'Retrieval failed',
         message: 'Failed to retrieve parent organization'
+      });
+    }
+  });
+
+  // Get organization hierarchy for current tenant
+  fastify.get('/hierarchy/current', {
+    preHandler: [authenticateToken, addUserAccessContext(), validateApplicationExists(), enforceApplicationAccess(), addApplicationDataFiltering()],
+    schema: {
+      description: 'Get complete organization hierarchy for the current tenant',
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            hierarchy: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  organizationId: { type: 'string' },
+                  organizationName: { type: 'string' },
+                  organizationType: { type: 'string' },
+                  organizationLevel: { type: 'number' },
+                  hierarchyPath: { type: 'string' },
+                  description: { type: 'string' },
+                  isActive: { type: 'boolean' },
+                  createdAt: { type: 'string', format: 'date-time' },
+                  updatedAt: { type: 'string', format: 'date-time' },
+                  parentOrganizationId: { type: ['string', 'null'] },
+                  children: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        organizationId: { type: 'string' },
+                        organizationName: { type: 'string' },
+                        organizationType: { type: 'string' },
+                        organizationLevel: { type: 'number' },
+                        hierarchyPath: { type: 'string' },
+                        description: { type: 'string' },
+                        isActive: { type: 'boolean' },
+                        createdAt: { type: 'string', format: 'date-time' },
+                        updatedAt: { type: 'string', format: 'date-time' },
+                        parentOrganizationId: { type: ['string', 'null'] },
+                        children: { type: 'array', items: { type: 'object' } }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            totalOrganizations: { type: 'number' },
+            message: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const tenantId = request.userContext.tenantId;
+      const result = await OrganizationService.getOrganizationHierarchy(
+        tenantId,
+        request.userContext,
+        request.applicationContext
+      );
+
+      return reply.send(result);
+    } catch (error) {
+      console.error('❌ Get organization hierarchy failed:', error);
+      console.error('❌ Stack trace:', error.stack);
+      console.error('❌ User context:', request.userContext);
+      console.error('❌ Tenant ID:', request.userContext?.tenantId);
+      return reply.code(500).send({
+        success: false,
+        error: 'Retrieval failed',
+        message: 'Failed to get organization hierarchy'
       });
     }
   });

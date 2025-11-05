@@ -697,10 +697,10 @@ export default async function adminRoutes(fastify, options) {
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('users-list');
     const tenantId = request.userContext.tenantId;
-    
+
     try {
       console.log(`🔍 [${requestId}] Getting users list for tenant: ${tenantId}`);
-      
+
       const users = await db
         .select({
           userId: tenantUsers.userId,
@@ -734,6 +734,67 @@ export default async function adminRoutes(fastify, options) {
       return reply.code(500).send({
         success: false,
         error: 'Failed to get users',
+        message: error.message,
+        requestId
+      });
+    }
+  });
+
+  // Get specific user details
+  fastify.get('/users/:userId', {
+    preHandler: [authenticateToken, requirePermission('user.view')]
+  }, async (request, reply) => {
+    const requestId = Logger.generateRequestId('user-details');
+    const { userId } = request.params;
+    const tenantId = request.userContext.tenantId;
+
+    try {
+      console.log(`🔍 [${requestId}] Getting user details: ${userId} for tenant: ${tenantId}`);
+
+      const [user] = await db
+        .select({
+          userId: tenantUsers.userId,
+          email: tenantUsers.email,
+          name: tenantUsers.name,
+          avatar: tenantUsers.avatar,
+          title: tenantUsers.title,
+          department: tenantUsers.department,
+          isActive: tenantUsers.isActive,
+          isTenantAdmin: tenantUsers.isTenantAdmin,
+          isVerified: tenantUsers.isVerified,
+          onboardingCompleted: tenantUsers.onboardingCompleted,
+          createdAt: tenantUsers.createdAt,
+          lastActiveAt: tenantUsers.lastActiveAt,
+          lastLoginAt: tenantUsers.lastLoginAt,
+          loginCount: tenantUsers.loginCount
+        })
+        .from(tenantUsers)
+        .where(and(
+          eq(tenantUsers.userId, userId),
+          eq(tenantUsers.tenantId, tenantId)
+        ))
+        .limit(1);
+
+      if (!user) {
+        return ErrorResponses.notFound(reply, 'User', 'User not found', {
+          userId,
+          tenantId,
+          requestId
+        });
+      }
+
+      console.log(`✅ [${requestId}] Found user: ${user.name} (${user.email})`);
+
+      return {
+        success: true,
+        data: user,
+        requestId
+      };
+    } catch (error) {
+      console.error(`❌ [${requestId}] Failed to get user details:`, error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to get user details',
         message: error.message,
         requestId
       });

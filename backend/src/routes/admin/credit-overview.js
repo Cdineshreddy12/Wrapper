@@ -7,6 +7,7 @@ import { authenticateToken, requirePermission } from '../../middleware/auth.js';
 import { db } from '../../db/index.js';
 import { credits, creditTransactions, tenants, entities } from '../../db/schema/index.js';
 import { eq, and, desc, sql, count, sum, gte, lte, between } from 'drizzle-orm';
+import CreditAllocationService from '../../services/credit-allocation-service.js';
 
 export default async function adminCreditOverviewRoutes(fastify, options) {
 
@@ -478,8 +479,7 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
           entityCode: entities.entityCode,
           companyName: tenants.companyName,
           availableCredits: sql`coalesce(${credits.availableCredits}, 0)`,
-          reservedCredits: sql`coalesce(${credits.reservedCredits}, 0)`,
-          totalCredits: sql`coalesce(${credits.availableCredits} + ${credits.reservedCredits}, 0)`,
+          totalCredits: sql`coalesce(${credits.availableCredits}, 0)`,
           isActive: entities.isActive,
           lastUpdatedAt: credits.lastUpdatedAt,
           createdAt: entities.createdAt
@@ -654,6 +654,34 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
     } catch (error) {
       console.error('Error fetching credit transactions:', error);
       return reply.code(500).send({ error: 'Failed to fetch credit transactions' });
+    }
+  });
+
+  // Get application allocations for an entity
+  fastify.get('/entity/:entityId/application-allocations', {
+    preHandler: [authenticateToken]
+  }, async (request, reply) => {
+    try {
+      const { entityId } = request.params;
+      const { tenantId } = request.userContext;
+
+      console.log('🔍 Getting application allocations for entity:', { entityId, tenantId });
+
+      const allocations = await CreditAllocationService.getApplicationAllocations(tenantId, entityId);
+
+      return {
+        success: true,
+        data: {
+          allocations: allocations || []
+        }
+      };
+    } catch (error) {
+      console.error('❌ Failed to get application allocations:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to get application allocations',
+        message: error.message
+      });
     }
   });
 }

@@ -1,12 +1,10 @@
-import { Card, CardContent, Badge } from "@/components/ui";
-import { Typography } from "@/components/common/Typography";
-import { IconButton } from "@/components/common/LoadingButton";
-import { getApplicationIcon, getStatusColor } from "@/components/application/applicationUtils";
+import { Badge } from "@/components/ui";
+import { GlareCard } from "@/components/ui/glare-card";
+import { getApplicationIcon, getThemeColors, getStatusColors } from "@/components/application/applicationUtils";
 import { Application } from "@/types/application";
 import { Eye } from "lucide-react";
 import { memo } from "react";
-import { Flex } from "../common/Page";
-import { IconBox } from "../common/IconBox";
+import { useTheme } from "@/components/theme/ThemeProvider";
 
 interface ApplicationCardProps {
   application: Application;
@@ -14,58 +12,75 @@ interface ApplicationCardProps {
 }
 
 export const ApplicationCard = memo(function ApplicationCard({ application, onView }: ApplicationCardProps) {
-  const { appId, appName, appCode, description, isEnabled, subscriptionTier, modules, enabledModules } = application;
+  const { actualTheme } = useTheme();
+  const { appName, appCode, description, isEnabled, subscriptionTier } = application;
+
+  // Get consistent theme colors
+  const themeColors = getThemeColors(actualTheme);
+  const statusColors = getStatusColors(isEnabled, actualTheme);
 
   return (
-    <Card
-      className="hover:shadow-lg transition-shadow cursor-pointer"
+    <GlareCard
+      className={`flex flex-col items-center justify-center cursor-pointer p-8 text-center h-full ${themeColors.cardBg} ${themeColors.cardBorder} ${themeColors.cardHover}`}
       onClick={() => onView(application)}
     >
-      <CardContent className="p-6">
-        <Flex align="center" justify="between" gap={4}>
-          <Flex align="center" gap={3}>
-            <IconBox icon={getApplicationIcon(appCode)} variant="default" size="default" shape="square" shadow="none" />
-            <Flex direction="col">
-              <Typography variant="h4">{appName || "Unknown App"}</Typography>
-              <Typography variant="muted">{appCode || "N/A"}</Typography>
-            </Flex>
-          </Flex>
-          <Badge className={getStatusColor(isEnabled ? "active" : "inactive")}>
-            {isEnabled ? "Active" : "Inactive"}
-          </Badge>
-        </Flex>
+      {/* Header with icon and status */}
+      <div className="flex items-center justify-between w-full mb-6">
+        <div className="flex items-center gap-4">
+          <div className={`p-3 rounded-full backdrop-blur-sm ${themeColors.iconBg}`}>
+            <div className={`text-2xl ${themeColors.iconColor}`}>
+              {getApplicationIcon(appCode)}
+            </div>
+          </div>
+          <div className="text-left">
+            <h3 className={`font-bold text-xl mb-1 ${themeColors.titleColor}`}>
+              {appName || "Unknown App"}
+            </h3>
+            <p className={`${themeColors.subtitleColor} text-sm`}>
+              {appCode || "N/A"}
+            </p>
+          </div>
+        </div>
+        <Badge
+          className={`border-0 ${statusColors.bg} ${statusColors.text} ${statusColors.border}`}
+        >
+          {isEnabled ? "Active" : "Inactive"}
+        </Badge>
+      </div>
 
-        <Typography variant="muted">
-          {description || "No description available"}
-        </Typography>
+      {/* Description */}
+      <p className={`${themeColors.descriptionColor} text-sm mb-6 line-clamp-2`}>
+        {description || "No description available"}
+      </p>
 
-        <div className="space-y-3">
-          <Flex align="center" justify="between" gap={4}>
-            <Typography variant="muted">Subscription Tier:</Typography>
-            <Badge variant="outline" className="capitalize">
+      {/* Subscription Tier */}
+      <div className="w-full mb-6">
+        <div className={`rounded-lg p-3 backdrop-blur-sm ${themeColors.iconBg}`}>
+          <div className="flex items-center justify-between">
+            <span className={`text-sm ${themeColors.subtitleColor}`}>
+              Subscription Tier
+            </span>
+            <Badge
+              variant="outline"
+              className={`capitalize ${themeColors.badgeBg} ${themeColors.badgeText} ${themeColors.badgeBorder}`}
+            >
               {typeof subscriptionTier === "object" ? "Basic" : subscriptionTier || "Basic"}
             </Badge>
-          </Flex>
-
-          {modules && modules.length > 0 && (
-            <Flex align="center" justify="between" gap={4}>
-              <Typography variant="muted">Modules:</Typography>
-              <Typography variant="muted">
-                {enabledModules?.length || 0} enabled / {modules.length} available
-              </Typography>
-            </Flex>
-          )}
+          </div>
         </div>
+      </div>
 
-        <IconButton
-          variant="ghost"
-          size="sm"
-          className="w-full"
-          startIcon={Eye}
-        >
-          View Details
-        </IconButton>
-      </CardContent>
-    </Card>
+      {/* Action Button */}
+      <div className="w-full">
+        <div className={`rounded-lg p-3 backdrop-blur-sm transition-all duration-200 hover:scale-105 ${themeColors.buttonBg}`}>
+          <div className="flex items-center justify-center gap-2">
+            <Eye className={`h-4 w-4 hover:scale-110 transition-transform ${themeColors.buttonIcon}`} />
+            <span className={`font-medium ${themeColors.buttonText}`}>
+              View Details
+            </span>
+          </div>
+        </div>
+      </div>
+    </GlareCard>
   );
 });

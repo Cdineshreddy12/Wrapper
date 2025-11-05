@@ -37,7 +37,7 @@ export class TenantAdminService {
           userCount: sql<number>`count(distinct ${tenantUsers.userId})`,
           entityCount: sql<number>`count(distinct ${entities.entityId})`,
           totalCredits: sql<number>`coalesce(sum(${credits.availableCredits}), 0)`,
-          reservedCredits: sql<number>`coalesce(sum(${credits.reservedCredits}), 0)`,
+
           lastActivity: sql`greatest(max(${tenantUsers.lastLoginAt}), max(${creditTransactions.createdAt}))`
         })
         .from(tenants)
@@ -216,7 +216,7 @@ export class TenantAdminService {
       const creditSummary = await db
         .select({
           totalCredits: sql<number>`coalesce(sum(${credits.availableCredits}), 0)`,
-          reservedCredits: sql<number>`coalesce(sum(${credits.reservedCredits}), 0)`,
+,
           activeEntities: sql<number>`count(case when ${credits.isActive} = true then 1 end)`,
           averageCredits: sql<number>`avg(${credits.availableCredits})`
         })

@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
-import  api  from '../lib/api';
+import { useAuthStatus } from '@/hooks/useSharedQueries';
 import toast from 'react-hot-toast';
+import api from '@/lib/api';
 
 export interface UserPermission {
   id: string;
@@ -65,11 +67,12 @@ interface UserContextProviderProps {
   refreshInterval?: number; // in milliseconds, default 30 seconds
 }
 
-export const UserContextProvider: React.FC<UserContextProviderProps> = ({ 
-  children, 
-  refreshInterval = 30000 
+export const UserContextProvider: React.FC<UserContextProviderProps> = React.memo(({
+  children,
+  refreshInterval = 30000
 }) => {
-  const { isAuthenticated } = useKindeAuth();
+  const { isAuthenticated, user: kindeUser } = useKindeAuth();
+  const location = useLocation();
   const [user, setUser] = useState<UserContextData | null>(null);
   const [tenant, setTenant] = useState<TenantData | null>(null);
   const [permissions, setPermissions] = useState<UserPermission[]>([]);
@@ -78,22 +81,27 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = ({
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
 
+  // Fetch user context from API using shared hook
+  const { data: authData, isLoading: authLoading, error: authError } = useAuthStatus();
+
   // Fetch user context from API
   const fetchUserContext = useCallback(async (showToast = false) => {
     try {
       console.log('🔄 Refreshing user context...');
-      
-      const response = await api.get('/admin/auth-status');
-      
-      if (response.data.success && response.data.authStatus) {
-        const authStatus = response.data.authStatus;
 
-        // Create user object from authStatus
+      if (authData?.success && authData.authStatus) {
+        const authStatus = authData.authStatus;
+
+        // Create user object from authStatus with Kinde user data
+        const userName = kindeUser?.givenName 
+          ? `${kindeUser.givenName}${kindeUser.familyName ? ' ' + kindeUser.familyName : ''}`
+          : authStatus.email || 'Unknown';
+        
         const userData: UserContextData = {
           userId: authStatus.userId,
           kindeUserId: authStatus.userId,
           email: authStatus.email,
-          name: authStatus.email || 'Unknown', // Use email as fallback for name
+          name: userName,
           tenantId: authStatus.tenantId,
           isTenantAdmin: authStatus.isTenantAdmin || false,
           isActive: true, // Assume active if authenticated
@@ -101,13 +109,42 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = ({
           needsOnboarding: authStatus.needsOnboarding || false
         };
 
-        // Create tenant object
-        const tenantData: TenantData = {
+        // Fetch detailed tenant information from API (skip during onboarding)
+        let tenantData: TenantData = {
           tenantId: authStatus.tenantId,
-          companyName: 'Unknown', // This might need to be fetched separately
+          companyName: 'Organization',
           subdomain: 'unknown',
-          industry: 'Unknown'
+          industry: 'Business'
         };
+
+        // Skip tenant API call during onboarding - user hasn't set up organization yet
+        const isOnboardingPage = location.pathname === '/onboarding' || location.pathname.startsWith('/onboarding/');
+        if (!isOnboardingPage) {
+          try {
+            console.log('🔄 Fetching tenant details from API...');
+            const tenantResponse = await api.get('/admin/tenant', {
+              headers: {
+                'X-Tenant-ID': authStatus.tenantId,
+              },
+            });
+
+            if (tenantResponse.data?.success && tenantResponse.data?.data) {
+              const tenant = tenantResponse.data.data;
+              tenantData = {
+                tenantId: tenant.tenantId || authStatus.tenantId,
+                companyName: tenant.companyName || 'Organization',
+                subdomain: tenant.subdomain || 'unknown',
+                industry: tenant.industry || 'Business',
+              };
+              console.log('✅ Tenant details fetched:', tenantData);
+            }
+          } catch (tenantError: any) {
+            console.warn('⚠️ Failed to fetch tenant details, using defaults:', tenantError.message);
+            // Continue with default tenant data
+          }
+        } else {
+          console.log('🚫 UserContextProvider: Skipping tenant API call during onboarding');
+        }
 
         setUser(userData);
         setTenant(tenantData);
@@ -119,14 +156,15 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = ({
           userId: userData.userId,
           email: userData.email,
           tenantId: authStatus.tenantId,
+          tenantName: tenantData.companyName,
           permissions: (authStatus.userPermissions || authStatus.legacyPermissions || []).length,
           roles: (authStatus.userRoles || []).length
         });
-        
+
         if (showToast) {
           toast.success('Permissions refreshed successfully');
         }
-      } else if (!response.data.authStatus?.isAuthenticated) {
+      } else if (!authData?.authStatus?.isAuthenticated) {
         // User is not authenticated
         setUser(null);
         setTenant(null);
@@ -137,7 +175,7 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = ({
       }
     } catch (error: any) {
       console.error('❌ Failed to fetch user context:', error);
-      
+
       if (error.response?.status === 401) {
         // Authentication failed - clear state
         setUser(null);
@@ -151,7 +189,7 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = ({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authData, kindeUser, location.pathname]);
 
   // Manual refresh function exposed to components
   const refreshUserContext = useCallback(async () => {
@@ -188,16 +226,19 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = ({
     window.location.href = '/login';
   }, []);
 
-  // Initial load
+  // Initial load - use shared auth hook data
   useEffect(() => {
     // Only fetch user context if user is authenticated
     // This prevents unnecessary API calls on public pages like invitation acceptance
-    if (isAuthenticated) {
+    if (isAuthenticated && authData) {
       fetchUserContext(false);
-    } else {
+    } else if (isAuthenticated && !authLoading && !authData && !authError) {
+      // If auth data is not available but user is authenticated, still proceed
+      setLoading(false);
+    } else if (!isAuthenticated) {
       setLoading(false);
     }
-  }, [fetchUserContext, isAuthenticated]);
+  }, [isAuthenticated, authData, authLoading, authError, fetchUserContext]);
 
   // Auto-refresh effect
   useEffect(() => {
@@ -247,7 +288,9 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = ({
       {children}
     </UserContext.Provider>
   );
-};
+});
+
+UserContextProvider.displayName = 'UserContextProvider';
 
 export const useUserContext = (): UserContextType => {
   const context = useContext(UserContext);

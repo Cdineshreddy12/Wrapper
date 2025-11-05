@@ -86,7 +86,7 @@ export function OrganizationManagementPage() {
         makeRequest('/tenants/current', {
           headers: { 'X-Application': 'crm' }
         }),
-        makeRequest('/admin/auth-status', {
+        makeRequest('/api/admin/auth-status', {
           headers: { 'X-Application': 'crm' }
         })
       ]);

@@ -22,6 +22,7 @@ export const addressInfoSchema = z.object({
   zipCode: z.string().regex(/^\d{5}(-\d{4})?$/, 'Please enter a valid ZIP code'),
   country: z.string().min(2, 'Country is required'),
   isPrimary: z.boolean().optional(),
+  gstin: z.string().regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z$/, 'Please enter a valid GSTIN (15 digits)').optional(),
 });
 
 // Preferences Step
@@ -55,6 +56,7 @@ export const fieldValidationSchemas = {
   zipCode: z.string().regex(/^\d{5}(-\d{4})?$/, 'Please enter a valid ZIP code'),
   country: z.string().min(2, 'Country is required'),
   isPrimary: z.boolean().optional(),
+  gstin: z.string().regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z$/, 'Please enter a valid GSTIN (15 digits)').optional(),
   newsletter: z.boolean(),
   notifications: z.boolean(),
   theme: z.enum(['light', 'dark', 'system']),

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Moon, Sun, Monitor } from 'lucide-react'
+import { Moon, Sun, Monitor, Palette } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -10,14 +10,28 @@ import {
 import { useTheme } from './ThemeProvider'
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme()
+  const { theme, setTheme, actualTheme } = useTheme()
+
+  const getThemeIcon = () => {
+    switch (actualTheme) {
+      case 'monochrome':
+        return <Palette className="h-[1.2rem] w-[1.2rem]" />
+      case 'dark':
+        return <Moon className="h-[1.2rem] w-[1.2rem]" />
+      default:
+        return <Sun className="h-[1.2rem] w-[1.2rem]" />
+    }
+  }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="icon">
-          <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-          <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+        <Button
+          variant="outline"
+          size="icon"
+          className="border-border/50 hover:bg-accent dark:text-white hover:text-accent-foreground dark:border-border dark:hover:bg-accent dark:hover:text-accent-foreground"
+        >
+          {getThemeIcon()}
           <span className="sr-only">Toggle theme</span>
         </Button>
       </DropdownMenuTrigger>
@@ -29,6 +43,10 @@ export function ThemeToggle() {
         <DropdownMenuItem onClick={() => setTheme('dark')}>
           <Moon className="mr-2 h-4 w-4" />
           <span>Dark</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme('monochrome')}>
+          <Palette className="mr-2 h-4 w-4" />
+          <span>Monochrome</span>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme('system')}>
           <Monitor className="mr-2 h-4 w-4" />
@@ -42,19 +60,25 @@ export function ThemeToggle() {
 export function SimpleThemeToggle() {
   const { actualTheme, setTheme } = useTheme()
 
-  const toggleTheme = () => {
-    setTheme(actualTheme === 'light' ? 'dark' : 'light')
+  const getThemeIcon = () => {
+    switch (actualTheme) {
+      case 'monochrome':
+        return <Palette className="h-[1.2rem] w-[1.2rem]" />
+      case 'dark':
+        return <Moon className="h-[1.2rem] w-[1.2rem]" />
+      default:
+        return <Sun className="h-[1.2rem] w-[1.2rem]" />
+    }
   }
 
   return (
     <Button
       variant="outline"
       size="icon"
-      onClick={toggleTheme}
-      className="h-9 w-9"
+      onClick={() => setTheme(actualTheme === 'light' ? 'dark' : 'light')}
+      className="h-9 w-9 border-border/50 hover:bg-accent hover:text-accent-foreground dark:border-border dark:hover:bg-accent dark:hover:text-accent-foreground"
     >
-      <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-      <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+      {getThemeIcon()}
       <span className="sr-only">Toggle theme</span>
     </Button>
   )

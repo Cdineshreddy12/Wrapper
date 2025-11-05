@@ -11,12 +11,13 @@ import {
 import { Button } from '@/components/ui/button'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { useTrialStatus } from '@/hooks/useTrialStatus'
-import { CreditBalance } from '@/components/CreditBalance'
 import GreetingCard from '@/components/common/GreetingCard'
 import CacheRefreshButton from '@/components/common/RefreshButton'
 import { IconButton } from '@/components/common/LoadingButton'
+import { NotificationManager } from '@/components/notifications'
 import { useQueryState } from 'nuqs'
 import { DashboardMenu } from '@/components/dashboard-menu'
+import AnimatedLoader from '@/components/common/AnimatedLoader'
 
 export function Dashboard() {
     const {
@@ -24,7 +25,7 @@ export function Dashboard() {
     isLoading: kindeLoading
   } = useKindeAuth()
 
-  const [selectedTab, setSelectedTab] = useQueryState('tab', { defaultValue: 'overview' })
+  const [selectedTab, setSelectedTab] = useQueryState('tab', { defaultValue: 'applications' })
 
   const navigate = useNavigate()
   const location = useLocation()
@@ -65,7 +66,7 @@ export function Dashboard() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <AnimatedLoader size="lg" className="mb-4" />
           <p className="text-muted-foreground">Loading your dashboard...</p>
           {isCached && cacheAge && (
             <p className="text-sm text-muted-foreground mt-2">
@@ -172,9 +173,10 @@ export function Dashboard() {
           {/* Header with Refresh Controls */}
           <div className="mb-8 flex items-center justify-between">
             <GreetingCard />
-            {/* Compact Credit Balance */}
-            <CreditBalance className="hidden md:block" compact showPurchaseButton={false} showUsageStats={false} />
-            <CacheRefreshButton />
+            <div className="flex items-center gap-3">
+              <NotificationManager />
+              <CacheRefreshButton />
+            </div>
             {isAdmin && (
               <IconButton
                 variant="outline"

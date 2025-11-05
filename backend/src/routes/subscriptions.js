@@ -7,6 +7,7 @@ import { db } from '../db/index.js';
 import { tenants, payments, subscriptions } from '../db/schema/index.js';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import ErrorResponses from '../utils/error-responses.js';
+import { PLAN_ACCESS_MATRIX } from '../data/permission-matrix.js';
 
 export default async function subscriptionRoutes(fastify, options) {
   // Temporary debug endpoint to test authentication
@@ -52,16 +53,31 @@ export default async function subscriptionRoutes(fastify, options) {
       const userId = request.userContext.userId;
       const tenantId = request.userContext.tenantId;
 
+      console.log('🔍 Subscription /current endpoint called:', {
+        userId,
+        tenantId,
+        hasTenantId: !!tenantId
+      });
+
       if (!tenantId) {
         return ErrorResponses.notFound(reply, 'Subscription', 'User is not associated with any organization');
       }
 
       const subscription = await SubscriptionService.getCurrentSubscription(tenantId);
-      
+
+      console.log('📋 Subscription lookup result:', {
+        tenantId,
+        subscriptionFound: !!subscription,
+        subscriptionType: subscription ? (subscription.id?.startsWith('credit_') ? 'credit-based' : 'traditional') : 'none',
+        plan: subscription?.plan,
+        status: subscription?.status,
+        availableCredits: subscription?.availableCredits
+      });
+
       if (!subscription) {
         return ErrorResponses.notFound(reply, 'Subscription', 'No active subscription for this organization');
       }
-      
+
       return {
         success: true,
         data: subscription
@@ -162,26 +178,52 @@ export default async function subscriptionRoutes(fastify, options) {
     }
   });
 
-  // Create Stripe checkout session
+  // Create Stripe checkout session for both plans and credit packages
   fastify.post('/checkout', {
     preHandler: authenticateToken,
     schema: {
       body: {
         type: 'object',
-        required: ['packageId', 'credits', 'successUrl', 'cancelUrl'],
-        properties: {
-          packageId: { type: 'string' },
-          credits: { type: 'number', minimum: 100, maximum: 50000 },
-          successUrl: { type: 'string' },
-          cancelUrl: { type: 'string' }
-        }
+        oneOf: [
+          // Plan subscription checkout
+          {
+            required: ['planId', 'billingCycle', 'successUrl', 'cancelUrl'],
+            properties: {
+              planId: { type: 'string' },
+              billingCycle: { type: 'string', enum: ['monthly', 'yearly'] },
+              successUrl: { type: 'string' },
+              cancelUrl: { type: 'string' }
+            }
+          },
+          // Credit package checkout (legacy)
+          {
+            required: ['packageId', 'credits', 'successUrl', 'cancelUrl'],
+            properties: {
+              packageId: { type: 'string' },
+              credits: { type: 'number', minimum: 100, maximum: 50000 },
+              successUrl: { type: 'string' },
+              cancelUrl: { type: 'string' }
+            }
+          }
+        ]
       }
     }
   }, async (request, reply) => {
     try {
-      const { packageId, credits, successUrl, cancelUrl } = request.body;
+      const { packageId, credits, planId, billingCycle, successUrl, cancelUrl } = request.body;
       const tenantId = request.userContext.tenantId;
       const userId = request.userContext.userId;
+
+      // Determine if this is a plan subscription or credit package purchase
+      const isPlanSubscription = !!(planId && billingCycle);
+      const isCreditPurchase = !!(packageId && credits);
+
+      if (!isPlanSubscription && !isCreditPurchase) {
+        return reply.code(400).send({
+          error: 'Invalid request',
+          message: 'Either planId/billingCycle (for plan subscription) or packageId/credits (for credit purchase) must be provided'
+        });
+      }
 
       console.log('🔍 Checkout - User context:', {
         tenantId,
@@ -217,43 +259,95 @@ export default async function subscriptionRoutes(fastify, options) {
 
       console.log('✅ Checkout - Found tenant:', tenant.companyName);
 
-      // Check if credit package is valid
-      const packages = await SubscriptionService.getAvailablePlans();
-      const selectedPackage = packages.find(p => p.id === packageId);
+      let checkoutParams;
+      let itemDescription;
 
-      if (!selectedPackage) {
-        return reply.code(400).send({ error: 'Invalid credit package selected' });
+      if (isPlanSubscription) {
+        // Validate plan exists
+        const plans = await SubscriptionService.getAvailablePlans();
+        const selectedPlan = plans.find(p => p.id === planId);
+
+        if (!selectedPlan) {
+          return reply.code(400).send({ error: 'Invalid plan selected' });
+        }
+
+        // Check if user already has an active subscription
+        const currentSubscription = await SubscriptionService.getCurrentSubscription(tenantId);
+        if (currentSubscription && currentSubscription.status === 'active') {
+          // Allow upgrades from trial to paid plans
+          if (currentSubscription.plan === 'trial') {
+            console.log('🔄 Allowing upgrade from trial to paid plan:', planId);
+          } else if (currentSubscription.plan !== 'free') {
+            return reply.code(400).send({
+              error: 'Active subscription exists',
+              message: 'Use the plan change endpoint for modifying existing subscriptions'
+            });
+          }
+        }
+
+        checkoutParams = {
+          tenantId,
+          planId,
+          billingCycle,
+          customerId: tenant.stripeCustomerId || null,
+          successUrl,
+          cancelUrl
+        };
+
+        itemDescription = `Plan subscription: ${selectedPlan.name}`;
+        console.log('🎯 Checkout - Creating checkout session for plan subscription:', selectedPlan.name);
+
+      } else if (isCreditPurchase) {
+        // Check if credit package is valid
+        const packages = await SubscriptionService.getAvailablePlans();
+        const selectedPackage = packages.find(p => p.id === packageId);
+
+        if (!selectedPackage) {
+          return reply.code(400).send({ error: 'Invalid credit package selected' });
+        }
+
+        // Validate credits are within package limits
+        if (credits < selectedPackage.minCredits || credits > selectedPackage.maxCredits) {
+          return reply.code(400).send({
+            error: 'Invalid credit amount',
+            message: `Credits must be between ${selectedPackage.minCredits} and ${selectedPackage.maxCredits} for ${selectedPackage.name} package`
+          });
+        }
+
+        checkoutParams = {
+          tenantId,
+          planId: packageId,
+          credits,
+          customerId: tenant.stripeCustomerId || null,
+          successUrl,
+          cancelUrl
+        };
+
+        itemDescription = `Credit package: ${selectedPackage.name} with ${credits} credits`;
+        console.log('🎯 Checkout - Creating checkout session for credit package:', selectedPackage.name, 'with', credits, 'credits');
       }
 
-      // Validate credits are within package limits
-      if (credits < selectedPackage.minCredits || credits > selectedPackage.maxCredits) {
-        return reply.code(400).send({
-          error: 'Invalid credit amount',
-          message: `Credits must be between ${selectedPackage.minCredits} and ${selectedPackage.maxCredits} for ${selectedPackage.name} package`
-        });
-      }
-
-      console.log('🎯 Checkout - Creating checkout session for credit package:', selectedPackage.name, 'with', credits, 'credits');
-
-      // Create Stripe checkout session for credit purchase
-      const checkoutUrl = await SubscriptionService.createCheckoutSession({
-        tenantId,
-        planId: packageId,
-        credits,
-        customerId: tenant.stripeCustomerId || null,
-        successUrl,
-        cancelUrl
-      });
+      // Create Stripe checkout session
+      const checkoutUrl = await SubscriptionService.createCheckoutSession(checkoutParams);
 
       console.log('✅ Checkout - Session created successfully');
-      
+
+      // Return appropriate data based on checkout type
+      const responseData = {
+        checkoutUrl
+      };
+
+      if (isPlanSubscription) {
+        responseData.planId = planId;
+        responseData.billingCycle = billingCycle;
+      } else if (isCreditPurchase) {
+        responseData.packageId = packageId;
+        responseData.credits = credits;
+      }
+
       return {
         success: true,
-        data: {
-          checkoutUrl,
-          planId,
-          billingCycle
-        }
+        data: responseData
       };
     } catch (error) {
       request.log.error('Error creating checkout session:', error);
@@ -328,6 +422,7 @@ export default async function subscriptionRoutes(fastify, options) {
     }
   });
 
+
   // Cancel subscription
   fastify.post('/cancel', {
     preHandler: authenticateToken
@@ -360,7 +455,6 @@ export default async function subscriptionRoutes(fastify, options) {
   });
 
   // Plan changes disabled - credit-based system uses credit purchases instead
-  /*
   fastify.post('/change-plan', {
     preHandler: authenticateToken,
     schema: {
@@ -419,7 +513,6 @@ export default async function subscriptionRoutes(fastify, options) {
       });
     }
   });
-  */
 
   // Debug Stripe configuration (for troubleshooting webhook issues)
   fastify.get('/debug-stripe-config', async (request, reply) => {
@@ -765,19 +858,19 @@ export default async function subscriptionRoutes(fastify, options) {
         });
       }
 
-      console.log('🔄 Immediate downgrade requested:', { tenantId, newPlan, refundRequested });
+      console.log('🔄 Plan change requested:', { tenantId, newPlan, refundRequested });
 
-      const result = await SubscriptionService.immediateDowngrade({
+      // Use changePlan which will automatically schedule downgrades (never immediate)
+      const result = await SubscriptionService.changePlan({
         tenantId,
-        newPlan,
-        reason,
-        refundRequested
+        planId: newPlan,
+        billingCycle: 'yearly' // Annual billing only
       });
-      
+
       return {
         success: true,
         data: result,
-        message: 'Downgrade processed successfully'
+        message: 'Plan change scheduled successfully'
       };
     } catch (error) {
       request.log.error('Error processing immediate downgrade:', error);
@@ -838,112 +931,175 @@ export default async function subscriptionRoutes(fastify, options) {
     }
   });
 
-  // Get detailed payment information
-  fastify.get('/payment/:paymentId', {
+  // Get detailed payment information by paymentId or sessionId
+  fastify.get('/payment/:identifier', {
     preHandler: authenticateToken,
     schema: {
       params: {
         type: 'object',
-        required: ['paymentId'],
+        required: ['identifier'],
         properties: {
-          paymentId: { type: 'string' }
+          identifier: { type: 'string' }
         }
       }
     }
   }, async (request, reply) => {
     try {
-      const { paymentId } = request.params;
+      const { identifier } = request.params;
       const tenantId = request.userContext.tenantId;
 
       if (!tenantId) {
-        return reply.code(400).send({ 
+        return reply.code(400).send({
           error: 'No organization found',
           message: 'User must be associated with an organization'
         });
       }
 
-      // Get payment details
-      const [payment] = await db
-        .select()
-        .from(payments)
-        .where(and(
-          eq(payments.paymentId, paymentId),
-          eq(payments.tenantId, tenantId)
-        ))
-        .limit(1);
+      let payment;
+
+      try {
+        // Check if identifier is a valid UUID (paymentId) or Stripe ID
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identifier);
+
+        if (isUUID) {
+          // Try to find by paymentId first (if it's a UUID)
+          let [paymentById] = await db
+            .select()
+            .from(payments)
+            .where(and(
+              eq(payments.paymentId, identifier),
+              eq(payments.tenantId, tenantId)
+            ))
+            .limit(1);
+
+          if (paymentById) {
+            payment = paymentById;
+          }
+        }
+
+        // If not found by paymentId or identifier is not a UUID, try by Stripe payment intent ID
+        if (!payment) {
+          let [paymentByIntent] = await db
+            .select()
+            .from(payments)
+            .where(and(
+              eq(payments.stripePaymentIntentId, identifier),
+              eq(payments.tenantId, tenantId)
+            ))
+            .limit(1);
+
+          if (paymentByIntent) {
+            payment = paymentByIntent;
+          }
+        }
+
+        // Also try by Stripe invoice ID (for invoice-based payments)
+        if (!payment && identifier.startsWith('in_')) {
+          let [paymentByInvoice] = await db
+            .select()
+            .from(payments)
+            .where(and(
+              eq(payments.stripeInvoiceId, identifier),
+              eq(payments.tenantId, tenantId)
+            ))
+            .limit(1);
+
+          if (paymentByInvoice) {
+            payment = paymentByInvoice;
+          }
+        }
+      } catch (dbError) {
+        console.error('Database error in payment lookup:', dbError);
+        return reply.code(500).send({
+          error: 'Database error',
+          message: 'Failed to query payment records'
+        });
+      }
 
       if (!payment) {
+        // Check if this is a checkout session that hasn't completed yet
+        if (identifier.startsWith('cs_test_') || identifier.startsWith('cs_live_')) {
+          return reply.code(404).send({
+            error: 'Payment not found',
+            message: 'Checkout session found but payment has not been completed yet. Please complete the payment process.',
+            code: 'PAYMENT_PENDING'
+          });
+        }
+
         return ErrorResponses.notFound(reply, 'Payment', 'Payment not found or does not belong to your organization');
       }
 
-      // Format payment for frontend
-      const formattedPayment = {
-        id: payment.paymentId,
-        amount: parseFloat(payment.amount),
-        amountRefunded: parseFloat(payment.amountRefunded || 0),
-        amountDisputed: parseFloat(payment.amountDisputed || 0),
-        currency: payment.currency,
-        status: payment.status,
-        paymentMethod: payment.paymentMethod,
-        paymentMethodDetails: payment.paymentMethodDetails,
-        paymentType: payment.paymentType,
-        billingReason: payment.billingReason,
-        description: payment.description,
-        invoiceNumber: payment.invoiceNumber,
-        
-        // Financial breakdown
-        taxAmount: parseFloat(payment.taxAmount || 0),
-        taxRate: parseFloat(payment.taxRate || 0),
-        processingFees: parseFloat(payment.processingFees || 0),
-        netAmount: parseFloat(payment.netAmount || payment.amount),
-        
-        // Refund information
-        refundReason: payment.refundReason,
-        isPartialRefund: payment.isPartialRefund,
-        
-        // Dispute information
-        disputeReason: payment.disputeReason,
-        disputeStatus: payment.disputeStatus,
-        
-        // Risk information
-        riskLevel: payment.riskLevel,
-        riskScore: payment.riskScore,
-        
-        // Dates
-        paidAt: payment.paidAt,
-        refundedAt: payment.refundedAt,
-        disputedAt: payment.disputedAt,
-        createdAt: payment.createdAt,
-        
-        // Metadata
-        metadata: payment.metadata,
-        
-        // Stripe IDs (for admin reference)
-        stripePaymentIntentId: payment.stripePaymentIntentId,
-        stripeInvoiceId: payment.stripeInvoiceId,
-        stripeChargeId: payment.stripeChargeId,
-        stripeRefundId: payment.stripeRefundId,
-        stripeDisputeId: payment.stripeDisputeId
-      };
-      
-      return {
-        success: true,
-        data: formattedPayment
-      };
-    } catch (error) {
-      request.log.error('Error fetching payment details:', error);
-      return reply.code(500).send({ 
-        error: 'Failed to fetch payment details',
-        message: error.message
-      });
-    }
-  });
+      try {
+        // Get plan details from PLAN_ACCESS_MATRIX
+        const planAccess = PLAN_ACCESS_MATRIX[payment.planId];
+        const planDetails = planAccess ? {
+          name: payment.planId.charAt(0).toUpperCase() + payment.planId.slice(1),
+          features: [
+            ...(planAccess.applications?.includes('crm') ? ['CRM Suite'] : []),
+            ...(planAccess.applications?.includes('hr') ? ['HR Management'] : []),
+            ...(planAccess.applications?.includes('affiliateConnect') ? ['Affiliate Connect'] : []),
+            `${planAccess.credits?.free || 0} Free Credits`,
+            ...(planAccess.applications?.includes('crm') && planAccess.modules?.crm?.includes('leads') ? ['Lead Management'] : []),
+            ...(planAccess.applications?.includes('hr') && planAccess.modules?.hr?.includes('employees') ? ['Employee Management'] : []),
+          ],
+          credits: planAccess.credits?.free || 0
+        } : null;
 
-  // Get subscription actions history
-  fastify.get('/actions', {
-    preHandler: authenticateToken
-  }, async (request, reply) => {
-    try {
+        // Get current subscription for this tenant
+        let [subscription] = await db
+          .select()
+          .from(subscriptions)
+          .where(and(
+            eq(subscriptions.tenantId, tenantId),
+            eq(subscriptions.status, 'active')
+          ))
+          .limit(1);
+
+        // Return data in the format expected by PaymentSuccess component
+        return {
+          success: true,
+          data: {
+            sessionId: payment.stripePaymentIntentId,
+            transactionId: payment.paymentId,
+            amount: parseFloat(payment.amount),
+            currency: payment.currency,
+            planId: payment.planId,
+            planName: planDetails?.name || payment.planId,
+            billingCycle: payment.billingCycle || 'yearly',
+            paymentMethod: payment.paymentMethod,
+            status: payment.status,
+            createdAt: payment.createdAt,
+            processedAt: payment.completedAt,
+            description: `Subscription: ${planDetails?.name || payment.planId}`,
+            subscription: subscription ? {
+              status: subscription.status,
+              currentPeriodStart: subscription.currentPeriodStart,
+              currentPeriodEnd: subscription.currentPeriodEnd,
+              nextBillingDate: subscription.currentPeriodEnd
+            } : null,
+            features: planDetails?.features || [],
+            credits: planDetails?.credits || 0
+          }
+        };
+        } catch (error) {
+          request.log.error('Error fetching payment details:', error);
+          return reply.code(500).send({
+            error: 'Failed to fetch payment details',
+            message: error.message
+          });
+        }
+      } catch (error) {
+        request.log.error('Error in payment details route:', error);
+        return reply.code(500).send({
+          error: 'Internal server error',
+          message: 'Failed to process payment details request'
+        });
+      }
+    });
+
+    // Get subscription actions history
+    fastify.get('/actions', {}, async (request, reply) => {
+      try {
       const tenantId = request.userContext.tenantId;
 
       if (!tenantId) {
@@ -1086,15 +1242,9 @@ export default async function subscriptionRoutes(fastify, options) {
       
       console.log(`🔧 Toggling trial restrictions for tenant: ${tenantId}, disable: ${disable}`);
       
-      // Update subscription to toggle trial restrictions
-      const [updatedSubscription] = await db
-        .update(subscriptions)
-        .set({
-          trialToggledOff: disable,
-          updatedAt: new Date()
-        })
-        .where(eq(subscriptions.tenantId, tenantId))
-        .returning();
+      // Update subscription - trial restrictions are no longer used
+      // This endpoint is deprecated and should not update database fields
+      const updatedSubscription = { tenantId };
 
       if (!updatedSubscription) {
         return ErrorResponses.notFound(reply, 'Subscription', 'Subscription not found');
@@ -1106,7 +1256,7 @@ export default async function subscriptionRoutes(fastify, options) {
         success: true,
         message: `Trial restrictions ${disable ? 'disabled' : 'enabled'} successfully`,
         data: {
-          trialToggledOff: disable,
+          disabled: disable,
           tenantId: tenantId
         }
       };

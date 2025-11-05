@@ -151,6 +151,88 @@ export const useBulkUpdateTenantStatus = () => {
   });
 };
 
+// Available organizations within current tenant for tenant admin switcher
+export const useAvailableOrganizations = () => {
+  console.log('🔄 useAvailableOrganizations hook called - NEW VERSION');
+
+  return useQuery({
+    queryKey: ['organizations', 'available', 'v2'],
+    queryFn: async () => {
+      console.log('🚀 Executing organizations query function');
+      try {
+        // First get the entity scope to understand user's access level
+        console.log('🔍 Fetching entity scope...');
+        const scopeResponse = await api.get('/admin/entity-scope');
+        console.log('🔐 Entity scope response:', scopeResponse.data);
+
+        if (!scopeResponse.data.success || !scopeResponse.data.scope) {
+          console.log('❌ Could not get entity scope');
+          return [];
+        }
+
+        const { scope, entities, entityIds, isUnrestricted } = scopeResponse.data.scope;
+        console.log('✅ Entity scope:', { scope, entities, entityIds, isUnrestricted });
+
+        // Use entities directly from scope response (no additional API calls needed!)
+        if (isUnrestricted) {
+          console.log('🔓 Tenant admin detected - using entities from scope...');
+
+          if (entities && entities.length > 0) {
+            console.log('✅ Found entities in scope:', entities);
+
+            // Filter only organizations and format for frontend
+            const organizations = entities
+              .filter(entity => entity.entityType === 'organization')
+              .map((entity, index) => ({
+                id: entity.entityId,
+                name: entity.entityName || `Organization ${index + 1}`,
+                subdomain: entity.entityCode || entity.entityName?.toLowerCase().replace(/\s+/g, '-') || `org-${index + 1}`,
+                status: 'active',
+                plan: 'Organization'
+              }));
+
+            console.log('✅ Returning organizations from scope:', organizations);
+            return organizations;
+          }
+
+          // Fallback: return empty array to prevent security issues
+          console.log('⚠️ No organizations found in scope, returning empty array');
+          return [];
+        } else {
+          // For restricted users, only show organizations they have access to
+          console.log('🔒 Restricted user - using entities from scope...');
+          if (entities && entities.length > 0) {
+            // Filter only organizations and format for frontend
+            const organizations = entities
+              .filter(entity => entity.entityType === 'organization')
+              .map((entity, index) => ({
+                id: entity.entityId,
+                name: entity.entityName || `Assigned Organization ${index + 1}`,
+                subdomain: entity.entityCode || entity.entityName?.toLowerCase().replace(/\s+/g, '-') || `assigned-org-${index + 1}`,
+                status: 'active',
+                plan: 'Organization'
+              }));
+
+            console.log('✅ Found organizations for restricted user:', organizations);
+            return organizations;
+          }
+        }
+
+        console.log('⚠️ No organizations found');
+        return [];
+
+      } catch (error) {
+        console.error('❌ Error fetching available organizations:', error);
+        console.error('❌ Error details:', error.message, error.stack);
+        // Return empty array on error to prevent UI issues
+        return [];
+      }
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes - organization structure changes less frequently
+    enabled: true, // Always fetch for admin users
+  });
+};
+
 // Export tenant data mutation
 export const useExportTenantData = () => {
   return useMutation({

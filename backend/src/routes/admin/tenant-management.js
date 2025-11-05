@@ -27,7 +27,7 @@ export default async function adminTenantManagementRoutes(fastify, options) {
           creditId: credits.creditId,
           entityId: credits.entityId,
           availableCredits: credits.availableCredits,
-          reservedCredits: credits.reservedCredits,
+
           isActive: credits.isActive
         })
         .from(credits)
@@ -56,7 +56,6 @@ export default async function adminTenantManagementRoutes(fastify, options) {
           creditId: credits.creditId,
           entityId: credits.entityId,
           availableCredits: credits.availableCredits,
-          reservedCredits: credits.reservedCredits
         })
         .from(credits)
         .leftJoin(entities, eq(credits.entityId, entities.entityId))
@@ -118,7 +117,6 @@ export default async function adminTenantManagementRoutes(fastify, options) {
           creditId: credits.creditId,
           entityId: credits.entityId,
           availableCredits: credits.availableCredits,
-          reservedCredits: credits.reservedCredits
         })
         .from(credits)
         .leftJoin(entities, eq(credits.entityId, entities.entityId))

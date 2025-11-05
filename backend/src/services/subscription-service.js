@@ -1,5 +1,5 @@
 import Stripe from 'stripe';
-import { eq, and, desc, lt, gt, or, sql } from 'drizzle-orm';
+import { eq, and, desc, lt, gt, or, sql, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   subscriptions,
@@ -8,7 +8,8 @@ import {
   customRoles,
   tenantUsers,
   credits,
-  creditPurchases
+  creditPurchases,
+  entities
 } from '../db/schema/index.js';
 import { webhookLogs } from '../db/schema/webhook-logs.js';
 import { EmailService } from '../utils/email.js';
@@ -53,6 +54,154 @@ if (isStripeConfigured) {
 }
 
 export class SubscriptionService {
+  // Plan hierarchy for comparing plan levels (used for upgrades/downgrades)
+  static PLAN_HIERARCHY = {
+    'free': 0,
+    'trial': 1,
+    'starter': 2,
+    'premium': 3,
+    'enterprise': 4
+  };
+
+  // Plan configurations based on permission matrix
+  static PLAN_CONFIGS = {
+    free: { freeCredits: 500, expiryDays: 30 },
+    trial: { freeCredits: 1000, expiryDays: 30 },
+    starter: { freeCredits: 60000, expiryDays: 365 },
+    professional: { freeCredits: 300000, expiryDays: 365 },
+    enterprise: { freeCredits: 1200000, expiryDays: 365 }
+  };
+
+  // Determine plan based on credit balance
+  static determinePlanFromCredits(creditBalance) {
+    const availableCredits = parseInt(creditBalance.availableCredits || 0);
+    const freeCredits = parseInt(creditBalance.freeCredits || 0);
+    const creditExpiry = creditBalance.creditExpiry;
+
+    // If no credits, assume free plan
+    if (availableCredits === 0) {
+      return 'free';
+    }
+
+    // Check if expiry date matches expected plan durations
+    const now = new Date();
+    const expiryDate = creditExpiry ? new Date(creditExpiry) : null;
+    const daysUntilExpiry = expiryDate ? Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : null;
+
+    // Enterprise plan: 1.2M+ credits, ~365 days expiry
+    if (freeCredits >= 1200000 && daysUntilExpiry && daysUntilExpiry >= 360) {
+      return 'enterprise';
+    }
+
+    // Professional plan: 300K+ credits, ~365 days expiry
+    if (freeCredits >= 300000 && daysUntilExpiry && daysUntilExpiry >= 360) {
+      return 'professional';
+    }
+
+    // Starter plan: 60K+ credits, ~365 days expiry
+    if (freeCredits >= 60000 && daysUntilExpiry && daysUntilExpiry >= 360) {
+      return 'starter';
+    }
+
+    // Trial plan: exactly 1000 credits with ~30 days expiry (from onboarding)
+    // Changed to return 'free' for consistency - user wants all plans to show as "free"
+    if (freeCredits === 1000 && daysUntilExpiry && daysUntilExpiry <= 35) {
+      return 'free';
+    }
+
+    // Free plan: 500 credits or less, or any other configuration
+    return 'free';
+  }
+
+  // Get subscribed tools for a plan
+  static getSubscribedToolsForPlan(plan) {
+    const planConfigs = {
+      free: ['crm'],
+      trial: ['crm'],
+      starter: ['crm', 'hr'],
+      professional: ['crm', 'hr'],
+      enterprise: ['crm', 'hr', 'affiliateConnect']
+    };
+
+    return planConfigs[plan] || ['crm'];
+  }
+
+  // Stripe Plan Configuration - YOUR ACTUAL STRIPE PRICE IDs
+  static STRIPE_PLAN_CONFIG = {
+    // Application Access Plans (Annual Subscriptions)
+    application_plans: {
+      starter: {
+        name: 'Starter Plan',
+        stripePriceId: 'price_1SIlHK01KG3phQlPdXThBrPO', // From STRIPE_STARTER_YEARLY_PRICE_ID
+        amount: 12000, // $120/year
+        currency: 'usd',
+        credits: 60000, // Annual free credits
+        interval: 'year'
+      },
+      premium: {
+        name: 'Premium Plan',
+        stripePriceId: 'price_1SIlHK01KG3phQlPdXThBrPO', // Use same as starter for now, should be updated
+        amount: 24000, // $240/year
+        currency: 'usd',
+        credits: 300000, // Annual free credits
+        interval: 'year'
+      },
+      professional: {
+        name: 'Professional Plan',
+        stripePriceId: 'price_professional_annual', // TODO: Create in Stripe
+        amount: 24000, // $240/year
+        currency: 'usd',
+        credits: 300000, // Annual free credits
+        interval: 'year'
+      },
+      enterprise: {
+        name: 'Enterprise Plan',
+        stripePriceId: 'price_1SIlIp01KG3phQlPoamQXvKi', // From STRIPE_ENTERPRISE_YEARLY_PRICE_ID
+        amount: 48000, // $480/year
+        currency: 'usd',
+        credits: 1200000, // Annual free credits
+        interval: 'year'
+      }
+    },
+
+    // Credit Top-up Plans (One-time purchases)
+    credit_topups: {
+      credits_5000: {
+        name: '5,000 Credits',
+        stripePriceId: 'price_1SIl8b01KG3phQlP0aQZ4Tuh', // From STRIPE_TOPUP-1 ($5)
+        amount: 500, // $5.00 in cents
+        currency: 'usd',
+        credits: 5000,
+        type: 'credit_topup'
+      },
+      credits_10000: {
+        name: '10,000 Credits',
+        stripePriceId: 'price_1SIl9501KG3phQlPzzMcO8I4', // From STRIPE_TOPUP-2 ($10)
+        amount: 1000, // $10.00 in cents
+        currency: 'usd',
+        credits: 10000,
+        type: 'credit_topup'
+      },
+      credits_15000: {
+        name: '15,000 Credits',
+        stripePriceId: 'price_1SIlBM01KG3phQlPWKOJweaG', // From STRIPE_TOPUP-3 ($15)
+        amount: 1500, // $15.00 in cents
+        currency: 'usd',
+        credits: 15000,
+        type: 'credit_topup'
+      }
+      // Note: 100,000 credits plan not created in Stripe yet
+      // credits_100000: {
+      //   name: '100,000 Credits',
+      //   stripePriceId: 'price_100000_credits', // TODO: Create in Stripe
+      //   amount: 100000, // $1,000.00
+      //   currency: 'usd',
+      //   credits: 100000,
+      //   type: 'credit_topup'
+      // }
+    }
+  };
+
   // Check if Stripe is properly configured
   static isStripeConfigured() {
     return isStripeConfigured && !!stripe;
@@ -77,54 +226,197 @@ export class SubscriptionService {
 
   // Get current subscription (now returns credit-based information)
   static async getCurrentSubscription(tenantId) {
+    console.log('🔍 getCurrentSubscription called for tenant:', tenantId);
     try {
-      // First try to get credit balance
-      const creditBalance = await CreditService.getCurrentBalance(tenantId);
+      // First check for actual subscription records (paid plans)
+      let subscription = null;
+      try {
+        const subscriptionResults = await db
+          .select()
+          .from(subscriptions)
+          .where(eq(subscriptions.tenantId, tenantId))
+          .orderBy(desc(subscriptions.createdAt))
+          .limit(1);
 
-      if (creditBalance) {
+        subscription = subscriptionResults[0];
+      } catch (dbError) {
+        console.error('❌ Database error during subscription lookup:', dbError.message);
+        // Continue with credit-based logic as fallback
+      }
+
+      console.log('📋 Traditional subscription lookup:', {
+        tenantId,
+        subscriptionFound: !!subscription,
+        subscriptionId: subscription?.subscriptionId,
+        plan: subscription?.plan,
+        status: subscription?.status
+      });
+
+      // If we found a paid subscription record, return it
+      if (subscription && subscription.plan !== 'free' && subscription.plan !== 'trial') {
+        console.log('✅ Returning paid subscription record');
+        return subscription;
+      }
+
+      // Fall back to credit-based logic for free/trial plans or if no subscription record exists
+      console.log('🔄 No paid subscription found, checking credit balance...');
+
+      // Get credit balance for the organization entity
+      const organizationEntity = await db
+        .select()
+        .from(entities)
+        .where(and(
+          eq(entities.tenantId, tenantId),
+          eq(entities.entityType, 'organization'),
+          eq(entities.isDefault, true)
+        ))
+        .limit(1);
+
+      console.log('🏢 Organization entity lookup:', {
+        tenantId,
+        organizationFound: organizationEntity.length > 0,
+        organizationId: organizationEntity[0]?.entityId
+      });
+
+      let creditBalance = null;
+      if (organizationEntity.length > 0) {
+        // Get credit balance for the organization entity
+        creditBalance = await CreditService.getCurrentBalance(tenantId, 'organization', organizationEntity[0].entityId);
+        console.log('💰 Organization credit balance:', {
+          found: !!creditBalance,
+          availableCredits: creditBalance?.availableCredits,
+          totalCredits: creditBalance?.totalCredits,
+          allocationsCount: creditBalance?.allocations?.length
+        });
+      }
+
+      // Fallback: try tenant-level credits if no organization credits found
+      if (!creditBalance || creditBalance.availableCredits === 0) {
+        console.log('🔄 Trying tenant-level credit balance as fallback...');
+        creditBalance = await CreditService.getCurrentBalance(tenantId);
+        console.log('💰 Tenant credit balance:', {
+          found: !!creditBalance,
+          availableCredits: creditBalance?.availableCredits
+        });
+      }
+
+      // Additional fallback: if still no credits found, try to find ANY allocations for this tenant
+      // This handles cases where allocations exist but entity lookup failed
+      if (!creditBalance || creditBalance.availableCredits === 0) {
+        console.log('🔄 Last resort: checking for any allocations for this tenant...');
+        try {
+          const { creditAllocations } = await import('../db/schema/index.js');
+          const anyAllocations = await db
+            .select({
+              allocationId: creditAllocations.allocationId,
+              allocatedCredits: creditAllocations.allocatedCredits,
+              usedCredits: creditAllocations.usedCredits,
+              availableCredits: creditAllocations.availableCredits,
+              creditType: creditAllocations.creditType,
+              allocationType: creditAllocations.allocationType,
+              allocationPurpose: creditAllocations.allocationPurpose,
+              allocatedAt: creditAllocations.allocatedAt,
+              expiresAt: creditAllocations.expiresAt,
+              isActive: creditAllocations.isActive,
+              sourceEntityId: creditAllocations.sourceEntityId
+            })
+            .from(creditAllocations)
+            .where(and(
+              eq(creditAllocations.tenantId, tenantId),
+              eq(creditAllocations.isActive, true),
+              sql`${creditAllocations.availableCredits} > 0`
+            ))
+            .orderBy(desc(creditAllocations.allocatedAt))
+            .limit(10); // Get recent allocations
+
+          if (anyAllocations.length > 0) {
+            console.log('🎯 Found allocations via direct query:', anyAllocations.length);
+            // Create a virtual credit balance from these allocations
+            const totalAvailableCredits = anyAllocations.reduce((sum, alloc) => sum + parseFloat(alloc.availableCredits), 0);
+            const freeCreditsFromAllocations = anyAllocations
+              .filter(alloc => alloc.creditType === 'free')
+              .reduce((sum, alloc) => sum + parseFloat(alloc.availableCredits), 0);
+
+            console.log('📊 Calculated virtual balance from allocations:', {
+              totalAvailableCredits,
+              freeCreditsFromAllocations,
+              allocationsCount: anyAllocations.length
+            });
+
+            // Create virtual credit balance
+            creditBalance = {
+              tenantId,
+              entityId: anyAllocations[0].sourceEntityId, // Use the first allocation's source entity
+              availableCredits: totalAvailableCredits,
+              totalCredits: totalAvailableCredits,
+              freeCredits: freeCreditsFromAllocations,
+              paidCredits: totalAvailableCredits - freeCreditsFromAllocations,
+              creditExpiry: anyAllocations.find(a => a.expiresAt)?.expiresAt || null,
+              plan: 'credit_based',
+              status: totalAvailableCredits > 0 ? 'active' : 'insufficient_credits',
+              allocations: anyAllocations.map(alloc => ({
+                allocationId: alloc.allocationId,
+                allocatedCredits: parseFloat(alloc.allocatedCredits),
+                usedCredits: parseFloat(alloc.usedCredits),
+                availableCredits: parseFloat(alloc.availableCredits),
+                creditType: alloc.creditType,
+                allocationType: alloc.allocationType,
+                allocationPurpose: alloc.allocationPurpose,
+                allocatedAt: alloc.allocatedAt,
+                expiresAt: alloc.expiresAt,
+                isActive: alloc.isActive
+              }))
+            };
+          }
+        } catch (allocError) {
+          console.error('❌ Error in allocation fallback query:', allocError);
+        }
+      }
+
+      if (creditBalance && creditBalance.availableCredits > 0) {
+        console.log('✅ Returning credit-based subscription');
+        // Determine the actual plan based on credit balance
+        const plan = this.determinePlanFromCredits(creditBalance);
+        console.log('🎯 Determined plan:', plan);
+
         // Return credit information in subscription format for backward compatibility
         return {
           id: `credit_${tenantId}`,
           tenantId,
-          plan: 'credit_based',
+          plan: plan,
           status: creditBalance.availableCredits > 0 ? 'active' : 'insufficient_credits',
-          isTrialUser: false,
-          subscribedTools: ['crm', 'hr', 'analytics'], // Default tools
-          usageLimits: {
-            users: 100, // Default limits
-            apiCalls: 100000,
-            storage: 100000000000 // 100GB
-          },
+          isTrialUser: false, // Always false since we're using 'free' plan consistently
+          subscribedTools: this.getSubscribedToolsForPlan(plan),
+          // Removed usageLimits as requested
           monthlyPrice: 0, // Credits are prepaid
           yearlyPrice: 0,
           billingCycle: 'prepaid',
-          trialStart: null,
+          trialStart: null, // No trial logic since we're using 'free' plan consistently
           trialEnd: null,
           currentPeriodStart: new Date(),
           currentPeriodEnd: null,
           stripeSubscriptionId: null,
           stripeCustomerId: null,
-          hasEverUpgraded: true,
-          trialToggledOff: true,
+          hasEverUpgraded: plan !== 'free',
           availableCredits: creditBalance.availableCredits,
           totalCredits: creditBalance.totalCredits,
-          reservedCredits: creditBalance.reservedCredits,
+          freeCredits: creditBalance.freeCredits || 0,
+          paidCredits: creditBalance.paidCredits || 0,
           creditExpiry: creditBalance.creditExpiry,
           alerts: creditBalance.alerts,
-          createdAt: new Date(),
-          updatedAt: new Date()
+          createdAt: creditBalance.createdAt || new Date(),
+          updatedAt: creditBalance.updatedAt || new Date()
         };
       }
 
-      // Fallback: try to get traditional subscription if no credits found
-      const [subscription] = await db
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.tenantId, tenantId))
-        .orderBy(desc(subscriptions.createdAt))
-        .limit(1);
+      // If no credits found and no paid subscription, return the subscription record (could be free/trial) or null
+      if (subscription) {
+        console.log('✅ Returning free/trial subscription record');
+        return subscription;
+      }
 
-      return subscription || null;
+      console.log('❌ No subscription found for tenant');
+      return null;
     } catch (error) {
       console.error('Error getting current subscription:', error);
       return null;
@@ -145,21 +437,60 @@ export class SubscriptionService {
       const expiryDate = new Date();
       expiryDate.setMonth(expiryDate.getMonth() + validityMonths);
 
-      // Create credit record
-      const [creditRecord] = await db
-        .insert(credits)
-        .values({
-          tenantId,
-          entityType: 'organization',
-          availableCredits: initialCredits.toString(),
-          totalCredits: initialCredits.toString(),
-          periodType: 'month',
-          creditExpiry: expiryDate,
-          lastUpdatedBy: planData.userId
-        })
-        .returning();
+      // Get or create organization entity for the tenant
+      let organizationEntity;
+      const organizationEntities = await db
+        .select()
+        .from(entities)
+        .where(and(
+          eq(entities.tenantId, tenantId),
+          eq(entities.entityType, 'organization'),
+          eq(entities.isActive, true)
+        ));
 
-      console.log('✅ Created initial credit balance:', creditRecord);
+      if (organizationEntities.length > 0) {
+        organizationEntity = organizationEntities.find(entity => entity.isDefault) || organizationEntities[0];
+      } else {
+        // Create organization entity if it doesn't exist
+        const { v4: uuidv4 } = await import('uuid');
+        const [newEntity] = await db
+          .insert(entities)
+          .values({
+            entityId: uuidv4(),
+            tenantId,
+            parentEntityId: null,
+            hierarchyPath: '/',
+            entityName: `Organization for ${tenantId}`,
+            entityCode: `org_${tenantId.substring(0, 8)}_${Date.now()}`,
+            description: 'Auto-created organization entity for trial',
+            entityType: 'organization',
+            organizationType: 'parent',
+            isActive: true,
+            isDefault: true,
+            contactEmail: null,
+            createdBy: planData.userId || null,
+            updatedBy: planData.userId || null
+          })
+          .returning();
+        organizationEntity = newEntity;
+      }
+
+      // Allocate initial credits using CreditAllocationService instead of direct credit record creation
+      const { CreditAllocationService } = await import('./credit-allocation-service.js');
+      const allocationService = new CreditAllocationService();
+
+      const allocationResult = await allocationService.allocateOperationalCredits({
+        tenantId,
+        sourceEntityId: organizationEntity.entityId,
+        creditAmount: initialCredits,
+        creditType: 'free',
+        allocationType: 'bulk', // Use 'bulk' to skip balance check for initial allocation
+        planId: planData.selectedPackage || 'trial',
+        allocatedBy: planData.userId || null,
+        purpose: `${planData.selectedPackage || 'trial'} plan initial free credits`
+      });
+
+      console.log('✅ Created initial credit allocation:', allocationResult);
 
       // Create transaction record for initial credits
       await db
@@ -172,7 +503,8 @@ export class SubscriptionService {
           metadata: {
             package: planData.selectedPackage || 'trial',
             validityMonths,
-            source: 'onboarding'
+            source: 'onboarding',
+            allocationId: allocationResult?.allocationId
           },
           initiatedBy: planData.userId
         });
@@ -207,9 +539,115 @@ export class SubscriptionService {
     }
   }
 
+  // Create free tier subscription with recurring credits
+  static async createFreeSubscription(tenantId, planData = {}) {
+    console.log('🆓 Creating free tier subscription for tenant:', tenantId);
+    console.log('📋 Plan data:', planData);
+
+    try {
+      const selectedPlan = planData.selectedPlan || 'free';
+
+      // Get plan configuration
+      const plans = await this.getAvailablePlans();
+      const planConfig = plans.find(p => p.id === selectedPlan);
+
+      if (!planConfig) {
+        throw new Error(`Plan ${selectedPlan} not found`);
+      }
+
+      // Create subscription record for free tier
+      const [subscription] = await db
+        .insert(subscriptions)
+        .values({
+          subscriptionId: uuidv4(),
+          tenantId,
+          plan: selectedPlan,
+          status: 'active',
+          subscribedTools: planConfig.tools || ['crm'],
+          usageLimits: planConfig.limits || { users: 1, apiCalls: 500, storage: 500000000 },
+          yearlyPrice: 0,
+          billingCycle: 'yearly', // Annual billing cycle
+          trialStart: new Date(),
+          trialEnd: null, // Free tier doesn't expire automatically
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: null, // No period end for free tier
+          isTrialUser: false,
+          hasEverUpgraded: false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        })
+        .returning();
+
+      console.log('✅ Created free tier subscription:', subscription.subscriptionId);
+
+      return subscription;
+    } catch (error) {
+      console.error('Error creating free tier subscription:', error);
+      throw error;
+    }
+  }
+
   // Get available credit packages (replaces plans)
   static async getAvailablePlans() {
     return [
+      {
+        id: 'starter',
+        name: 'Starter',
+        description: 'Perfect for individuals and small teams',
+        yearlyPrice: 120, // $120/year
+        monthlyPrice: 12, // $12/month
+        stripePriceId: 'price_1SIlHK01KG3phQlPdXThBrPO',
+        stripeYearlyPriceId: 'price_1SIlHK01KG3phQlPdXThBrPO',
+        freeCredits: 60000, // Annual free credits
+        features: [
+          'Basic CRM tools',
+          'Up to 5 users',
+          '60,000 annual credits',
+          'Email support',
+          'Basic integrations'
+        ],
+        limits: {
+          users: 5,
+          roles: 3,
+          apiCalls: 60000,
+          storage: 1048576000, // 1GB
+          credits: 60000
+        },
+        applications: ['crm'],
+        modules: {
+          crm: ['leads', 'contacts', 'dashboard', 'users']
+        },
+        allowUpgrade: true,
+        allowDowngrade: false,
+        billingCycle: 'yearly'
+      },
+      {
+        id: 'free',
+        name: 'Free',
+        description: 'Get started with basic CRM features',
+        yearlyPrice: 0,
+        freeCredits: 60000, // Annual recurring credits (500/month × 12)
+        features: [
+          'Basic CRM tools',
+          '1 user',
+          '60,000 annual credits',
+          'Community support'
+        ],
+        limits: {
+          users: 1,
+          roles: 1,
+          apiCalls: 60000,
+          storage: 524288000, // 500MB
+          credits: 60000
+        },
+        applications: ['crm'],
+        modules: {
+          crm: ['leads', 'contacts', 'dashboard']
+        },
+        allowUpgrade: true,
+        allowDowngrade: false,
+        billingCycle: 'free'
+      },
       {
         id: 'basic',
         name: 'Basic',
@@ -269,71 +707,73 @@ export class SubscriptionService {
         id: 'premium',
         name: 'Premium',
         description: 'Advanced features for established businesses',
-        pricePerCredit: 0.20, // $0.20 per credit
-        minCredits: 1000,
-        maxCredits: 25000,
+        yearlyPrice: 240, // $240/year
+        monthlyPrice: 20, // $20/month
+        stripePriceId: 'price_1SIlHK01KG3phQlPdXThBrPO', // Use same for now, should be updated
+        stripeYearlyPriceId: 'price_1SIlHK01KG3phQlPdXThBrPO', // Use same for now, should be updated
+        freeCredits: 300000, // Annual free credits
         features: [
-          'All tools included',
-          'Advanced CRM & HR',
-          'Affiliate management',
-          'Custom integrations',
-          'Premium support'
+          'All modules + Affiliate',
+          '300,000 free credits/year',
+          'Priority support'
         ],
         limits: {
-          users: 100,
-          roles: 20,
-          apiCallsPerCredit: 20,
-          storagePerCredit: 3000000, // 3MB per credit
-          projectsPerCredit: 10
+          users: 50,
+          roles: 15,
+          apiCalls: 300000,
+          storage: 107374182400, // 100GB
+          credits: 300000
         },
         applications: ['crm', 'hr', 'affiliate'],
         modules: {
-          crm: ['leads', 'contacts', 'accounts', 'opportunities', 'quotations', 'tickets', 'communications', 'invoices', 'dashboard', 'users', 'roles', 'bulk_operations'],
-          hr: ['employees', 'payroll', 'leave', 'documents', 'performance', 'recruitment'],
+          crm: ['leads', 'contacts', 'accounts', 'opportunities', 'quotations', 'tickets', 'communications', 'dashboard', 'users'],
+          hr: ['employees', 'payroll', 'leave', 'documents'],
           affiliate: ['partners', 'commissions']
         },
-        allowDowngrade: true
+        allowUpgrade: true,
+        allowDowngrade: true,
+        billingCycle: 'yearly'
       },
       {
         id: 'enterprise',
         name: 'Enterprise',
-        description: 'Complete solution with all features',
-        pricePerCredit: 0.25, // $0.25 per credit
-        minCredits: 5000,
-        maxCredits: 50000,
+        description: 'For large organizations',
+        yearlyPrice: 1188, // $1188/year
+        monthlyPrice: 99, // $99/month
+        stripePriceId: 'price_1SIlHK01KG3phQlPdXThBrPO', // Use same for now, should be updated
+        stripeYearlyPriceId: 'price_1SIlHK01KG3phQlPdXThBrPO', // Use same for now, should be updated
+        freeCredits: 120000, // 10,000/month × 12
         features: [
-          'All applications',
-          'Unlimited usage within credits',
-          'White-label options',
-          'Dedicated support',
-          'Custom development'
+          'Unlimited modules',
+          '120,000 free credits/year',
+          'Dedicated support'
         ],
         limits: {
           users: 500,
           roles: 50,
-          apiCallsPerCredit: 25,
-          storagePerCredit: 5000000, // 5MB per credit
-          projectsPerCredit: 5
+          apiCalls: 1200000,
+          storage: 1099511627776, // 1TB
+          credits: 120000
         },
-        applications: ['crm', 'hr', 'affiliate', 'accounting', 'inventory'],
-        modules: { 
-          crm: '*', // All CRM modules
-          hr: '*',  // All HR modules  
-          affiliate: '*', // All affiliate modules
-          accounting: '*', // All accounting modules (when built)
-          inventory: '*'  // All inventory modules (when built)
+        applications: ['crm', 'hr', 'affiliate'],
+        modules: {
+          crm: ['leads', 'contacts', 'accounts', 'opportunities', 'quotations', 'tickets', 'communications', 'invoices', 'dashboard', 'users', 'roles', 'bulk_operations', 'analytics'],
+          hr: ['employees', 'payroll', 'leave', 'documents', 'performance', 'recruitment', 'analytics'],
+          affiliate: ['partners', 'commissions', 'analytics']
         },
-        allowDowngrade: true
+        allowUpgrade: true,
+        allowDowngrade: true,
+        billingCycle: 'yearly'
       }
     ];
   }
 
-  // Create Stripe checkout session
-  static async createCheckoutSession({ tenantId, planId, customerId, successUrl, cancelUrl, billingCycle = 'monthly' }) {
+  // Create Stripe checkout session for application plans or credit top-ups
+  static async createCheckoutSession({ tenantId, planId, customerId, successUrl, cancelUrl, billingCycle = 'yearly' }) {
     const startTime = Date.now();
     const requestId = Logger.generateRequestId('stripe-checkout');
 
-    Logger.billing.start(requestId, 'CREDIT PURCHASE CHECKOUT', {
+    Logger.billing.start(requestId, 'STRIPE CHECKOUT', {
       tenantId,
       planId,
       customerId,
@@ -342,72 +782,80 @@ export class SubscriptionService {
       environment: process.env.NODE_ENV
     });
 
-    // Get credit packages instead of subscription plans
-    const packages = await CreditService.getAvailablePackages();
-    const selectedPackage = packages.find(p => p.id === planId);
+    // Check if it's an application plan or credit top-up
+    let planConfig = null;
+    let isApplicationPlan = false;
+    let isCreditTopup = false;
 
-    console.log('🔍 createCheckoutSession - Found package:', selectedPackage ? selectedPackage.name : 'NOT FOUND');
-
-    if (!selectedPackage) {
-      throw new Error('Invalid credit package selected');
+    // Check application plans
+    if (this.STRIPE_PLAN_CONFIG.application_plans[planId]) {
+      planConfig = this.STRIPE_PLAN_CONFIG.application_plans[planId];
+      isApplicationPlan = true;
+    }
+    // Check credit top-ups
+    else if (this.STRIPE_PLAN_CONFIG.credit_topups[planId]) {
+      planConfig = this.STRIPE_PLAN_CONFIG.credit_topups[planId];
+      isCreditTopup = true;
     }
 
-    // Calculate pricing for credit package
-    const unitPrice = 0.10; // $0.10 per credit
-    const totalAmount = selectedPackage.credits * unitPrice;
+    if (!planConfig) {
+      throw new Error(`Invalid plan ID: ${planId}. Please check your Stripe plan configuration.`);
+    }
 
-    console.log('🔍 createCheckoutSession - Credit package details:', {
-      packageId: selectedPackage.id,
-      credits: selectedPackage.credits,
-      unitPrice,
-      totalAmount,
-      currency: selectedPackage.currency
+    console.log(`🔍 createCheckoutSession - Found ${isApplicationPlan ? 'application plan' : 'credit top-up'}:`, planConfig.name);
+
+    console.log(`🔍 createCheckoutSession - Plan details:`, {
+      planId: planConfig.id,
+      amount: planConfig.amount / 100, // Convert cents to dollars
+      currency: planConfig.currency,
+      credits: planConfig.credits || 0,
+      type: isApplicationPlan ? 'subscription' : 'payment'
     });
 
     // Check if we should use mock mode
     const isMockMode = !this.isStripeConfigured();
 
     if (isMockMode) {
-      console.log('🧪 createCheckoutSession - Using mock mode for credit purchase');
-      const mockSessionId = `mock_credit_session_${Date.now()}`;
-      const mockCheckoutUrl = `${successUrl}?session_id=${mockSessionId}&mock=true&package=${planId}&credits=${selectedPackage.credits}`;
-      console.log('✅ createCheckoutSession - Mock credit purchase success! URL:', mockCheckoutUrl);
+      console.log(`🧪 createCheckoutSession - Using mock mode for ${isApplicationPlan ? 'plan subscription' : 'credit top-up'}`);
+      const mockSessionId = `mock_session_${Date.now()}`;
+      const mockCheckoutUrl = `${successUrl}?session_id=${mockSessionId}&mock=true&plan=${planId}&type=${isApplicationPlan ? 'subscription' : 'payment'}`;
 
-      // Simulate successful credit purchase
+      console.log('✅ createCheckoutSession - Mock session created! URL:', mockCheckoutUrl);
+
+      // Simulate successful purchase/subscription
       setTimeout(async () => {
         try {
-          console.log('🧪 Processing mock credit purchase completion...');
-          await CreditService.purchaseCredits({
-            tenantId,
-            userId: 'mock-user', // This should be passed from the request
-            creditAmount: selectedPackage.credits,
-            paymentMethod: 'stripe',
-            currency: selectedPackage.currency,
-            notes: `Mock purchase of ${selectedPackage.name} package`
-          });
-          console.log('✅ Mock credit purchase processed successfully');
+          console.log('🧪 Processing mock purchase completion...');
+
+          if (isApplicationPlan) {
+            // Mock application plan subscription
+            await this.processApplicationPlanSubscription(tenantId, planConfig, `mock_sub_${Date.now()}`, customerId);
+          } else if (isCreditTopup) {
+            // Mock credit top-up
+            await this.processCreditTopupPurchase(tenantId, planConfig);
+          }
+
+          console.log('✅ Mock purchase processed successfully');
         } catch (error) {
-          console.error('❌ Mock credit purchase processing error:', error);
+          console.error('❌ Mock purchase processing error:', error);
         }
       }, 2000); // 2 second delay to simulate processing
 
       return mockCheckoutUrl;
     }
 
-    console.log('🔍 createCheckoutSession - Creating credit purchase session config...');
+    console.log(`🔍 createCheckoutSession - Creating ${isApplicationPlan ? 'subscription' : 'payment'} session config...`);
+
+    // Define variables for both credit top-ups and application plans
+    const selectedPackage = planConfig;
+    const unitPrice = planConfig.amount / 100; // Convert cents to dollars
+    const totalAmount = planConfig.amount / 100; // Same for single quantity
 
     const sessionConfig = {
-      mode: 'payment', // One-time payment for credits
+      mode: isApplicationPlan ? 'subscription' : 'payment', // Subscription for plans, payment for credits
       payment_method_types: ['card'],
       line_items: [{
-        price_data: {
-          currency: selectedPackage.currency.toLowerCase(),
-          product_data: {
-            name: `${selectedPackage.credits} Credits - ${selectedPackage.name}`,
-            description: `Purchase ${selectedPackage.credits} credits for your account`
-          },
-          unit_amount: Math.round(totalAmount * 100) // Convert to cents
-        },
+        price: planConfig.stripePriceId, // Use the actual Stripe price ID
         quantity: 1,
       }],
       success_url: successUrl,
@@ -416,9 +864,11 @@ export class SubscriptionService {
         tenantId,
         packageId: planId,
         planId: planId, // For backward compatibility
-        creditAmount: selectedPackage.credits.toString(),
-        unitPrice: unitPrice.toString(),
-        totalAmount: totalAmount.toString()
+        ...(isCreditTopup && selectedPackage ? {
+          creditAmount: selectedPackage.credits.toString(),
+          unitPrice: unitPrice.toString(),
+          totalAmount: totalAmount.toString()
+        } : {})
       },
     };
 
@@ -488,17 +938,30 @@ export class SubscriptionService {
   // Get usage metrics for a tenant (now credit-based)
   static async getUsageMetrics(tenantId) {
     try {
+      // Get actual subscription plan first
+      const subscription = await this.getCurrentSubscription(tenantId);
+      const actualPlan = subscription?.plan || 'free';
+
       // Get credit balance and usage data
       const creditData = await CreditService.getCurrentBalance(tenantId);
       const usageSummary = await CreditService.getUsageSummary(tenantId);
 
-      // Default limits for credit-based system
+      // Get plan-specific limits
+      const planLimits = this.getUsageLimitsForPlan(actualPlan);
+
+      // Default limits for credit-based system (fallback)
       const defaultLimits = {
         users: 100,
         projects: -1, // Unlimited
         storage: 100000000000, // 100GB
         apiCalls: 100000,
         credits: creditData?.totalCredits || 1000
+      };
+
+      // Use plan limits if available, otherwise use defaults
+      const limits = {
+        ...defaultLimits,
+        ...planLimits
       };
 
       // Mock usage data - in production, this would come from actual usage tracking
@@ -512,14 +975,14 @@ export class SubscriptionService {
 
       return {
         current: mockUsage,
-        limits: defaultLimits,
-        plan: 'credit_based',
+        limits: limits,
+        plan: actualPlan,
         percentUsed: {
-          users: Math.round((mockUsage.users / defaultLimits.users) * 100),
-          projects: defaultLimits.projects > 0 ?
-            Math.round((mockUsage.projects / defaultLimits.projects) * 100) : 0,
-          storage: Math.round((mockUsage.storage / defaultLimits.storage) * 100),
-          apiCalls: Math.round((mockUsage.apiCalls / defaultLimits.apiCalls) * 100),
+          users: limits.users > 0 ? Math.round((mockUsage.users / limits.users) * 100) : 0,
+          projects: limits.projects > 0 ?
+            Math.round((mockUsage.projects / limits.projects) * 100) : 0,
+          storage: limits.storage > 0 ? Math.round((mockUsage.storage / limits.storage) * 100) : 0,
+          apiCalls: limits.apiCalls > 0 ? Math.round((mockUsage.apiCalls / limits.apiCalls) * 100) : 0,
           credits: creditData?.totalCredits ?
             Math.round((usageSummary?.totalConsumed / creditData.totalCredits) * 100) : 0
         }
@@ -530,31 +993,168 @@ export class SubscriptionService {
     }
   }
 
-  // Get billing history for a tenant (now credit purchases)
+  // Get comprehensive billing history for a tenant (includes both subscription payments and credit purchases)
   static async getBillingHistory(tenantId) {
     try {
-      console.log('📋 Fetching billing history for tenant:', tenantId);
+      console.log('📋 Fetching comprehensive billing history for tenant:', tenantId);
 
-      const creditPurchaseRecords = await db
-        .select()
-        .from(creditPurchases)
-        .where(eq(creditPurchases.tenantId, tenantId))
-        .orderBy(desc(creditPurchases.createdAt));
+      // Test database connection
+      const { db } = await import('../db/index.js');
+      console.log('🔌 Database connection available:', !!db);
 
-      console.log('✅ Found billing history records:', creditPurchaseRecords.length);
+      const billingHistory = [];
 
-      return creditPurchaseRecords.map(purchase => ({
-        id: purchase.purchaseId,
-        amount: parseFloat(purchase.finalAmount || purchase.totalAmount),
-        currency: purchase.currency,
-        status: purchase.status,
-        description: `Credit purchase: ${purchase.creditAmount} credits`,
-        invoiceNumber: purchase.invoiceNumber,
-        paidAt: purchase.paidAt,
-        createdAt: purchase.createdAt,
-        creditsPurchased: parseFloat(purchase.creditAmount),
-        expiryDate: purchase.expiryDate
-      }));
+      // 1. Get subscription payment records (from payments table)
+      try {
+        const { payments } = await import('../db/schema/index.js');
+        const subscriptionPayments = await db
+          .select()
+          .from(payments)
+          .where(eq(payments.tenantId, tenantId))
+          .orderBy(desc(payments.paidAt || payments.createdAt));
+
+        console.log('💳 Found subscription payment records:', subscriptionPayments?.length || 0);
+
+        if (subscriptionPayments && Array.isArray(subscriptionPayments)) {
+          console.log('💳 Processing subscription payment records...');
+          subscriptionPayments.forEach(payment => {
+            try {
+              const billingItem = {
+                id: payment.paymentId,
+                type: 'subscription',
+                amount: parseFloat(payment.amount) || 0,
+                currency: payment.currency,
+                status: payment.status,
+                description: payment.description || `Subscription payment - ${payment.billingReason}`,
+                invoiceNumber: payment.invoiceNumber,
+                paidAt: payment.paidAt,
+                createdAt: payment.createdAt,
+                creditsPurchased: null, // Not applicable for subscription payments
+                expiryDate: null, // Not applicable for subscription payments
+                paymentType: payment.paymentType,
+                billingReason: payment.billingReason
+              };
+              billingHistory.push(billingItem);
+              console.log('✅ Added subscription payment to billing history:', payment.paymentId);
+            } catch (itemError) {
+              console.log('⚠️ Failed to process subscription payment item:', payment.paymentId, itemError.message);
+            }
+          });
+        } else {
+          console.log('⚠️ Subscription payments query returned invalid result:', typeof subscriptionPayments);
+        }
+
+      } catch (paymentError) {
+        console.log('⚠️ Could not fetch subscription payments:', paymentError.message);
+        // Continue without subscription payments
+      }
+
+      // 2. Get credit purchase records (from creditPurchases table)
+      try {
+        const creditPurchaseRecords = await db
+          .select()
+          .from(creditPurchases)
+          .where(eq(creditPurchases.tenantId, tenantId))
+          .orderBy(desc(creditPurchases.createdAt));
+
+        console.log('🪙 Found credit purchase records:', creditPurchaseRecords?.length || 0);
+
+        if (creditPurchaseRecords && Array.isArray(creditPurchaseRecords)) {
+          console.log('🪙 Processing credit purchase records...');
+          creditPurchaseRecords.forEach(purchase => {
+            try {
+              const billingItem = {
+                id: purchase.purchaseId,
+                type: 'credit_purchase',
+                amount: parseFloat(purchase.totalAmount) || 0,
+                currency: 'USD', // Default currency since it's not in schema
+                status: purchase.status,
+                description: `Credit purchase: ${purchase.creditAmount} credits`,
+                invoiceNumber: null, // Not in schema
+                paidAt: purchase.paidAt,
+                createdAt: purchase.createdAt,
+                creditsPurchased: parseFloat(purchase.creditAmount) || 0,
+                expiryDate: purchase.expiryDate,
+                paymentType: 'credit_purchase',
+                billingReason: 'credit_topup'
+              };
+              billingHistory.push(billingItem);
+              console.log('✅ Added credit purchase to billing history:', purchase.purchaseId);
+            } catch (itemError) {
+              console.log('⚠️ Failed to process credit purchase item:', purchase.purchaseId, itemError.message);
+            }
+          });
+        } else {
+          console.log('⚠️ Credit purchases query returned invalid result:', typeof creditPurchaseRecords);
+        }
+
+      } catch (creditError) {
+        console.log('⚠️ Could not fetch credit purchases:', creditError.message);
+        // Continue without credit purchases
+      }
+
+      // 3. Get credit usage transactions (from creditTransactions table)
+      try {
+        const { creditTransactions } = await import('../db/schema/credits.js');
+        const creditUsageRecords = await db
+          .select()
+          .from(creditTransactions)
+          .where(eq(creditTransactions.tenantId, tenantId))
+          .orderBy(desc(creditTransactions.createdAt))
+          .limit(100); // Limit to prevent overwhelming the response
+
+        console.log('💰 Found credit usage records:', creditUsageRecords?.length || 0);
+
+        if (creditUsageRecords && Array.isArray(creditUsageRecords)) {
+          console.log('💰 Processing credit usage records...');
+          creditUsageRecords.forEach(transaction => {
+            try {
+              // Only show consumption transactions (negative amounts)
+              const amount = parseFloat(transaction.amount) || 0;
+              if (amount < 0) { // Only consumption (negative = usage)
+                const billingItem = {
+                  id: transaction.transactionId,
+                  type: 'credit_usage',
+                  amount: Math.abs(amount), // Show as positive for display
+                  currency: 'USD',
+                  status: 'completed',
+                  description: transaction.operationCode
+                    ? `Credit usage: ${transaction.operationCode}`
+                    : `Credit consumption`,
+                  invoiceNumber: null,
+                  paidAt: null, // Usage doesn't have payment date
+                  createdAt: transaction.createdAt,
+                  creditsPurchased: null, // Not applicable for usage
+                  expiryDate: null, // Not applicable for usage
+                  paymentType: 'credit_usage',
+                  billingReason: 'usage'
+                };
+                billingHistory.push(billingItem);
+                console.log('✅ Added credit usage to billing history:', transaction.transactionId);
+              }
+            } catch (itemError) {
+              console.log('⚠️ Failed to process credit usage item:', transaction.transactionId, itemError.message);
+            }
+          });
+        } else {
+          console.log('⚠️ Credit usage query returned invalid result:', typeof creditUsageRecords);
+        }
+
+      } catch (usageError) {
+        console.log('⚠️ Could not fetch credit usage:', usageError.message);
+        // Continue without credit usage
+      }
+
+      // Sort combined history by date (most recent first)
+      billingHistory.sort((a, b) => {
+        const dateA = a.paidAt || a.createdAt;
+        const dateB = b.paidAt || b.createdAt;
+        return new Date(dateB).getTime() - new Date(dateA).getTime();
+      });
+
+      console.log('✅ Combined billing history records:', billingHistory.length);
+
+      return billingHistory;
     } catch (error) {
       console.error('❌ Error getting billing history:', {
         message: error.message,
@@ -562,14 +1162,9 @@ export class SubscriptionService {
         code: error.code
       });
 
-      // If table doesn't exist, return empty array instead of throwing
-      if (error.message?.includes('relation "credit_purchases" does not exist') ||
-          error.code === '42P01') {
-        console.log('⚠️ Credit purchases table not found, returning empty history');
-        return [];
-      }
-
-      throw error;
+      // Return empty array instead of throwing to prevent frontend errors
+      console.log('⚠️ Returning empty billing history due to error');
+      return [];
     }
   }
 
@@ -638,6 +1233,17 @@ export class SubscriptionService {
           })
           .where(eq(subscriptions.subscriptionId, currentSubscription.subscriptionId));
 
+        // Expire all credits when subscription is cancelled
+        try {
+          const { CreditAllocationService } = await import('./credit-allocation-service.js');
+          const creditAllocationService = new CreditAllocationService();
+          await creditAllocationService.expireAllCreditsForTenant(tenantId, 'subscription_cancelled');
+          console.log('✅ All credits expired for cancelled subscription');
+        } catch (creditError) {
+          console.error('❌ Failed to expire credits for cancelled subscription:', creditError.message);
+          // Don't fail the cancellation for credit expiry issues
+        }
+
         return {
           subscriptionId: currentSubscription.subscriptionId,
           status: 'canceled',
@@ -650,8 +1256,8 @@ export class SubscriptionService {
     }
   }
 
-  // Change subscription plan (upgrade/downgrade)
-  static async changePlan({ tenantId, planId, billingCycle = 'monthly' }) {
+  // Change subscription plan (upgrade/downgrade) - Annual only
+  static async changePlan({ tenantId, planId, billingCycle = 'yearly' }) {
     try {
       console.log('🔄 Changing plan for tenant:', tenantId, 'to plan:', planId);
 
@@ -670,48 +1276,16 @@ export class SubscriptionService {
 
       const currentPlan = plans.find(p => p.id === currentSubscription.plan);
 
-      // Check if this is a downgrade and enforce billing cycle restrictions
-      const planHierarchy = {
-        'free': 0,
-        'trial': 1,
-        'starter': 2,
-        'professional': 3,
-        'enterprise': 4
-      };
-
-      const currentLevel = planHierarchy[currentPlan?.id] || 0;
-      const targetLevel = planHierarchy[targetPlan.id] || 0;
+      // Determine if this is an upgrade or downgrade
+      const currentLevel = this.PLAN_HIERARCHY[currentPlan?.id] || 0;
+      const targetLevel = this.PLAN_HIERARCHY[targetPlan.id] || 0;
       const isDowngrade = targetLevel < currentLevel;
+      const isUpgrade = targetLevel > currentLevel;
+      const isSameLevel = targetLevel === currentLevel;
 
-      // NEW: Enforce billing cycle restrictions for downgrades
-      if (isDowngrade && currentSubscription.status === 'active') {
-        const now = new Date();
-        const currentPeriodEnd = new Date(currentSubscription.currentPeriodEnd);
-        const billingCycleType = currentSubscription.billingCycle || 'monthly';
-        
-        // Calculate days remaining in current billing cycle
-        const daysRemaining = Math.ceil((currentPeriodEnd - now) / (1000 * 60 * 60 * 24));
-        
-        if (daysRemaining > 7) { // More than a week remaining
-          const endDateStr = currentPeriodEnd.toLocaleDateString();
-          throw new Error(
-            `Plan downgrades are only allowed within 7 days of your billing cycle end. ` +
-            `Your current ${billingCycleType} plan renews on ${endDateStr}. ` +
-            `You can schedule a plan change to take effect on ${endDateStr}, or wait until then to downgrade. ` +
-            `Since you've paid for the full ${billingCycleType} period, you'll continue to have access to all features until ${endDateStr}.`
-          );
-        }
-
-        // If within 7 days of renewal, allow but schedule for end of period
-        console.log(`⏰ Downgrade scheduled for end of billing period: ${endDateStr}`);
-        
-        // Schedule the downgrade instead of processing immediately
-        return await this.scheduleDowngrade({ tenantId, planId, effectiveDate: currentPeriodEnd });
-      }
-
-      // Check for other downgrade restrictions (legacy)
+      // Validate plan change
       if (currentPlan && !this.isValidPlanChange(currentPlan, targetPlan)) {
-        throw new Error(`Cannot downgrade from ${currentPlan.name} to ${targetPlan.name} - plan restrictions apply`);
+        throw new Error(`Cannot change from ${currentPlan.name} to ${targetPlan.name} - plan restrictions apply`);
       }
 
       // Trial plans are not available through plan changes - only at account creation
@@ -719,8 +1293,14 @@ export class SubscriptionService {
         throw new Error('Trial plans cannot be selected through subscription changes. Trials are only available during account creation.');
       }
 
-      // Allow upgrades immediately (no billing cycle restrictions)
-      if (!isDowngrade) {
+      // Free tier restrictions
+      if (planId === 'free' && currentSubscription.plan !== 'free') {
+        throw new Error('Cannot downgrade to free tier from paid plans. Free tier is only available for new users.');
+      }
+
+      // Handle different plan change scenarios
+      if (isUpgrade) {
+        // 🟢 UPGRADES: Process immediately (following enterprise SaaS best practices)
         console.log('⬆️ Processing immediate upgrade');
         return await this.processImmediatePlanChange({ 
           tenantId, 
@@ -729,9 +1309,24 @@ export class SubscriptionService {
           planId, 
           billingCycle 
         });
-      }
+      } else if (isDowngrade) {
+        // 🔴 DOWNGRADES: Always schedule for end of billing period (never immediate)
+        // This follows Zoho/Salesforce model - no immediate downgrades with refunds
+        const currentPeriodEnd = new Date(currentSubscription.currentPeriodEnd);
+        const billingCycleType = currentSubscription.billingCycle || 'yearly';
+        const endDateStr = currentPeriodEnd.toLocaleDateString();
 
-      // Process immediate plan change for same-level changes or allowed downgrades
+        console.log(`⏰ Downgrade scheduled for end of billing period: ${endDateStr} (${billingCycleType})`);
+
+        return await this.scheduleDowngrade({
+          tenantId,
+          planId,
+          effectiveDate: currentPeriodEnd,
+          reason: 'customer_requested_downgrade'
+        });
+      } else if (isSameLevel) {
+        // 🟡 SAME LEVEL: Process immediately (billing cycle change)
+        console.log('🔄 Processing same-level plan change');
       return await this.processImmediatePlanChange({ 
         tenantId, 
         currentSubscription, 
@@ -739,6 +1334,7 @@ export class SubscriptionService {
         planId, 
         billingCycle 
       });
+      }
 
     } catch (error) {
       console.error('Error changing plan:', error);
@@ -777,70 +1373,33 @@ export class SubscriptionService {
   // NEW: Process immediate plan changes (upgrades and allowed changes)
   static async processImmediatePlanChange({ tenantId, currentSubscription, targetPlan, planId, billingCycle }) {
     try {
-      // Handle upgrade/change to paid plan
-      if (currentSubscription.stripeSubscriptionId && this.isStripeConfigured()) {
-        // Update existing Stripe subscription
-        const priceId = billingCycle === 'yearly' ? targetPlan.stripeYearlyPriceId : targetPlan.stripePriceId;
-        
-        if (!priceId) {
-          throw new Error(`Stripe price ID not configured for ${planId} plan (${billingCycle})`);
-        }
+      // Plan changes ALWAYS require payment processing through Stripe
+      console.log('💳 Plan change requires payment - creating Stripe checkout session');
 
-        const updatedSubscription = await stripe.subscriptions.update(
-          currentSubscription.stripeSubscriptionId,
-          {
-            items: [{
-              id: currentSubscription.stripeSubscriptionId,
-              price: priceId,
-            }],
-            proration_behavior: 'always_invoice',
-          }
-        );
+      const checkoutResult = await this.createCheckoutSession({
+        tenantId,
+        planId,
+        billingCycle,
+        successUrl: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/billing?payment=success&type=subscription&plan=${planId}`,
+        cancelUrl: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/billing?payment=cancelled&type=subscription`
+      });
 
-        // Update our database
-        await db
-          .update(subscriptions)
-          .set({
-            plan: planId,
-            status: updatedSubscription.status,
-            subscribedTools: targetPlan.tools || targetPlan.modules,
-            usageLimits: targetPlan.limits,
-            monthlyPrice: targetPlan.monthlyPrice,
-            yearlyPrice: targetPlan.yearlyPrice,
-            billingCycle: billingCycle,
-            trialEnd: null, // Clear trial data for paid plans
-            updatedAt: new Date()
-          })
-          .where(eq(subscriptions.tenantId, tenantId));
-
-        // Update Administrator roles when plan changes - Enhanced version
-        await this.updateAdministratorRolesForPlan(tenantId, planId);
-
-        // 🎯 UPDATE ORGANIZATION APPLICATIONS FOR NEW PLAN (CRITICAL ADDITION)
-        try {
-          console.log('🏢 Updating organization applications for plan change...');
-          const { OnboardingOrganizationSetupService } = await import('./onboarding-organization-setup.js');
-          await OnboardingOrganizationSetupService.updateOrganizationApplicationsForPlanChange(tenantId, planId);
-          console.log('✅ Organization applications updated for new plan');
-        } catch (orgAppError) {
-          console.error('❌ Failed to update organization applications:', orgAppError.message);
-          // Don't fail the plan change, but log for manual intervention
-        }
-
-        return {
-          message: 'Plan changed successfully',
-          subscription: await this.getCurrentSubscription(tenantId)
-        };
-      } else {
-        // Create new Stripe subscription for plan change
-        return await this.createCheckoutSession({
-          tenantId,
-          planId,
-          billingCycle,
-          successUrl: `${process.env.FRONTEND_URL}/billing?payment=success&plan=${planId}`,
-          cancelUrl: `${process.env.FRONTEND_URL}/billing?payment=cancelled`
+      // Update organization applications and roles immediately when plan change is initiated
+      // This ensures UI reflects changes even before webhook processing
+      try {
+        console.log('🔄 Updating tenant applications and roles for immediate plan change...');
+        await this.updateTenantForPlanChange(tenantId, planId, {
+          skipIfRecentlyUpdated: false,
+          operation: 'immediate_plan_change'
         });
+        console.log('✅ Tenant applications and roles updated for immediate plan change');
+      } catch (updateError) {
+        console.error('❌ Failed to update tenant applications and roles:', updateError.message);
+        // Don't fail the checkout process if updates fail
       }
+
+      return checkoutResult;
+
     } catch (error) {
       console.error('Error processing immediate plan change:', error);
       throw error;
@@ -850,16 +1409,8 @@ export class SubscriptionService {
   // Helper method to check if plan change is valid
   static isValidPlanChange(currentPlan, targetPlan) {
     // Can always upgrade to higher plans
-    const planHierarchy = {
-      'free': 0,
-      'trial': 1,
-      'starter': 2,
-      'professional': 3,
-      'enterprise': 4
-    };
-
-    const currentLevel = planHierarchy[currentPlan.id] || 0;
-    const targetLevel = planHierarchy[targetPlan.id] || 0;
+    const currentLevel = this.PLAN_HIERARCHY[currentPlan.id] || 0;
+    const targetLevel = this.PLAN_HIERARCHY[targetPlan.id] || 0;
 
     // Allow upgrades or same level changes
     if (targetLevel >= currentLevel) return true;
@@ -1025,19 +1576,12 @@ export class SubscriptionService {
         lastUpgraded: new Date().toISOString()
       };
       
-      // Remove restrictions that are no longer applicable
-      if (planAccess.limitations.users === -1) {
+      // Since limitations have been removed, all plans now have unlimited access
+      // Remove any existing restrictions for users, roles, storage, and API calls
         delete updatedRestrictions.maxUsers;
-      }
-      if (planAccess.limitations.roles === -1) {
         delete updatedRestrictions.maxRoles;
-      }
-      if (planAccess.limitations.storage === 'unlimited') {
         delete updatedRestrictions.storageLimit;
-      }
-      if (planAccess.limitations.apiCalls === -1) {
         delete updatedRestrictions.apiCallLimit;
-      }
       
       return updatedRestrictions;
     } catch (error) {
@@ -1080,27 +1624,479 @@ export class SubscriptionService {
     }
   }
 
-  // Keep the original method for backward compatibility but make it call the enhanced version
-  static async updateSuperAdminRoleForPlan(tenantId, newPlanId) {
-    return await this.updateAdministratorRolesForPlan(tenantId, newPlanId);
-  }
-
-  // Helper method to get plan ID from Stripe price ID
-  static async getPlanIdFromPriceId(priceId) {
+  // Helper method to get plan details from Stripe price ID
+  static getPlanFromPriceId(priceId) {
     try {
-      const plans = await this.getAvailablePlans();
-      
-      for (const plan of plans) {
-        if (plan.stripePriceId === priceId || plan.stripeYearlyPriceId === priceId) {
-          return plan.id;
+      // Check application plans
+      for (const [planId, planConfig] of Object.entries(this.STRIPE_PLAN_CONFIG.application_plans)) {
+        if (planConfig.stripePriceId === priceId) {
+          return {
+            id: planId,
+            type: 'application_plan',
+            ...planConfig
+          };
         }
       }
-      
-      console.warn(`⚠️ Plan not found for price ID: ${priceId}`);
+
+      // Check credit top-up plans
+      for (const [topupId, topupConfig] of Object.entries(this.STRIPE_PLAN_CONFIG.credit_topups)) {
+        if (topupConfig.stripePriceId === priceId) {
+          return {
+            id: topupId,
+            type: 'credit_topup',
+            ...topupConfig
+          };
+        }
+      }
+
+      console.warn(`⚠️ No plan found for price ID: ${priceId}`);
       return null;
     } catch (error) {
-      console.error('Error getting plan ID from price ID:', error);
+      console.error('Error getting plan from price ID:', error);
       return null;
+    }
+  }
+
+  // Legacy method for backward compatibility
+  static async getPlanIdFromPriceId(priceId) {
+    const plan = this.getPlanFromPriceId(priceId);
+    return plan ? plan.id : null;
+  }
+
+  // Process application plan subscription (creates/updates subscription)
+  static async processApplicationPlanSubscription(tenantId, planConfig, stripeSubscriptionId, stripeCustomerId) {
+    try {
+      if (!planConfig || !planConfig.id) {
+        throw new Error('Invalid planConfig: missing id property');
+      }
+
+      // Validate planConfig has required properties
+      if (!planConfig.amount && planConfig.amount !== 0) {
+        throw new Error('Invalid planConfig: missing amount property');
+      }
+
+      console.log(`📋 Processing application plan subscription: ${planConfig.id} for tenant ${tenantId}`);
+      console.log(`📋 Stripe details: subscription=${stripeSubscriptionId}, customer=${stripeCustomerId}`);
+      console.log(`📋 Plan config:`, planConfig);
+
+      // Check if subscription already exists
+      const existingSubscription = await this.getCurrentSubscription(tenantId);
+      console.log(`📋 Existing subscription check:`, existingSubscription ? 'found' : 'not found');
+
+      if (existingSubscription) {
+        // Update existing subscription
+        const subscribedTools = this.getSubscribedToolsForPlan(planConfig.id) || ['crm'];
+        const usageLimits = this.getUsageLimitsForPlan(planConfig.id) || { users: 1, apiCalls: 60000, storage: 524288000 };
+        const yearlyPrice = (typeof planConfig.amount === 'number' && planConfig.amount >= 0) ? planConfig.amount / 100 : 0;
+
+        const billingCycleValue = planConfig.billingCycle || 'yearly';
+        const periodEnd = billingCycleValue === 'yearly'
+          ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) // 1 year
+          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 1 month
+
+        const updateData = {
+          plan: planConfig.id,
+          stripeSubscriptionId: stripeSubscriptionId,
+          stripeCustomerId: stripeCustomerId,
+          status: 'active',
+          subscribedTools,
+          usageLimits,
+          yearlyPrice: (billingCycleValue === 'yearly' ? yearlyPrice : (yearlyPrice * 12)).toFixed(2), // Store yearly equivalent as string
+          billingCycle: billingCycleValue,
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: periodEnd,
+          updatedAt: new Date()
+        };
+
+        // If upgrading from trial, mark as upgraded and no longer trial user
+        if (existingSubscription.plan === 'trial') {
+          updateData.isTrialUser = false;
+          updateData.hasEverUpgraded = true;
+          console.log(`🔄 Upgrading from trial to ${planConfig.id} for tenant ${tenantId}`);
+        }
+
+        // Validate updateData before database operation
+        console.log('🔍 Final updateData validation:', {
+          plan: updateData.plan,
+          stripeSubscriptionId: updateData.stripeSubscriptionId,
+          stripeCustomerId: updateData.stripeCustomerId,
+          status: updateData.status,
+          subscribedTools: updateData.subscribedTools,
+          usageLimits: updateData.usageLimits,
+          yearlyPrice: updateData.yearlyPrice,
+          billingCycle: updateData.billingCycle,
+          hasUndefined: Object.values(updateData).some(v => v === undefined || v === null)
+        });
+
+        await db
+          .update(subscriptions)
+          .set(updateData)
+          .where(eq(subscriptions.tenantId, tenantId));
+
+        console.log(`✅ Existing subscription updated for tenant ${tenantId}, plan ${planConfig.id}`);
+      } else {
+        // Create new subscription
+        console.log(`📋 Creating new subscription for tenant ${tenantId}`);
+
+        const billingCycleValue = planConfig.billingCycle || 'yearly';
+        const subscribedTools = this.getSubscribedToolsForPlan(planConfig.id) || ['crm'];
+        const usageLimits = this.getUsageLimitsForPlan(planConfig.id) || { users: 1, apiCalls: 60000, storage: 524288000 };
+        const yearlyPrice = (typeof planConfig.amount === 'number' && planConfig.amount >= 0) ? planConfig.amount / 100 : 0;
+        const periodEnd = billingCycleValue === 'yearly'
+          ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) // 1 year
+          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 1 month
+
+        const subscriptionData = {
+          subscriptionId: uuidv4(),
+          tenantId,
+          plan: planConfig.id,
+          status: 'active',
+          stripeSubscriptionId: stripeSubscriptionId,
+          stripeCustomerId: stripeCustomerId,
+          subscribedTools,
+          usageLimits,
+          yearlyPrice: (billingCycleValue === 'yearly' ? yearlyPrice : (yearlyPrice * 12)).toFixed(2),
+          billingCycle: billingCycleValue,
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: periodEnd,
+          isTrialUser: false,
+          hasEverUpgraded: true,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        await db.insert(subscriptions).values(subscriptionData);
+
+        console.log(`✅ New subscription created for tenant ${tenantId}, plan ${planConfig.id}`);
+      }
+
+      // Allocate initial plan credits (for both new and updated subscriptions)
+      await this.updateOperationalCreditsForPlan(tenantId, planConfig.id, 'plan_activation');
+
+      console.log(`✅ Application plan subscription processed: ${planConfig.id}`);
+      return { success: true, planId: planConfig.id, credits: planConfig.credits };
+    } catch (error) {
+      console.error('❌ Error processing application plan subscription:', error);
+      throw error;
+    }
+  }
+
+  // Process credit top-up purchase (adds credits to existing allocation)
+  static async processCreditTopupPurchase(tenantId, topupConfig) {
+    try {
+      console.log(`💰 Processing credit top-up: ${topupConfig.credits} credits for tenant ${tenantId}`);
+
+      // Get organization entity
+      const [organizationEntity] = await db
+        .select()
+        .from(entities)
+        .where(eq(entities.tenantId, tenantId))
+        .limit(1);
+
+      if (!organizationEntity) {
+        throw new Error('Organization entity not found');
+      }
+
+      // Allocate paid credits
+      const { CreditAllocationService } = await import('./credit-allocation-service.js');
+      const creditAllocationService = new CreditAllocationService();
+
+      await creditAllocationService.allocateOperationalCredits({
+        tenantId,
+        sourceEntityId: organizationEntity.entityId,
+        creditAmount: topupConfig.credits,
+        creditType: 'paid',
+        allocationType: 'bulk',
+        allocatedBy: null,
+        purpose: `${topupConfig.name} - Credit top-up purchase`
+      });
+
+      console.log(`✅ Credit top-up processed: ${topupConfig.credits} credits added`);
+      return { success: true, creditsAdded: topupConfig.credits, topupId: topupConfig.id };
+
+    } catch (error) {
+      console.error('Error processing credit top-up:', error);
+      throw error;
+    }
+  }
+
+  // Helper methods for plan configuration
+  static getSubscribedToolsForPlan(planId) {
+    const planTools = {
+      starter: ['crm', 'hr'],
+      // professional: ['crm', 'hr', 'affiliateConnect'], // Not available yet
+      enterprise: ['crm', 'hr', 'affiliateConnect']
+    };
+    return planTools[planId] || ['crm'];
+  }
+
+  static getUsageLimitsForPlan(planId) {
+    const planLimits = {
+      starter: { users: 10, apiCalls: 60000, storage: 10737418240 }, // 10GB
+      // professional: { users: 50, apiCalls: 300000, storage: 107374182400 }, // 100GB - Not available yet
+      enterprise: { users: -1, apiCalls: 1200000, storage: -1 } // Unlimited
+    };
+    return planLimits[planId] || { users: 1, apiCalls: 60000, storage: 524288000 };
+  }
+
+  // Helper method to update tenant applications and roles for plan changes
+  static async updateTenantForPlanChange(tenantId, planId, options = {}) {
+    const { skipIfRecentlyUpdated = false, operation = 'plan_change' } = options;
+
+    try {
+      console.log(`🔄 Updating tenant ${tenantId} for ${operation} to plan: ${planId}`);
+
+      // Update Administrator roles
+      try {
+        console.log('🔄 Updating administrator roles...');
+        await this.updateAdministratorRolesForPlan(tenantId, planId);
+        console.log('✅ Administrator roles updated');
+      } catch (roleError) {
+        console.error('❌ Failed to update administrator roles:', roleError.message);
+        // Don't fail the entire operation for role update issues
+      }
+
+      // Update organization applications
+      try {
+        console.log('🔄 Updating organization applications for tenant:', tenantId, 'plan:', planId);
+        const { OnboardingOrganizationSetupService } = await import('./onboarding-organization-setup.js');
+        const orgAppResult = await OnboardingOrganizationSetupService.updateOrganizationApplicationsForPlanChange(
+          tenantId,
+          planId,
+          { skipIfRecentlyUpdated }
+        );
+        console.log('✅ Organization applications updated:', orgAppResult);
+      } catch (orgAppError) {
+        console.error('❌ Failed to update organization applications:', orgAppError.message);
+        console.error('❌ Full error:', orgAppError);
+        // Don't fail the entire operation for application update issues
+      }
+
+      // Update operational credits
+      try {
+        console.log('🔄 Updating operational credits...');
+        await this.updateOperationalCreditsForPlan(tenantId, planId, operation);
+        console.log('✅ Operational credits updated');
+      } catch (creditError) {
+        console.error('❌ Failed to update operational credits:', creditError.message);
+        // Don't fail the entire operation for credit update issues
+      }
+
+      console.log(`✅ Completed tenant updates for ${operation}`);
+      return { success: true, tenantId, planId, operation };
+
+    } catch (error) {
+      console.error(`❌ Failed to update tenant for plan change:`, error);
+      throw error;
+    }
+  }
+
+  // Update operational credits when plan changes
+  static async updateOperationalCreditsForPlan(tenantId, planId, operation = 'plan_change') {
+    try {
+      console.log(`💰 Updating operational credits for tenant ${tenantId} to ${planId} plan`);
+
+      // Get plan credit configuration
+      const { PermissionMatrixUtils } = await import('../data/permission-matrix.js');
+      const planCredits = PermissionMatrixUtils.getPlanCredits(planId);
+      const newFreeCredits = planCredits.free || 0;
+
+      // Get current subscription to find organization entity
+      const currentSubscription = await this.getCurrentSubscription(tenantId);
+      if (!currentSubscription) {
+        throw new Error('No subscription found for tenant');
+      }
+
+      // Find the organization entity for this tenant
+      const { entities } = await import('../db/schema/index.js');
+      const { eq } = await import('drizzle-orm');
+      const [organizationEntity] = await db
+        .select()
+        .from(entities)
+        .where(eq(entities.tenantId, tenantId))
+        .limit(1);
+
+      if (!organizationEntity) {
+        throw new Error('No organization entity found for tenant');
+      }
+
+      // Check if free credits allocation already exists
+      const { creditAllocations } = await import('../db/schema/index.js');
+      const existingFreeAllocation = await db
+        .select()
+        .from(creditAllocations)
+        .where(and(
+          eq(creditAllocations.tenantId, tenantId),
+          eq(creditAllocations.sourceEntityId, organizationEntity.entityId),
+          eq(creditAllocations.targetApplication, 'system'),
+          eq(creditAllocations.creditType, 'free'),
+          eq(creditAllocations.allocationType, 'subscription'),
+          eq(creditAllocations.isActive, true)
+        ))
+        .limit(1);
+
+      const { CreditAllocationService } = await import('./credit-allocation-service.js');
+      const creditAllocationService = new CreditAllocationService();
+
+      if (existingFreeAllocation.length > 0) {
+        // Update existing free credits allocation
+        console.log(`📈 Updating existing free credits from ${existingFreeAllocation[0].allocatedCredits} to ${newFreeCredits}`);
+
+        if (operation === 'plan_change') {
+          // For plan changes, we replace the free credits (don't add to existing)
+          await creditAllocationService.allocateOperationalCredits({
+            tenantId,
+            sourceEntityId: organizationEntity.entityId,
+            creditAmount: newFreeCredits,
+            creditType: 'free',
+            allocationType: 'bulk', // Use 'bulk' to skip available balance check for subscription plans
+            planId,
+            allocatedBy: null,
+            purpose: `${planId.charAt(0).toUpperCase() + planId.slice(1)} plan free credits update`
+          });
+        } else if (operation === 'annual_renewal' && planId === 'free') {
+          // For free tier annual renewal, add credits to existing allocation
+          const existingCredits = parseFloat(existingFreeAllocation[0].allocatedCredits || '0');
+          const additionalCredits = newFreeCredits; // Full annual amount
+
+          await creditAllocationService.allocateOperationalCredits({
+            tenantId,
+            sourceEntityId: organizationEntity.entityId,
+            creditAmount: additionalCredits,
+            creditType: 'free',
+            allocationType: 'bulk', // Use 'bulk' to skip available balance check for subscription renewals
+            planId,
+            allocatedBy: null,
+            purpose: `Free tier annual credit renewal: +${additionalCredits} credits`
+          });
+        }
+      } else {
+        // Create new free credits allocation
+        console.log(`🎁 Allocating initial free credits: ${newFreeCredits} for ${planId} plan`);
+
+        await creditAllocationService.allocateOperationalCredits({
+          tenantId,
+          sourceEntityId: organizationEntity.entityId,
+          creditAmount: newFreeCredits,
+          creditType: 'free',
+          allocationType: 'bulk', // Use 'bulk' to skip available balance check for subscription plans
+          planId,
+          allocatedBy: currentSubscription.createdBy || null,
+          purpose: `${planId.charAt(0).toUpperCase() + planId.slice(1)} plan free credits`
+        });
+      }
+
+      console.log(`✅ Operational credits updated for tenant ${tenantId} with ${newFreeCredits} free credits`);
+
+    } catch (error) {
+      console.error('Error updating operational credits for plan:', error);
+      throw error;
+    }
+  }
+
+  // Renew free tier credits (called annually)
+  static async renewFreeTierCredits() {
+    try {
+      console.log('🔄 Processing free tier annual credit renewals...');
+
+      // Find all active free tier subscriptions
+      const freeTierSubscriptions = await db
+        .select()
+        .from(subscriptions)
+        .where(and(
+          eq(subscriptions.plan, 'free'),
+          eq(subscriptions.status, 'active')
+        ));
+
+      console.log(`📋 Found ${freeTierSubscriptions.length} active free tier subscriptions`);
+
+      let renewedCount = 0;
+      for (const subscription of freeTierSubscriptions) {
+        try {
+          // Check if credits were renewed recently (avoid double renewal)
+          const lastYear = new Date();
+          lastYear.setDate(lastYear.getDate() - 365);
+
+          // Renew credits for this tenant (annual allocation)
+          await this.updateOperationalCreditsForPlan(
+            subscription.tenantId,
+            'free',
+            'annual_renewal'
+          );
+
+          renewedCount++;
+          console.log(`✅ Renewed annual credits for free tier tenant: ${subscription.tenantId}`);
+        } catch (renewalError) {
+          console.error(`❌ Failed to renew credits for tenant ${subscription.tenantId}:`, renewalError.message);
+        }
+      }
+
+      console.log(`✅ Free tier annual credit renewal completed: ${renewedCount}/${freeTierSubscriptions.length} successful`);
+      return { total: freeTierSubscriptions.length, renewed: renewedCount };
+
+    } catch (error) {
+      console.error('Error processing free tier annual credit renewals:', error);
+      throw error;
+    }
+  }
+
+  // Helper method to find subscription by Stripe subscription ID or customer ID
+  static async findSubscriptionByStripeIdOrCustomer(stripeSubscriptionId, stripeCustomerId) {
+    try {
+      // First try to find by subscription ID
+      if (stripeSubscriptionId) {
+        const [subscription] = await db
+          .select()
+          .from(subscriptions)
+          .where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId))
+          .limit(1);
+
+        if (subscription) {
+          console.log(`✅ Found subscription by stripe ID: ${stripeSubscriptionId}`);
+          return subscription;
+        }
+      }
+
+      // Fallback: try to find by customer ID
+      if (stripeCustomerId) {
+        const [fallbackSubscription] = await db
+          .select()
+          .from(subscriptions)
+          .where(eq(subscriptions.stripeCustomerId, stripeCustomerId))
+          .limit(1);
+
+        if (fallbackSubscription) {
+          console.log(`✅ Found subscription by customer ID: ${stripeCustomerId} (fallback)`);
+          return fallbackSubscription;
+        }
+      }
+
+      // Third fallback: Look for recent subscriptions that might be pending Stripe ID updates
+      // This handles the case where checkout completed but subscription webhooks haven't updated yet
+      const [recentSubscription] = await db
+        .select()
+        .from(subscriptions)
+        .where(and(
+          or(eq(subscriptions.status, 'active'), eq(subscriptions.status, 'trialing')),
+          or(
+            isNull(subscriptions.stripeSubscriptionId),
+            isNull(subscriptions.stripeCustomerId)
+          )
+        ))
+        .orderBy(desc(subscriptions.createdAt))
+        .limit(1);
+
+      if (recentSubscription) {
+        console.log(`✅ Found recent subscription without Stripe IDs (likely pending update):`, recentSubscription.subscriptionId);
+        return recentSubscription;
+      }
+
+      console.warn(`⚠️ No subscription found for stripeId: ${stripeSubscriptionId}, customerId: ${stripeCustomerId}`);
+      return null;
+
+    } catch (error) {
+      console.error('❌ Error finding subscription by Stripe ID or customer:', error);
+      throw error;
     }
   }
 
@@ -1382,6 +2378,7 @@ export class SubscriptionService {
       const creditAmount = parseInt(session.metadata?.creditAmount || 0);
       const unitPrice = parseFloat(session.metadata?.unitPrice || 0);
       const totalAmount = parseFloat(session.metadata?.totalAmount || 0);
+      const billingCycle = 'yearly'; // Default billing cycle for subscriptions
 
       console.log('📦 Checkout session metadata:', {
         tenantId,
@@ -1468,6 +2465,16 @@ export class SubscriptionService {
           throw new Error(`Invalid plan ID: ${planId}`);
         }
 
+        console.log('📋 Found plan details:', {
+          id: plan.id,
+          name: plan.name,
+          applications: plan.applications,
+          limits: plan.limits,
+          monthlyPrice: plan.monthlyPrice,
+          yearlyPrice: plan.yearlyPrice,
+          billingCycle: plan.billingCycle
+        });
+
       // Check if subscription already exists
       const existingSubscription = await this.getCurrentSubscription(tenantId);
       
@@ -1482,16 +2489,26 @@ export class SubscriptionService {
           status: 'active',
           stripeSubscriptionId: session.subscription,
           stripeCustomerId: session.customer,
-          subscribedTools: plan.tools,
-          usageLimits: plan.limits,
-          monthlyPrice: plan.monthlyPrice,
-          yearlyPrice: plan.yearlyPrice,
-          billingCycle: billingCycle,
+          subscribedTools: plan.applications || ['crm'],
+          usageLimits: plan.limits || { users: 1, apiCalls: 60000, storage: 524288000 },
+          yearlyPrice: plan.yearlyPrice ? plan.yearlyPrice.toFixed(2) : '0.00',
+          billingCycle: plan.billingCycle || billingCycle,
           currentPeriodStart: new Date(),
           currentPeriodEnd: new Date(Date.now() + (billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000),
-          trialToggledOff: true, // Disable trial restrictions after upgrade
           updatedAt: new Date()
         };
+
+        console.log('🔍 Final updateData validation:', {
+          plan: updateData.plan,
+          stripeSubscriptionId: updateData.stripeSubscriptionId,
+          stripeCustomerId: updateData.stripeCustomerId,
+          status: updateData.status,
+          subscribedTools: updateData.subscribedTools,
+          usageLimits: updateData.usageLimits,
+          yearlyPrice: updateData.yearlyPrice,
+          billingCycle: updateData.billingCycle,
+          hasUndefined: Object.values(updateData).some(v => v === undefined || v === null)
+        });
         
         // Track if this is their first upgrade from trial
         if (existingSubscription.plan === 'trial' || existingSubscription.isTrialUser) {
@@ -1512,22 +2529,11 @@ export class SubscriptionService {
         
         console.log('✅ Subscription updated successfully:', updatedSubscription.subscriptionId);
           
-        // Update administrator roles for the new plan
-        await this.updateAdministratorRolesForPlan(tenantId, planId);
-        
-        // Update organization applications for the new plan
-        try {
-          const { OnboardingOrganizationSetupService } = await import('./onboarding-organization-setup.js');
-          await OnboardingOrganizationSetupService.updateOrganizationApplicationsForPlanChange(
-            tenantId, 
-            planId,
-            { skipIfRecentlyUpdated: true } // Enable idempotency
-          );
-          console.log('✅ Organization applications updated for new plan');
-        } catch (orgAppError) {
-          console.error('❌ Failed to update organization applications:', orgAppError.message);
-          // Don't fail the checkout, but log for manual intervention
-        }
+        // Update tenant applications and roles for the new plan
+        await this.updateTenantForPlanChange(tenantId, planId, {
+          skipIfRecentlyUpdated: true, // Enable idempotency
+          operation: 'checkout_completed'
+        });
           
         subscriptionRecord = existingSubscription;
       } else {
@@ -1550,7 +2556,6 @@ export class SubscriptionService {
           currentPeriodEnd: new Date(Date.now() + (billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000),
           hasEverUpgraded: true, // New subscription is automatically an upgrade
           firstUpgradeAt: new Date(),
-          trialToggledOff: true, // Disable trial restrictions for new paid subscriptions
           isTrialUser: false,
           createdAt: new Date(),
           updatedAt: new Date()
@@ -1601,96 +2606,114 @@ export class SubscriptionService {
         status: invoice.status
       });
       
-      const subscriptionId = invoice.subscription;
-      
-      if (subscriptionId) {
-        // Get subscription to find tenantId
-        const [subscription] = await db
+      // Find subscription using helper method
+      let subscription = await this.findSubscriptionByStripeIdOrCustomer(invoice.subscription, invoice.customer);
+
+      // If no subscription found, this might be a subscription not created through our system
+      // or it might be a test/development scenario
+      if (!subscription) {
+        console.warn(`⚠️ No subscription found for invoice: ${invoice.id}. This might be a subscription not created through our system or a development scenario.`);
+
+        // Try to find by customer ID only
+        const [subscriptionByCustomer] = await db
           .select()
           .from(subscriptions)
-          .where(eq(subscriptions.stripeSubscriptionId, subscriptionId))
+          .where(eq(subscriptions.stripeCustomerId, invoice.customer))
+          .orderBy(desc(subscriptions.createdAt))
           .limit(1);
 
-        if (!subscription) {
-          console.error('❌ Subscription not found for payment:', subscriptionId);
-          
-          // Try to find by customer ID as fallback
-          const [fallbackSubscription] = await db
-            .select()
-            .from(subscriptions)
-            .where(eq(subscriptions.stripeCustomerId, invoice.customer))
-            .limit(1);
-            
-          if (fallbackSubscription) {
-            console.log('✅ Found subscription by customer ID:', invoice.customer);
-            
-            // Update with the subscription ID
+        if (subscriptionByCustomer) {
+          console.log(`✅ Found subscription by customer ID: ${invoice.customer}`);
+          subscription = subscriptionByCustomer;
+          // Update with the subscription ID if it's missing
+          if (!subscription.stripeSubscriptionId && invoice.subscription) {
             await db
               .update(subscriptions)
               .set({
-                stripeSubscriptionId: subscriptionId,
-                status: 'active',
+                stripeSubscriptionId: invoice.subscription,
                 updatedAt: new Date()
               })
-              .where(eq(subscriptions.subscriptionId, fallbackSubscription.subscriptionId));
-              
-            // Trigger role upgrade for the new plan
-            if (invoice.lines?.data?.[0]?.price?.id) {
-              const planId = await this.getPlanIdFromPriceId(invoice.lines.data[0].price.id);
-              if (planId) {
-                console.log(`🔄 Triggering role upgrade for plan: ${planId}`);
-                await this.updateAdministratorRolesForPlan(fallbackSubscription.tenantId, planId);
-                
-                // Also update organization applications
-                try {
-                  const { OnboardingOrganizationSetupService } = await import('./onboarding-organization-setup.js');
-                  await OnboardingOrganizationSetupService.updateOrganizationApplicationsForPlanChange(fallbackSubscription.tenantId, planId);
-                  console.log('✅ Organization applications updated for new plan');
-                } catch (orgAppError) {
-                  console.error('❌ Failed to update organization applications:', orgAppError.message);
-                }
-              }
-            }
-            
-            return;
+              .where(eq(subscriptions.subscriptionId, subscription.subscriptionId));
           }
-          
-          throw new Error(`Subscription not found: ${subscriptionId}`);
+        } else {
+          console.warn(`⚠️ No subscription found for customer ${invoice.customer}. Skipping invoice payment processing.`);
+          return; // Exit early if no subscription found
+        }
+      }
+
+      // Handle first-time subscription setup vs existing subscription updates
+      const isFirstPayment = !subscription.stripeSubscriptionId;
+
+      console.log(`💰 Processing payment for subscription: ${subscription.subscriptionId}, isFirstPayment: ${isFirstPayment}`);
+
+      if (isFirstPayment) {
+        // First payment - update subscription with stripe ID and upgrade from trial if needed
+        const updateData = {
+          stripeSubscriptionId: invoice.subscription,
+          stripeCustomerId: invoice.customer,
+          status: 'active',
+          updatedAt: new Date()
+        };
+
+        // If this is a trial upgrade, mark as upgraded
+        if (subscription.plan === 'trial') {
+          updateData.plan = 'starter'; // Default to starter plan, will be updated by plan processing below
+          updateData.isTrialUser = false;
+          updateData.hasEverUpgraded = true;
+          console.log('🔄 Upgrading trial subscription to paid plan');
         }
 
-        // Update subscription status
+        await db
+          .update(subscriptions)
+          .set(updateData)
+          .where(eq(subscriptions.subscriptionId, subscription.subscriptionId));
+
+        console.log(`✅ Updated subscription ${subscription.subscriptionId} with Stripe IDs`);
+      } else {
+        // Recurring payment - just update status
         await db
           .update(subscriptions)
           .set({
             status: 'active',
             updatedAt: new Date()
           })
-          .where(eq(subscriptions.stripeSubscriptionId, subscriptionId));
+          .where(eq(subscriptions.stripeSubscriptionId, invoice.subscription));
+      }
           
-        // Trigger role upgrade for the active plan
+        // Process the purchased plan (application plan or credit top-up)
         if (invoice.lines?.data?.[0]?.price?.id) {
-          const planId = await this.getPlanIdFromPriceId(invoice.lines.data[0].price.id);
-          if (planId) {
-            console.log(`🔄 Triggering role upgrade for plan: ${planId}`);
-            await this.updateAdministratorRolesForPlan(subscription.tenantId, planId);
-            
-            // Also update organization applications (with idempotency)
-            try {
-              const { OnboardingOrganizationSetupService } = await import('./onboarding-organization-setup.js');
-              const result = await OnboardingOrganizationSetupService.updateOrganizationApplicationsForPlanChange(
-                subscription.tenantId, 
-                planId,
-                { skipIfRecentlyUpdated: true } // Enable idempotency
+          const planDetails = this.getPlanFromPriceId(invoice.lines.data[0].price.id);
+
+          if (planDetails) {
+            if (planDetails.type === 'application_plan') {
+              // Process application plan subscription
+              await this.processApplicationPlanSubscription(
+                subscription.tenantId,
+                planDetails,
+                invoice.subscription,
+                invoice.customer
               );
-              
-              if (result.skipped) {
-                console.log('⏭️ Organization applications update skipped - recently updated');
-              } else {
-                console.log('✅ Organization applications updated for new plan');
-              }
-            } catch (orgAppError) {
-              console.error('❌ Failed to update organization applications:', orgAppError.message);
+            } else if (planDetails.type === 'credit_topup') {
+              // Process credit top-up purchase
+              await this.processCreditTopupPurchase(subscription.tenantId, planDetails);
             }
+
+            console.log(`✅ Processed ${planDetails.type} for tenant ${subscription.tenantId}`);
+          } else {
+            console.warn(`⚠️ Could not find plan details for price ID: ${invoice.lines.data[0].price.id}`);
+            // Fallback: If we can't find plan details but this is a first payment for trial upgrade,
+            // assume it's a standard plan upgrade and update accordingly
+            if (isFirstPayment && subscription.plan === 'trial') {
+              console.log('🔄 Fallback: Upgrading trial to starter plan due to missing plan details');
+              await this.upgradeTrialToPaidPlan(subscription.tenantId, invoice.subscription, invoice.customer);
+            }
+          }
+        } else {
+          console.warn('⚠️ No price ID found in invoice lines');
+          // Fallback for missing price information
+          if (isFirstPayment && subscription.plan === 'trial') {
+            console.log('🔄 Fallback: Upgrading trial to starter plan due to missing price info');
+            await this.upgradeTrialToPaidPlan(subscription.tenantId, invoice.subscription, invoice.customer);
           }
         }
 
@@ -1738,9 +2761,6 @@ export class SubscriptionService {
         });
 
         console.log('✅ Payment succeeded and recorded for tenant:', subscription.tenantId, 'amount:', invoice.amount_paid / 100);
-      } else {
-        console.log('⚠️ Payment succeeded but no subscription ID found in invoice:', invoice.id);
-      }
     } catch (error) {
       console.error('Error handling payment succeeded:', error);
       throw error;
@@ -2043,13 +3063,40 @@ export class SubscriptionService {
   static async handleSubscriptionCreated(subscription) {
     try {
       console.log('🆕 Processing subscription created:', subscription.id);
-      
-      // Find existing subscription by customer ID
-      const [existingSubscription] = await db
+
+      // First try to find existing subscription by customer ID
+      let existingSubscription = null;
+
+      const [subscriptionByCustomer] = await db
         .select()
         .from(subscriptions)
         .where(eq(subscriptions.stripeCustomerId, subscription.customer))
         .limit(1);
+
+      if (subscriptionByCustomer) {
+        existingSubscription = subscriptionByCustomer;
+        console.log('✅ Found subscription by customer ID:', subscription.customer);
+      } else {
+        // Fallback: Find subscriptions that don't have Stripe IDs set yet
+        // This handles the case where checkout completed but subscription webhook comes later
+        const [subscriptionWithoutStripeId] = await db
+          .select()
+          .from(subscriptions)
+          .where(and(
+            eq(subscriptions.status, 'active'),
+            or(
+              isNull(subscriptions.stripeSubscriptionId),
+              isNull(subscriptions.stripeCustomerId)
+            )
+          ))
+          .orderBy(desc(subscriptions.createdAt))
+          .limit(1);
+
+        if (subscriptionWithoutStripeId) {
+          existingSubscription = subscriptionWithoutStripeId;
+          console.log('✅ Found subscription without Stripe IDs (likely from recent checkout):', subscriptionWithoutStripeId.subscriptionId);
+        }
+      }
 
       if (existingSubscription) {
         // Update existing subscription
@@ -2057,17 +3104,63 @@ export class SubscriptionService {
           .update(subscriptions)
           .set({
             stripeSubscriptionId: subscription.id,
+            stripeCustomerId: subscription.customer,
             status: subscription.status,
-            currentPeriodStart: new Date(subscription.current_period_start * 1000),
-            currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+            currentPeriodStart: subscription.current_period_start ? new Date(subscription.current_period_start * 1000) : null,
+            currentPeriodEnd: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
             updatedAt: new Date()
           })
           .where(eq(subscriptions.subscriptionId, existingSubscription.subscriptionId));
-        
-        console.log('✅ Updated existing subscription with Stripe subscription ID');
+
+        console.log('✅ Updated subscription with Stripe IDs:', {
+          subscriptionId: existingSubscription.subscriptionId,
+          stripeSubscriptionId: subscription.id,
+          stripeCustomerId: subscription.customer
+        });
+      } else {
+        console.warn('⚠️ No existing subscription found to update with Stripe IDs');
       }
     } catch (error) {
       console.error('Error handling subscription created:', error);
+      throw error;
+    }
+  }
+
+  // Upgrade trial subscription to paid plan (fallback method)
+  static async upgradeTrialToPaidPlan(tenantId, stripeSubscriptionId, stripeCustomerId) {
+    try {
+      console.log(`🔄 Upgrading trial to paid plan for tenant: ${tenantId}`);
+
+      // Get the default starter plan configuration
+      const availablePlans = await this.getAvailablePlans();
+      const starterPlan = availablePlans.find(p => p.id === 'starter');
+
+      if (!starterPlan) {
+        console.warn('⚠️ Could not find starter plan, using default configuration');
+        // Use default configuration if starter plan not found
+        const defaultPlanConfig = {
+          id: 'starter',
+          amount: 2900, // $29 in cents
+          credits: 5000,
+          billingCycle: 'monthly'
+        };
+
+        await this.processApplicationPlanSubscription(tenantId, defaultPlanConfig, stripeSubscriptionId, stripeCustomerId);
+      } else {
+        // Convert plan to compatible format
+        const planConfig = {
+          id: starterPlan.id,
+          amount: starterPlan.monthlyPrice * 100, // Convert dollars to cents
+          credits: starterPlan.freeCredits || 0,
+          billingCycle: 'monthly'
+        };
+
+        await this.processApplicationPlanSubscription(tenantId, planConfig, stripeSubscriptionId, stripeCustomerId);
+      }
+
+      console.log(`✅ Successfully upgraded trial to paid plan for tenant: ${tenantId}`);
+    } catch (error) {
+      console.error('❌ Error upgrading trial to paid plan:', error);
       throw error;
     }
   }
@@ -2123,7 +3216,69 @@ export class SubscriptionService {
       const userId = session.metadata?.userId;
       const creditAmount = parseInt(session.metadata?.creditAmount || '0');
       const entityType = session.metadata?.entityType || 'organization';
-      const entityId = session.metadata?.entityId || tenantId;
+
+      // Find the organization entity for this tenant
+      console.log('🔍 Looking for organization entity for tenant:', tenantId);
+      const organizationEntities = await db
+        .select()
+        .from(entities)
+        .where(and(
+          eq(entities.tenantId, tenantId),
+          eq(entities.entityType, 'organization'),
+          eq(entities.isActive, true)
+        ));
+
+      console.log('📋 Found organization entities:', organizationEntities.length);
+      organizationEntities.forEach(entity => {
+        console.log('Entity:', entity.entityId, entity.tenantId, entity.entityName, entity.isDefault);
+      });
+
+      // Use the default organization entity, or the first one if no default
+      let organizationEntity = organizationEntities.find(entity => entity.isDefault);
+      if (!organizationEntity && organizationEntities.length > 0) {
+        organizationEntity = organizationEntities[0];
+        console.log('⚠️ No default organization entity found, using first available:', organizationEntity.entityId);
+      }
+
+      if (!organizationEntity) {
+        console.error('❌ No organization entity found for tenant:', tenantId);
+        console.error('❌ Available entities for tenant:', organizationEntities.length);
+
+        // Create a fallback organization entity
+        console.log('🔧 Creating fallback organization entity for tenant');
+        const { v4: uuidv4 } = await import('uuid');
+        const [newEntity] = await db
+          .insert(entities)
+          .values({
+            entityId: uuidv4(),
+            tenantId,
+            parentEntityId: null,
+            entityLevel: 1,
+            hierarchyPath: '/',
+            entityName: `Organization for ${tenantId}`,
+            entityCode: `org_${tenantId.substring(0, 8)}_${Date.now()}`,
+            description: 'Auto-created organization entity for credit purchase',
+            entityType: 'organization',
+            organizationType: 'parent',
+            isActive: true,
+            isDefault: true,
+            contactEmail: null,
+            createdBy: userId || null,
+            updatedBy: userId || null
+          })
+          .returning();
+
+        organizationEntity = newEntity;
+        console.log('✅ Created fallback organization entity:', organizationEntity.entityId);
+      }
+
+      const entityId = organizationEntity.entityId;
+      console.log('✅ Using organization entity ID:', entityId);
+
+      if (!entityId) {
+        console.error('❌ Invalid entity ID found:', entityId);
+        throw new Error(`Invalid entity ID for tenant ${tenantId}`);
+      }
 
       console.log('📋 Credit purchase details:', {
         tenantId,
@@ -2300,7 +3455,9 @@ export class SubscriptionService {
         createdAt: new Date()
       };
 
-      const [payment] = await db.insert(payments).values(paymentRecord).returning();
+      // Use PaymentService for consistent payment recording
+      const { PaymentService } = await import('./payment-service.js');
+      const payment = await PaymentService.recordPayment(paymentRecord);
       
       console.log('✅ Payment record created:', payment.paymentId);
       return payment;
@@ -2407,231 +3564,6 @@ export class SubscriptionService {
   }
 
   // Immediate downgrade with optional refund
-  static async immediateDowngrade({ tenantId, newPlan, reason = 'customer_request', refundRequested = false }) {
-    try {
-      console.log('🔄 Processing immediate downgrade:', { tenantId, newPlan, refundRequested });
-
-      // Get current subscription
-      const currentSubscription = await this.getCurrentSubscription(tenantId);
-      if (!currentSubscription) {
-        throw new Error('No active subscription found');
-      }
-
-      // Validate downgrade
-      if (currentSubscription.plan === newPlan) {
-        throw new Error('Already on the requested plan');
-      }
-
-      // Calculate proration and refund
-      let refundAmount = 0;
-      let prorationAmount = 0;
-
-      if (refundRequested && currentSubscription.stripeSubscriptionId) {
-        // Calculate prorated refund amount
-        const remainingDays = Math.max(0, 
-          Math.ceil((new Date(currentSubscription.currentPeriodEnd) - new Date()) / (1000 * 60 * 60 * 24))
-        );
-        const totalDays = currentSubscription.billingCycle === 'yearly' ? 365 : 30;
-        const prorationRatio = remainingDays / totalDays;
-        
-        const currentAmount = currentSubscription.billingCycle === 'yearly' 
-          ? parseFloat(currentSubscription.yearlyPrice || 0)
-          : parseFloat(currentSubscription.monthlyPrice || 0);
-          
-        prorationAmount = currentAmount * prorationRatio;
-        refundAmount = prorationAmount;
-      } else if (refundRequested && !currentSubscription.stripeSubscriptionId) {
-        // For non-Stripe subscriptions, calculate based on last payment
-        const [lastPayment] = await db
-      .select()
-      .from(payments)
-          .where(and(
-            eq(payments.tenantId, tenantId),
-            eq(payments.status, 'succeeded'),
-            eq(payments.paymentType, 'subscription')
-          ))
-      .orderBy(desc(payments.createdAt))
-          .limit(1);
-
-        if (lastPayment) {
-          const paymentDate = new Date(lastPayment.paidAt || lastPayment.createdAt);
-          const periodEnd = new Date(currentSubscription.currentPeriodEnd);
-          const totalPeriod = currentSubscription.billingCycle === 'yearly' ? 365 : 30;
-          const daysSincePayment = Math.ceil((new Date() - paymentDate) / (1000 * 60 * 60 * 24));
-          const remainingDays = Math.max(0, totalPeriod - daysSincePayment);
-          
-          if (remainingDays > 0) {
-            const prorationRatio = remainingDays / totalPeriod;
-            refundAmount = parseFloat(lastPayment.amount) * prorationRatio;
-            prorationAmount = refundAmount;
-          }
-        }
-      }
-
-      // Log subscription change (using audit logs instead of subscriptionActions)
-      console.log(`📝 Subscription downgrade initiated: ${currentSubscription.plan} → ${newPlan} for tenant ${tenantId}`);
-
-      // Cancel Stripe subscription if moving to trial
-      if (newPlan === 'trial' && currentSubscription.stripeSubscriptionId) {
-        await stripe.subscriptions.cancel(currentSubscription.stripeSubscriptionId, {
-          prorate: refundRequested,
-          invoice_now: refundRequested
-        });
-      } else if (currentSubscription.stripeSubscriptionId) {
-        // Update Stripe subscription to new plan
-        const plans = await this.getAvailablePlans();
-        const targetPlan = plans.find(p => p.id === newPlan);
-        
-        if (targetPlan && targetPlan.stripePriceId) {
-          await stripe.subscriptions.update(currentSubscription.stripeSubscriptionId, {
-            items: [{
-              id: currentSubscription.stripeSubscriptionId,
-              price: targetPlan.stripePriceId,
-            }],
-            proration_behavior: refundRequested ? 'always_invoice' : 'none',
-          });
-        }
-      }
-
-      // Update subscription in database
-      const targetPlan = (await this.getAvailablePlans()).find(p => p.id === newPlan);
-      await db
-        .update(subscriptions)
-        .set({
-          plan: newPlan,
-          status: newPlan === 'trial' ? 'trialing' : currentSubscription.status,
-          subscribedTools: targetPlan?.tools || ['crm'],
-          usageLimits: targetPlan?.limits || { users: 2, apiCalls: 1000, storage: 1000000000, projects: 3 },
-          monthlyPrice: targetPlan?.monthlyPrice || 0,
-          yearlyPrice: targetPlan?.yearlyPrice || 0,
-          stripeSubscriptionId: newPlan === 'trial' ? null : currentSubscription.stripeSubscriptionId,
-          stripeCustomerId: newPlan === 'trial' ? null : currentSubscription.stripeCustomerId,
-          trialEnd: newPlan === 'trial' ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) : null,
-          updatedAt: new Date()
-        })
-        .where(eq(subscriptions.tenantId, tenantId));
-
-      // Update administrator roles for the downgraded plan
-      await this.updateAdministratorRolesForPlan(tenantId, newPlan);
-      
-      // Update organization applications for the downgraded plan
-      try {
-        const { OnboardingOrganizationSetupService } = await import('./onboarding-organization-setup.js');
-        await OnboardingOrganizationSetupService.updateOrganizationApplicationsForPlanChange(tenantId, newPlan);
-        console.log('✅ Organization applications updated for downgraded plan');
-      } catch (orgAppError) {
-        console.error('❌ Failed to update organization applications:', orgAppError.message);
-        // Don't fail the downgrade, but log for manual intervention
-      }
-      
-      // Get the updated subscription
-      const updatedSubscription = await this.getCurrentSubscription(tenantId);
-
-      // Record downgrade event appropriately
-      if (newPlan === 'trial') {
-        // If downgrading to trial, record as trial event
-        await this.recordTrialEvent(tenantId, updatedSubscription.subscriptionId, 'plan_downgraded_to_trial', {
-          fromPlan: currentSubscription.plan,
-          toPlan: newPlan,
-          downgradedAt: new Date(),
-          refundRequested: refundRequested,
-          prorationAmount: prorationAmount,
-          refundAmount: refundAmount,
-          isImmediate: true
-        });
-      } else {
-        // Regular paid plan downgrade - create payment record
-        const downgradePaymentRecord = await this.createPaymentRecord({
-          tenantId: tenantId,
-          subscriptionId: updatedSubscription.subscriptionId,
-          amount: targetPlan.monthlyPrice,
-          currency: 'USD',
-          status: 'succeeded',
-          paymentMethod: 'system',
-          paymentType: 'plan_change',
-          billingReason: 'plan_downgrade',
-          description: `Downgraded from ${currentSubscription.plan} to ${newPlan}`,
-          prorationAmount: -prorationAmount, // Negative because it's a credit
-          metadata: {
-            fromPlan: currentSubscription.plan,
-            toPlan: newPlan,
-            downgradedAt: new Date(),
-            refundRequested: refundRequested,
-            prorationAmount: prorationAmount,
-            refundAmount: refundAmount,
-            isImmediate: true
-          },
-          paidAt: new Date()
-        });
-      }
-
-      // Process refund if requested and amount > 0
-      if (refundRequested && refundAmount > 0) {
-        // Find the most recent payment to refund
-        const [recentPayment] = await db
-          .select()
-      .from(payments)
-          .where(and(
-            eq(payments.tenantId, tenantId),
-            eq(payments.status, 'succeeded'),
-            eq(payments.paymentType, 'subscription')
-          ))
-          .orderBy(desc(payments.createdAt))
-          .limit(1);
-
-        if (recentPayment) {
-          await this.processRefund({
-            tenantId,
-            paymentId: recentPayment.paymentId,
-            amount: refundAmount,
-            reason: `Prorated refund for downgrade from ${currentSubscription.plan} to ${newPlan}`
-          });
-        } else {
-          // Create refund record even without original payment for tracking
-          await this.createPaymentRecord({
-            tenantId: tenantId,
-            subscriptionId: updatedSubscription.subscriptionId,
-            amount: refundAmount,
-            currency: 'USD',
-            status: 'pending',
-            paymentMethod: 'refund',
-            paymentType: 'refund',
-            billingReason: 'downgrade_refund',
-            description: `Prorated refund for downgrade to ${newPlan}`,
-            metadata: {
-              refundReason: 'plan_downgrade',
-              originalPlan: currentSubscription.plan,
-              newPlan: newPlan,
-              prorationDays: Math.ceil((new Date(currentSubscription.currentPeriodEnd) - new Date()) / (1000 * 60 * 60 * 24))
-            },
-            paidAt: new Date()
-          });
-        }
-      }
-
-      // Log completion (using audit logs instead of subscriptionActions)
-      console.log(`✅ Subscription downgrade completed: ${currentSubscription.plan} → ${newPlan} for tenant ${tenantId}`);
-
-      // Send confirmation email
-      await EmailService.sendDowngradeConfirmation({
-        tenantId,
-        fromPlan: currentSubscription.plan,
-        toPlan: newPlan,
-        refundAmount: refundRequested ? refundAmount : 0,
-        effectiveDate: new Date()
-      });
-
-      console.log('✅ Immediate downgrade completed');
-      return {
-        subscriptionAction,
-        refundAmount: refundRequested ? refundAmount : 0,
-        newSubscription: updatedSubscription
-      };
-    } catch (error) {
-      console.error('❌ Immediate downgrade failed:', error);
-      throw error;
-    }
-  }
 
   // Calculate feature loss impact
   static calculateFeatureLoss(fromPlan, toPlan) {
