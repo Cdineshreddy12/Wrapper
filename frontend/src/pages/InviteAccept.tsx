@@ -268,10 +268,12 @@ export function InviteAccept() {
 
   if (loading || isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Loading invitation...</p>
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/20 mb-6">
+            <Loader2 className="h-8 w-8 animate-spin text-white" />
+          </div>
+          <p className="text-lg font-medium text-gray-700">Loading invitation...</p>
         </div>
       </div>
     )
@@ -279,18 +281,20 @@ export function InviteAccept() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="max-w-md w-full mx-4">
-          <CardHeader className="text-center">
-            <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-            <CardTitle className="text-red-600">Invalid Invitation</CardTitle>
-            <CardDescription>{error}</CardDescription>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center py-12 px-4">
+        <Card className="max-w-md w-full shadow-2xl border-0 bg-white/80 backdrop-blur-sm rounded-2xl overflow-hidden">
+          <CardHeader className="text-center p-10">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-6">
+              <AlertTriangle className="h-8 w-8 text-red-600" />
+            </div>
+            <CardTitle className="text-2xl font-bold text-gray-900 mb-2">Invalid Invitation</CardTitle>
+            <CardDescription className="text-gray-600">{error}</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-10 pb-10">
             <Button 
               onClick={() => navigate('/landing')} 
-              className="w-full"
-              variant="outline"
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-6 rounded-xl shadow-lg shadow-blue-500/30"
+              variant="default"
             >
               Go to Homepage
             </Button>
@@ -302,12 +306,14 @@ export function InviteAccept() {
 
   if (accepting) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="max-w-md w-full mx-4">
-          <CardHeader className="text-center">
-            <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
-            <CardTitle>Joining Organization</CardTitle>
-            <CardDescription>Please wait while we set up your access...</CardDescription>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center py-12 px-4">
+        <Card className="max-w-md w-full shadow-2xl border-0 bg-white/80 backdrop-blur-sm rounded-2xl overflow-hidden">
+          <CardHeader className="text-center p-10">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/20 mb-6">
+              <Loader2 className="h-8 w-8 animate-spin text-white" />
+            </div>
+            <CardTitle className="text-2xl font-bold text-gray-900 mb-2">Joining Organization</CardTitle>
+            <CardDescription className="text-gray-600">Please wait while we set up your access...</CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -315,22 +321,26 @@ export function InviteAccept() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center py-12 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center py-12 px-4">
       <div className="max-w-md w-full">
-        {/* Simplified Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Join Your Team</h1>
-          <p className="text-gray-600">Sign in to accept your invitation</p>
+        {/* Modern Header */}
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/20 mb-6">
+            <Users className="h-8 w-8 text-white" />
+          </div>
+          <h1 className="text-4xl font-bold text-gray-900 mb-3 tracking-tight">Join Your Team</h1>
+          <p className="text-lg text-gray-600 font-medium">Sign in to accept your invitation</p>
         </div>
 
-        {/* Authentication Only */}
+        {/* Authentication Card */}
         {!isAuthenticated ? (
-          <Card className="shadow-lg border-0">
-            <CardContent className="p-8">
+          <Card className="shadow-2xl border-0 bg-white/80 backdrop-blur-sm rounded-2xl overflow-hidden">
+            <CardContent className="p-10">
               <SocialLogin
                 orgCode={invitation?.orgCode}
                 title=""
                 subtitle=""
+                providers={['google']}
                 onSuccess={() => {
                   toast.success('Welcome! Setting up your account...')
                   // handleAcceptInvitation will be called automatically via useEffect
@@ -342,24 +352,24 @@ export function InviteAccept() {
             </CardContent>
           </Card>
         ) : (
-          <Card className="shadow-lg border-0">
-            <CardContent className="p-8 text-center">
-              <div className="flex items-center justify-center space-x-2 mb-4">
-                <CheckCircle className="h-6 w-6 text-green-600" />
-                <span className="text-green-600 font-medium">Welcome back!</span>
+          <Card className="shadow-2xl border-0 bg-white/80 backdrop-blur-sm rounded-2xl overflow-hidden">
+            <CardContent className="p-10 text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-6">
+                <CheckCircle className="h-8 w-8 text-green-600" />
               </div>
-              <p className="text-sm text-gray-600 mb-6">
-                You're signed in as <strong>{user?.email}</strong>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome back!</h2>
+              <p className="text-gray-600 mb-8">
+                You're signed in as <strong className="text-gray-900">{user?.email}</strong>
               </p>
               <Button
                 onClick={handleAcceptInvitation}
-                className="w-full"
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-6 rounded-xl shadow-lg shadow-blue-500/30 transition-all duration-200"
                 disabled={accepting}
                 size="lg"
               >
                 {accepting ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
                     Joining your team...
                   </>
                 ) : (
@@ -370,12 +380,17 @@ export function InviteAccept() {
           </Card>
         )}
 
-        {/* Minimal Footer */}
-        <div className="text-center mt-8">
-          <p className="text-xs text-gray-500">
-            Secure access powered by Google
-          </p>
-        </div>
+        {/* Modern Footer */}
+        {invitation?.orgCode && (
+          <div className="mt-8 text-center">
+            <div className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-50 rounded-full">
+              <Building2 className="h-4 w-4 text-blue-600" />
+              <span className="text-sm text-blue-700 font-medium">
+                Organization: <strong className="text-blue-900">{invitation.orgCode}</strong>
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

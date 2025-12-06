@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -65,6 +66,8 @@ const SUPPORTED_APPLICATIONS = [
 ];
 
 const ApplicationCreditAllocations: React.FC = () => {
+  const queryClient = useQueryClient();
+
   const [allocations, setAllocations] = useState<ApplicationAllocation[]>([]);
   const [summary, setSummary] = useState<AllocationSummary | null>(null);
   const [applicationBalances, setApplicationBalances] = useState<ApplicationBalance[]>([]);
@@ -163,6 +166,19 @@ const ApplicationCreditAllocations: React.FC = () => {
 
       if (response.data.success) {
         toast.success(`Successfully allocated ${allocationForm.creditAmount} credits to ${allocationForm.targetApplication}`);
+
+        // Invalidate credit queries to update the UI immediately
+        try {
+          queryClient.invalidateQueries({ queryKey: ['credit'] });
+          queryClient.invalidateQueries({ queryKey: ['creditStatus'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['admin', 'entities'] });
+
+          console.log('✅ Credit queries invalidated, UI should update automatically');
+        } catch (invalidateError) {
+          console.warn('Failed to invalidate queries:', invalidateError);
+          // Don't show error to user as this is not critical
+        }
+
         setAllocationForm({
           targetApplication: '',
           creditAmount: 0,

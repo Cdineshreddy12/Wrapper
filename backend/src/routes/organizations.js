@@ -28,11 +28,11 @@ export default async function organizationRoutes(fastify, options) {
   fastify.addHook('preHandler', async (request, reply) => {
     // Skip authentication for public routes that don't require it
     const publicRoutes = [
-      'GET /api/organizations/hierarchy',  // Allow hierarchy viewing with fallback auth
-      'GET /api/organizations/parent',     // Allow parent organization viewing with fallback auth
-      'POST /api/organizations/parent',    // Allow parent organization creation with fallback auth
-      'POST /api/organizations/sub',       // Allow sub-organization creation with fallback auth
-      'POST /api/organizations/bulk',      // Allow bulk organization creation with fallback auth
+      'GET /api/organizations/hierarchy',   // Allow hierarchy viewing with fallback auth
+      'GET /api/organizations/parent',      // Allow parent organization viewing with fallback auth
+      'POST /api/organizations/parent',     // Allow parent organization creation with fallback auth
+      'POST /api/organizations/sub',        // Allow sub-organization creation with fallback auth
+      'POST /api/organizations/bulk',       // Allow bulk organization creation with fallback auth
     ];
 
     const routeKey = `${request.method} ${request.url}`;
@@ -41,6 +41,10 @@ export default async function organizationRoutes(fastify, options) {
       const routeParts = route.split(' ');
       const method = routeParts[0];
       const path = routeParts[1];
+      // Skip public route check for /current routes - they handle their own auth
+      if (request.url.endsWith('/current')) {
+        return false;
+      }
       return request.method === method && request.url.includes(path);
     });
 
@@ -417,15 +421,9 @@ export default async function organizationRoutes(fastify, options) {
 
   // Get organization hierarchy for current tenant
   fastify.get('/hierarchy/current', {
-    preHandler: [
-      authenticateToken,
-      addUserAccessContext(),
-      validateApplicationExists(),
-      enforceApplicationAccess(),
-      addApplicationDataFiltering()
-    ],
+    preHandler: [authenticateToken, addUserAccessContext(), validateApplicationExists(), enforceApplicationAccess(), addApplicationDataFiltering()],
     schema: {
-      description: 'Get complete entity hierarchy (organizations and locations) for current tenant',
+      description: 'Get complete organization hierarchy for the current tenant',
       response: {
         200: {
           type: 'object',
@@ -461,7 +459,7 @@ export default async function organizationRoutes(fastify, options) {
                         createdAt: { type: 'string', format: 'date-time' },
                         updatedAt: { type: 'string', format: 'date-time' },
                         parentOrganizationId: { type: ['string', 'null'] },
-                        children: { type: 'array' }
+                        children: { type: 'array', items: { type: 'object' } }
                       }
                     }
                   }
@@ -476,148 +474,24 @@ export default async function organizationRoutes(fastify, options) {
     }
   }, async (request, reply) => {
     try {
-      // Get tenantId from user context
-      let tenantId = request.userContext?.tenantId;
-
-      if (!tenantId && request.userContext?.internalUserId) {
-        // Fallback: look up tenantId from user record
-        try {
-          const { tenantUsers } = await import('../db/schema/index.js');
-          const { eq } = await import('drizzle-orm');
-          const { db } = await import('../db/index.js');
-
-          const [userRecord] = await db
-            .select({ tenantId: tenantUsers.tenantId })
-            .from(tenantUsers)
-            .where(eq(tenantUsers.userId, request.userContext.internalUserId))
-            .limit(1);
-
-          if (userRecord?.tenantId) {
-            tenantId = userRecord.tenantId;
-            console.log('✅ Found tenantId from user record:', tenantId);
-          } else {
-            return reply.code(400).send({
-              success: false,
-              error: 'Invalid tenant',
-              message: 'Cannot determine current tenant - user not associated with any tenant'
-            });
-          }
-        } catch (dbError) {
-          console.error('❌ Error looking up tenantId from user record:', dbError);
-          return reply.code(500).send({
-            success: false,
-            error: 'Database error',
-            message: 'Failed to determine user tenant'
-          });
-        }
-      }
-
-      if (!tenantId) {
-        console.error('❌ Cannot determine current tenant:', {
-          userContextKeys: request.userContext ? Object.keys(request.userContext) : [],
-          internalUserId: request.userContext?.internalUserId,
-          tenantId: request.userContext?.tenantId,
-          isAuthenticated: request.userContext?.isAuthenticated
-        });
-
-        return reply.code(400).send({
-          success: false,
-          error: 'Invalid tenant',
-          message: 'Cannot determine current tenant - user authentication context incomplete',
-          debug: {
-            hasUserContext: !!request.userContext,
-            isAuthenticated: request.userContext?.isAuthenticated,
-            hasInternalUserId: !!request.userContext?.internalUserId,
-            hasTenantId: !!request.userContext?.tenantId
-          }
-        });
-      }
-
-      console.log('🔍 Calling OrganizationService.getOrganizationHierarchy with:', {
-        tenantId,
-        userContext: request.userContext ? {
-          isTenantAdmin: request.userContext.isTenantAdmin,
-          isSuperAdmin: request.userContext.isSuperAdmin,
-          isAdmin: request.userContext.isAdmin,
-          userId: request.userContext.userId,
-          internalUserId: request.userContext.internalUserId
-        } : null,
-        applicationContext: request.applicationContext
-      });
-
+      const tenantId = request.userContext.tenantId;
       const result = await OrganizationService.getOrganizationHierarchy(
         tenantId,
         request.userContext,
         request.applicationContext
       );
 
-      console.log('📊 Organization hierarchy result:', {
-        success: result.success,
-        totalOrganizations: result.totalOrganizations,
-        hierarchyLength: result.hierarchy?.length || 0
-      });
-
       return reply.send(result);
     } catch (error) {
       console.error('❌ Get organization hierarchy failed:', error);
-
-      // Provide fallback for simple hierarchy query if the main query fails
-      try {
-        console.log('Falling back to simple organization query...');
-        const { db } = await import('../db/index.js');
-        const { entities } = await import('../db/schema/index.js');
-        const { eq } = await import('drizzle-orm');
-
-        const tenantId = request.userContext?.tenantId;
-
-        const organizations = await db
-          .select({
-            organizationId: entities.entityId,
-            organizationName: entities.entityName,
-            organizationType: entities.organizationType,
-            organizationLevel: entities.entityLevel,
-            hierarchyPath: entities.hierarchyPath,
-            description: entities.description,
-            isActive: entities.isActive,
-            createdAt: entities.createdAt,
-            updatedAt: entities.updatedAt,
-            parentOrganizationId: entities.parentEntityId
-          })
-          .from(entities)
-          .where(eq(entities.tenantId, tenantId))
-          .orderBy(entities.entityLevel, entities.entityName);
-
-        // Build simple hierarchy
-        const hierarchy = [];
-        const orgMap = new Map();
-
-        organizations.forEach(org => {
-          orgMap.set(org.organizationId, { ...org, children: [] });
-        });
-
-        organizations.forEach(org => {
-          if (org.parentOrganizationId && orgMap.has(org.parentOrganizationId)) {
-            const parent = orgMap.get(org.parentOrganizationId);
-            parent.children.push(orgMap.get(org.organizationId));
-          } else {
-            hierarchy.push(orgMap.get(org.organizationId));
-          }
-        });
-
-        return reply.send({
-          success: true,
-          hierarchy,
-          totalOrganizations: organizations.length,
-          message: 'Organization hierarchy retrieved successfully (fallback)'
-        });
-      } catch (fallbackError) {
-        console.error('❌ Fallback organization hierarchy query also failed:', fallbackError);
-        return reply.code(500).send({
-          success: false,
-          error: 'Failed to retrieve organization hierarchy',
-          message: error.message
-        });
-      }
+      console.error('❌ Stack trace:', error.stack);
+      console.error('❌ User context:', request.userContext);
+      console.error('❌ Tenant ID:', request.userContext?.tenantId);
+      return reply.code(500).send({
+        success: false,
+        error: 'Retrieval failed',
+        message: 'Failed to get organization hierarchy'
+      });
     }
   });
 

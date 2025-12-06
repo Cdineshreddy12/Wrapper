@@ -8,17 +8,16 @@ export const credits = pgTable('credits', {
   creditId: uuid('credit_id').primaryKey().defaultRandom(),
   tenantId: uuid('tenant_id').references(() => tenants.tenantId).notNull(),
 
-  // Entity Context - Now references unified entities table
+  // Entity Context
   entityId: uuid('entity_id').references(() => entities.entityId), // References unified entities table
 
-  // Credit Balance - SIMPLIFIED
+  // Credit Balance
   availableCredits: decimal('available_credits', { precision: 15, scale: 4 }).default('0'),
-  reservedCredits: decimal('reserved_credits', { precision: 15, scale: 4 }).default('0'), // Credits held for pending operations
 
-  // Status - SIMPLIFIED
+  // Status
   isActive: boolean('is_active').default(true),
 
-  // Audit - SIMPLIFIED
+  // Audit
   lastUpdatedAt: timestamp('last_updated_at').defaultNow(),
   createdAt: timestamp('created_at').defaultNow(),
 });

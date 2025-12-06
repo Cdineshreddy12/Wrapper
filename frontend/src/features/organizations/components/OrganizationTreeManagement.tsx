@@ -8,7 +8,7 @@ import { Section } from '@/components/common/Page/Section';
 import { Typography } from '@/components/common/Typography';
 import { TreeNode } from './TreeNode';
 import { OrganizationDialogs } from './OrganizationDialogs';
-import { OrganizationHierarchyChart } from '../OrganizationHierarchyChart';
+import { OrganizationHierarchyFlow } from './OrganizationHierarchyFlow';
 import {
   Plus,
   RefreshCw,
@@ -296,6 +296,20 @@ export function OrganizationTreeManagement({
   useEffect(() => {
     loadData();
   }, [tenantId]);
+
+  // Helper function to find organization by ID in hierarchy
+  const findOrganizationById = (id: string, orgs: any[]): any => {
+    for (const org of orgs) {
+      if (org.entityId === id) {
+        return org;
+      }
+      if (org.children && org.children.length > 0) {
+        const found = findOrganizationById(id, org.children);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
 
   // CRUD Operations
   const createSubOrganization = async () => {
@@ -878,7 +892,7 @@ export function OrganizationTreeManagement({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="w-full h-full flex flex-col">
       {/* Enhanced Header */}
       <Section
         title="Organization & Location Hierarchy"
@@ -898,51 +912,6 @@ export function OrganizationTreeManagement({
       >
         <div className="py-4">
           <div className="flex items-center gap-3">
-            {/* Hierarchy Chart Button - Show even with empty hierarchy to display tenant */}
-            {tenantId && (
-              <OrganizationHierarchyChart 
-                hierarchy={buildTenantHierarchy(processedHierarchy || [], parentOrg, tenantId)} 
-                isLoading={loading}
-                onSelectEntity={(entity) => {
-                  console.log('Selected entity:', entity);
-                  toast.success(`Selected: ${entity.entityName}`);
-                }}
-                onEditEntity={(entity) => {
-                  console.log('Edit entity:', entity);
-                  // Find the corresponding organization in processedHierarchy for proper typing
-                  const findOrgById = (orgs: Organization[], id: string): Organization | null => {
-                    for (const org of orgs) {
-                      if (org.entityId === id) return org;
-                      if (org.children) {
-                        const found = findOrgById(org.children, id);
-                        if (found) return found;
-                      }
-                    }
-                    return null;
-                  };
-                  
-                  const orgToEdit = findOrgById(processedHierarchy || [], entity.entityId);
-                  if (orgToEdit) {
-                    handleEditOrganization(orgToEdit);
-                  }
-                }}
-                onDeleteEntity={async (entityId) => {
-                  if (confirm('Are you sure you want to delete this entity? This action cannot be undone.')) {
-                    try {
-                      await makeRequest(`/entities/${entityId}`, {
-                        method: 'DELETE',
-                        headers: { 'X-Application': 'crm' }
-                      });
-                      toast.success('Entity deleted successfully');
-                      loadData(); // Refresh the hierarchy
-                    } catch (error: any) {
-                      console.error('Delete failed:', error);
-                      toast.error(error.message || 'Failed to delete entity');
-                    }
-                  }
-                }}
-              />
-            )}
             {parentOrg && (
               <Button
                 onClick={() => {
@@ -1061,112 +1030,60 @@ export function OrganizationTreeManagement({
         </div>
       </Section>
 
-      {/* Enhanced Organization Tree with Multiple Views */}
-      <Section
-        title="Organization Tree"
-        description=""
-        badges={hierarchy ? [{ text: `${hierarchy.totalOrganizations} organizations`, variant: "secondary" }] : []}
-        variant="banner"
-        size="md"
-      >
-        {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
-            <Typography variant="body" className="ml-2 text-muted-foreground">Loading organization hierarchy...</Typography>
-          </div>
-        ) : processedHierarchy.length > 0 ? (
-          <>
-            {/* Tree view only */}
-            <div className="space-y-2">
-              {processedHierarchy.map(org => {
-                if (!org || !org.entityId) {
-                  console.warn('Skipping invalid organization in hierarchy:', org);
-                  return null;
-                }
-                try {
-                  return (
-                    <TreeNode
-                      key={org.entityId}
-                      org={org}
-                      isAdmin={isAdmin}
-                      selectedItems={selectedItems}
-                      onSelect={handleSelect}
-                      onAddSubOrganization={handleAddSubOrganization}
-                      onAddLocation={handleAddLocation}
-                      onEditOrganization={handleEditOrganization}
-                      onDeleteOrganization={deleteOrganization}
-                      onTransferCredits={handleTransferCredits}
-                    />
-                  );
-                } catch (error) {
-                  console.error('Error rendering TreeNode for organization:', org.entityId, error);
-                  return null;
-                }
-              }).filter(Boolean)}
-
-              {/* Unassigned Locations */}
-              {unassignedLocations.length > 0 && (
-                <div className="mt-6 p-4 border-2 border-dashed border-orange-300 rounded-lg bg-orange-50">
-                  <div className="text-sm font-semibold text-orange-700 mb-3 flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4" />
-                    🚨 Unassigned Locations ({unassignedLocations.length})
-                  </div>
-                  <div className="text-xs text-orange-600 mb-3">
-                    These locations are not assigned to any organization and should be assigned for proper management.
-                  </div>
-                  <div className="space-y-2">
-                    {unassignedLocations.map(location => (
-                      <div
-                        key={(location as any).entityId}
-                        className="flex items-center border rounded-lg bg-white border-orange-200 shadow-sm p-3"
-                      >
-                        <div className="rounded-full bg-gradient-to-r from-orange-500 to-red-500 flex items-center justify-center text-white font-semibold mr-3 w-8 h-8">
-                          ⚠️
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-semibold text-gray-900 truncate text-sm">
-                              🏢 {(location as any).entityName}
-                            </span>
-                            <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300 text-xs">
-                              🚨 Unassigned
-                            </Badge>
-                          </div>
-                          <div className="text-red-600 font-medium text-xs">
-                            🚫 Not assigned to any organization
-                          </div>
-                          <div className="text-xs text-gray-600 mt-1">
-                            📍 Address: {' '}
-                            {(location as any).address?.street && `${(location as any).address.street}, `}
-                            {(location as any).address?.city && `${(location as any).address.city}, `}
-                            {(location as any).address?.country && (location as any).address.country}
-                            {(!(location as any).address?.street && !(location as any).address?.city && !(location as any).address?.country) && '🚫 No address information'}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="text-center py-8">
-            <TreePine className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <Typography variant="h4" className="mb-2">
-              {searchTerm || filterType !== 'all' ? 'No organizations match your criteria' : 'No organizations found'}
-            </Typography>
-            <Typography variant="body" className="text-muted-foreground mb-4">
-              {searchTerm || filterType !== 'all' ? 'Try adjusting your search or filter settings.' : 'Create your first organization to get started.'}
-            </Typography>
-            {!parentOrg && (
-              <div className="text-center">
-                <Typography variant="body" className="text-muted-foreground mb-2">Contact your administrator to set up the parent organization for your tenant.</Typography>
-              </div>
-            )}
-          </div>
-        )}
-      </Section>
+      {/* React Flow Organization Hierarchy - Full Page Viewport */}
+      <div className="flex-1 w-full min-h-[600px] relative bg-blue-50 border-2 border-blue-500" style={{ height: 'calc(100vh - 300px)' }}>
+        <div className="absolute top-2 left-2 bg-white p-2 rounded shadow z-50 text-xs">
+          <p><strong>React Flow Debug Panel</strong></p>
+          <p>Container Height: calc(100vh - 300px)</p>
+          <p>Has Hierarchy: {hierarchy ? 'Yes' : 'No'}</p>
+          <p>Hierarchy Length: {hierarchy?.hierarchy?.length || 0}</p>
+          <p>Processed Length: {processedHierarchy.length}</p>
+          <p>Loading: {loading ? 'Yes' : 'No'}</p>
+          <p>Tenant ID: {tenantId || 'None'}</p>
+        </div>
+        <OrganizationHierarchyFlow
+          hierarchy={hierarchy ? {
+            ...hierarchy,
+            hierarchy: processedHierarchy.length > 0 ? processedHierarchy : (hierarchy.hierarchy || [])
+          } : null}
+          loading={loading}
+          onRefresh={loadData}
+          isAdmin={isAdmin}
+          tenantId={tenantId}
+          tenantName={parentOrg?.entityName ? `${parentOrg.entityName} (Tenant)` : `Tenant ${tenantId}`}
+          onNodeClick={(nodeId) => {
+            // Find and select the organization
+            const org = findOrganizationById(nodeId, processedHierarchy);
+            if (org) {
+              handleSelect(org.entityId);
+            }
+          }}
+          onEditOrganization={(orgId) => {
+            const org = findOrganizationById(orgId, processedHierarchy);
+            if (org) {
+              handleEditOrganization(org);
+            }
+          }}
+          onDeleteOrganization={(orgId) => {
+            const org = findOrganizationById(orgId, processedHierarchy);
+            if (org) {
+              deleteOrganization(org.entityId, org.entityName);
+            }
+          }}
+          onAddSubOrganization={(parentId) => {
+            const org = findOrganizationById(parentId, processedHierarchy);
+            if (org) {
+              handleAddSubOrganization(org);
+            }
+          }}
+          onAddLocation={(parentId) => {
+            const org = findOrganizationById(parentId, processedHierarchy);
+            if (org) {
+              handleAddLocation(org);
+            }
+          }}
+        />
+      </div>
 
       {/* Organization Dialogs */}
       <OrganizationDialogs

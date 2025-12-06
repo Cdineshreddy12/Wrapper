@@ -1,5 +1,5 @@
 {
-  "id": "8243e726-d990-46a3-94a4-7400524c8b9b",
+  "id": "7f35fd36-13db-4176-89c5-e6cb9ef98ca4",
   "prevId": "c1959327-5701-4ff4-9e7a-676cea26c4fe",
   "version": "5",
   "dialect": "pg",
@@ -172,26 +172,6 @@
         },
         "role_id": {
           "name": "role_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "target_entities": {
-          "name": "target_entities",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'[]'::jsonb"
-        },
-        "invitation_scope": {
-          "name": "invitation_scope",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'tenant'"
-        },
-        "primary_entity_id": {
-          "name": "primary_entity_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -3027,6 +3007,162 @@
         }
       }
     },
+    "event_tracking": {
+      "name": "event_tracking",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_id": {
+          "name": "entity_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stream_key": {
+          "name": "stream_key",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_application": {
+          "name": "source_application",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_application": {
+          "name": "target_application",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_data": {
+          "name": "event_data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'{}'::jsonb"
+        },
+        "published_by": {
+          "name": "published_by",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'{}'::jsonb"
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "error_message": {
+          "name": "error_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_retryable": {
+          "name": "is_retryable",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "event_tracking_event_id_idx": {
+          "name": "event_tracking_event_id_idx",
+          "columns": [
+            "event_id"
+          ],
+          "isUnique": false
+        },
+        "event_tracking_event_type_idx": {
+          "name": "event_tracking_event_type_idx",
+          "columns": [
+            "event_type"
+          ],
+          "isUnique": false
+        },
+        "event_tracking_tenant_id_idx": {
+          "name": "event_tracking_tenant_id_idx",
+          "columns": [
+            "tenant_id"
+          ],
+          "isUnique": false
+        },
+        "event_tracking_status_idx": {
+          "name": "event_tracking_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "event_tracking_created_at_idx": {
+          "name": "event_tracking_created_at_idx",
+          "columns": [
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "event_tracking_event_id_unique": {
+          "name": "event_tracking_event_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "event_id"
+          ]
+        }
+      }
+    },
     "entities": {
       "name": "entities",
       "schema": "",
@@ -4217,303 +4353,6 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {}
     },
-    "credit_allocation_transactions": {
-      "name": "credit_allocation_transactions",
-      "schema": "",
-      "columns": {
-        "transaction_id": {
-          "name": "transaction_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "allocation_id": {
-          "name": "allocation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "transaction_type": {
-          "name": "transaction_type",
-          "type": "varchar(30)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "amount": {
-          "name": "amount",
-          "type": "numeric(15, 4)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "previous_allocated": {
-          "name": "previous_allocated",
-          "type": "numeric(15, 4)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "new_allocated": {
-          "name": "new_allocated",
-          "type": "numeric(15, 4)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "previous_used": {
-          "name": "previous_used",
-          "type": "numeric(15, 4)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "new_used": {
-          "name": "new_used",
-          "type": "numeric(15, 4)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "operation_code": {
-          "name": "operation_code",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "initiated_by": {
-          "name": "initiated_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "credit_allocation_transactions_tenant_id_tenants_tenant_id_fk": {
-          "name": "credit_allocation_transactions_tenant_id_tenants_tenant_id_fk",
-          "tableFrom": "credit_allocation_transactions",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "tenant_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "credit_allocation_transactions_allocation_id_credit_allocations_allocation_id_fk": {
-          "name": "credit_allocation_transactions_allocation_id_credit_allocations_allocation_id_fk",
-          "tableFrom": "credit_allocation_transactions",
-          "tableTo": "credit_allocations",
-          "columnsFrom": [
-            "allocation_id"
-          ],
-          "columnsTo": [
-            "allocation_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "credit_allocation_transactions_initiated_by_tenant_users_user_id_fk": {
-          "name": "credit_allocation_transactions_initiated_by_tenant_users_user_id_fk",
-          "tableFrom": "credit_allocation_transactions",
-          "tableTo": "tenant_users",
-          "columnsFrom": [
-            "initiated_by"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
-    },
-    "credit_allocations": {
-      "name": "credit_allocations",
-      "schema": "",
-      "columns": {
-        "allocation_id": {
-          "name": "allocation_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_entity_id": {
-          "name": "source_entity_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "target_application": {
-          "name": "target_application",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "allocated_credits": {
-          "name": "allocated_credits",
-          "type": "numeric(15, 4)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "used_credits": {
-          "name": "used_credits",
-          "type": "numeric(15, 4)",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'0'"
-        },
-        "available_credits": {
-          "name": "available_credits",
-          "type": "numeric(15, 4)",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'0'"
-        },
-        "allocation_type": {
-          "name": "allocation_type",
-          "type": "varchar(30)",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'manual'"
-        },
-        "allocation_purpose": {
-          "name": "allocation_purpose",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_active": {
-          "name": "is_active",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": true
-        },
-        "allocated_at": {
-          "name": "allocated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "auto_replenish": {
-          "name": "auto_replenish",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "allocated_by": {
-          "name": "allocated_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_updated_at": {
-          "name": "last_updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        },
-        "updated_by": {
-          "name": "updated_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "credit_allocations_tenant_id_tenants_tenant_id_fk": {
-          "name": "credit_allocations_tenant_id_tenants_tenant_id_fk",
-          "tableFrom": "credit_allocations",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "tenant_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "credit_allocations_source_entity_id_entities_entity_id_fk": {
-          "name": "credit_allocations_source_entity_id_entities_entity_id_fk",
-          "tableFrom": "credit_allocations",
-          "tableTo": "entities",
-          "columnsFrom": [
-            "source_entity_id"
-          ],
-          "columnsTo": [
-            "entity_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "credit_allocations_allocated_by_tenant_users_user_id_fk": {
-          "name": "credit_allocations_allocated_by_tenant_users_user_id_fk",
-          "tableFrom": "credit_allocations",
-          "tableTo": "tenant_users",
-          "columnsFrom": [
-            "allocated_by"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "credit_allocations_updated_by_tenant_users_user_id_fk": {
-          "name": "credit_allocations_updated_by_tenant_users_user_id_fk",
-          "tableFrom": "credit_allocations",
-          "tableTo": "tenant_users",
-          "columnsFrom": [
-            "updated_by"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
-    },
     "credit_purchases": {
       "name": "credit_purchases",
       "schema": "",
@@ -4991,6 +4830,303 @@
         "credit_configurations_updated_by_tenant_users_user_id_fk": {
           "name": "credit_configurations_updated_by_tenant_users_user_id_fk",
           "tableFrom": "credit_configurations",
+          "tableTo": "tenant_users",
+          "columnsFrom": [
+            "updated_by"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "credit_allocation_transactions": {
+      "name": "credit_allocation_transactions",
+      "schema": "",
+      "columns": {
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "allocation_id": {
+          "name": "allocation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transaction_type": {
+          "name": "transaction_type",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(15, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "previous_allocated": {
+          "name": "previous_allocated",
+          "type": "numeric(15, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "new_allocated": {
+          "name": "new_allocated",
+          "type": "numeric(15, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "previous_used": {
+          "name": "previous_used",
+          "type": "numeric(15, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "new_used": {
+          "name": "new_used",
+          "type": "numeric(15, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "operation_code": {
+          "name": "operation_code",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "initiated_by": {
+          "name": "initiated_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "credit_allocation_transactions_tenant_id_tenants_tenant_id_fk": {
+          "name": "credit_allocation_transactions_tenant_id_tenants_tenant_id_fk",
+          "tableFrom": "credit_allocation_transactions",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "tenant_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "credit_allocation_transactions_allocation_id_credit_allocations_allocation_id_fk": {
+          "name": "credit_allocation_transactions_allocation_id_credit_allocations_allocation_id_fk",
+          "tableFrom": "credit_allocation_transactions",
+          "tableTo": "credit_allocations",
+          "columnsFrom": [
+            "allocation_id"
+          ],
+          "columnsTo": [
+            "allocation_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "credit_allocation_transactions_initiated_by_tenant_users_user_id_fk": {
+          "name": "credit_allocation_transactions_initiated_by_tenant_users_user_id_fk",
+          "tableFrom": "credit_allocation_transactions",
+          "tableTo": "tenant_users",
+          "columnsFrom": [
+            "initiated_by"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "credit_allocations": {
+      "name": "credit_allocations",
+      "schema": "",
+      "columns": {
+        "allocation_id": {
+          "name": "allocation_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_entity_id": {
+          "name": "source_entity_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_application": {
+          "name": "target_application",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "allocated_credits": {
+          "name": "allocated_credits",
+          "type": "numeric(15, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "used_credits": {
+          "name": "used_credits",
+          "type": "numeric(15, 4)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'0'"
+        },
+        "available_credits": {
+          "name": "available_credits",
+          "type": "numeric(15, 4)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'0'"
+        },
+        "allocation_type": {
+          "name": "allocation_type",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'manual'"
+        },
+        "allocation_purpose": {
+          "name": "allocation_purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "allocated_at": {
+          "name": "allocated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auto_replenish": {
+          "name": "auto_replenish",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "allocated_by": {
+          "name": "allocated_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_updated_at": {
+          "name": "last_updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_by": {
+          "name": "updated_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "credit_allocations_tenant_id_tenants_tenant_id_fk": {
+          "name": "credit_allocations_tenant_id_tenants_tenant_id_fk",
+          "tableFrom": "credit_allocations",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "tenant_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "credit_allocations_source_entity_id_entities_entity_id_fk": {
+          "name": "credit_allocations_source_entity_id_entities_entity_id_fk",
+          "tableFrom": "credit_allocations",
+          "tableTo": "entities",
+          "columnsFrom": [
+            "source_entity_id"
+          ],
+          "columnsTo": [
+            "entity_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "credit_allocations_allocated_by_tenant_users_user_id_fk": {
+          "name": "credit_allocations_allocated_by_tenant_users_user_id_fk",
+          "tableFrom": "credit_allocations",
+          "tableTo": "tenant_users",
+          "columnsFrom": [
+            "allocated_by"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "credit_allocations_updated_by_tenant_users_user_id_fk": {
+          "name": "credit_allocations_updated_by_tenant_users_user_id_fk",
+          "tableFrom": "credit_allocations",
           "tableTo": "tenant_users",
           "columnsFrom": [
             "updated_by"

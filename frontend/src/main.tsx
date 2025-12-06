@@ -1,12 +1,19 @@
 import React from "react"
 import { createRoot } from "react-dom/client"
-import { BrowserRouter } from "react-router-dom"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
-import { Toaster } from "sonner"
+import { Toaster as SonnerToaster } from "@/components/ui/sonner"
 import { NuqsAdapter } from 'nuqs/adapters/react'
 import App from "@/App"
 import "@/index.css"
+
+// Conditionally import ReactQueryDevtools only in development
+const ReactQueryDevtools = import.meta.env.DEV
+  ? React.lazy(() =>
+      import("@tanstack/react-query-devtools")
+        .then((mod) => ({ default: mod.ReactQueryDevtools }))
+        .catch(() => ({ default: () => null }))
+    )
+  : () => null
 
 // Suppress browser extension warnings for video elements
 const originalWarn = console.warn;
@@ -38,14 +45,16 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <QueryClientProvider client={queryClient}>
-        <NuqsAdapter>
-          <App />
-          <Toaster position="top-right" richColors />
-          <ReactQueryDevtools initialIsOpen={false} />
-        </NuqsAdapter>
-      </QueryClientProvider>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <NuqsAdapter>
+        <App />
+        <SonnerToaster position="top-right" richColors offset="80px" gap={12} />
+        {import.meta.env.DEV && (
+          <React.Suspense fallback={null}>
+            <ReactQueryDevtools initialIsOpen={false} />
+          </React.Suspense>
+        )}
+      </NuqsAdapter>
+    </QueryClientProvider>
   </React.StrictMode>
 ) 

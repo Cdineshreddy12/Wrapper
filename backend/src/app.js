@@ -9,6 +9,19 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import 'dotenv/config';
 
+// Check if logging should be disabled (set this to true or use DISABLE_LOGGING env var)
+const DISABLE_ALL_LOGGING = process.env.DISABLE_LOGGING === 'true' || 'true' === 'true';
+
+// Optionally suppress all console output (uncomment if you want to disable console.log too)
+if (DISABLE_ALL_LOGGING && process.env.SUPPRESS_CONSOLE === 'true') {
+  const noop = () => {};
+  console.log = noop;
+  console.info = noop;
+  console.warn = noop;
+  // Keep console.error for critical errors
+  // console.error = noop;
+}
+
 // Import routes
 import authRoutes from './routes/auth.js';
 import tenantRoutes from './routes/tenants.js';
@@ -33,6 +46,7 @@ import adminDashboardRoutes from './routes/admin/dashboard.js';
 import adminTenantManagementRoutes from './routes/admin/tenant-management.js';
 import adminEntityManagementRoutes from './routes/admin/entity-management.js';
 import adminCreditOverviewRoutes from './routes/admin/credit-overview.js';
+import seasonalCreditsRoutes from './routes/admin/seasonal-credits.js';
 import invitationRoutes from './routes/invitations.js';
 import suiteRoutes from './routes/suite.js';
 import paymentRoutes from './routes/payments.js';
@@ -54,6 +68,8 @@ import entityRoutes from './routes/entities.js';
 import paymentUpgradeRoutes from './routes/payment-upgrade.js';
 import creditRoutes from './routes/credits.js';
 import demoRoutes from './routes/demo.js';
+import notificationRoutes from './routes/notifications.js';
+import entityScopeRoutes from './routes/entity-scope.js';
 // import { createRLSRoutes } from './routes/rls-examples.js'; // Temporarily disabled
 
 
@@ -73,13 +89,109 @@ import trialManager from './utils/trial-manager.js';
 import { dbManager } from './db/connection-manager.js';
 
 const fastify = Fastify({
-  logger: {
+  logger: DISABLE_ALL_LOGGING ? false : {
     level: process.env.LOG_LEVEL || 'info',
   },
   // Enable raw body support for webhooks
   bodyLimit: 1048576, // 1MB limit
   requestIdHeader: 'x-request-id'
 });
+
+// Initialize Elasticsearch logger and hook into Fastify logs
+let enhancedLogger = null;
+
+if (!DISABLE_ALL_LOGGING) {
+  try {
+    enhancedLogger = (await import('./utils/logger-enhanced.js')).default;
+    console.log('✅ Elasticsearch logger initialized');
+  } catch (error) {
+    console.warn('⚠️ Could not load Elasticsearch logger:', error.message);
+  }
+
+  // Hook into Fastify's logging to send logs to Elasticsearch
+  if (enhancedLogger && enhancedLogger.winstonLogger) {
+    // Override Fastify's log methods to also send to Elasticsearch
+    const originalLog = fastify.log;
+    
+    fastify.addHook('onRequest', async (request, reply) => {
+      // Log incoming requests to Elasticsearch
+      enhancedLogger.winstonLogger.info('Incoming request', {
+        method: request.method,
+        url: request.url,
+        hostname: request.hostname,
+        remoteAddress: request.ip,
+        requestId: request.id,
+        service: process.env.SERVICE_NAME || 'wrapper-backend',
+        env: process.env.NODE_ENV || 'development'
+      });
+    });
+
+    fastify.addHook('onResponse', async (request, reply) => {
+      // Log completed requests to Elasticsearch
+      enhancedLogger.winstonLogger.info('Request completed', {
+        method: request.method,
+        url: request.url,
+        statusCode: reply.statusCode,
+        responseTime: reply.getResponseTime(),
+        requestId: request.id,
+        service: process.env.SERVICE_NAME || 'wrapper-backend',
+        env: process.env.NODE_ENV || 'development'
+      });
+    });
+
+    // Hook into Fastify's error logging
+    fastify.addHook('onError', async (request, reply, error) => {
+      // Log errors to Elasticsearch
+      enhancedLogger.winstonLogger.error('Request error', {
+        method: request.method,
+        url: request.url,
+        statusCode: reply.statusCode || 500,
+        error: {
+          message: error.message,
+          stack: error.stack,
+          code: error.code
+        },
+        requestId: request.id,
+        service: process.env.SERVICE_NAME || 'wrapper-backend',
+        env: process.env.NODE_ENV || 'development'
+      });
+    });
+    
+    console.log('✅ Fastify logs will be sent to Elasticsearch');
+  }
+} else {
+  console.log('🔇 All logging disabled');
+}
+
+// Helper function to log important messages to both console and Elasticsearch
+// Usage: logToES('info', 'Important message', { key: 'value' })
+global.logToES = (level, message, data = {}) => {
+  if (DISABLE_ALL_LOGGING) return; // Skip logging if disabled
+  
+  console.log(`[${level.toUpperCase()}] ${message}`, data);
+  if (enhancedLogger && enhancedLogger.winstonLogger) {
+    const logData = {
+      message,
+      ...data,
+      service: process.env.SERVICE_NAME || 'wrapper-backend',
+      env: process.env.NODE_ENV || 'development'
+    };
+    
+    switch (level.toLowerCase()) {
+      case 'error':
+        enhancedLogger.winstonLogger.error(message, logData);
+        break;
+      case 'warn':
+        enhancedLogger.winstonLogger.warn(message, logData);
+        break;
+      case 'debug':
+        enhancedLogger.winstonLogger.debug(message, logData);
+        break;
+      default:
+        enhancedLogger.winstonLogger.info(message, logData);
+    }
+  }
+};
 
 // Raw body parser for webhooks
 fastify.addContentTypeParser(['application/json'], { parseAs: 'buffer' }, function (req, body, done) {
@@ -139,12 +251,14 @@ async function registerPlugins() {
     credentials: true, // Required so browser can send cookies
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: [
-      'Content-Type', 
-      'Authorization', 
+      'Content-Type',
+      'Authorization',
       'X-Requested-With',
       'X-Application',
       'X-Kinde-User-ID',      // CRM sends this
       'X-Organization-ID',    // CRM sends this
+      'X-Tenant-ID',          // Frontend sends this
+      'x-tenant-id',          // Alternative casing
       'Origin',               // Browser sends this
       'Accept',               // Browser sends this
       'Accept-Language',      // Browser sends this
@@ -372,8 +486,15 @@ async function registerRoutes() {
   await fastify.register(tenantRoutes, { prefix: '/api/tenants' });
   await fastify.register(userRoutes, { prefix: '/api/users' });
   await fastify.register(subscriptionRoutes, { prefix: '/api/subscriptions' });
+  
+  // Handle double /api/api/ prefix issue (register routes with both prefixes)
+  // This happens when frontend API base URL already includes /api
+  await fastify.register(subscriptionRoutes, { prefix: '/api/api/subscriptions' });
   await fastify.register(permissionRoutes, { prefix: '/api/permissions' });
   await fastify.register(roleRoutes, { prefix: '/api/roles' });
+  // Register custom-roles routes with both prefixes for compatibility
+  await fastify.register(customRolesRoutes, { prefix: '/api/custom-roles' });
+  await fastify.register(customRolesRoutes, { prefix: '/api/api/custom-roles' });
   await fastify.register(analyticsRoutes, { prefix: '/api/analytics' });
   await fastify.register(usageRoutes, { prefix: '/api/usage' });
   await fastify.register(internalRoutes, { prefix: '/api/internal' });
@@ -392,11 +513,11 @@ async function registerRoutes() {
   await fastify.register(adminTenantManagementRoutes, { prefix: '/api/admin/tenants' });
   await fastify.register(adminEntityManagementRoutes, { prefix: '/api/admin/entities' });
   await fastify.register(adminCreditOverviewRoutes, { prefix: '/api/admin/credits' });
+  await fastify.register(seasonalCreditsRoutes, { prefix: '/api/admin/seasonal-credits' });
   await fastify.register(suiteRoutes, { prefix: '/api/suite' });
   await fastify.register(paymentRoutes, { prefix: '/api/payments' });
   await fastify.register(activityRoutes, { prefix: '/api/activity' });
   await fastify.register(trialRoutes, { prefix: '/api/trial' });
-  await fastify.register(customRolesRoutes, { prefix: '/api/custom-roles' });
   await fastify.register(adminPromotionRoutes, { prefix: '/api/admin-promotion' });
   await fastify.register(permissionMatrixRoutes, { prefix: '/api/permission-matrix' });
   await fastify.register(permissionSyncRoutes, { prefix: '/api/permission-sync' });
@@ -409,11 +530,15 @@ async function registerRoutes() {
   console.log('✅ Entities routes registered successfully');
   await fastify.register(paymentUpgradeRoutes, { prefix: '/api/payment-upgrade' });
   await fastify.register(creditRoutes, { prefix: '/api/credits' });
+  await fastify.register(notificationRoutes, { prefix: '/api/notifications' });
   await fastify.register(demoRoutes, { prefix: '/api/demo' });
   await fastify.register(enhancedCrmIntegrationRoutes, { prefix: '/api/enhanced-crm-integration' });
   await fastify.register(wrapperCrmSyncRoutes, { prefix: '/api/wrapper' });
   await fastify.register(userVerificationRoutes, { prefix: '/api' });
   await fastify.register(healthRoutes, { prefix: '/api' });
+  console.log('📋 Registering entity-scope routes...');
+  await fastify.register(entityScopeRoutes, { prefix: '/api/admin' });
+  console.log('✅ Entity-scope routes registered successfully');
 
   // RLS Example Routes (temporarily disabled - need Fastify compatibility)
   // TODO: Implement Fastify-compatible RLS routes
@@ -717,11 +842,43 @@ async function start() {
     const port = parseInt(process.env.PORT || '3000');
     const host = process.env.HOST || '0.0.0.0';
     
-    await fastify.listen({ port, host });
+    const server =     await fastify.listen({ port, host });
+    
+    // Initialize WebSocket server for real-time notifications
+    try {
+      const { initWebSocketServer } = await import('./utils/websocket-server.js');
+      // Get the underlying HTTP server from Fastify
+      initWebSocketServer(fastify.server);
+      console.log('✅ WebSocket server initialized for real-time notifications');
+    } catch (error) {
+      console.warn('⚠️ Failed to initialize WebSocket server:', error.message);
+      // Don't fail startup if WebSocket fails
+    }
     
     console.log(`✅ Server listening on http://${host}:${port}`);
     console.log(`📚 API Documentation: http://${host}:${port}/docs`);
     console.log(`🏥 Health Check: http://${host}:${port}/health`);
+    
+    // TEST: Force a log to Elasticsearch
+    try {
+      const enhancedLogger = (await import('./utils/logger-enhanced.js')).default;
+      enhancedLogger.winstonLogger.info('Server started successfully', {
+        port,
+        host,
+        environment: process.env.NODE_ENV || 'development',
+        service: process.env.SERVICE_NAME || 'wrapper-backend',
+        timestamp: new Date().toISOString()
+      });
+      console.log('📝 Test log sent to Elasticsearch');
+    } catch (error) {
+      console.error('❌ Failed to send test log:', error.message);
+      // Check for Elasticsearch connection errors
+      if (error.message.includes('Elasticsearch') || error.message.includes('ECONNREFUSED')) {
+        console.warn('⚠️ Elasticsearch may not be running or accessible');
+        console.warn('   Make sure Elasticsearch is running: docker compose ps');
+        console.warn('   Check ELASTICSEARCH_URL environment variable');
+      }
+    }
     
     // // Initialize trial monitoring system after app setup
     // await initializeTrialSystem();
@@ -803,4 +960,4 @@ if (import.meta.url === `file://${process.argv[1]}` || process.env.NODE_ENV !== 
 //   }, 2000);
 // }
 
-export default fastify; 
+export default fastify;

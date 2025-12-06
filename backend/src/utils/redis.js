@@ -475,28 +475,48 @@ class CrmSyncStreams {
 
   /**
    * Publish user lifecycle event
+   * According to CRM requirements, the data field must be a JSON string
    */
   async publishUserEvent(tenantId, eventType, userData, metadata = {}) {
     const streamKey = `${this.streamPrefix}:user:${eventType}`;
+
+    // Prepare data according to CRM requirements
+    // The data field should be a JSON string, not an object
+    const eventData = {
+      userId: userData.userId,
+      email: userData.email,
+      ...(userData.firstName && { firstName: userData.firstName }),
+      ...(userData.lastName && { lastName: userData.lastName }),
+      ...(userData.name && { name: userData.name }),
+      ...(userData.isActive !== undefined && { isActive: userData.isActive }),
+      ...(userData.createdAt && { createdAt: typeof userData.createdAt === 'string' ? userData.createdAt : userData.createdAt.toISOString() }),
+      // For deactivation events
+      ...(userData.deactivatedAt && { deactivatedAt: typeof userData.deactivatedAt === 'string' ? userData.deactivatedAt : userData.deactivatedAt.toISOString() }),
+      ...(userData.deactivatedBy && { deactivatedBy: userData.deactivatedBy }),
+      // For deletion events
+      ...(userData.deletedAt && { deletedAt: typeof userData.deletedAt === 'string' ? userData.deletedAt : userData.deletedAt.toISOString() }),
+      ...(userData.deletedBy && { deletedBy: userData.deletedBy }),
+      ...(userData.reason && { reason: userData.reason })
+    };
 
     const message = {
       streamId: streamKey,
       messageId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       timestamp: new Date().toISOString(),
-      sourceApp: 'wrapper',
+      sourceApp: 'wrapper-api',
       eventType,
       entityType: 'user',
       entityId: userData.userId,
       tenantId,
       action: eventType.replace('user_', ''),
-      data: userData,
-      metadata: {
+      data: JSON.stringify(eventData), // Data must be a JSON string per CRM requirements
+      metadata: JSON.stringify({
         correlationId: `user_${userData.userId}_${Date.now()}`,
         version: '1.0',
         retryCount: 0,
         sourceTimestamp: new Date().toISOString(),
         ...metadata
-      }
+      })
     };
 
     return await this.publishToStream(streamKey, message);
@@ -504,6 +524,7 @@ class CrmSyncStreams {
 
   /**
    * Publish role/permission event
+   * According to CRM requirements, the data field must be a JSON string
    */
   async publishRoleEvent(tenantId, eventType, roleData, metadata = {}) {
     const streamKey = `${this.streamPrefix}:permissions:${eventType}`;
@@ -512,20 +533,20 @@ class CrmSyncStreams {
       streamId: streamKey,
       messageId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       timestamp: new Date().toISOString(),
-      sourceApp: 'wrapper',
+      sourceApp: 'wrapper-api',
       eventType,
       entityType: 'role_assignment',
       entityId: roleData.assignmentId || roleData.roleId,
       tenantId,
       action: eventType.replace('role_', ''),
-      data: roleData,
-      metadata: {
+      data: JSON.stringify(roleData), // Data must be a JSON string per CRM requirements
+      metadata: JSON.stringify({
         correlationId: `role_${roleData.userId || roleData.roleId}_${Date.now()}`,
         version: '1.0',
         retryCount: 0,
         sourceTimestamp: new Date().toISOString(),
         ...metadata
-      }
+      })
     };
 
     return await this.publishToStream(streamKey, message);
@@ -694,9 +715,16 @@ class CrmSyncStreams {
 
     try {
       // Convert message to Redis stream format
+      // If data/metadata are already JSON strings (per CRM requirements), don't double-stringify
       const streamData = {};
       Object.entries(message).forEach(([key, value]) => {
-        streamData[key] = JSON.stringify(value);
+        // If value is already a string (like data and metadata fields), use it as-is
+        // Otherwise, stringify it
+        if (typeof value === 'string') {
+          streamData[key] = value;
+        } else {
+          streamData[key] = JSON.stringify(value);
+        }
       });
 
       // Use XADD to add to stream

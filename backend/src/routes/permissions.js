@@ -9,6 +9,8 @@ import {
   userApplicationPermissions
 } from '../db/schema/suite-schema.js';
 import { tenantUsers } from '../db/schema/users.js';
+import { customRoles, userRoleAssignments } from '../db/schema/index.js';
+import { organizationMemberships } from '../db/schema/organization_memberships.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import CacheInvalidationService from '../middleware/cache-invalidation.js';
 import ActivityLogger, { ACTIVITY_TYPES, RESOURCE_TYPES } from '../services/activityLogger.js';
@@ -587,24 +589,167 @@ export default async function permissionRoutes(fastify, options) {
         properties: {
           roleId: { type: 'string' }
         }
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          force: { type: 'boolean', default: false },
+          transferUsersTo: { type: 'string' }
+        }
       }
     }
   }, async (request, reply) => {
     try {
       const { roleId } = request.params;
-      
-      await permissionService.deleteRole(getTenantId(request), roleId);
-      
+      const { force, transferUsersTo } = request.query;
+      const tenantId = getTenantId(request);
+
+      console.log('🗑️ Attempting to delete role:', roleId, 'tenantId:', tenantId);
+
+      // Get role data before deletion for event publishing
+      const [roleToDelete] = await db
+        .select()
+        .from(customRoles)
+        .where(
+          and(
+            eq(customRoles.tenantId, tenantId),
+            eq(customRoles.roleId, roleId)
+          )
+        )
+        .limit(1);
+
+      console.log('Role to delete found:', !!roleToDelete, roleToDelete ? roleToDelete.roleId : 'N/A');
+
+      if (!roleToDelete) {
+        return reply.code(404).send({ error: 'Role not found' });
+      }
+
+      // Check how many users are affected
+      const userAssignments = await db
+        .select({
+          userId: userRoleAssignments.userId,
+          userEmail: tenantUsers.email
+        })
+        .from(userRoleAssignments)
+        .innerJoin(tenantUsers, eq(userRoleAssignments.userId, tenantUsers.userId))
+        .where(eq(userRoleAssignments.roleId, roleId));
+
+      const organizationAssignments = await db
+        .select({
+          membershipId: organizationMemberships.membershipId,
+          userId: organizationMemberships.userId,
+          userEmail: tenantUsers.email,
+          entityId: organizationMemberships.entityId,
+          entityType: organizationMemberships.entityType
+        })
+        .from(organizationMemberships)
+        .innerJoin(tenantUsers, eq(organizationMemberships.userId, tenantUsers.userId))
+        .where(eq(organizationMemberships.roleId, roleId));
+
+      const affectedUsers = [
+        ...userAssignments.map(ua => ({ userId: ua.userId, email: ua.userEmail, type: 'direct' })),
+        ...organizationAssignments.map(oa => ({ userId: oa.userId, email: oa.userEmail, type: 'organization' }))
+      ];
+
+      // Remove duplicates
+      const uniqueAffectedUsers = affectedUsers.filter((user, index, self) =>
+        index === self.findIndex(u => u.userId === user.userId)
+      );
+
+      console.log('Affected users:', uniqueAffectedUsers.length);
+
+      // If force is not specified and there are affected users, return confirmation needed
+      if (!force && uniqueAffectedUsers.length > 0) {
+        return reply.code(200).send({
+          success: false,
+          requiresConfirmation: true,
+          message: `Role "${roleToDelete.roleName}" is assigned to ${uniqueAffectedUsers.length} user(s)`,
+          affectedUsers: uniqueAffectedUsers,
+          role: {
+            roleId: roleToDelete.roleId,
+            roleName: roleToDelete.roleName,
+            description: roleToDelete.description
+          },
+          instructions: 'To delete this role, set force=true in the query parameters. This will remove all user assignments.'
+        });
+      }
+
+      console.log('Calling permissionService.deleteRole...');
+      const result = await permissionService.deleteRole(
+        tenantId,
+        roleId,
+        {
+          force: force || false,
+          transferUsersTo,
+          deletedBy: request.userContext.internalUserId
+        }
+      );
+      console.log('permissionService.deleteRole result:', result);
+
+      // Log role deletion activity
+      await ActivityLogger.logActivity(
+        request.userContext.internalUserId,
+        tenantId,
+        null,
+        ACTIVITY_TYPES.ROLE_DELETED,
+        {
+          roleId: roleId,
+          force: force,
+          transferUsersTo: transferUsersTo,
+          tenantId: tenantId,
+          userEmail: request.userContext.email
+        },
+        ActivityLogger.createRequestContext(request)
+      );
+
+      // Publish role deletion event to relevant applications (only apps with permissions)
+      if (roleToDelete) {
+        console.log('📡 Publishing role deletion event for role:', roleId);
+        try {
+          // Import the event publishing function
+          console.log('Importing roles.js...');
+          const { publishRoleEventToApplications } = await import('./roles.js');
+          console.log('Successfully imported publishRoleEventToApplications');
+
+          await publishRoleEventToApplications(
+            'role.deleted',
+            tenantId,
+            roleId,
+            {
+              roleName: roleToDelete.roleName || roleToDelete.name,
+              description: roleToDelete.description,
+              permissions: roleToDelete.permissions,
+              restrictions: roleToDelete.restrictions,
+              metadata: roleToDelete.metadata,
+              deletedBy: request.userContext.internalUserId,
+              deletedAt: new Date().toISOString(),
+              transferredToRoleId: transferUsersTo,
+              affectedUsersCount: result.usersAffected || 0
+            }
+          );
+          console.log('✅ Role deletion event published successfully');
+        } catch (publishError) {
+          console.warn('⚠️ Failed to publish role deletion event:', publishError.message);
+          console.error('Full error:', publishError);
+          // Don't fail the deletion if event publishing fails
+        }
+      } else {
+        console.log('⚠️ No role data found for event publishing');
+      }
+
       return {
         success: true,
+        data: result,
         message: 'Role deleted successfully'
       };
     } catch (error) {
+      console.error('Error deleting role:', error.message);
+      console.error('Full error:', error);
       fastify.log.error('Error deleting role:', error);
       if (error.message.includes('not found')) {
         return reply.code(404).send({ error: error.message });
       }
-      if (error.message.includes('in use')) {
+      if (error.message.includes('in use') || error.message.includes('assigned to')) {
         return reply.code(409).send({ error: error.message });
       }
       return reply.code(500).send({ error: 'Failed to delete role' });
@@ -719,7 +864,7 @@ export default async function permissionRoutes(fastify, options) {
     }
   });
 
-  // Remove role assignment
+  // Remove role assignment by assignmentId
   fastify.delete('/assignments/:assignmentId', {
     preHandler: [authenticateToken, requirePermission('roles:assign'), trackUsage],
     schema: {
@@ -734,9 +879,10 @@ export default async function permissionRoutes(fastify, options) {
   }, async (request, reply) => {
     try {
       const { assignmentId } = request.params;
+      const tenantId = getTenantId(request);
       
-      await permissionService.removeRoleAssignment(
-        getTenantId(request),
+      await permissionService.removeRoleAssignmentById(
+        tenantId,
         assignmentId,
         request.userContext?.kindeUserId || request.user?.id
       );
@@ -744,12 +890,12 @@ export default async function permissionRoutes(fastify, options) {
       // Log role removal activity
       await ActivityLogger.logActivity(
         request.userContext?.internalUserId || request.user?.id,
-        getTenantId(request),
+        tenantId,
         null,
         ACTIVITY_TYPES.PERMISSION_REVOKED,
         {
           assignmentId: assignmentId,
-          tenantId: getTenantId(request),
+          tenantId: tenantId,
           userEmail: request.userContext?.email || request.user?.email
         },
         ActivityLogger.createRequestContext(request)
@@ -761,6 +907,62 @@ export default async function permissionRoutes(fastify, options) {
       };
     } catch (error) {
       fastify.log.error('Error removing role assignment:', error);
+      if (error.message === 'Role assignment not found') {
+        return reply.code(404).send({ error: error.message });
+      }
+      return reply.code(500).send({ error: 'Failed to remove role assignment' });
+    }
+  });
+
+  // Remove role assignment by userId and roleId (deassign)
+  fastify.delete('/assignments/user/:userId/role/:roleId', {
+    preHandler: [authenticateToken, requirePermission('roles:assign'), trackUsage],
+    schema: {
+      params: {
+        type: 'object',
+        required: ['userId', 'roleId'],
+        properties: {
+          userId: { type: 'string' },
+          roleId: { type: 'string' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const { userId, roleId } = request.params;
+      const tenantId = getTenantId(request);
+      
+      await permissionService.removeRoleAssignment(
+        tenantId,
+        userId,
+        roleId,
+        request.userContext?.kindeUserId || request.user?.id
+      );
+
+      // Log role removal activity
+      await ActivityLogger.logActivity(
+        request.userContext?.internalUserId || request.user?.id,
+        tenantId,
+        null,
+        ACTIVITY_TYPES.PERMISSION_REVOKED,
+        {
+          userId: userId,
+          roleId: roleId,
+          tenantId: tenantId,
+          userEmail: request.userContext?.email || request.user?.email
+        },
+        ActivityLogger.createRequestContext(request)
+      );
+
+      return {
+        success: true,
+        message: 'Role assignment removed successfully'
+      };
+    } catch (error) {
+      fastify.log.error('Error removing role assignment:', error);
+      if (error.message === 'Role assignment not found') {
+        return reply.code(404).send({ error: error.message });
+      }
       return reply.code(500).send({ error: 'Failed to remove role assignment' });
     }
   });

@@ -6,8 +6,15 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatDate(date: Date) {
-  return date.toLocaleDateString('en-US', {
+export function formatDate(date: Date | string | null | undefined) {
+  if (!date) return 'N/A'
+
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+
+  // Check if the date is valid
+  if (isNaN(dateObj.getTime())) return 'Invalid date'
+
+  return dateObj.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric'

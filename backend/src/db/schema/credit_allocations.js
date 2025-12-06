@@ -20,8 +20,18 @@ export const creditAllocations = pgTable('credit_allocations', {
   usedCredits: decimal('used_credits', { precision: 15, scale: 4 }).default('0'),
   availableCredits: decimal('available_credits', { precision: 15, scale: 4 }).default('0'), // computed: allocated - used
 
+  // Credit type differentiation
+  creditType: varchar('credit_type', { length: 50 }).default('free'), // 'free', 'paid', 'seasonal', 'bonus', 'promotional', 'event', 'partnership', 'trial_extension'
+
+  // Seasonal credit metadata
+  creditMetadata: jsonb('credit_metadata'), // Additional metadata for seasonal/promotional credits
+  campaignId: varchar('campaign_id', { length: 100 }), // Identifier for the credit campaign or promotion
+  campaignName: varchar('campaign_name', { length: 255 }), // Human-readable name for the credit campaign
+  expiryRule: varchar('expiry_rule', { length: 50 }).default('fixed_date'), // 'fixed_date', 'rolling_window', 'never_expire'
+  expiryWarningDays: decimal('expiry_warning_days', { precision: 5, scale: 0 }).default('7'), // Days before expiry to show warning notifications
+
   // Allocation metadata
-  allocationType: varchar('allocation_type', { length: 30 }).default('manual'), // 'manual', 'automatic', 'bulk'
+  allocationType: varchar('allocation_type', { length: 30 }).default('manual'), // 'manual', 'automatic', 'bulk', 'subscription', 'campaign'
   allocationPurpose: text('allocation_purpose'), // Description of why credits were allocated
 
   // Validity period

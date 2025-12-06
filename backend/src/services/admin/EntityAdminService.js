@@ -38,7 +38,6 @@ export class EntityAdminService {
           updatedAt: entities.updatedAt,
           companyName: tenants.companyName,
           availableCredits: sql`coalesce(${credits.availableCredits}, 0)`,
-          reservedCredits: sql`coalesce(${credits.reservedCredits}, 0)`,
           responsiblePerson: tenantUsers.firstName
         })
         .from(entities)
@@ -141,7 +140,13 @@ export class EntityAdminService {
    */
   static async getTenantEntities(tenantId, entityType = null) {
     try {
-      let query = db
+      // Build where conditions
+      const whereConditions = [eq(entities.tenantId, tenantId)];
+      if (entityType) {
+        whereConditions.push(eq(entities.entityType, entityType));
+      }
+
+      const query = db
         .select({
           entityId: entities.entityId,
           tenantId: entities.tenantId,
@@ -156,17 +161,14 @@ export class EntityAdminService {
           address: entities.address,
           locationType: entities.locationType,
           organizationType: entities.organizationType,
-          availableCredits: sql`coalesce(${credits.availableCredits}, 0)`,
-          reservedCredits: sql`coalesce(${credits.reservedCredits}, 0)`
+          availableCredits: sql`coalesce(${credits.availableCredits}, 0)`
         })
         .from(entities)
-        .leftJoin(credits, eq(entities.entityId, credits.entityId))
-        .where(eq(entities.tenantId, tenantId));
-
-      // Filter by entity type if specified
-      if (entityType) {
-        query = query.where(eq(entities.entityType, entityType));
-      }
+        .leftJoin(credits, and(
+          eq(entities.entityId, credits.entityId),
+          eq(credits.isActive, true)
+        ))
+        .where(and(...whereConditions));
 
       const entitiesList = await query.orderBy(entities.entityType, entities.entityName);
 
@@ -223,7 +225,7 @@ export class EntityAdminService {
           companyName: tenant.companyName,
           subdomain: tenant.subdomain
         },
-        credit: credit || { availableCredits: 0, reservedCredits: 0 },
+        credit: credit || { availableCredits: 0 },
         responsiblePerson: responsiblePerson ? {
           userId: responsiblePerson.userId,
           name: `${responsiblePerson.firstName} ${responsiblePerson.lastName}`,
@@ -255,8 +257,7 @@ export class EntityAdminService {
           entityLevel: entities.entityLevel,
           isActive: entities.isActive,
           createdAt: entities.createdAt,
-          availableCredits: sql`coalesce(${credits.availableCredits}, 0)`,
-          reservedCredits: sql`coalesce(${credits.reservedCredits}, 0)`
+          availableCredits: sql`coalesce(${credits.availableCredits}, 0)`
         })
         .from(entities)
         .leftJoin(credits, eq(entities.entityId, credits.entityId))

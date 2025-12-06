@@ -93,7 +93,7 @@ export default async function adminDashboardRoutes(fastify, options) {
       const creditStats = await db
         .select({
           totalCredits: sum(credits.availableCredits),
-          totalReserved: sum(credits.reservedCredits),
+
           lowBalanceAlerts: sql`count(case when ${credits.availableCredits} < 100 then 1 end)`
         })
         .from(credits);

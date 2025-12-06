@@ -4,6 +4,30 @@ import { PermissionSummary } from '@/types/role-management';
  * Utility function to handle both permission formats and provide consistent summaries
  */
 export const getPermissionSummary = (permissions: Record<string, any> | string[]): PermissionSummary => {
+  // Handle JSON string permissions (like "all crm permissions role")
+  if (typeof permissions === 'string') {
+    try {
+      const parsedPermissions = JSON.parse(permissions);
+      // Recursively call with parsed object
+      return getPermissionSummary(parsedPermissions);
+    } catch (error) {
+      console.error('Failed to parse permissions JSON string:', error);
+      return {
+        total: 0,
+        admin: 0,
+        write: 0,
+        read: 0,
+        modules: 0,
+        mainModules: 0,
+        moduleDetails: {},
+        moduleNames: [],
+        mainModuleNames: [],
+        applicationCount: 0,
+        moduleCount: 0
+      };
+    }
+  }
+
   // Handle new hierarchical permissions (like Super Administrator)
   if (permissions && typeof permissions === 'object' && !Array.isArray(permissions)) {
     const hierarchicalPerms = permissions as Record<string, any>;

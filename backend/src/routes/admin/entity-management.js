@@ -54,14 +54,6 @@ export default async function adminEntityManagementRoutes(fastify, options) {
               and ${credits.isActive} = true
             ), 0)
           `,
-          reservedCredits: sql`
-            coalesce((
-              select sum(${credits.reservedCredits})
-              from ${credits}
-              where ${credits.entityId} = ${entities.entityId}
-              and ${credits.isActive} = true
-            ), 0)
-          `
         })
         .from(entities)
         .innerJoin(tenants, eq(entities.tenantId, tenants.tenantId));
@@ -184,14 +176,6 @@ export default async function adminEntityManagementRoutes(fastify, options) {
               and ${credits.isActive} = true
             ), 0)
           `,
-          reservedCredits: sql`
-            coalesce((
-              select sum(${credits.reservedCredits})
-              from ${credits}
-              where ${credits.entityId} = ${entities.entityId}
-              and ${credits.isActive} = true
-            ), 0)
-          `
         })
         .from(entities)
         .where(eq(entities.parentEntityId, entityId))
@@ -399,14 +383,6 @@ export default async function adminEntityManagementRoutes(fastify, options) {
               and ${credits.isActive} = true
             ), 0)
           `,
-          reservedCredits: sql`
-            coalesce((
-              select sum(${credits.reservedCredits})
-              from ${credits}
-              where ${credits.entityId} = ${entities.entityId}
-              and ${credits.isActive} = true
-            ), 0)
-          `
         })
         .from(entities)
         .innerJoin(tenants, eq(entities.tenantId, tenants.tenantId))
@@ -482,8 +458,7 @@ export default async function adminEntityManagementRoutes(fastify, options) {
           entityLevel: entities.entityLevel,
           isActive: entities.isActive,
           createdAt: entities.createdAt,
-          availableCredits: sql`coalesce(${credits.availableCredits}, 0)`,
-          reservedCredits: sql`coalesce(${credits.reservedCredits}, 0)`
+          availableCredits: sql`coalesce(${credits.availableCredits}, 0)`
         })
         .from(entities)
         .leftJoin(credits, and(
@@ -492,6 +467,12 @@ export default async function adminEntityManagementRoutes(fastify, options) {
         ))
         .where(eq(entities.tenantId, tenantId))
         .orderBy(entities.entityLevel, entities.entityName);
+
+      // Debug: Log credit values for each entity
+      console.log('🔍 Hierarchy entities with credits:');
+      entitiesList.forEach(entity => {
+        console.log(`  ${entity.entityId} (${entity.entityName}): ${entity.availableCredits} credits`);
+      });
 
       // Build hierarchy tree
       const entityMap = new Map();

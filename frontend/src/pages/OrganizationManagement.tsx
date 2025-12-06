@@ -83,7 +83,7 @@ export function OrganizationManagementPage() {
         makeRequest('/tenants/current', {
           headers: { 'X-Application': 'crm' }
         }),
-        makeRequest('/admin/auth-status', {
+        makeRequest('/api/admin/auth-status', {
           headers: { 'X-Application': 'crm' }
         })
       ]);
@@ -265,7 +265,7 @@ export function OrganizationManagementPage() {
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="hierarchy" className="flex items-center gap-2">
               <Building className="w-4 h-4" />
               Hierarchy
@@ -282,25 +282,11 @@ export function OrganizationManagementPage() {
               <Shield className="w-4 h-4" />
               Permissions
             </TabsTrigger>
-            <TabsTrigger value="analytics" className="flex items-center gap-2">
-              <BarChart3 className="w-4 h-4" />
-              Analytics
-            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="hierarchy">
+          <TabsContent value="hierarchy" className="p-0 m-0 h-full">
             {effectiveTenantId && isAuthenticated ? (
-              <div>
-                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <h4 className="font-medium text-blue-900">Debug Information</h4>
-                  <p className="text-sm text-blue-700">Tenant ID (effective): {effectiveTenantId}</p>
-                  <p className="text-sm text-blue-700">Tenant ID (auth hook): {tenantId || 'n/a'}</p>
-                  <p className="text-sm text-blue-700">Auth Tenant ID: {authTenantId || 'n/a'}</p>
-                  <p className="text-sm text-blue-700">Tenant Info ID: {tenantInfo?.tenantId || 'n/a'}</p>
-                  <p className="text-sm text-blue-700">Is Admin: {isAdmin ? 'Yes' : 'No'}</p>
-                  <p className="text-sm text-blue-700">Authenticated: {isAuthenticated ? 'Yes' : 'No'}</p>
-                  <p className="text-sm text-blue-700">User Context: {userContext ? 'Available' : 'Loading...'}</p>
-                </div>
+              <div className="w-full h-full min-h-[600px] relative">
                 <OrganizationTreeManagement
                   tenantId={effectiveTenantId}
                   isAdmin={isAdmin}
@@ -350,31 +336,6 @@ export function OrganizationManagementPage() {
             <OrganizationPermissionManagement applications={applications} />
           </TabsContent>
 
-          <TabsContent value="analytics">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5" />
-                  Organization Analytics
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <Activity className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">
-                    Analytics Coming Soon
-                  </h3>
-                  <p className="text-gray-600 mb-4">
-                    Organization analytics and reporting features are under development.
-                  </p>
-                  <Button variant="outline">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Request Analytics Features
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
         </Tabs>
       </div>
     </div>

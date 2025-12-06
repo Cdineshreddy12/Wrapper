@@ -513,7 +513,8 @@ export default async function tenantRoutes(fastify, options) {
       // Test M2M token
       let m2mTokenTest = { success: false, error: 'Not tested' };
       try {
-        const kindeService = require('../services/kinde-service.js').default;
+        const kindeServiceModule = await import('../services/kinde-service.js');
+        const kindeService = kindeServiceModule.default || kindeServiceModule;
         const token = await kindeService.getM2MToken();
         m2mTokenTest = { success: true, tokenLength: token.length };
       } catch (error) {
@@ -523,7 +524,8 @@ export default async function tenantRoutes(fastify, options) {
       // Test organization assignment
       let orgAssignmentTest = { success: false, error: 'Not tested' };
       try {
-        const kindeService = require('../services/kinde-service.js').default;
+        const kindeServiceModule = await import('../services/kinde-service.js');
+        const kindeService = kindeServiceModule.default || kindeServiceModule;
         const result = await kindeService.addUserToOrganization(
           testUser.kindeUserId || testUser.userId,
           tenant.kindeOrgId,
@@ -736,6 +738,25 @@ export default async function tenantRoutes(fastify, options) {
 
       if (!updatedUser) {
         return ErrorResponses.notFound(reply, 'User', 'User not found');
+      }
+
+      // Publish user deactivation event to Redis streams
+      try {
+        const { crmSyncStreams } = await import('../utils/redis.js');
+        await crmSyncStreams.publishUserEvent(tenantId, 'user_deactivated', {
+          userId: updatedUser.userId,
+          email: updatedUser.email,
+          firstName: updatedUser.name?.split(' ')[0],
+          lastName: updatedUser.name?.split(' ').slice(1).join(' ') || '',
+          name: updatedUser.name,
+          deactivatedAt: new Date().toISOString(),
+          deactivatedBy: request.userContext.internalUserId,
+          reason: 'manual_deactivation'
+        });
+        console.log('📡 Published user_deactivated event to Redis streams');
+      } catch (publishError) {
+        console.warn('⚠️ Failed to publish user_deactivated event:', publishError.message);
+        // Don't fail the request if event publishing fails
       }
 
       return {
@@ -1070,8 +1091,17 @@ export default async function tenantRoutes(fastify, options) {
         }
       }
 
+      // Get existing assignments before removal for event publishing
+      const existingAssignments = await db
+        .select({
+          id: userRoleAssignments.id,
+          roleId: userRoleAssignments.roleId
+        })
+        .from(userRoleAssignments)
+        .where(eq(userRoleAssignments.userId, userId));
+
       // Use transaction for atomic operation
-      await db.transaction(async (tx) => {
+      const newAssignments = await db.transaction(async (tx) => {
         console.log(`🔄 Removing existing role assignments for user ${userId}`);
         // Remove existing role assignments for this user
         await tx
@@ -1079,6 +1109,7 @@ export default async function tenantRoutes(fastify, options) {
           .where(eq(userRoleAssignments.userId, userId));
 
         // Add new role assignments
+        let insertedAssignments = [];
         if (roleIds.length > 0) {
           console.log(`➕ Adding ${roleIds.length} new role assignments for user ${userId}`);
           const assignments = roleIds.map(roleId => ({
@@ -1090,12 +1121,70 @@ export default async function tenantRoutes(fastify, options) {
           }));
 
           console.log(`📝 Assignment data:`, assignments);
-          await tx
+          insertedAssignments = await tx
             .insert(userRoleAssignments)
-            .values(assignments);
+            .values(assignments)
+            .returning();
           console.log(`✅ Successfully inserted role assignments`);
         }
+        return insertedAssignments;
       });
+
+      // Publish role unassignment events for removed roles
+      const removedRoleIds = existingAssignments
+        .map(a => a.roleId)
+        .filter(roleId => !roleIds.includes(roleId));
+      
+      if (removedRoleIds.length > 0) {
+        try {
+          const { crmSyncStreams } = await import('../utils/redis.js');
+          for (const assignment of existingAssignments.filter(a => removedRoleIds.includes(a.roleId))) {
+            try {
+              await crmSyncStreams.publishRoleEvent(tenantId, 'role_unassigned', {
+                assignmentId: assignment.id,
+                userId: userId,
+                roleId: assignment.roleId,
+                unassignedAt: new Date().toISOString(),
+                unassignedBy: request.userContext.internalUserId,
+                reason: 'Roles updated'
+              });
+            } catch (streamError) {
+              console.warn('⚠️ Failed to publish role unassignment event:', streamError.message);
+            }
+          }
+          console.log(`📡 Published ${removedRoleIds.length} role unassignment events`);
+        } catch (publishError) {
+          console.warn('⚠️ Failed to publish some role unassignment events:', publishError.message);
+        }
+      }
+
+      // Publish role assignment events for new roles
+      const newRoleIds = roleIds.filter(roleId => 
+        !existingAssignments.some(a => a.roleId === roleId)
+      );
+      
+      if (newRoleIds.length > 0 && newAssignments.length > 0) {
+        try {
+          const { crmSyncStreams } = await import('../utils/redis.js');
+          for (const assignment of newAssignments.filter(a => newRoleIds.includes(a.roleId))) {
+            try {
+              await crmSyncStreams.publishRoleEvent(tenantId, 'role_assigned', {
+                assignmentId: assignment.id,
+                userId: userId,
+                roleId: assignment.roleId,
+                assignedAt: assignment.assignedAt ? (typeof assignment.assignedAt === 'string' ? assignment.assignedAt : assignment.assignedAt.toISOString()) : new Date().toISOString(),
+                assignedBy: assignment.assignedBy || request.userContext.internalUserId
+              });
+              console.log(`📡 Published role assignment event for role ${assignment.roleId}`);
+            } catch (streamError) {
+              console.warn('⚠️ Failed to publish role assignment event:', streamError.message);
+            }
+          }
+          console.log(`📡 Published ${newRoleIds.length} role assignment events`);
+        } catch (publishError) {
+          console.warn('⚠️ Failed to publish some role assignment events:', publishError.message);
+        }
+      }
 
       return {
         success: true,
@@ -1103,8 +1192,14 @@ export default async function tenantRoutes(fastify, options) {
         data: { userId, assignedRoles: roleIds.length }
       };
     } catch (error) {
+      console.error('❌ Error assigning roles:', error);
       request.log.error('Error assigning roles:', error);
-      return reply.code(500).send({ error: 'Failed to assign roles' });
+      return reply.code(500).send({ 
+        success: false,
+        error: 'Failed to assign roles',
+        message: error.message || 'Unknown error occurred',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
     }
   });
 

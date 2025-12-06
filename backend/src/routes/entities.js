@@ -97,7 +97,6 @@ export default async function entityRoutes(fastify, options) {
               address: entity.address,
               // Include credit information
               availableCredits: entity.availableCredits,
-              reservedCredits: entity.reservedCredits,
               children: []
             };
             
@@ -169,7 +168,6 @@ export default async function entityRoutes(fastify, options) {
                 address: entity.address,
                 // Include credit information (fallback to 0 if not available)
                 availableCredits: entity.availableCredits || "0.0000",
-                reservedCredits: entity.reservedCredits || "0.0000",
                 children: [] // No hierarchy in fallback
               });
             }
@@ -198,61 +196,121 @@ export default async function entityRoutes(fastify, options) {
     }
   });
 
-  // Get parent entity - FULL DATABASE VERSION
-  fastify.get('/parent/:tenantId', async (request, reply) => {
+  // Get parent entity hierarchy - includes parent and all children
+  fastify.get('/parent/:parentEntityId', async (request, reply) => {
     try {
-      const { tenantId } = request.params;
+      const { parentEntityId } = request.params;
 
-      console.log('🏠 Getting parent entity for tenant:', tenantId);
+      console.log('🏠 Getting hierarchy starting from parent entity:', parentEntityId);
 
-      // Try to get the parent organization from hierarchy
-      const hierarchyResult = await OrganizationService.getOrganizationHierarchy(tenantId);
+      // Get the parent entity details first
+      const { db } = await import('../db/index.js');
+      const { entities } = await import('../db/schema/index.js');
+      const { eq, and } = await import('drizzle-orm');
 
-      if (hierarchyResult.success && hierarchyResult.hierarchy.length > 0) {
-        // Find parent organization (level 1)
-        const parentOrganization = hierarchyResult.hierarchy.find(
-          org => org.organizationLevel === 1
-        );
+      const [parentEntity] = await db
+        .select({
+          entityId: entities.entityId,
+          tenantId: entities.tenantId,
+          entityName: entities.entityName,
+          entityType: entities.entityType,
+          entityCode: entities.entityCode,
+          entityLevel: entities.entityLevel,
+          hierarchyPath: entities.hierarchyPath,
+          fullHierarchyPath: entities.fullHierarchyPath,
+          parentEntityId: entities.parentEntityId,
+          organizationType: entities.organizationType,
+          locationType: entities.locationType,
+          address: entities.address,
+          description: entities.description,
+          responsiblePersonId: entities.responsiblePersonId,
+          isActive: entities.isActive,
+          createdAt: entities.createdAt,
+          updatedAt: entities.updatedAt
+        })
+        .from(entities)
+        .where(and(
+          eq(entities.entityId, parentEntityId),
+          eq(entities.isActive, true)
+        ));
 
-        if (parentOrganization) {
-          const transformedOrg = {
-            entityId: parentOrganization.organizationId,
-            entityName: parentOrganization.organizationName,
-            entityType: 'organization',
-            entityLevel: parentOrganization.organizationLevel,
-            organizationType: parentOrganization.organizationType,
-            hierarchyPath: parentOrganization.hierarchyPath,
-            description: parentOrganization.description,
-            isActive: parentOrganization.isActive,
-            createdAt: parentOrganization.createdAt,
-            updatedAt: parentOrganization.updatedAt,
-            parentEntityId: parentOrganization.parentOrganizationId,
-            responsiblePersonId: parentOrganization.responsiblePersonId
-          };
-
-          return reply.send({
-            success: true,
-            organization: transformedOrg,
-            message: 'Parent entity retrieved successfully'
-          });
-        }
+      if (!parentEntity) {
+        return reply.code(404).send({
+          success: false,
+          error: 'Parent entity not found',
+          message: 'The specified parent entity does not exist or is inactive'
+        });
       }
 
-      // If no organizations exist, return a flag indicating no parent is available
-      console.log('ℹ️ No organizations found for tenant:', tenantId);
+      // Get all descendant entities (children, grandchildren, etc.)
+      const descendantEntities = await db
+        .select({
+          entityId: entities.entityId,
+          tenantId: entities.tenantId,
+          entityName: entities.entityName,
+          entityType: entities.entityType,
+          entityCode: entities.entityCode,
+          entityLevel: entities.entityLevel,
+          hierarchyPath: entities.hierarchyPath,
+          fullHierarchyPath: entities.fullHierarchyPath,
+          parentEntityId: entities.parentEntityId,
+          organizationType: entities.organizationType,
+          locationType: entities.locationType,
+          address: entities.address,
+          description: entities.description,
+          responsiblePersonId: entities.responsiblePersonId,
+          isActive: entities.isActive,
+          createdAt: entities.createdAt,
+          updatedAt: entities.updatedAt
+        })
+        .from(entities)
+        .where(and(
+          eq(entities.tenantId, parentEntity.tenantId),
+          eq(entities.isActive, true)
+        ));
+
+      // Build hierarchy starting from parent
+      const buildHierarchy = (parentId) => {
+        const children = descendantEntities.filter(entity => entity.parentEntityId === parentId);
+        return children.map(child => ({
+          ...child,
+          children: buildHierarchy(child.entityId)
+        }));
+      };
+
+      // Transform parent entity to match the expected format
+      const transformedParent = {
+        entityId: parentEntity.entityId,
+        entityName: parentEntity.entityName,
+        entityType: parentEntity.entityType,
+        entityCode: parentEntity.entityCode,
+        entityLevel: parentEntity.entityLevel,
+        hierarchyPath: parentEntity.hierarchyPath,
+        fullHierarchyPath: parentEntity.fullHierarchyPath,
+        organizationType: parentEntity.organizationType,
+        locationType: parentEntity.locationType,
+        address: parentEntity.address,
+        description: parentEntity.description,
+        isActive: parentEntity.isActive,
+        createdAt: parentEntity.createdAt,
+        updatedAt: parentEntity.updatedAt,
+        parentEntityId: parentEntity.parentEntityId,
+        responsiblePersonId: parentEntity.responsiblePersonId,
+        children: buildHierarchy(parentEntity.entityId)
+      };
 
       return reply.send({
         success: true,
-        organization: null,
-        message: 'No organizations found for this tenant',
-        needsParentCreation: true
+        parentEntity: transformedParent,
+        message: 'Parent entity hierarchy retrieved successfully'
       });
+
     } catch (error) {
-      console.error('❌ Get parent entity failed:', error);
+      console.error('❌ Get parent entity hierarchy failed:', error);
       return reply.code(500).send({
         success: false,
         error: 'Retrieval failed',
-        message: 'Failed to get parent entity'
+        message: 'Failed to get parent entity hierarchy'
       });
     }
   });
@@ -263,11 +321,110 @@ export default async function entityRoutes(fastify, options) {
       const { tenantId } = request.params;
       const { entityType } = request.query;
 
-      console.log('🏢 Getting tenant entities:', { tenantId, entityType });
+      console.log('🏢 Getting tenant entities:', {
+        tenantId,
+        entityType,
+        queryString: request.query,
+        url: request.url,
+        tenantIdType: typeof tenantId,
+        tenantIdLength: tenantId?.length
+      });
+
+      // DEBUG: Validate tenantId format
+      if (!tenantId || typeof tenantId !== 'string' || tenantId.length !== 36) {
+        console.error('🚨 Invalid tenantId format:', {
+          tenantId,
+          type: typeof tenantId,
+          length: tenantId?.length
+        });
+        return reply.code(400).send({
+          success: false,
+          error: 'Invalid tenant ID',
+          message: 'Tenant ID must be a valid UUID string'
+        });
+      }
+
+      // DEBUG: Check if tenant exists in database
+      const { db } = await import('../db/index.js');
+      const { tenants, tenantUsers } = await import('../db/schema/index.js');
+      const { eq, and } = await import('drizzle-orm');
+
+      const [tenantRecord] = await db
+        .select({ tenantId: tenants.tenantId, companyName: tenants.companyName })
+        .from(tenants)
+        .where(eq(tenants.tenantId, tenantId))
+        .limit(1);
+
+      if (!tenantRecord) {
+        console.error('🚨 Tenant does not exist in database:', tenantId);
+
+        // Try to find the correct tenant for this user as fallback
+        if (request.userContext?.userId) {
+          console.log('🔍 Attempting to find correct tenant for user:', request.userContext.userId);
+
+          const userTenants = await db
+            .select({
+              tenantId: tenants.tenantId,
+              companyName: tenants.companyName,
+              subdomain: tenants.subdomain
+            })
+            .from(tenants)
+            .innerJoin(tenantUsers, eq(tenants.tenantId, tenantUsers.tenantId))
+            .where(and(
+              eq(tenantUsers.kindeUserId, request.userContext.userId),
+              eq(tenants.isActive, true)
+            ))
+            .orderBy(tenants.createdAt)
+            .limit(1);
+
+          if (userTenants.length > 0) {
+            const correctTenant = userTenants[0];
+            console.log('✅ Found correct tenant for user:', correctTenant);
+
+            // Use the correct tenant instead
+            const result = await EntityAdminService.getTenantEntities(correctTenant.tenantId, entityType);
+
+            if (result.success) {
+              console.log('✅ Returned entities for correct tenant:', correctTenant.tenantId);
+              return reply.send({
+                ...result,
+                correctedTenantId: correctTenant.tenantId,
+                originalTenantId: tenantId,
+                message: `Tenant corrected from ${tenantId} to ${correctTenant.tenantId}`
+              });
+            }
+          }
+        }
+
+        return reply.code(404).send({
+          success: false,
+          error: 'Tenant not found',
+          message: `Tenant with ID ${tenantId} does not exist`,
+          suggestion: 'Try refreshing the page to get the correct tenant information'
+        });
+      }
+
+      console.log('✅ Tenant exists:', {
+        tenantId: tenantRecord.tenantId,
+        companyName: tenantRecord.companyName
+      });
 
       const result = await EntityAdminService.getTenantEntities(tenantId, entityType);
 
       if (result.success) {
+        console.log('✅ Tenant entities retrieved successfully:', {
+          tenantId,
+          entityType,
+          totalEntities: result.total,
+          entityTypesReturned: [...new Set(result.entities.map(e => e.entityType))],
+          sampleEntities: result.entities.slice(0, 3).map(e => ({
+            id: e.entityId,
+            name: e.entityName,
+            type: e.entityType,
+            tenantId: e.tenantId
+          }))
+        });
+
         return reply.send(result);
       } else {
         return reply.code(404).send(result);

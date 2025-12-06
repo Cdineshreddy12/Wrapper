@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Shield, Lock, AlertCircle } from 'lucide-react';
 import AuthButton from './AuthButton';
-import api from '@/lib/api';
+import { useAuthStatus } from '@/hooks/useSharedQueries';
+import AnimatedLoader from '@/components/common/AnimatedLoader';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -83,13 +84,11 @@ const AuthRequired: React.FC<AuthRequiredProps> = ({
 
 const LoadingSpinner: React.FC = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
-      <Card className="p-8">
-        <CardContent className="flex flex-col items-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <p className="text-gray-600">Checking authentication...</p>
-        </CardContent>
-      </Card>
+    <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="text-center">
+        <AnimatedLoader size="lg" className="mb-6" />
+        <p className="text-gray-600 dark:text-gray-300 text-lg font-medium">Checking authentication...</p>
+      </div>
     </div>
   );
 };
@@ -121,7 +120,7 @@ const AccessDenied: React.FC<{ reason: string }> = ({ reason }) => {
   );
 };
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = React.memo(({
   children,
   requiredOrganization,
   requiredPermissions = [],
@@ -129,51 +128,25 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   redirectTo,
   skipOnboardingCheck = false
 }) => {
-  const { 
-    isAuthenticated, 
-    isLoading, 
+  const {
+    isAuthenticated,
+    isLoading,
     user
   } = useKindeAuth();
   const location = useLocation();
-  const [authStatusLoading, setAuthStatusLoading] = useState(true);
-  const [backendAuthStatus, setBackendAuthStatus] = useState<any>(null);
+  const { data: authData, isLoading: authStatusLoading, error: authError } = useAuthStatus();
+
+  const backendAuthStatus = authData?.authStatus || null;
 
   console.log('🔒 ProtectedRoute: Called for path:', location.pathname, {
     isAuthenticated,
     isLoading,
     hasUser: !!user,
     userId: user?.id,
-    skipOnboardingCheck
+    skipOnboardingCheck,
+    authStatusLoading,
+    hasAuthData: !!backendAuthStatus
   });
-
-  // Get auth status from backend (which includes onboarding status)
-  useEffect(() => {
-    const getBackendAuthStatus = async () => {
-      if (!isAuthenticated || !user || isLoading) {
-        setAuthStatusLoading(false);
-        return;
-      }
-
-      try {
-        console.log('🔍 ProtectedRoute: Getting backend auth status...');
-        const response = await api.get('/admin/auth-status');
-        setBackendAuthStatus(response.data.authStatus);
-        console.log('📊 ProtectedRoute: Backend auth status:', response.data.authStatus);
-      } catch (error) {
-        console.error('❌ ProtectedRoute: Error getting backend auth status:', error);
-        // On error, assume user needs onboarding for safety
-        setBackendAuthStatus({ 
-          isAuthenticated: false, 
-          needsOnboarding: true,
-          onboardingCompleted: false 
-        });
-      } finally {
-        setAuthStatusLoading(false);
-      }
-    };
-
-    getBackendAuthStatus();
-  }, [isAuthenticated, user, isLoading]);
 
   // Show loading spinner while checking authentication
   if (isLoading || authStatusLoading) {
@@ -238,6 +211,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // User is authenticated and authorized
   return <>{children}</>;
-};
+});
+
+ProtectedRoute.displayName = 'ProtectedRoute';
 
 export default ProtectedRoute; 

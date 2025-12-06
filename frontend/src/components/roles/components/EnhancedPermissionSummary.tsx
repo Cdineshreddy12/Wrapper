@@ -11,6 +11,19 @@ interface EnhancedPermissionSummaryProps {
   userCount: number;
 }
 
+// Normalize permissions - convert JSON strings to objects
+const normalizePermissions = (permissions: any): Record<string, any> | string[] => {
+  if (typeof permissions === 'string') {
+    try {
+      return JSON.parse(permissions);
+    } catch (error) {
+      console.error('Failed to parse permissions JSON string:', error);
+      return {};
+    }
+  }
+  return permissions;
+};
+
 export function EnhancedPermissionSummary({
   permissions,
   roleName,
@@ -18,7 +31,9 @@ export function EnhancedPermissionSummary({
   isSystemRole,
   userCount,
 }: EnhancedPermissionSummaryProps) {
-  const permissionSummary = getPermissionSummary(permissions);
+  // Normalize permissions before calculating summary
+  const normalizedPermissions = normalizePermissions(permissions);
+  const permissionSummary = getPermissionSummary(normalizedPermissions);
 
   return (
     <div className="space-y-6">

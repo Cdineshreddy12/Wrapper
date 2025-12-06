@@ -8,7 +8,8 @@ import {
   customRoles,
   tenantUsers,
   credits,
-  creditPurchases
+  creditPurchases,
+  creditAllocations
 } from '../db/schema/index.js';
 import { webhookLogs } from '../db/schema/webhook-logs.js';
 import { EmailService } from '../utils/email.js';
@@ -78,56 +79,108 @@ export class SubscriptionService {
   // Get current subscription (now returns credit-based information)
   static async getCurrentSubscription(tenantId) {
     try {
-      // First try to get credit balance
+      // First try to get credit balance from credits table
       const creditBalance = await CreditService.getCurrentBalance(tenantId);
 
-      if (creditBalance) {
-        // Return credit information in subscription format for backward compatibility
-        return {
-          id: `credit_${tenantId}`,
-          tenantId,
-          plan: 'credit_based',
-          status: creditBalance.availableCredits > 0 ? 'active' : 'insufficient_credits',
-          isTrialUser: false,
-          subscribedTools: ['crm', 'hr', 'analytics'], // Default tools
-          usageLimits: {
-            users: 100, // Default limits
-            apiCalls: 100000,
-            storage: 100000000000 // 100GB
-          },
-          monthlyPrice: 0, // Credits are prepaid
-          yearlyPrice: 0,
-          billingCycle: 'prepaid',
-          trialStart: null,
-          trialEnd: null,
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: null,
-          stripeSubscriptionId: null,
-          stripeCustomerId: null,
-          hasEverUpgraded: true,
-          trialToggledOff: true,
-          availableCredits: creditBalance.availableCredits,
-          totalCredits: creditBalance.totalCredits,
-          reservedCredits: creditBalance.reservedCredits,
-          creditExpiry: creditBalance.creditExpiry,
-          alerts: creditBalance.alerts,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
+      // Also check creditAllocations table to aggregate available credits
+      let totalAvailableFromAllocations = 0;
+      let totalAllocatedFromAllocations = 0;
+      let totalUsedFromAllocations = 0;
+      
+      try {
+        const allocations = await db
+          .select({
+            availableCredits: sql`COALESCE(SUM(${creditAllocations.availableCredits}::numeric), 0)`,
+            allocatedCredits: sql`COALESCE(SUM(${creditAllocations.allocatedCredits}::numeric), 0)`,
+            usedCredits: sql`COALESCE(SUM(${creditAllocations.usedCredits}::numeric), 0)`
+          })
+          .from(creditAllocations)
+          .where(and(
+            eq(creditAllocations.tenantId, tenantId),
+            eq(creditAllocations.isActive, true)
+          ));
+
+        if (allocations && allocations.length > 0) {
+          totalAvailableFromAllocations = parseFloat(allocations[0].availableCredits || '0');
+          totalAllocatedFromAllocations = parseFloat(allocations[0].allocatedCredits || '0');
+          totalUsedFromAllocations = parseFloat(allocations[0].usedCredits || '0');
+        }
+      } catch (allocationError) {
+        console.warn('Error fetching credit allocations:', allocationError.message);
       }
 
-      // Fallback: try to get traditional subscription if no credits found
-      const [subscription] = await db
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.tenantId, tenantId))
-        .orderBy(desc(subscriptions.createdAt))
-        .limit(1);
+      // Use the higher value between credits table and creditAllocations table
+      const finalAvailableCredits = Math.max(
+        creditBalance?.availableCredits || 0,
+        totalAvailableFromAllocations
+      );
+      const finalTotalCredits = Math.max(
+        creditBalance?.totalCredits || totalAllocatedFromAllocations,
+        totalAllocatedFromAllocations
+      );
 
-      return subscription || null;
+      // Determine status based on available credits
+      const hasCredits = finalAvailableCredits > 0;
+      const status = hasCredits ? 'active' : 'insufficient_credits';
+
+      // Return credit information in subscription format for backward compatibility
+      return {
+        id: `credit_${tenantId}`,
+        tenantId,
+        plan: 'credit_based',
+        status,
+        isTrialUser: false,
+        subscribedTools: ['crm', 'hr', 'analytics'], // Default tools
+        usageLimits: {
+          users: 100, // Default limits
+          apiCalls: 100000,
+          storage: 100000000000 // 100GB
+        },
+        monthlyPrice: 0, // Credits are prepaid
+        yearlyPrice: 0,
+        billingCycle: 'prepaid',
+        trialStart: null,
+        trialEnd: null,
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: null,
+        stripeSubscriptionId: null,
+        stripeCustomerId: null,
+        hasEverUpgraded: true,
+        trialToggledOff: true,
+        availableCredits: finalAvailableCredits,
+        totalCredits: finalTotalCredits,
+        reservedCredits: creditBalance?.reservedCredits || 0,
+        creditExpiry: creditBalance?.creditExpiry || null,
+        alerts: hasCredits ? (creditBalance?.alerts || []) : [{
+          id: 'no_credit_record',
+          type: 'no_credit_record',
+          severity: 'info',
+          title: 'No Credit Record',
+          message: 'This entity does not have a credit record yet',
+          threshold: 0,
+          currentValue: 0,
+          actionRequired: 'initialize_credits'
+        }],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
     } catch (error) {
       console.error('Error getting current subscription:', error);
-      return null;
+      
+      // Fallback: try to get traditional subscription if no credits found
+      try {
+        const [subscription] = await db
+          .select()
+          .from(subscriptions)
+          .where(eq(subscriptions.tenantId, tenantId))
+          .orderBy(desc(subscriptions.createdAt))
+          .limit(1);
+
+        return subscription || null;
+      } catch (fallbackError) {
+        console.error('Error fetching fallback subscription:', fallbackError);
+        return null;
+      }
     }
   }
 

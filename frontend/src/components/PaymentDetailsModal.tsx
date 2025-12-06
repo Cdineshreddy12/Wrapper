@@ -80,7 +80,7 @@ export function PaymentDetailsModal({ payment, isOpen, onClose, onRefund }: Paym
                 <div>
                   <p className="text-sm text-gray-600">Amount</p>
                   <p className="font-medium text-lg">
-                    {formatCurrency((payment.amount || 0) * 100)}
+                    {formatCurrency(payment.amount || 0)}
                   </p>
                 </div>
                 <div>
@@ -117,14 +117,14 @@ export function PaymentDetailsModal({ payment, isOpen, onClose, onRefund }: Paym
                   <div>
                     <p className="text-sm text-gray-600">Subtotal</p>
                     <p className="font-medium">
-                      {formatCurrency((payment.netAmount || payment.amount || 0) * 100)}
+                      {formatCurrency(payment.netAmount || payment.amount || 0)}
                     </p>
                   </div>
                   {payment.taxAmount > 0 && (
                     <div>
                       <p className="text-sm text-gray-600">Tax</p>
                       <p className="font-medium">
-                        {formatCurrency((payment.taxAmount || 0) * 100)}
+                        {formatCurrency(payment.taxAmount || 0)}
                       </p>
                     </div>
                   )}
@@ -132,14 +132,14 @@ export function PaymentDetailsModal({ payment, isOpen, onClose, onRefund }: Paym
                     <div>
                       <p className="text-sm text-gray-600">Processing Fees</p>
                       <p className="font-medium">
-                        {formatCurrency((payment.processingFees || 0) * 100)}
+                        {formatCurrency(payment.processingFees || 0)}
                       </p>
                     </div>
                   )}
                   <div className="border-t pt-2">
                     <p className="text-sm text-gray-600">Total</p>
                     <p className="font-medium text-lg">
-                      {formatCurrency((payment.amount || 0) * 100)}
+                      {formatCurrency(payment.amount || 0)}
                     </p>
                   </div>
                 </div>
@@ -161,7 +161,7 @@ export function PaymentDetailsModal({ payment, isOpen, onClose, onRefund }: Paym
                   <div>
                     <p className="text-sm text-gray-600">Refunded Amount</p>
                     <p className="font-medium text-orange-600">
-                      {formatCurrency((payment.amountRefunded || 0) * 100)}
+                      {formatCurrency(payment.amountRefunded || 0)}
                     </p>
                   </div>
                   <div>
@@ -195,7 +195,7 @@ export function PaymentDetailsModal({ payment, isOpen, onClose, onRefund }: Paym
                   <div>
                     <p className="text-sm text-gray-600">Disputed Amount</p>
                     <p className="font-medium text-red-600">
-                      {formatCurrency((payment.amountDisputed || 0) * 100)}
+                      {formatCurrency(payment.amountDisputed || 0)}
                     </p>
                   </div>
                   <div>

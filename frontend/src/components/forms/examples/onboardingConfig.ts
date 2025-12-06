@@ -163,6 +163,16 @@ export const onboardingFormConfig: FormConfig = {
           validation: fieldValidationSchemas.isPrimary,
           helpText: 'Check if this is your main residence',
           className: 'col-span-2'
+        },
+        {
+          id: 'gstin',
+          label: 'GSTIN',
+          type: 'text',
+          placeholder: '22AAAAA0000A1Z6',
+          required: false,
+          validation: fieldValidationSchemas.gstin,
+          helpText: 'GST Identification Number (15 digits)',
+          className: 'col-span-2'
         }
       ]
     },

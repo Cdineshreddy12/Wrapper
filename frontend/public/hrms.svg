@@ -1,0 +1,129 @@
+<svg width="400" height="300" viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="hrmsBgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f0fdf4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#dcfce7;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="hrmsCardGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f1f5f9;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="employeeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="payrollGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="performanceGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="recruitmentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:1" />
+    </linearGradient>
+    <filter id="hrmsShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="2" dy="4" stdDeviation="4" flood-color="#000000" flood-opacity="0.1"/>
+    </filter>
+    <filter id="hrmsGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="300" fill="url(#hrmsBgGradient)"/>
+
+  <!-- Main HRMS Dashboard Card -->
+  <rect x="20" y="40" width="360" height="220" rx="12" fill="url(#hrmsCardGradient)" filter="url(#hrmsShadow)"/>
+  <rect x="20" y="40" width="360" height="8" rx="4" fill="url(#employeeGradient)"/>
+
+  <!-- Header -->
+  <text x="40" y="75" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#1e293b">Human Resource Management</text>
+  <text x="40" y="90" font-family="Arial, sans-serif" font-size="12" fill="#64748b">Employee Lifecycle Platform</text>
+
+  <!-- Employee Management Section -->
+  <rect x="40" y="105" width="140" height="80" rx="8" fill="url(#employeeGradient)" opacity="0.1"/>
+  <!-- Employee cards -->
+  <rect x="55" y="120" width="25" height="15" rx="3" fill="url(#employeeGradient)"/>
+  <circle cx="62" cy="127" r="3" fill="#ffffff"/>
+  <rect x="70" y="135" width="15" height="2" fill="#ffffff" opacity="0.8"/>
+  <rect x="55" y="140" width="25" height="15" rx="3" fill="url(#employeeGradient)" opacity="0.7"/>
+  <circle cx="62" cy="147" r="3" fill="#ffffff"/>
+  <rect x="70" y="155" width="15" height="2" fill="#ffffff" opacity="0.8"/>
+  <rect x="55" y="160" width="25" height="15" rx="3" fill="url(#employeeGradient)" opacity="0.5"/>
+  <circle cx="62" cy="167" r="3" fill="#ffffff"/>
+  <rect x="70" y="175" width="15" height="2" fill="#ffffff" opacity="0.8"/>
+  <text x="55" y="195" font-family="Arial, sans-serif" font-size="11" fill="#374151">Employee Management</text>
+
+  <!-- Payroll Processing Section -->
+  <rect x="200" y="105" width="140" height="80" rx="8" fill="url(#payrollGradient)" opacity="0.1"/>
+  <!-- Payroll elements -->
+  <rect x="220" y="125" width="30" height="20" rx="4" fill="url(#payrollGradient)"/>
+  <text x="225" y="137" font-family="Arial, sans-serif" font-size="8" fill="#ffffff">$</text>
+  <rect x="220" y="150" width="20" height="2" fill="url(#payrollGradient)"/>
+  <rect x="220" y="155" width="25" height="2" fill="url(#payrollGradient)"/>
+  <rect x="220" y="160" width="22" height="2" fill="url(#payrollGradient)"/>
+  <!-- Calculator -->
+  <rect x="270" y="120" width="20" height="25" rx="3" fill="#374151"/>
+  <circle cx="275" cy="130" r="1.5" fill="#ffffff"/>
+  <circle cx="280" cy="130" r="1.5" fill="#ffffff"/>
+  <circle cx="285" cy="130" r="1.5" fill="#ffffff"/>
+  <circle cx="275" cy="135" r="1.5" fill="#ffffff"/>
+  <circle cx="280" cy="135" r="1.5" fill="#ffffff"/>
+  <circle cx="285" cy="135" r="1.5" fill="#ffffff"/>
+  <text x="220" y="185" font-family="Arial, sans-serif" font-size="11" fill="#374151">Payroll Processing</text>
+
+  <!-- Performance Tracking Section -->
+  <rect x="40" y="195" width="140" height="50" rx="8" fill="url(#performanceGradient)" opacity="0.1"/>
+  <!-- Performance metrics -->
+  <rect x="55" y="210" width="25" height="4" rx="2" fill="#e5e7eb"/>
+  <rect x="55" y="210" width="20" height="4" rx="2" fill="url(#performanceGradient)"/>
+  <circle cx="70" cy="212" r="2" fill="url(#performanceGradient)"/>
+  <text x="80" y="215" font-family="Arial, sans-serif" font-size="9" fill="#374151">85%</text>
+  <rect x="55" y="218" width="25" height="4" rx="2" fill="#e5e7eb"/>
+  <rect x="55" y="218" width="18" height="4" rx="2" fill="url(#performanceGradient)"/>
+  <circle cx="70" cy="220" r="2" fill="url(#performanceGradient)"/>
+  <text x="80" y="223" font-family="Arial, sans-serif" font-size="9" fill="#374151">72%</text>
+  <text x="55" y="240" font-family="Arial, sans-serif" font-size="11" fill="#374151">Performance Tracking</text>
+
+  <!-- Recruitment Section -->
+  <rect x="200" y="195" width="140" height="50" rx="8" fill="url(#recruitmentGradient)" opacity="0.1"/>
+  <!-- Job postings -->
+  <rect x="220" y="210" width="25" height="15" rx="3" fill="url(#recruitmentGradient)"/>
+  <text x="225" y="220" font-family="Arial, sans-serif" font-size="7" fill="#ffffff">JOB</text>
+  <rect x="250" y="210" width="25" height="15" rx="3" fill="url(#recruitmentGradient)"/>
+  <text x="255" y="220" font-family="Arial, sans-serif" font-size="7" fill="#ffffff">JOB</text>
+  <rect x="280" y="210" width="25" height="15" rx="3" fill="url(#recruitmentGradient)"/>
+  <text x="285" y="220" font-family="Arial, sans-serif" font-size="7" fill="#ffffff">JOB</text>
+  <!-- Candidates -->
+  <circle cx="232" cy="235" r="4" fill="url(#recruitmentGradient)"/>
+  <circle cx="242" cy="235" r="4" fill="url(#recruitmentGradient)"/>
+  <circle cx="252" y="235" r="4" fill="url(#recruitmentGradient)"/>
+  <text x="220" y="250" font-family="Arial, sans-serif" font-size="11" fill="#374151">Recruitment</text>
+
+  <!-- Floating HR elements for 3D effect -->
+  <circle cx="350" cy="70" r="8" fill="url(#employeeGradient)" opacity="0.6"/>
+  <circle cx="360" cy="85" r="6" fill="url(#payrollGradient)" opacity="0.4"/>
+  <circle cx="340" cy="95" r="5" fill="url(#performanceGradient)" opacity="0.5"/>
+
+  <!-- Organization chart -->
+  <circle cx="320" cy="180" r="6" fill="url(#employeeGradient)"/>
+  <circle cx="305" cy="200" r="5" fill="url(#employeeGradient)" opacity="0.7"/>
+  <circle cx="335" cy="200" r="5" fill="url(#employeeGradient)" opacity="0.7"/>
+  <circle cx="290" cy="220" r="4" fill="url(#employeeGradient)" opacity="0.5"/>
+  <circle cx="320" cy="220" r="4" fill="url(#employeeGradient)" opacity="0.5"/>
+  <circle cx="350" cy="220" r="4" fill="url(#employeeGradient)" opacity="0.5"/>
+  <line x1="320" y1="186" x2="305" y2="195" stroke="url(#employeeGradient)" stroke-width="1"/>
+  <line x1="320" y1="186" x2="335" y2="195" stroke="url(#employeeGradient)" stroke-width="1"/>
+  <line x1="305" y1="205" x2="290" y2="216" stroke="url(#employeeGradient)" stroke-width="1"/>
+  <line x1="305" y1="205" x2="320" y2="216" stroke="url(#employeeGradient)" stroke-width="1"/>
+  <line x1="335" y1="205" x2="320" y2="216" stroke="url(#employeeGradient)" stroke-width="1"/>
+  <line x1="335" y1="205" x2="350" y2="216" stroke="url(#employeeGradient)" stroke-width="1"/>
+</svg>

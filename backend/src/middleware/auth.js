@@ -332,7 +332,14 @@ export async function authMiddleware(request, reply) {
   try {
     console.log('🔐 Authenticating user...');
 
-    const kindeUser = await kindeService.validateToken(token);
+    // Add timeout to prevent hanging requests
+    const authPromise = kindeService.validateToken(token);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Authentication timeout')), 10000) // 10 second timeout
+    );
+
+    const kindeUser = await Promise.race([authPromise, timeoutPromise]);
+    
     if (!kindeUser?.userId) {
       throw new Error('Invalid token response');
     }
@@ -342,6 +349,15 @@ export async function authMiddleware(request, reply) {
 
   } catch (error) {
     console.error('❌ Authentication failed:', error.message);
+
+    // Handle timeout specifically
+    if (error.message === 'Authentication timeout') {
+      return reply.code(408).send({
+        error: 'Request Timeout',
+        message: 'Authentication request timed out. Please try again.',
+        retryable: true
+      });
+    }
 
     // Try token refresh
     const refreshToken = request.cookies?.kinde_refresh_token;
@@ -356,7 +372,8 @@ export async function authMiddleware(request, reply) {
 
     return reply.code(401).send({
       error: 'Unauthorized',
-      message: 'Invalid or expired authentication token'
+      message: 'Invalid or expired authentication token',
+      retryable: true
     });
   }
 }
@@ -381,18 +398,23 @@ export function requirePermission(permission) {
 }
 
 function isPublicRoute(url) {
+  // Routes ending with /current should not be treated as public
+  if (url.endsWith('/current')) {
+    return false;
+  }
+
   return PUBLIC_ROUTES.some(route => {
     if (route.endsWith('*')) {
       return url.startsWith(route.slice(0, -1));
     }
-    
+
     // Handle parameterized routes like /api/entities/hierarchy/:tenantId
     if (route.includes(':')) {
       const pathPattern = route.replace(/:[^/]+/g, '[^/]+');
       const regex = new RegExp(`^${pathPattern.replace(/\//g, '\\/')}`);
       return regex.test(url);
     }
-    
+
     return url.startsWith(route);
   });
 }

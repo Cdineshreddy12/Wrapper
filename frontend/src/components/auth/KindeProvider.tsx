@@ -154,7 +154,7 @@ export const KindeProvider: React.FC<KindeProviderProps> = ({
       redirectUri={redirectUri}
       logoutUri={logoutUri}
       scope="openid profile email offline"
-      useInsecureForRefreshToken={process.env.NODE_ENV === 'development'}
+      useInsecureForRefreshToken={import.meta.env.DEV || import.meta.env.MODE === 'development'}
     >
       <TokenSetupComponent />
       <SilentAuthInitializer />

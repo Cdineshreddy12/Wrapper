@@ -94,6 +94,19 @@ export function UserManagementModals() {
       }
     });
   };
+
+  const handleDeassignRole = async (userId: string, roleId: string) => {
+    userMutations.deassignRole.mutate(
+      { userId, roleId },
+      {
+        onSuccess: () => {
+          // Update selectedRoles to remove the deassigned role
+          const updatedRoles = state.selectedRoles.filter(id => id !== roleId);
+          dispatch({ type: 'SET_SELECTED_ROLES', payload: updatedRoles });
+        }
+      }
+    );
+  };
   
   return (
     <>
@@ -123,6 +136,7 @@ export function UserManagementModals() {
         selectedRoles={state.selectedRoles}
         setSelectedRoles={(roles) => dispatch({ type: 'SET_SELECTED_ROLES', payload: roles })}
         onSave={handleSaveRoleAssignment}
+        onDeassignRole={handleDeassignRole}
       />
       
       {/* Edit User Modal */}

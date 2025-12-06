@@ -244,4 +244,20 @@ export class UserService {
       throw error;
     }
   }
+
+  /**
+   * Deassign a role from a user
+   */
+  static async deassignRole(userId: string, roleId: string): Promise<any> {
+    try {
+      const response = await api.delete(`/admin/users/${userId}/roles/${roleId}`);
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to deassign role');
+      }
+      return response.data;
+    } catch (error) {
+      console.error('Error deassigning role:', error);
+      throw error;
+    }
+  }
 }

@@ -1,7 +1,12 @@
 import { Container } from '@/components/common/Page';
 import { OrganizationManagement } from '@/components/OrganizationManagement';
+import { OrganizationHierarchyModal } from '@/components/OrganizationHierarchyModal';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useOrganizationAuth } from '@/hooks/useOrganizationAuth';
+import { useOrganizationHierarchy } from '@/hooks/useOrganizationHierarchy';
+import { Button } from '@/components/ui/button';
+import { Network } from 'lucide-react';
+import { useState } from 'react';
 import api from '@/lib/api';
 
 
@@ -11,14 +16,68 @@ export function OrganizationPage({
     isAdmin?: boolean
 }) {
     const { tenantId } = useOrganizationAuth()
+    const [isHierarchyModalOpen, setIsHierarchyModalOpen] = useState(false);
 
-    const { users: employees, refreshDashboard } = useDashboardData();
+    const { users: employees, applications, refreshDashboard } = useDashboardData();
+    const { hierarchy: rawHierarchy, loading: hierarchyLoading } = useOrganizationHierarchy(tenantId);
+
+    // Debug applications data
+    console.log('🔍 OrganizationPage - Applications data:', applications);
+    console.log('🔍 OrganizationPage - Applications length:', applications?.length || 0);
+    console.log('🔍 OrganizationPage - Applications type:', Array.isArray(applications) ? 'array' : typeof applications);
+
+    // Transform raw hierarchy to Entity format expected by OrganizationHierarchyChart
+    const hierarchy = rawHierarchy ? rawHierarchy.map((org: any) => ({
+        entityId: org.entityId,
+        entityName: org.entityName,
+        entityType: org.entityType,
+        organizationType: org.organizationType,
+        locationType: org.locationType,
+        entityLevel: org.entityLevel,
+        hierarchyPath: org.hierarchyPath,
+        fullHierarchyPath: org.hierarchyPath,
+        parentEntityId: org.parentEntityId,
+        responsiblePersonId: org.responsiblePersonId,
+        responsiblePersonName: org.responsiblePersonName,
+        isActive: org.isActive,
+        description: org.description,
+        availableCredits: org.availableCredits,
+        reservedCredits: org.reservedCredits,
+        address: org.address,
+        children: org.children ? org.children.map((child: any) => ({
+            entityId: child.entityId,
+            entityName: child.entityName,
+            entityType: child.entityType,
+            organizationType: child.organizationType,
+            locationType: child.locationType,
+            entityLevel: child.entityLevel,
+            hierarchyPath: child.hierarchyPath,
+            fullHierarchyPath: child.hierarchyPath,
+            parentEntityId: child.parentEntityId,
+            responsiblePersonId: child.responsiblePersonId,
+            responsiblePersonName: child.responsiblePersonName,
+            isActive: child.isActive,
+            description: child.description,
+            availableCredits: child.availableCredits,
+            reservedCredits: child.reservedCredits,
+            address: child.address,
+            children: child.children || [],
+            createdAt: child.createdAt,
+            updatedAt: child.updatedAt
+        })) : [],
+        createdAt: org.createdAt,
+        updatedAt: org.updatedAt
+    })) : [];
+
+
     return (
         <Container>
+         
             <OrganizationManagement
                 employees={employees || []}
                 isAdmin={isAdmin || false}
                 tenantId={tenantId}
+                applications={applications || []}
                 makeRequest={async (endpoint: string, options?: RequestInit) => {
                     // Use enhanced api.ts for proper authentication and error handling
                     // TODO: use axios interceptors
@@ -60,14 +119,12 @@ export function OrganizationPage({
                         const response = await api(apiPath, axiosConfig);
                         return response.data;
                     } catch (error: any) {
-                        console.error('API request failed:', error);
                         throw error;
                     }
                 }}
                 loadDashboardData={refreshDashboard}
                 inviteEmployee={() => {
                     // Implement invite employee function
-                    console.log('Invite employee clicked');
                 }}
             />
         </Container>

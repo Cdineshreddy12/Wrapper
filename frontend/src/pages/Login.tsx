@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { useNavigate, useParams, useSearchParams, Navigate, useLocation } from 'react-router-dom'
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Users, BarChart3, CreditCard, Building2, ArrowLeft, ExternalLink } from 'lucide-react'
-
+import { ArrowLeft, Loader2, Shield, Zap, BarChart3, Users, CheckCircle2, Globe } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '@/lib/api'
 import { crmAuthService } from '../services/crmAuthService'
@@ -24,548 +23,580 @@ export function Login() {
   } = useKindeAuth()
   
   const [isRedirecting, setIsRedirecting] = useState(false)
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [userOrgs, setUserOrgs] = useState<any>(null)
   const [currentOrg, setCurrentOrg] = useState<any>(null)
+  const [attemptCount, setAttemptCount] = useState(0)
 
-  // Check for external redirect URL from query params
-  const redirectTo = searchParams.get('redirect_to')
-  const app = searchParams.get('app')
-  
   // CRM-specific parameters
   const returnTo = searchParams.get('returnTo')
   const source = searchParams.get('source')
   const error = searchParams.get('error')
-  const redirectAfterAuth = searchParams.get('redirectAfterAuth')
   const crmRedirect = searchParams.get('crmRedirect')
   
   // Determine if this is a CRM request
-  const isCrmRequest = source === 'crm' || app === 'crm' || crmRedirect === 'true'
-  const shouldAutoRedirect = redirectAfterAuth === 'true'
+  const isCrmRequest = source === 'crm' || crmRedirect === 'true'
   
-  // ✅ NEW: Store user's intended path when CRM request is detected
+  // Store user's intended path when CRM request is detected
   useEffect(() => {
     if (isCrmRequest && returnTo) {
-      console.log('🔍 CRM request detected, storing intended path');
-      // Store the intended path for debugging
+      console.log('🔍 CRM request detected, storing intended path')
       try {
-        const returnUrl = new URL(returnTo);
-        const intendedPath = returnUrl.pathname === '/' ? '/' : returnUrl.pathname;
-        sessionStorage.setItem('crm_intended_path', intendedPath);
-        console.log('💾 Stored intended path:', intendedPath);
-      } catch (error) {
-        console.error('❌ Error storing intended path:', error);
+        const returnUrl = new URL(returnTo)
+        const intendedPath = returnUrl.pathname === '/' ? '/' : returnUrl.pathname
+        sessionStorage.setItem('crm_intended_path', intendedPath)
+        console.log('💾 Stored intended path:', intendedPath)
+      } catch (err) {
+        console.error('❌ Error storing intended path:', err)
       }
     }
-  }, [isCrmRequest, returnTo]);
+  }, [isCrmRequest, returnTo])
   
-  console.log('🔐 Login.tsx - CRM Integration Check:', {
-    redirectTo,
-    app,
-    isAuthenticated,
-    hasUser: !!user,
-    isLoading,
-    isRedirecting,
-    currentOrg,
-    userOrgs,
-    pathname: location.pathname,
-    timestamp: new Date().toISOString()
-  })
-
   // Get organization data when user is authenticated
   useEffect(() => {
     const fetchOrgData = async () => {
-      if (!isAuthenticated || !user || isLoading) return;
+      if (!isAuthenticated || !user || isLoading) return
       
       try {
-        // Get current organization
-        const org = await getOrganization();
-        console.log('🏢 Current organization:', org);
-        setCurrentOrg(org);
+        const org = await getOrganization()
+        console.log('🏢 Current organization:', org)
+        setCurrentOrg(org)
         
-        // Get all user organizations
-        const orgs = await getUserOrganizations();
-        console.log('🏢 User organizations:', orgs);
-        setUserOrgs(orgs);
-      } catch (error) {
-        console.error('❌ Error fetching organization data:', error);
+        const orgs = await getUserOrganizations()
+        console.log('🏢 User organizations:', orgs)
+        setUserOrgs(orgs)
+      } catch (err) {
+        console.error('❌ Error fetching organization data:', err)
       }
-    };
+    }
 
-    fetchOrgData();
-  }, [isAuthenticated, user, isLoading, getOrganization, getUserOrganizations]);
+    fetchOrgData()
+  }, [isAuthenticated, user, isLoading, getOrganization, getUserOrganizations])
 
   // Handle CRM redirect after authentication
-  // ✅ NEW FLOW: Always redirect to /callback endpoint to prevent infinite loops
   useEffect(() => {
     const handleCrmRedirect = async () => {
-      // Only proceed if authenticated with CRM redirect
       if (!isAuthenticated || !user || !returnTo || !isCrmRequest || isLoading || isRedirecting) {
-        return;
+        return
       }
 
-      // ✅ CRITICAL: Check for infinite redirect loops before proceeding
-      const crmRedirectCount = parseInt(localStorage.getItem('crm_redirect_count') || '0');
+      // Check for infinite redirect loops
+      const crmRedirectCount = parseInt(localStorage.getItem('crm_redirect_count') || '0')
       if (crmRedirectCount > 3) {
-        console.error('🚨 CRM INFINITE LOOP DETECTED - Too many redirects');
-        localStorage.removeItem('crm_redirect_count');
-        window.location.href = 'https://crm.zopkit.com/';
-        return;
+        console.error('🚨 CRM INFINITE LOOP DETECTED - Too many redirects')
+        localStorage.removeItem('crm_redirect_count')
+        window.location.href = 'https://crm.zopkit.com/'
+        return
       }
-      localStorage.setItem('crm_redirect_count', (crmRedirectCount + 1).toString());
+      localStorage.setItem('crm_redirect_count', (crmRedirectCount + 1).toString())
 
-      console.log('🔄 Login.tsx - Processing CRM redirect to:', returnTo);
+      console.log('🔄 Processing CRM redirect to:', returnTo)
+      setIsRedirecting(true)
       
       try {
         // Validate return URL using CRM auth service
         if (!crmAuthService.validateReturnToUrl(returnTo)) {
-          console.error('❌ Invalid CRM return URL:', returnTo);
-          toast.error('Invalid return URL. Please contact support.');
-          return;
+          console.error('❌ Invalid CRM return URL:', returnTo)
+          toast.error('Invalid return URL. Please contact support.')
+          setIsRedirecting(false)
+          return
         }
         
         // Get access token from Kinde
-        let token = null;
+        let token = null
         
         try {
-          token = await getToken();
+          token = await getToken()
         } catch (tokenError) {
-          console.warn('⚠️ Could not get token via getToken(), but proceeding with redirect:', tokenError);
+          console.warn('⚠️ Could not get token via getToken():', tokenError)
         }
         
         // Clear the CRM params from current URL to prevent loops
-        const currentUrl = new URL(window.location.href);
-        currentUrl.searchParams.delete('returnTo');
-        currentUrl.searchParams.delete('source');
-        currentUrl.searchParams.delete('app');
-        currentUrl.searchParams.delete('error');
-        currentUrl.searchParams.delete('redirectAfterAuth');
-        currentUrl.searchParams.delete('crmRedirect');
-        window.history.replaceState({}, '', currentUrl.toString());
+        const currentUrl = new URL(window.location.href)
+        currentUrl.searchParams.delete('returnTo')
+        currentUrl.searchParams.delete('source')
+        currentUrl.searchParams.delete('crmRedirect')
+        currentUrl.searchParams.delete('error')
+        window.history.replaceState({}, '', currentUrl.toString())
         
-        // ✅ NEW: Use JWT-based CRM authentication service
-        try {
-          // Validate returnTo URL using the service
-          if (!crmAuthService.validateReturnToUrl(returnTo)) {
-            console.error('❌ Invalid CRM returnTo URL:', returnTo);
-            toast.error('Invalid return URL. Please contact support.');
-            return;
-          }
-          
-          // Generate CRM callback URL with JWT authentication
-          const callbackUrl = crmAuthService.generateCRMCallback(user, returnTo);
-          
-          console.log('🎯 CRM Authentication Success:', {
-            user: user.email,
-            originalReturnTo: returnTo,
-            callbackUrl: callbackUrl,
-            hasJWTToken: callbackUrl.includes('code=')
-          });
-          
-          // ✅ CRITICAL: Clear any stored paths to prevent future issues
-          sessionStorage.removeItem('crm_intended_path');
-          localStorage.removeItem('crm_redirect_count');
-          localStorage.removeItem('crm_last_redirect');
-          
-          // ✅ CRITICAL: Store authentication data for debugging
-          localStorage.setItem('crm_callback_url', callbackUrl);
-          localStorage.setItem('crm_user_id', user.id || user.email || 'unknown');
-          localStorage.setItem('crm_callback_timestamp', Date.now().toString());
-          
-          // ✅ CRITICAL: Redirect to CRM callback endpoint with JWT authentication
-          window.location.href = callbackUrl;
-          
-        } catch (authError) {
-          console.error('❌ Failed to generate CRM authentication:', authError);
-          
-          // ✅ SAFE FALLBACK: Redirect to CRM root without callback to prevent loops
-          console.log('🔄 Fallback: Redirecting to CRM root due to authentication failure');
-          window.location.href = crmAuthService.generateFallbackUrl();
-        }
+        // Generate CRM callback URL with JWT authentication
+        const callbackUrl = crmAuthService.generateCRMCallback(user, returnTo)
         
-      } catch (error) {
-        console.error('❌ Error during CRM redirect:', error);
-        toast.error('Failed to redirect to CRM. Please try again.');
+        console.log('🎯 CRM Authentication Success:', {
+          user: user.email,
+          originalReturnTo: returnTo,
+          callbackUrl: callbackUrl
+        })
+        
+        // Clear stored paths and redirect count
+        sessionStorage.removeItem('crm_intended_path')
+        localStorage.removeItem('crm_redirect_count')
+        localStorage.removeItem('crm_last_redirect')
+        
+        // Store authentication data for debugging
+        localStorage.setItem('crm_callback_url', callbackUrl)
+        localStorage.setItem('crm_user_id', user.id || user.email || 'unknown')
+        localStorage.setItem('crm_callback_timestamp', Date.now().toString())
+        
+        // Redirect to CRM callback endpoint with JWT authentication
+        window.location.href = callbackUrl
+        
+      } catch (err) {
+        console.error('❌ Failed to generate CRM authentication:', err)
+        console.log('🔄 Fallback: Redirecting to CRM root')
+        window.location.href = crmAuthService.generateFallbackUrl()
       }
-    };
+    }
     
-    // Small delay to ensure everything is ready
-    const timer = setTimeout(handleCrmRedirect, 500);
-    return () => clearTimeout(timer);
-  }, [isAuthenticated, user, returnTo, isCrmRequest, isLoading, isRedirecting, getToken]);
-
-  // Handle external redirect after authentication (existing functionality)
-  useEffect(() => {
-    const handleExternalRedirect = async () => {
-      // Only proceed if authenticated with external redirect (non-CRM)
-      if (!isAuthenticated || !user || !redirectTo || isLoading || isRedirecting || isCrmRequest) {
-        return;
-      }
-
-      console.log('🔄 Login.tsx - Processing external redirect to:', redirectTo);
-      
-      try {
-        // Get access token from Kinde
-        let token = null;
-        
-        try {
-          token = await getToken();
-        } catch (tokenError) {
-          console.warn('⚠️ Could not get token via getToken(), checking user properties:', tokenError);
-          // For now, we'll handle this in the backend by passing the session
-        }
-        
-        if (token) {
-          // Construct redirect URL with token
-          const redirectUrl = new URL(redirectTo);
-          redirectUrl.searchParams.set('token', token);
-          if (app) redirectUrl.searchParams.set('app', app);
-          
-          console.log('🚀 Redirecting to external app:', redirectUrl.toString());
-          
-          // Clear the redirect params from current URL to prevent loops
-          const currentUrl = new URL(window.location.href);
-          currentUrl.searchParams.delete('redirect_to');
-          currentUrl.searchParams.delete('app');
-          window.history.replaceState({}, '', currentUrl.toString());
-          
-          // Redirect to external app
-          window.location.href = redirectUrl.toString();
-        } else {
-          console.error('❌ No token available for external redirect');
-          toast.error('Authentication token not available. Please try logging in again.');
-        }
-      } catch (error) {
-        console.error('❌ Error during external redirect:', error);
-        toast.error('Failed to redirect to application. Please try again.');
-      }
-    };
-    
-    // Small delay to ensure everything is ready
-    const timer = setTimeout(handleExternalRedirect, 500);
-    return () => clearTimeout(timer);
-  }, [isAuthenticated, user, redirectTo, app, isLoading, isRedirecting, getToken]);
-
-  // Show loading screen when processing CRM redirect
-  if (!isLoading && isAuthenticated && user && returnTo && isCrmRequest && !isRedirecting) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-gray-600">Redirecting to CRM...</p>
-          <p className="text-sm text-gray-500 mt-2">Please wait while we redirect you back to the CRM application</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show loading screen when processing external redirect
-  if (!isLoading && isAuthenticated && user && redirectTo && !isRedirecting && !isCrmRequest) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-gray-600">Redirecting to your application...</p>
-          <p className="text-sm text-gray-500 mt-2">Please wait while we redirect you back to {app || 'your application'}</p>
-        </div>
-      </div>
-    );
-  }
+    const timer = setTimeout(handleCrmRedirect, 500)
+    return () => clearTimeout(timer)
+  }, [isAuthenticated, user, returnTo, isCrmRequest, isLoading, isRedirecting, getToken])
 
   // Handle post-login redirect for authenticated users
   useEffect(() => {
     const handlePostLoginRedirect = async () => {
-      if (!isAuthenticated || !user || isLoading || redirectTo || returnTo || isRedirecting) {
+      if (!isAuthenticated || !user || isLoading || returnTo || isRedirecting) {
         return
       }
 
-      console.log('🔄 Login.tsx - User authenticated, checking onboarding status')
+      console.log('🔄 User authenticated, checking onboarding status')
       setIsRedirecting(true)
 
       try {
-        // Check onboarding status to determine where to redirect
         const response = await api.get('/onboarding/status')
         const status = response.data
 
         if (status.user && status.isOnboarded && !status.needsOnboarding) {
-          // User is fully onboarded - go to dashboard
           console.log('✅ User onboarded, redirecting to dashboard')
           navigate('/dashboard', { replace: true })
         } else if (status.authStatus?.onboardingCompleted === true || 
                    status.authStatus?.userType === 'INVITED_USER' ||
                    status.authStatus?.isInvitedUser === true) {
-          // INVITED USERS: Always go to dashboard (they skip onboarding)
-          console.log('✅ Invited user detected, redirecting to dashboard (skipping onboarding)')
+          console.log('✅ Invited user detected, redirecting to dashboard')
           navigate('/dashboard', { replace: true })
         } else {
-          // User needs onboarding - go to onboarding page
-          console.log('🔄 User needs onboarding, redirecting to onboarding')
+          console.log('🔄 User needs onboarding')
           navigate('/onboarding', { replace: true })
         }
-      } catch (error) {
-        console.error('❌ Error checking onboarding status:', error)
-        // Default to onboarding on error
+      } catch (err) {
+        console.error('❌ Error checking onboarding status:', err)
         navigate('/onboarding', { replace: true })
       }
     }
 
     handlePostLoginRedirect()
-  }, [isAuthenticated, user, isLoading, redirectTo, navigate])
+  }, [isAuthenticated, user, isLoading, returnTo, navigate, isRedirecting])
 
   // Show loading while handling post-login redirect
-  if (!isLoading && isAuthenticated && user && !redirectTo && !returnTo && !isRedirecting) {
+  if (!isLoading && isAuthenticated && user && !returnTo && !isRedirecting) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-gray-600">Setting up your workspace...</p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="relative w-16 h-16 mx-auto">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full opacity-20 animate-pulse"></div>
+            <div className="absolute inset-2 border-2 border-transparent border-t-blue-500 border-r-cyan-500 rounded-full animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Zap className="w-8 h-8 text-blue-400" />
+            </div>
+          </div>
+          <div>
+            <p className="text-slate-200 font-semibold text-lg">Setting up your workspace</p>
+            <p className="text-slate-400 text-sm mt-2">Initializing your environment...</p>
+          </div>
         </div>
       </div>
     )
   }
-
-  // Check for messages from URL params - only run once
-  useEffect(() => {
-    const message = searchParams.get('message')
-    const error = searchParams.get('error')
-    
-    if (message === 'setup_complete') {
-      toast.success('Organization setup complete! Please sign in to continue.')
-    }
-    
-    if (error === 'auth_failed') {
-      toast.error('Authentication failed. Please try again.')
-    }
-  }, []) // Empty dependency array to run only once
 
   // Show loading while auth is being determined
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="relative w-16 h-16 mx-auto">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full opacity-20 animate-pulse"></div>
+            <div className="absolute inset-2 border-2 border-transparent border-t-blue-500 border-r-cyan-500 rounded-full animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Shield className="w-8 h-8 text-blue-400" />
+            </div>
+          </div>
+          <div>
+            <p className="text-slate-200 font-semibold text-lg">Verifying credentials</p>
+            <p className="text-slate-400 text-sm mt-2">Connecting to Zopkit...</p>
+          </div>
         </div>
       </div>
     )
   }
 
-  const handleAuthSuccess = (user: any) => {
-    toast.success(`Welcome, ${user.givenName || user.email}!`)
-    // Let the router handle the redirect automatically
+  // Show loading while redirecting to CRM
+  if (!isLoading && isAuthenticated && user && returnTo && isCrmRequest && isRedirecting) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="relative w-16 h-16 mx-auto">
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full opacity-20 animate-pulse"></div>
+            <div className="absolute inset-2 border-2 border-transparent border-t-emerald-500 border-r-cyan-500 rounded-full animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Globe className="w-8 h-8 text-emerald-400" />
+            </div>
+          </div>
+          <div>
+            <p className="text-slate-200 font-semibold text-lg">Redirecting to CRM</p>
+            <p className="text-slate-400 text-sm mt-2">Establishing secure connection...</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
-  const handleAuthError = (error: string) => {
-    toast.error(error)
+  // Show loading while redirecting to dashboard
+  if (isRedirecting && !returnTo && isCrmRequest === false) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="relative w-16 h-16 mx-auto">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full opacity-20 animate-pulse"></div>
+            <div className="absolute inset-2 border-2 border-transparent border-t-blue-500 border-r-cyan-500 rounded-full animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Zap className="w-8 h-8 text-blue-400" />
+            </div>
+          </div>
+          <div>
+            <p className="text-slate-200 font-semibold text-lg">Redirecting to dashboard</p>
+            <p className="text-slate-400 text-sm mt-2">Loading your workspace...</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
-  // Handle going back to CRM without login
   const handleBackToCRM = () => {
-            if (returnTo && crmAuthService.validateReturnToUrl(returnTo)) {
-      window.location.href = returnTo;
+    if (returnTo && crmAuthService.validateReturnToUrl(returnTo)) {
+      window.location.href = returnTo
     } else {
-      toast.error('Invalid return URL');
+      toast.error('Invalid return URL')
     }
-  };
+  }
 
-  // Handle login - let Kinde manage organization selection
   const handleLogin = async () => {
     try {
-      console.log('🔄 Starting Kinde login flow');
-      // Kinde will automatically handle organization selection:
-      // - If user belongs to one org: automatically signs them in
-      // - If user belongs to multiple orgs: shows organization picker
-      // - If user belongs to no orgs: signs them in without org context
-      await login();
-    } catch (error) {
-      console.error('❌ Login error:', error);
-      toast.error('Failed to start login process. Please try again.');
+      setIsLoggingIn(true)
+      setAttemptCount(prev => prev + 1)
+      console.log('🔄 Starting Google login flow')
+      await login()
+    } catch (err) {
+      console.error('❌ Login error:', err)
+      toast.error('Failed to start login process. Please try again.')
+      setIsLoggingIn(false)
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-lg w-full space-y-8">
-        {/* CRM Mode Header */}
-        {isCrmRequest && (
-          <div className="text-center">
-            <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 bg-green-600 rounded-lg flex items-center justify-center">
-                <ExternalLink className="h-10 w-10 text-white" />
-              </div>
-            </div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">🔐 CRM Authentication</h1>
-            <p className="text-lg text-gray-600">Please login to access the CRM application</p>
-            
-            {/* CRM Return URL Info */}
-            {returnTo && (
-              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-sm text-green-800 font-medium">
-                  Returning to: <code className="text-xs break-all">{returnTo}</code>
-                </p>
-              </div>
-            )}
-            
-            {/* Previous Error Display */}
-            {error && (
-              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-800 font-medium">
-                  Previous error: {decodeURIComponent(error)}
-                </p>
-              </div>
-            )}
-            
-            {/* Back to CRM Button */}
-            <Button
-              onClick={handleBackToCRM}
-              variant="outline"
-              size="sm"
-              className="mt-3"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to CRM
-            </Button>
-          </div>
-        )}
-
-        {/* Normal Wrapper Header */}
-        {!isCrmRequest && (
-          <div className="text-center">
-            <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Building2 className="h-10 w-10 text-white" />
-              </div>
-            </div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Wrapper Platform</h1>
-            <p className="text-lg text-gray-600">Enterprise Multi-tenant SaaS Solution</p>
-          </div>
-        )}
-
-        {/* Main login card */}
-        <Card className={`shadow-xl ${isCrmRequest ? 'border-green-200' : ''}`}>
-          <CardHeader className="text-center pb-4">
-            <CardTitle className="text-2xl">
-              {isCrmRequest ? 'CRM Authentication Required' : 'Welcome Back'}
-            </CardTitle>
-            <CardDescription>
-              {isCrmRequest 
-                ? 'Sign in to access the CRM application'
-                : 'Sign in to access your organization\'s dashboard'
-              }
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <Button 
-                onClick={handleLogin}
-                className={`w-full ${isCrmRequest ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
-                size="lg"
-              >
-                {isCrmRequest ? 'Sign In to CRM' : 'Sign In with Kinde'}
-              </Button>
-              
-              <div className="text-center">
-                <p className="text-sm text-gray-600">
-                  {isCrmRequest 
-                    ? 'Kinde will securely authenticate you and redirect you back to CRM'
-                    : 'Kinde will automatically detect your organization'
-                  }
-                </p>
-              </div>
-
-              {/* Show organization info if user is authenticated */}
-              {isAuthenticated && currentOrg && (
-                <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-sm text-green-800 font-medium">
-                    ✓ Signed in to: {currentOrg.orgName}
-                  </p>
-                  {userOrgs && userOrgs.orgCodes && userOrgs.orgCodes.length > 1 && (
-                    <p className="text-xs text-green-600 mt-1">
-                      You have access to {userOrgs.orgCodes.length} organizations
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Platform Features - Only show for non-CRM requests */}
-        {!isCrmRequest && (
-          <Card className="shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-lg text-center">Platform Features</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-start space-x-2">
-                  <Users className="h-5 w-5 text-blue-600 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Team Management</p>
-                    <p className="text-xs text-gray-500">Role-based access control</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-2">
-                  <BarChart3 className="h-5 w-5 text-blue-600 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Analytics</p>
-                    <p className="text-xs text-gray-500">Real-time insights</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-2">
-                  <CreditCard className="h-5 w-5 text-blue-600 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Billing</p>
-                    <p className="text-xs text-gray-500">Integrated payments</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-2">
-                  <Building2 className="h-5 w-5 text-blue-600 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Multi-tenant</p>
-                    <p className="text-xs text-gray-500">Isolated workspaces</p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Footer - Only show for non-CRM requests */}
-        {!isCrmRequest && (
-          <div className="text-center space-y-2">
-            <p className="text-sm text-gray-600">
-              Don't have an organization? 
-              <a href="/onboarding" className="text-blue-600 hover:text-blue-500 font-medium ml-1">
-                Get Started
-              </a>
-            </p>
-            <p className="text-sm text-gray-600">
-              Need help? 
-              <a href="#" className="text-blue-600 hover:text-blue-500 font-medium ml-1">
-                Support Center
-              </a>
-            </p>
-            <p className="text-xs text-gray-400 mt-4">
-              Powered by Kinde Authentication • Secure Social SSO
-            </p>
-          </div>
-        )}
-
-        {/* CRM Mode Footer */}
-        {isCrmRequest && (
-          <div className="text-center space-y-2">
-            <p className="text-sm text-gray-600">
-              Having trouble? 
-              <a href="#" className="text-green-600 hover:text-green-500 font-medium ml-1">
-                Contact Support
-              </a>
-            </p>
-            <p className="text-xs text-gray-400 mt-4">
-              Secure CRM Authentication via Wrapper Platform
-            </p>
-          </div>
-        )}
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-black flex flex-col">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 right-1/4 w-96 h-96 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob"></div>
+        <div className="absolute -bottom-8 left-20 w-96 h-96 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob animation-delay-2000"></div>
+        <div className="absolute top-1/2 left-1/3 w-96 h-96 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob animation-delay-4000"></div>
       </div>
+
+      <style>{`
+        @keyframes blob {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          33% { transform: translate(30px, -50px) scale(1.1); }
+          66% { transform: translate(-20px, 20px) scale(0.9); }
+        }
+        .animate-blob {
+          animation: blob 7s infinite;
+        }
+        .animation-delay-2000 {
+          animation-delay: 2s;
+        }
+        .animation-delay-4000 {
+          animation-delay: 4s;
+        }
+      `}</style>
+
+      {/* Main Content */}
+      <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative z-10">
+        <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
+          {/* Left Column - Hero Section */}
+          <div className="hidden lg:flex flex-col justify-center space-y-8">
+            {/* Logo */}
+            <div className="space-y-4">
+              <div className="inline-flex items-center space-x-3 group cursor-pointer">
+                <div className="relative w-14 h-14">
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-2xl opacity-80 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="absolute inset-0.5 bg-slate-900 rounded-xl flex items-center justify-center">
+                    <span className="text-white font-black text-xl bg-gradient-to-br from-blue-400 to-cyan-400 bg-clip-text text-transparent">Z</span>
+                  </div>
+                </div>
+                <div>
+                  <h2 className="text-3xl font-black text-white">Zopkit</h2>
+                  <p className="text-xs text-slate-400 font-medium">Enterprise Platform</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Tagline */}
+            <div className="space-y-3">
+              <h1 className="text-5xl font-black text-white leading-tight">
+                Unified Enterprise <br />
+                <span className="bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-600 bg-clip-text text-transparent">Management Platform</span>
+              </h1>
+              <p className="text-lg text-slate-400 leading-relaxed max-w-xl">
+                Streamline your business operations with our comprehensive suite of tools designed for modern enterprises.
+              </p>
+            </div>
+
+            {/* Features Grid */}
+            <div className="grid grid-cols-2 gap-4 pt-4">
+              <div className="group p-4 rounded-xl bg-white/5 border border-white/10 hover:border-blue-500/50 hover:bg-white/10 transition-all">
+                <div className="flex items-start space-x-3">
+                  <div className="p-2 rounded-lg bg-blue-600/20 group-hover:bg-blue-600/40 transition-colors">
+                    <Zap className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">Lightning Fast</p>
+                    <p className="text-xs text-slate-400">Optimized for speed</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="group p-4 rounded-xl bg-white/5 border border-white/10 hover:border-cyan-500/50 hover:bg-white/10 transition-all">
+                <div className="flex items-start space-x-3">
+                  <div className="p-2 rounded-lg bg-cyan-600/20 group-hover:bg-cyan-600/40 transition-colors">
+                    <Shield className="w-5 h-5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">Bank-Grade Security</p>
+                    <p className="text-xs text-slate-400">256-bit encryption</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="group p-4 rounded-xl bg-white/5 border border-white/10 hover:border-blue-500/50 hover:bg-white/10 transition-all">
+                <div className="flex items-start space-x-3">
+                  <div className="p-2 rounded-lg bg-blue-600/20 group-hover:bg-blue-600/40 transition-colors">
+                    <Users className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">Team Collaboration</p>
+                    <p className="text-xs text-slate-400">Real-time sync</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="group p-4 rounded-xl bg-white/5 border border-white/10 hover:border-cyan-500/50 hover:bg-white/10 transition-all">
+                <div className="flex items-start space-x-3">
+                  <div className="p-2 rounded-lg bg-cyan-600/20 group-hover:bg-cyan-600/40 transition-colors">
+                    <BarChart3 className="w-5 h-5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">Advanced Analytics</p>
+                    <p className="text-xs text-slate-400">Actionable insights</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-white/10">
+              <div>
+                <p className="text-2xl font-black text-transparent bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text">50K+</p>
+                <p className="text-xs text-slate-400 mt-1">Active Users</p>
+              </div>
+              <div>
+                <p className="text-2xl font-black text-transparent bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text">99.9%</p>
+                <p className="text-xs text-slate-400 mt-1">Uptime</p>
+              </div>
+              <div>
+                <p className="text-2xl font-black text-transparent bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text">180+</p>
+                <p className="text-xs text-slate-400 mt-1">Countries</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column - Login Card */}
+          <div className="flex items-center justify-center lg:justify-end">
+            <Card className="w-full max-w-sm shadow-2xl border-0 bg-slate-900/95 backdrop-blur-md">
+              <CardHeader className="pb-6 space-y-4">
+                {/* Mobile Logo - Only show on mobile */}
+                <div className="lg:hidden flex justify-center mb-2">
+                  <div className="relative w-12 h-12">
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-xl opacity-80"></div>
+                    <div className="absolute inset-0.5 bg-slate-900 rounded-lg flex items-center justify-center">
+                      <span className="text-white font-black text-lg bg-gradient-to-br from-blue-400 to-cyan-400 bg-clip-text text-transparent">Z</span>
+                    </div>
+                  </div>
+                </div>
+
+                {isCrmRequest ? (
+                  <>
+                    <div className="text-center space-y-2">
+                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-emerald-600/20 border border-emerald-500/30 mx-auto">
+                        <Globe className="w-6 h-6 text-emerald-400" />
+                      </div>
+                      <CardTitle className="text-2xl text-white">CRM Access</CardTitle>
+                      <CardDescription className="text-slate-400">
+                        Authenticate to access your CRM workspace
+                      </CardDescription>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-center space-y-2">
+                      <CardTitle className="text-2xl text-white">Welcome Back</CardTitle>
+                      <CardDescription className="text-slate-400">
+                        Sign in to your Zopkit account
+                      </CardDescription>
+                    </div>
+                  </>
+                )}
+              </CardHeader>
+
+              <CardContent className="space-y-5">
+                {/* Google Sign In Button */}
+                <Button 
+                  onClick={handleLogin}
+                  disabled={isLoggingIn}
+                  className={`w-full h-11 font-semibold text-base rounded-lg transition-all relative group overflow-hidden ${
+                    isCrmRequest 
+                      ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-700 hover:to-cyan-700' 
+                      : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700'
+                  } ${isLoggingIn ? 'opacity-80 cursor-not-allowed' : 'shadow-lg shadow-blue-600/30'}`}
+                >
+                  <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="relative flex items-center justify-center">
+                    {isLoggingIn ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        <span>Signing in...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                        </svg>
+                        <span>Continue with Google</span>
+                      </>
+                    )}
+                  </div>
+                </Button>
+
+                {/* Divider */}
+                <div className="flex items-center space-x-3">
+                  <div className="flex-1 h-px bg-gradient-to-r from-white/0 to-white/20"></div>
+                  <span className="text-xs text-slate-500 font-medium">OR</span>
+                  <div className="flex-1 h-px bg-gradient-to-l from-white/0 to-white/20"></div>
+                </div>
+
+                {/* Trust Badges */}
+                <div className="space-y-3 p-4 rounded-lg bg-white/5 border border-white/10">
+                  <div className="flex items-center space-x-3">
+                    <div className="flex-shrink-0">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-white font-medium">Secure Login</p>
+                      <p className="text-xs text-slate-400">Protected by industry-standard authentication</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="flex-shrink-0">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-white font-medium">SOC 2 Type II</p>
+                      <p className="text-xs text-slate-400">Compliance certified enterprise platform</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Organization Info - Only show if authenticated */}
+                {isAuthenticated && currentOrg && (
+                  <div className="p-4 rounded-lg bg-gradient-to-br from-blue-600/20 to-cyan-600/20 border border-blue-500/30 space-y-3">
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle2 className="w-5 h-5 text-blue-400" />
+                      <span className="text-sm font-semibold text-white">Authentication Verified</span>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <p className="text-slate-300">
+                        <span className="text-slate-500">Email:</span> {user?.email}
+                      </p>
+                      <p className="text-slate-300">
+                        <span className="text-slate-500">Organization:</span> {currentOrg.orgName}
+                      </p>
+                      {userOrgs?.orgCodes?.length > 1 && (
+                        <p className="text-slate-300">
+                          <span className="text-slate-500">Teams:</span> Access to {userOrgs.orgCodes.length} organizations
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* CRM Return Info */}
+                {isCrmRequest && returnTo && (
+                  <div className="p-3 rounded-lg bg-emerald-600/10 border border-emerald-500/30 text-xs">
+                    <p className="text-emerald-300 font-medium">
+                      ✓ You will be securely redirected to your CRM after authentication
+                    </p>
+                  </div>
+                )}
+
+                {/* Error Display */}
+                {error && (
+                  <div className="p-3 rounded-lg bg-red-600/10 border border-red-500/30 text-xs">
+                    <p className="text-red-300 font-medium">
+                      Authentication Error: {decodeURIComponent(error)}
+                    </p>
+                  </div>
+                )}
+
+                {/* Back to CRM Button */}
+                {isCrmRequest && (
+                  <Button
+                    onClick={handleBackToCRM}
+                    variant="outline"
+                    className="w-full bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white hover:border-white/20"
+                  >
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Back to CRM
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <footer className="relative z-10 border-t border-white/10 bg-black/40 backdrop-blur-sm py-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
+            <div className="flex items-center space-x-2 text-sm text-slate-400">
+              <Shield className="w-4 h-4 text-emerald-400" />
+              <span>256-bit SSL Encrypted</span>
+              <span className="text-slate-600">•</span>
+              <span>SOC 2 Type II Compliant</span>
+              <span className="text-slate-600">•</span>
+              <span>GDPR Ready</span>
+            </div>
+            <div className="flex items-center space-x-4 text-sm">
+              <a href="#" className="text-slate-400 hover:text-white transition-colors">Privacy Policy</a>
+              <span className="text-slate-600">•</span>
+              <a href="#" className="text-slate-400 hover:text-white transition-colors">Terms of Service</a>
+              <span className="text-slate-600">•</span>
+              <a href="#" className="text-slate-400 hover:text-white transition-colors">Support</a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   )
-} 
+}

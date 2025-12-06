@@ -164,8 +164,31 @@ export default async function customRolesRoutes(fastify, options) {
         selectedModules,
         selectedPermissions,
         restrictions,
-        metadata
+        metadata,
+        updatedBy: request.userContext.internalUserId
       });
+      
+      // Publish role update event to Redis streams
+      try {
+        const { crmSyncStreams } = await import('../utils/redis.js');
+        await crmSyncStreams.publishRoleEvent(tenantId, 'role_updated', {
+          roleId: updatedRole.roleId,
+          roleName: updatedRole.roleName,
+          description: updatedRole.description,
+          permissions: typeof updatedRole.permissions === 'string' 
+            ? JSON.parse(updatedRole.permissions) 
+            : updatedRole.permissions,
+          restrictions: typeof updatedRole.restrictions === 'string'
+            ? JSON.parse(updatedRole.restrictions)
+            : updatedRole.restrictions,
+          updatedBy: request.userContext.internalUserId,
+          updatedAt: updatedRole.updatedAt || new Date().toISOString()
+        });
+        console.log('📡 Published role_updated event to Redis streams');
+      } catch (publishError) {
+        console.warn('⚠️ Failed to publish role_updated event:', publishError.message);
+        // Don't fail the request if event publishing fails
+      }
       
       return {
         success: true,

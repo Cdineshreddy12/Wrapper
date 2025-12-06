@@ -3,10 +3,109 @@ import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { trackUsage } from '../middleware/usage.js';
 import { checkRoleLimit } from '../middleware/planRestrictions.js';
 import { db } from '../db/index.js';
-import { userRoleAssignments, tenantUsers } from '../db/schema/index.js';
-import { eq } from 'drizzle-orm';
+import { userRoleAssignments, tenantUsers, customRoles } from '../db/schema/index.js';
+import { eq, and } from 'drizzle-orm';
 import Logger from '../utils/logger.js';
 import ActivityLogger, { ACTIVITY_TYPES, RESOURCE_TYPES } from '../services/activityLogger.js';
+import { crmSyncStreams } from '../utils/redis.js';
+import { PermissionMatrixUtils } from '../data/permission-matrix.js';
+
+/**
+ * Publish role events to relevant applications based on permissions
+ * Publishes to application-specific streams: crm:sync:role:{eventType}
+ * Only publishes to applications that have permissions in the role
+ */
+export async function publishRoleEventToApplications(eventType, tenantId, roleId, roleData) {
+  try {
+    // Ensure Redis is connected before publishing
+    if (!crmSyncStreams.redis.isConnected) {
+      console.log('🔗 Connecting to Redis for event publishing...');
+      await crmSyncStreams.redis.connect();
+    }
+
+    // Parse permissions if they're stored as JSON string
+    let permissions = roleData.permissions;
+    if (typeof permissions === 'string') {
+      try {
+        permissions = JSON.parse(permissions);
+      } catch (e) {
+        console.warn('⚠️ Failed to parse permissions JSON:', e.message);
+        permissions = {};
+      }
+    }
+
+    // Extract which applications are present in this role's permissions
+    const applications = PermissionMatrixUtils.extractApplicationsFromPermissions(permissions);
+
+    if (applications.length === 0) {
+      console.log(`⚠️ No applications found in role ${roleId} permissions, skipping event publishing`);
+      return;
+    }
+
+    console.log(`📡 Publishing ${eventType} event for role ${roleId} to applications:`, applications);
+
+    // Publish event to each relevant application using their specific stream
+    const publishPromises = applications.map(async (appCode) => {
+      // Filter permissions for this specific application
+      const appPermissions = PermissionMatrixUtils.filterPermissionsByApplication(permissions, appCode);
+
+      // Prepare event data with only relevant permissions
+      const eventData = {
+        roleId: roleId,
+        roleName: roleData.roleName || roleData.name,
+        description: roleData.description,
+        permissions: appPermissions, // Only permissions for this app
+        restrictions: roleData.restrictions,
+        metadata: roleData.metadata,
+        ...(eventType === 'role.created' && {
+          createdBy: roleData.createdBy,
+          createdAt: roleData.createdAt
+        }),
+        ...(eventType === 'role.updated' && {
+          updatedBy: roleData.updatedBy,
+          updatedAt: roleData.updatedAt
+        }),
+        ...(eventType === 'role.deleted' && {
+          deletedBy: roleData.deletedBy,
+          deletedAt: roleData.deletedAt,
+          transferredToRoleId: roleData.transferredToRoleId,
+          affectedUsersCount: roleData.affectedUsersCount
+        })
+      };
+
+      // Convert eventType to stream format (role.created → role_created)
+      const streamEventType = eventType.replace('.', '_');
+      const streamKey = `${appCode}:sync:role:${streamEventType}`;
+
+      try {
+        // Use the existing publishToStream method with the specific stream key
+        const streamMessage = {
+          eventId: `${appCode}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: new Date().toISOString(),
+          eventType: eventType,
+          tenantId: tenantId,
+          entityType: 'role',
+          entityId: roleId,
+          data: eventData,
+          publishedBy: roleData.createdBy || roleData.updatedBy || roleData.deletedBy || 'system'
+        };
+
+        await crmSyncStreams.publishToStream(streamKey, streamMessage);
+
+        console.log(`✅ Published ${eventType} event to ${streamKey} for role ${roleId}`);
+      } catch (error) {
+        console.error(`❌ Failed to publish ${eventType} event to ${streamKey}:`, error.message);
+        // Don't throw - continue with other applications
+      }
+    });
+
+    await Promise.allSettled(publishPromises);
+    console.log(`✅ Completed publishing ${eventType} events for role ${roleId}`);
+  } catch (error) {
+    console.error(`❌ Error publishing role events:`, error);
+    // Don't throw - event publishing failure shouldn't break the API response
+  }
+}
 
 export default async function roleRoutes(fastify, options) {
   
@@ -512,6 +611,22 @@ export default async function roleRoutes(fastify, options) {
         },
         ActivityLogger.createRequestContext(request)
       );
+
+      // Publish role creation event to relevant applications (only apps with permissions)
+      await publishRoleEventToApplications(
+        'role.created',
+        request.userContext.tenantId,
+        role.roleId,
+        {
+          roleName: role.roleName,
+          description: role.description,
+          permissions: role.permissions,
+          restrictions: role.restrictions,
+          metadata: role.metadata,
+          createdBy: role.createdBy,
+          createdAt: role.createdAt
+        }
+      );
       
       // Parse JSON fields for frontend consumption with error handling
       let permissions = {};
@@ -663,6 +778,22 @@ export default async function roleRoutes(fastify, options) {
           userEmail: request.userContext.email
         },
         ActivityLogger.createRequestContext(request)
+      );
+
+      // Publish role update event to relevant applications (only apps with permissions)
+      await publishRoleEventToApplications(
+        'role.updated',
+        tenantId,
+        roleId,
+        {
+          roleName: updatedRole.roleName || updatedRole.name,
+          description: updatedRole.description,
+          permissions: updatedRole.permissions,
+          restrictions: updatedRole.restrictions,
+          metadata: updatedRole.metadata,
+          updatedBy: request.userContext.internalUserId,
+          updatedAt: updatedRole.updatedAt || new Date()
+        }
       );
 
       // Get users affected by this role change
@@ -877,9 +1008,22 @@ export default async function roleRoutes(fastify, options) {
     try {
       const { roleId } = request.params;
       const { force, transferUsersTo } = request.query;
+      const tenantId = request.userContext.tenantId;
+      
+      // Get role data before deletion for event publishing
+      const [roleToDelete] = await db
+        .select()
+        .from(customRoles)
+        .where(
+          and(
+            eq(customRoles.tenantId, tenantId),
+            eq(customRoles.roleId, roleId)
+          )
+        )
+        .limit(1);
       
       const result = await permissionService.deleteRole(
-        request.userContext.tenantId,
+        tenantId,
         roleId,
         {
           force,
@@ -891,18 +1035,43 @@ export default async function roleRoutes(fastify, options) {
       // Log role deletion activity
       await ActivityLogger.logActivity(
         request.userContext.internalUserId,
-        request.userContext.tenantId,
+        tenantId,
         null,
         ACTIVITY_TYPES.ROLE_DELETED,
         {
           roleId: roleId,
           force: force,
           transferUsersTo: transferUsersTo,
-          tenantId: request.userContext.tenantId,
+          tenantId: tenantId,
           userEmail: request.userContext.email
         },
         ActivityLogger.createRequestContext(request)
       );
+
+      // Publish role deletion event to relevant applications (only apps with permissions)
+      if (roleToDelete) {
+        try {
+          await publishRoleEventToApplications(
+            'role.deleted',
+            tenantId,
+            roleId,
+            {
+              roleName: roleToDelete.roleName || roleToDelete.name,
+              description: roleToDelete.description,
+              permissions: roleToDelete.permissions,
+              restrictions: roleToDelete.restrictions,
+              metadata: roleToDelete.metadata,
+              deletedBy: request.userContext.internalUserId,
+              deletedAt: new Date().toISOString(),
+              transferredToRoleId: transferUsersTo,
+              affectedUsersCount: result.usersAffected || 0
+            }
+          );
+        } catch (publishError) {
+          console.warn('⚠️ Failed to publish role deletion event:', publishError.message);
+          // Don't fail the deletion if event publishing fails
+        }
+      }
 
       return {
         success: true,

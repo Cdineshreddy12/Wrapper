@@ -6,6 +6,7 @@ export * from './permissions.js';
 export * from './usage.js';
 export * from './suite-schema.js';
 export * from './webhook-logs.js';
+export * from './event-tracking.js';
 
 // Export unified entities schema (replaces organizations.js and locations.js)
 export * from './unified-entities.js';
@@ -15,8 +16,10 @@ export * from './credit_allocations.js';
 export * from './credit_purchases.js';
 export * from './credit_usage.js';
 export * from './credit_configurations.js';
+export * from './credit_allocations.js';
 export * from './responsible_persons.js';
 export * from './event-tracking.js';
+export * from './notifications.js';
 
 // Define relationships
 import { relations } from 'drizzle-orm';
@@ -43,7 +46,8 @@ import {
   responsiblePersons,
   responsibilityHistory,
   responsibilityNotifications,
-  eventTracking
+  eventTracking,
+  notifications
 } from './index.js';
 
 export const tenantsRelations = relations(tenants, ({ many, one }) => ({
@@ -59,6 +63,7 @@ export const tenantsRelations = relations(tenants, ({ many, one }) => ({
   creditPurchases: many(creditPurchases),
   creditUsage: many(creditUsage),
   responsiblePersons: many(responsiblePersons),
+  notifications: many(notifications),
 }));
 
 export const tenantUsersRelations = relations(tenantUsers, ({ one, many }) => ({

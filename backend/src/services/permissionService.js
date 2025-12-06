@@ -1,6 +1,7 @@
 import { db } from '../db/index.js';
 import { customRoles, userRoleAssignments } from '../db/schema/permissions.js';
 import { tenantUsers, auditLogs } from '../db/schema/users.js';
+import { organizationMemberships } from '../db/schema/organization_memberships.js';
 import { eq, and, like, desc, count, or, ne } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 // Role templates removed - using application/module based role creation
@@ -374,9 +375,26 @@ class PermissionService {
     // Publish role change event to Redis streams for real-time sync
     try {
       const { crmSyncStreams } = await import('../utils/redis.js');
+      
+      // Publish using standard publishRoleEvent method for consistency
+      await crmSyncStreams.publishRoleEvent(tenantId, 'role_updated', {
+        roleId: updatedRole[0].roleId,
+        roleName: updatedRole[0].roleName,
+        description: updatedRole[0].description,
+        permissions: JSON.parse(updatedRole[0].permissions || '{}'),
+        restrictions: updatedRole[0].restrictions 
+          ? (typeof updatedRole[0].restrictions === 'string' 
+              ? JSON.parse(updatedRole[0].restrictions) 
+              : updatedRole[0].restrictions)
+          : null,
+        updatedBy: updatedBy,
+        updatedAt: updatedRole[0].updatedAt || new Date().toISOString()
+      });
+      
+      console.log('📡 Published role_updated event to Redis streams');
+      
+      // Also publish to custom stream for backward compatibility
       const { v4: uuidv4 } = await import('uuid');
-
-      // Create event data for Redis stream
       const eventData = {
         eventId: uuidv4(),
         timestamp: new Date().toISOString(),
@@ -443,28 +461,42 @@ class PermissionService {
       throw new Error('Cannot delete Super Administrator role - this is the primary admin role for the organization');
     }
 
-    // Check if role is assigned to users
-    const assignments = await db
+    // Check if role is assigned to users (direct assignments)
+    const userAssignments = await db
       .select({ count: count() })
       .from(userRoleAssignments)
       .where(eq(userRoleAssignments.roleId, roleId));
 
-    if (assignments[0].count > 0) {
+    // Check if role is assigned via organization memberships
+    const orgAssignments = await db
+      .select({ count: count() })
+      .from(organizationMemberships)
+      .where(eq(organizationMemberships.roleId, roleId));
+
+    const totalAssignments = userAssignments[0].count + orgAssignments[0].count;
+
+    if (totalAssignments > 0) {
       if (!force && !transferUsersTo) {
-        throw new Error(`Cannot delete role that is assigned to ${assignments[0].count} users`);
+        throw new Error(`Cannot delete role that is assigned to ${totalAssignments} user(s)`);
       }
-      
+
       if (transferUsersTo) {
-        // Transfer users to another role
+        // Transfer users to another role (only for direct assignments)
         await db
           .update(userRoleAssignments)
           .set({ roleId: transferUsersTo })
           .where(eq(userRoleAssignments.roleId, roleId));
+        // Note: Organization memberships cannot be transferred, only removed
       } else if (force) {
         // Force delete - remove all assignments
         await db
           .delete(userRoleAssignments)
           .where(eq(userRoleAssignments.roleId, roleId));
+
+        // Also remove organization memberships that reference this role
+        await db
+          .delete(organizationMemberships)
+          .where(eq(organizationMemberships.roleId, roleId));
       }
     }
 
@@ -487,17 +519,17 @@ class PermissionService {
         resourceType: 'role',
         resourceId: roleId,
         oldValues: existingRole[0],
-        details: { 
-          force, 
-          transferUsersTo, 
-          usersAffected: assignments[0].count 
+        details: {
+          force,
+          transferUsersTo,
+          usersAffected: totalAssignments
         }
       });
     }
 
     return {
       deleted: true,
-      usersAffected: assignments[0].count,
+      usersAffected: totalAssignments,
       transferredTo: transferUsersTo
     };
   }
@@ -566,7 +598,7 @@ class PermissionService {
 
     if (existing.length > 0) {
       console.log('🔄 [PermissionService] Updating existing role assignment:', {
-        existingAssignmentId: existing[0].assignmentId,
+        existingAssignmentId: existing[0].id,
         wasActive: existing[0].isActive
       });
       
@@ -579,21 +611,38 @@ class PermissionService {
           assignedBy,
           assignedAt: new Date()
         })
-        .where(eq(userRoleAssignments.assignmentId, existing[0].assignmentId))
+        .where(eq(userRoleAssignments.id, existing[0].id))
         .returning();
 
       console.log('✅ [PermissionService] Role assignment updated successfully');
+      
+      // Publish role assignment event (reassignment)
+      try {
+        const { crmSyncStreams } = await import('../utils/redis.js');
+        await crmSyncStreams.publishRoleEvent(tenantId, 'role_assigned', {
+          assignmentId: updated[0].id,
+          userId: userId,
+          roleId: roleId,
+          assignedAt: new Date().toISOString(),
+          assignedBy: assignedBy,
+          expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+          isReassignment: true
+        });
+        console.log('📡 Published role reassignment event successfully');
+      } catch (publishError) {
+        console.warn('⚠️ Failed to publish role reassignment event:', publishError.message);
+        // Don't fail the assignment if event publishing fails
+      }
+      
       return updated[0];
     }
 
-    // Create new assignment
-    const assignmentId = uuidv4();
-    console.log('➕ [PermissionService] Creating new role assignment:', assignmentId);
+    // Create new assignment - 'id' is auto-generated by schema
+    console.log('➕ [PermissionService] Creating new role assignment');
     
     const assignment = await db
       .insert(userRoleAssignments)
       .values({
-        assignmentId,
         userId,
         roleId,
         isActive: true,
@@ -605,7 +654,127 @@ class PermissionService {
       .returning();
 
     console.log('✅ [PermissionService] New role assignment created successfully');
+    
+    // Publish role assignment event
+    try {
+      const { crmSyncStreams } = await import('../utils/redis.js');
+      await crmSyncStreams.publishRoleEvent(tenantId, 'role_assigned', {
+        assignmentId: assignment[0].id,
+        userId: userId,
+        roleId: roleId,
+        assignedAt: new Date().toISOString(),
+        assignedBy: assignedBy,
+        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null
+      });
+      console.log('📡 Published role assignment event successfully');
+    } catch (publishError) {
+      console.warn('⚠️ Failed to publish role assignment event:', publishError.message);
+      // Don't fail the assignment if event publishing fails
+    }
+    
     return assignment[0];
+  }
+
+  // Remove role assignment
+  async removeRoleAssignment(tenantId, userId, roleId, removedBy) {
+    console.log('🔒 [PermissionService] Role removal request:', {
+      userId,
+      roleId,
+      removedBy,
+      tenantId
+    });
+    
+    // Find the assignment
+    const existing = await db
+      .select()
+      .from(userRoleAssignments)
+      .where(
+        and(
+          eq(userRoleAssignments.userId, userId),
+          eq(userRoleAssignments.roleId, roleId)
+        )
+      )
+      .limit(1);
+
+    if (existing.length === 0) {
+      throw new Error('Role assignment not found');
+    }
+
+    const assignment = existing[0];
+    
+    // Delete the assignment - use 'id' field from schema, not 'assignmentId'
+    await db
+      .delete(userRoleAssignments)
+      .where(eq(userRoleAssignments.id, assignment.id));
+
+    console.log('✅ [PermissionService] Role assignment removed successfully');
+    
+    // Publish role unassignment event
+    try {
+      const { crmSyncStreams } = await import('../utils/redis.js');
+      await crmSyncStreams.publishRoleEvent(tenantId, 'role_unassigned', {
+        assignmentId: assignment.id, // Use 'id' as assignmentId in event
+        userId: userId,
+        roleId: roleId,
+        unassignedAt: new Date().toISOString(),
+        unassignedBy: removedBy,
+        reason: 'Manual removal'
+      });
+      console.log('📡 Published role unassignment event successfully');
+    } catch (publishError) {
+      console.warn('⚠️ Failed to publish role unassignment event:', publishError.message);
+      // Don't fail the removal if event publishing fails
+    }
+    
+    return { success: true, assignmentId: assignment.id };
+  }
+
+  // Remove role assignment by assignmentId
+  async removeRoleAssignmentById(tenantId, assignmentId, removedBy) {
+    console.log('🔒 [PermissionService] Role removal by assignmentId request:', {
+      assignmentId,
+      removedBy,
+      tenantId
+    });
+    
+    // Find the assignment - use 'id' field from schema
+    const existing = await db
+      .select()
+      .from(userRoleAssignments)
+      .where(eq(userRoleAssignments.id, assignmentId))
+      .limit(1);
+
+    if (existing.length === 0) {
+      throw new Error('Role assignment not found');
+    }
+
+    const assignment = existing[0];
+    
+    // Delete the assignment - use 'id' field from schema
+    await db
+      .delete(userRoleAssignments)
+      .where(eq(userRoleAssignments.id, assignmentId));
+
+    console.log('✅ [PermissionService] Role assignment removed successfully');
+    
+    // Publish role unassignment event
+    try {
+      const { crmSyncStreams } = await import('../utils/redis.js');
+      await crmSyncStreams.publishRoleEvent(tenantId, 'role_unassigned', {
+        assignmentId: assignment.id, // Use 'id' as assignmentId in event
+        userId: assignment.userId,
+        roleId: assignment.roleId,
+        unassignedAt: new Date().toISOString(),
+        unassignedBy: removedBy,
+        reason: 'Manual removal'
+      });
+      console.log('📡 Published role unassignment event successfully');
+    } catch (publishError) {
+      console.warn('⚠️ Failed to publish role unassignment event:', publishError.message);
+      // Don't fail the removal if event publishing fails
+    }
+    
+    return { success: true, assignmentId: assignment.id };
   }
 
   // Log audit events
@@ -1828,6 +1997,28 @@ class PermissionService {
       } catch (auditError) {
         console.error('⚠️ Failed to log audit event:', auditError);
         // Don't fail the entire operation for audit logging
+      }
+
+      // Publish role update event to Redis streams
+      try {
+        const { crmSyncStreams } = await import('../utils/redis.js');
+        await crmSyncStreams.publishRoleEvent(tenantId, 'role_updated', {
+          roleId: updatedRole[0].roleId,
+          roleName: updatedRole[0].roleName,
+          description: updatedRole[0].description,
+          permissions: typeof updatedRole[0].permissions === 'string'
+            ? JSON.parse(updatedRole[0].permissions)
+            : updatedRole[0].permissions,
+          restrictions: typeof updatedRole[0].restrictions === 'string'
+            ? JSON.parse(updatedRole[0].restrictions)
+            : updatedRole[0].restrictions,
+          updatedBy: updatedBy,
+          updatedAt: updatedRole[0].updatedAt || new Date().toISOString()
+        });
+        console.log('📡 Published role_updated event to Redis streams');
+      } catch (publishError) {
+        console.warn('⚠️ Failed to publish role_updated event:', publishError.message);
+        // Don't fail the operation if event publishing fails
       }
 
       console.log('🎉 updateAdvancedRole completed successfully');

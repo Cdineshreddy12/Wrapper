@@ -8,6 +8,9 @@ import { BUSINESS_SUITE_MATRIX } from '../data/permission-matrix.js';
 import { crmSpecificSync } from './crm-specific-sync.js';
 import { v4 as uuidv4 } from 'uuid';
 
+// Import the role event publishing function
+import { publishRoleEventToApplications } from '../routes/roles.js';
+
 /**
  * Convert flat permission array to hierarchical object format
  * @param {string[]} permissionsArray - Array of permission strings like ['crm.leads.read', 'crm.leads.create']
@@ -287,6 +290,31 @@ export class CustomRoleService {
     }).returning();
 
     console.log(`🎉 Created role "${roleName}" with hierarchical permissions structure`);
+
+    // Publish role creation event to relevant applications (only apps with permissions)
+    console.log('🎯 About to publish role creation event for custom role:', role.roleId);
+    try {
+      await publishRoleEventToApplications(
+        'role.created',
+        tenantId,
+        role.roleId,
+        {
+          roleName: roleName,
+          description: description,
+          permissions: JSON.stringify(hierarchicalPermissions), // Pass as JSON string like the database stores it
+          restrictions: processedRestrictions,
+          metadata: metadata,
+          createdBy: createdBy,
+          createdAt: role.createdAt
+        }
+      );
+      console.log('✅ Role creation event publishing completed for custom role');
+    } catch (publishError) {
+      console.warn('⚠️ Failed to publish role creation event:', publishError.message);
+      console.error('Full error:', publishError);
+      // Don't fail the role creation if event publishing fails
+    }
+
     return role;
   }
   
@@ -443,7 +471,25 @@ export class CustomRoleService {
     try {
       const { crmSyncStreams } = await import('../utils/redis.js');
 
-      // Create event data for Redis stream
+      // Publish using standard publishRoleEvent method for consistency
+      await crmSyncStreams.publishRoleEvent(tenantId, 'role_updated', {
+        roleId: updatedRole.roleId,
+        roleName: updatedRole.roleName,
+        description: updatedRole.description,
+        permissions: typeof updatedRole.permissions === 'string'
+          ? JSON.parse(updatedRole.permissions)
+          : updatedRole.permissions,
+        restrictions: typeof updatedRole.restrictions === 'string'
+          ? JSON.parse(updatedRole.restrictions)
+          : updatedRole.restrictions,
+        updatedBy: updatedBy,
+        updatedAt: updatedRole.updatedAt || new Date().toISOString(),
+        isSystemRole: updatedRole.isSystemRole || false
+      });
+
+      console.log(`📡 Published role_updated event for "${roleName}" to Redis streams`);
+
+      // Also publish to custom stream for backward compatibility
       const eventData = {
         eventId: uuidv4(),
         timestamp: new Date().toISOString(),

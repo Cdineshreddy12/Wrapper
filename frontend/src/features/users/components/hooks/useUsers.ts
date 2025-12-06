@@ -165,6 +165,26 @@ export const useUserMutations = () => {
     },
   });
 
+  const deassignRole = useMutation({
+    mutationFn: async ({ userId, roleId }: { userId: string; roleId: string }) => {
+      LoggingService.logUserAction('deassignRole', userId, { roleId });
+      return await UserService.deassignRole(userId, roleId);
+    },
+    onSuccess: (data, variables) => {
+      const role = data.roleName || variables.roleId;
+      toast.success(`Role "${role}" removed successfully!`);
+      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+      // Also invalidate user detail queries
+      queryClient.invalidateQueries({ queryKey: userKeys.detail(variables.userId) });
+      // Trigger permission refresh notification
+      localStorage.setItem('user_permissions_changed', Date.now().toString());
+    },
+    onError: (error: any) => {
+      LoggingService.logError(error, 'deassignRole', { userId: error.variables?.userId, roleId: error.variables?.roleId });
+      toast.error(error.response?.data?.message || 'Failed to remove role');
+    },
+  });
+
   return {
     inviteUser,
     updateUser,
@@ -174,5 +194,6 @@ export const useUserMutations = () => {
     reactivateUser,
     resendInvite,
     assignRoles,
+    deassignRole,
   };
 };

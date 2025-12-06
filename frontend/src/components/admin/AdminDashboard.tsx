@@ -14,6 +14,7 @@ import { EntityManagement } from './EntityManagement';
 import { CreditManagement } from './CreditManagement';
 import ApplicationAssignmentManager from './ApplicationAssignmentManager';
 import CreditOperationCostManager from './credit-configuration/CreditOperationCostManager';
+import SeasonalCreditsManagement from './SeasonalCreditsManagement';
 
 // Import the new component we'll create
 import ApplicationCreditAllocations from './ApplicationCreditAllocations';
@@ -188,6 +189,7 @@ const AdminDashboard: React.FC = () => {
           <TabsTrigger value="app-credits">App Credits</TabsTrigger>
           <TabsTrigger value="applications">Applications</TabsTrigger>
           <TabsTrigger value="operation-costs">Operation Costs</TabsTrigger>
+          <TabsTrigger value="seasonal-credits">Seasonal Credits</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -309,6 +311,10 @@ const AdminDashboard: React.FC = () => {
 
         <TabsContent value="operation-costs">
           <CreditOperationCostManager />
+        </TabsContent>
+
+        <TabsContent value="seasonal-credits">
+          <SeasonalCreditsManagement />
         </TabsContent>
       </Tabs>
       </div>

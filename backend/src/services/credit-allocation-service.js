@@ -653,4 +653,7 @@ class CreditAllocationService {
   }
 }
 
+// Export the class for extension
+export { CreditAllocationService };
+// Export default instance for backward compatibility
 export default new CreditAllocationService();

@@ -27,7 +27,7 @@ export default async function adminTenantManagementRoutes(fastify, options) {
           creditId: credits.creditId,
           entityId: credits.entityId,
           availableCredits: credits.availableCredits,
-          reservedCredits: credits.reservedCredits,
+
           isActive: credits.isActive
         })
         .from(credits)
@@ -38,8 +38,7 @@ export default async function adminTenantManagementRoutes(fastify, options) {
         .select({
           entityId: entities.entityId,
           entityName: entities.entityName,
-          totalAvailableCredits: sql`sum(${credits.availableCredits})`,
-          totalReservedCredits: sql`sum(${credits.reservedCredits})`,
+          totalAvailableCredits: sql`sum(${credits.availableCredits}::numeric)`,
           creditRecordCount: sql`count(${credits.creditId})`
         })
         .from(entities)
@@ -56,7 +55,6 @@ export default async function adminTenantManagementRoutes(fastify, options) {
           creditId: credits.creditId,
           entityId: credits.entityId,
           availableCredits: credits.availableCredits,
-          reservedCredits: credits.reservedCredits
         })
         .from(credits)
         .leftJoin(entities, eq(credits.entityId, entities.entityId))
@@ -118,7 +116,6 @@ export default async function adminTenantManagementRoutes(fastify, options) {
           creditId: credits.creditId,
           entityId: credits.entityId,
           availableCredits: credits.availableCredits,
-          reservedCredits: credits.reservedCredits
         })
         .from(credits)
         .leftJoin(entities, eq(credits.entityId, entities.entityId))
@@ -220,8 +217,7 @@ export default async function adminTenantManagementRoutes(fastify, options) {
       // Get credit summary
       const creditSummary = await db
         .select({
-          totalCredits: sql`coalesce(sum(${credits.availableCredits}), 0)`,
-          reservedCredits: sql`coalesce(sum(${credits.reservedCredits}), 0)`,
+          totalCredits: sql`coalesce(sum(${credits.availableCredits}::numeric), 0)`,
           activeEntities: sql`count(case when ${credits.isActive} = true then 1 end)`
         })
         .from(credits)
@@ -233,7 +229,7 @@ export default async function adminTenantManagementRoutes(fastify, options) {
           tenant: tenantInfo[0],
           users: tenantUsersList,
           entitySummary: entitySummary[0] || { total: 0, organizations: 0, locations: 0, departments: 0, teams: 0 },
-          creditSummary: creditSummary[0] || { totalCredits: 0, reservedCredits: 0, activeEntities: 0 }
+          creditSummary: creditSummary[0] || { totalCredits: 0, activeEntities: 0 }
         }
       };
     } catch (error) {
@@ -488,9 +484,8 @@ export default async function adminTenantManagementRoutes(fastify, options) {
       // Credit statistics
       const creditStats = await db
         .select({
-          totalAvailable: sql`coalesce(sum(${credits.availableCredits}), 0)`,
-          totalReserved: sql`coalesce(sum(${credits.reservedCredits}), 0)`,
-          averagePerEntity: sql`avg(${credits.availableCredits})`
+          totalAvailable: sql`coalesce(sum(${credits.availableCredits}::numeric), 0)`,
+          averagePerEntity: sql`avg(${credits.availableCredits}::numeric)`
         })
         .from(credits)
         .where(eq(credits.tenantId, tenantId));
@@ -543,14 +538,14 @@ export default async function adminTenantManagementRoutes(fastify, options) {
           createdAt: tenants.createdAt,
           updatedAt: tenants.updatedAt,
           entityCount: sql`count(distinct ${entities.entityId})`,
-          totalCredits: sql`coalesce(sum(${credits.availableCredits}), 0)`,
-          reservedCredits: sql`coalesce(sum(${credits.reservedCredits}), 0)`
+          totalCredits: sql`coalesce(sum(${credits.availableCredits}::numeric), 0)`
         })
         .from(tenants)
         .leftJoin(entities, eq(tenants.tenantId, entities.tenantId))
         .leftJoin(credits, and(
           eq(credits.tenantId, tenants.tenantId),
-          eq(credits.entityId, entities.entityId)
+          eq(credits.entityId, entities.entityId),
+          eq(credits.isActive, true)
         ))
         .groupBy(tenants.tenantId);
 
@@ -579,7 +574,7 @@ export default async function adminTenantManagementRoutes(fastify, options) {
       // Apply sorting
       const sortColumn = sortBy === 'companyName' ? tenants.companyName :
                         sortBy === 'createdAt' ? tenants.createdAt :
-                        sortBy === 'totalCredits' ? sql`sum(${credits.availableCredits})` :
+                        sortBy === 'totalCredits' ? sql`sum(${credits.availableCredits}::numeric)` :
                         tenants.createdAt;
 
       query = sortOrder === 'desc' ? query.orderBy(desc(sortColumn)) : query.orderBy(sortColumn);

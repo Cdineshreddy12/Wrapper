@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronDown, ChevronRight, Building2, MapPin, Users, UserCheck, MoreHorizontal, Eye, Edit, Trash2, ZoomIn, ZoomOut, Maximize2, RotateCcw, Move, CreditCard } from 'lucide-react';
+import { PearlButton } from '@/components/ui/pearl-button';
 
 // Types based on your documentation
 interface Entity {
@@ -47,6 +48,8 @@ interface OrganizationHierarchyChartProps {
   onEditEntity?: (entity: Entity) => void;
   onDeleteEntity?: (entityId: string) => void;
   isLoading?: boolean;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 // (legacy color arrays removed in favor of type-based themes)
@@ -54,27 +57,27 @@ interface OrganizationHierarchyChartProps {
 // Themed color palette by entity type for consistent visuals
 const ENTITY_THEMES = {
   tenant: {
-    card: 'border-blue-500 bg-gradient-to-br from-blue-100 to-indigo-100',
-    iconBg: 'bg-blue-200',
-    iconColor: 'text-blue-700',
+    card: 'border-blue-500 dark:border-blue-400 bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30',
+    iconBg: 'bg-blue-200 dark:bg-blue-800',
+    iconColor: 'text-blue-700 dark:text-blue-300',
     line: '#3b82f6'
   },
   parentOrg: {
-    card: 'border-emerald-500 bg-gradient-to-br from-emerald-50 to-green-50',
-    iconBg: 'bg-emerald-100',
-    iconColor: 'text-emerald-700',
+    card: 'border-emerald-500 dark:border-emerald-400 bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-900/30 dark:to-green-900/30',
+    iconBg: 'bg-emerald-100 dark:bg-emerald-800',
+    iconColor: 'text-emerald-700 dark:text-emerald-300',
     line: '#10b981'
   },
   subOrg: {
-    card: 'border-indigo-400 bg-gradient-to-br from-indigo-50 to-violet-50',
-    iconBg: 'bg-indigo-100',
-    iconColor: 'text-indigo-700',
+    card: 'border-indigo-400 dark:border-indigo-300 bg-gradient-to-br from-indigo-50 to-violet-50 dark:from-indigo-900/30 dark:to-violet-900/30',
+    iconBg: 'bg-indigo-100 dark:bg-indigo-800',
+    iconColor: 'text-indigo-700 dark:text-indigo-300',
     line: '#6366f1'
   },
   location: {
-    card: 'border-rose-400 bg-gradient-to-br from-rose-50 to-pink-50',
-    iconBg: 'bg-rose-100',
-    iconColor: 'text-rose-700',
+    card: 'border-rose-400 dark:border-rose-300 bg-gradient-to-br from-rose-50 to-pink-50 dark:from-rose-900/30 dark:to-pink-900/30',
+    iconBg: 'bg-rose-100 dark:bg-rose-800',
+    iconColor: 'text-rose-700 dark:text-rose-300',
     line: '#f43f5e'
   }
 } as const;
@@ -248,39 +251,48 @@ const EntityCard = ({
       <div
         ref={cardRef}
         className={`
-          relative bg-white rounded-lg shadow-lg p-4 transition-all duration-200 hover:shadow-xl
+          relative bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 transition-all duration-200 hover:shadow-xl
           cursor-pointer group border-2 ${colorClass}
           ${isTenant ? 'w-80 min-h-[160px] shadow-xl' : 'w-72 min-h-[140px]'}
           select-none
+          ${(entity.entityType === 'organization' || entity.entityType === 'location') ? 'ring-2 ring-green-200 dark:ring-green-300 ring-opacity-50' : ''}
         `}
         onClick={() => onSelect?.(entity)}
         onMouseEnter={() => setShowActions(true)}
         onMouseLeave={() => setShowActions(false)}
         data-entity-id={entity.entityId}
+        title={(entity.entityType === 'organization' || entity.entityType === 'location') ? 'Click to allocate credits to applications' : undefined}
       >
         {/* Header with Icon and Expand Button */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-2">
             <div className={`p-2 rounded-full ${theme.iconBg}`}>
-              <EntityIcon 
-                entityType={entity.entityType} 
+              <EntityIcon
+                entityType={entity.entityType}
                 organizationType={entity.organizationType}
                 className={isTenant ? `w-6 h-6 ${theme.iconColor}` : `w-5 h-5 ${theme.iconColor}`}
               />
             </div>
+            {/* Credit Allocation Indicator for Organizations and Locations */}
+            {(entity.entityType === 'organization' || entity.entityType === 'location') && (
+              <div className="flex items-center space-x-1 px-2 py-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded-full text-xs font-medium">
+                <CreditCard className="w-3 h-3" />
+                <span>Allocatable</span>
+              </div>
+            )}
             {hasChildren && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleExpanded?.();
                 }}
-                className="p-1 rounded hover:bg-gray-100 transition-colors"
+                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 aria-label={isExpanded ? 'Collapse' : 'Expand'}
               >
                 {isExpanded ? (
-                  <ChevronDown className="w-4 h-4 text-gray-600" />
+                  <ChevronDown className="w-4 h-4 text-gray-600 dark:text-gray-300" />
                 ) : (
-                  <ChevronRight className="w-4 h-4 text-gray-600" />
+                  <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-300" />
                 )}
               </button>
             )}
@@ -289,18 +301,18 @@ const EntityCard = ({
           {/* Actions Menu */}
           <div className={`transition-opacity duration-200 ${showActions ? 'opacity-100' : 'opacity-0'}`}>
             <div className="relative">
-              <button className="p-1 rounded hover:bg-gray-100">
-                <MoreHorizontal className="w-4 h-4 text-gray-500" />
+              <button className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
+                <MoreHorizontal className="w-4 h-4 text-gray-500 dark:text-gray-400" />
               </button>
               
               {showActions && (
-                <div className="absolute right-0 top-8 bg-white rounded-lg shadow-lg border py-1 z-10 min-w-[120px]">
+                <div className="absolute right-0 top-8 bg-white dark:bg-gray-700 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-10 min-w-[120px]">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       onSelect?.(entity);
                     }}
-                    className="flex items-center space-x-2 px-3 py-2 text-sm hover:bg-gray-50 w-full text-left"
+                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 w-full text-left"
                   >
                     <Eye className="w-4 h-4" />
                     <span>View</span>
@@ -310,7 +322,7 @@ const EntityCard = ({
                       e.stopPropagation();
                       onEdit?.(entity);
                     }}
-                    className="flex items-center space-x-2 px-3 py-2 text-sm hover:bg-gray-50 w-full text-left"
+                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 w-full text-left"
                   >
                     <Edit className="w-4 h-4" />
                     <span>Edit</span>
@@ -320,7 +332,7 @@ const EntityCard = ({
                       e.stopPropagation();
                       onDelete?.(entity.entityId);
                     }}
-                    className="flex items-center space-x-2 px-3 py-2 text-sm hover:bg-gray-50 text-red-600 w-full text-left"
+                    className="flex items-center space-x-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-600 text-red-600 dark:text-red-400 w-full text-left"
                   >
                     <Trash2 className="w-4 h-4" />
                     <span>Delete</span>
@@ -332,42 +344,42 @@ const EntityCard = ({
         </div>
 
         {/* Entity Name */}
-        <h3 className={`font-semibold text-gray-900 mb-1 leading-tight ${isTenant ? 'text-lg' : 'text-sm'}`}>
+        <h3 className={`font-semibold text-gray-900 dark:text-white mb-1 leading-tight ${isTenant ? 'text-lg' : 'text-sm'}`}>
           {entity.entityName || 'YOUR NAME HERE'}
         </h3>
         
         {/* Entity Type/Position */}
-        <p className={`text-gray-600 uppercase tracking-wide mb-3 ${isTenant ? 'text-sm font-medium text-blue-700' : 'text-xs'}`}>
+        <p className={`text-gray-600 dark:text-gray-300 uppercase tracking-wide mb-3 ${isTenant ? 'text-sm font-medium text-blue-700 dark:text-blue-400' : 'text-xs'}`}>
           {entity.organizationType || entity.locationType || entity.departmentType || entity.teamType || 'POSITION'}
         </p>
 
         {/* Responsible Person */}
         {entity.responsiblePersonName && (
           <div className="flex items-center space-x-2 mb-2">
-            <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center">
-              <UserCheck className="w-3 h-3 text-gray-600" />
+            <div className="w-6 h-6 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center">
+              <UserCheck className="w-3 h-3 text-gray-600 dark:text-gray-300" />
             </div>
-            <span className="text-xs text-gray-700">{entity.responsiblePersonName}</span>
+            <span className="text-xs text-gray-700 dark:text-gray-300">{entity.responsiblePersonName}</span>
           </div>
         )}
 
         {/* Credits (if available) */}
         {(entity.availableCredits !== undefined || entity.reservedCredits !== undefined || entity.applicationAllocations) && (
-          <div className="text-xs text-gray-600 space-y-1">
+          <div className="text-xs text-gray-600 dark:text-gray-300 space-y-1">
             {/* Organization Credits */}
             {(entity.availableCredits !== undefined || entity.reservedCredits !== undefined) && (
-              <div className="border-b border-gray-200 pb-1 mb-1">
-                <div className="font-medium text-gray-800 mb-1">Organization Credits:</div>
+              <div className="border-b border-gray-200 dark:border-gray-700 pb-1 mb-1">
+                <div className="font-medium text-gray-800 dark:text-gray-200 mb-1">Organization Credits:</div>
                 {entity.availableCredits !== undefined && (
                   <div className="flex items-center gap-1">
-                    <CreditCard className="w-3 h-3 text-green-600" />
-                    <span>Available: <span className="font-medium text-green-700">{Number(entity.availableCredits || 0).toLocaleString()}</span></span>
+                    <CreditCard className="w-3 h-3 text-green-600 dark:text-green-400" />
+                    <span className="text-gray-700 dark:text-gray-300">Available: <span className="font-medium text-green-700 dark:text-green-400">{Number(entity.availableCredits || 0).toLocaleString()}</span></span>
                   </div>
                 )}
                 {entity.reservedCredits !== undefined && Number(entity.reservedCredits) > 0 && (
                   <div className="flex items-center gap-1">
-                    <CreditCard className="w-3 h-3 text-yellow-600" />
-                    <span>Reserved: <span className="font-medium text-yellow-700">{Number(entity.reservedCredits || 0).toLocaleString()}</span></span>
+                    <CreditCard className="w-3 h-3 text-yellow-600 dark:text-yellow-400" />
+                    <span className="text-gray-700 dark:text-gray-300">Reserved: <span className="font-medium text-yellow-700 dark:text-yellow-400">{Number(entity.reservedCredits || 0).toLocaleString()}</span></span>
                   </div>
                 )}
               </div>
@@ -376,16 +388,16 @@ const EntityCard = ({
             {/* Application Allocations */}
             {entity.applicationAllocations && entity.applicationAllocations.length > 0 && (
               <div>
-                <div className="font-medium text-gray-800 mb-1">Application Credits:</div>
-                {entity.applicationAllocations.slice(0, 3).map((allocation, index) => (
+                <div className="font-medium text-gray-800 dark:text-gray-200 mb-1">Application Credits:</div>
+                {entity.applicationAllocations.slice(0, 3).map((allocation) => (
                   <div key={allocation.application} className="flex items-center justify-between gap-1">
                     <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                      <span className="capitalize">{allocation.application}:</span>
+                      <div className="w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400"></div>
+                      <span className="capitalize text-gray-700 dark:text-gray-300">{allocation.application}:</span>
                     </div>
                     <span className={`font-medium ${
-                      allocation.availableCredits > 0 ? 'text-green-600' :
-                      allocation.hasAllocation ? 'text-yellow-600' : 'text-gray-500'
+                      allocation.availableCredits > 0 ? 'text-green-600 dark:text-green-400' :
+                      allocation.hasAllocation ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400'
                     }`}>
                       {Number(allocation.availableCredits || 0).toFixed(0)}/{Number(allocation.allocatedCredits || 0).toFixed(0)}
                       {allocation.autoReplenish && <span className="text-xs ml-1">🔄</span>}
@@ -393,7 +405,7 @@ const EntityCard = ({
                   </div>
                 ))}
                 {entity.applicationAllocations.length > 3 && (
-                  <div className="text-gray-500 text-xs mt-1">
+                  <div className="text-gray-500 dark:text-gray-400 text-xs mt-1">
                     +{entity.applicationAllocations.length - 3} more...
                   </div>
                 )}
@@ -404,8 +416,8 @@ const EntityCard = ({
 
         {/* Description */}
         {entity.description && (
-          <div className="mt-2 pt-2 border-t border-gray-100">
-            <p className="text-xs text-gray-600 leading-relaxed">
+          <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+            <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
               {entity.description.length > 80 
                 ? `${entity.description.substring(0, 80)}...` 
                 : entity.description
@@ -483,10 +495,11 @@ export const OrganizationHierarchyChart: React.FC<OrganizationHierarchyChartProp
   onSelectEntity,
   onEditEntity,
   onDeleteEntity,
-  isLoading = false
+  isLoading = false,
+  isOpen = false,
+  onClose
 }) => {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
-  const [isOpen, setIsOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -511,7 +524,6 @@ export const OrganizationHierarchyChart: React.FC<OrganizationHierarchyChartProp
         }
       });
       
-      console.log('🔄 Auto-expanding nodes:', expandedIds);
       setExpandedNodes(expandedIds);
     }
   }, [hierarchy]);
@@ -633,7 +645,6 @@ export const OrganizationHierarchyChart: React.FC<OrganizationHierarchyChartProp
       hierarchy.forEach(processEntity);
     }
     
-    console.log('🔗 Generated connections:', connections.length);
     return connections;
   }, [hierarchy, expandedNodes, getPosition, positions]);
 
@@ -658,96 +669,96 @@ export const OrganizationHierarchyChart: React.FC<OrganizationHierarchyChartProp
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2 text-gray-600">Loading hierarchy...</span>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
+        <span className="ml-2 text-gray-600 dark:text-gray-300">Loading hierarchy...</span>
       </div>
     );
   }
 
   if (!hierarchy || hierarchy.length === 0) {
     return (
-      <div className="text-center p-8 text-gray-500">
-        <Building2 className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+      <div className="text-center p-8 text-gray-500 dark:text-gray-400">
+        <Building2 className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
         <p>No organizational hierarchy data available.</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full">
-      {/* Trigger Button */}
-      <button
-        onClick={() => setIsOpen(true)}
-        className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        data-testid="organization-chart-btn"
-      >
-        <Building2 className="w-4 h-4" />
-        <span>Organization Chart</span>
-      </button>
-
+    <>
       {/* Full-Screen Overlay */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 bg-gray-900 bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg shadow-2xl w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col">
+        <div className="fixed inset-0 z-50 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl rounded-lg shadow-2xl w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col border border-gray-200/50 dark:border-gray-700/50">
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-t-lg">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-800 dark:to-purple-800 text-white rounded-t-lg">
               <h2 className="text-xl font-semibold">Organization Hierarchy</h2>
               <div className="flex items-center space-x-2">
                 {/* Hierarchy Controls */}
-                <button
+                <PearlButton
                   onClick={expandAll}
-                  className="px-3 py-1 bg-white bg-opacity-20 rounded text-sm hover:bg-opacity-30 transition-colors"
+                  variant="secondary"
+                  size="sm"
                   data-testid="expand-all-btn"
                   title="Expand All"
                 >
                   Expand All
-                </button>
-                <button
+                </PearlButton>
+                <PearlButton
                   onClick={collapseAll}
-                  className="px-3 py-1 bg-white bg-opacity-20 rounded text-sm hover:bg-opacity-30 transition-colors"
+                  variant="secondary"
+                  size="sm"
                   title="Collapse All"
                 >
                   Collapse All
-                </button>
+                </PearlButton>
                 
                 {/* Zoom Controls */}
-                <div className="flex items-center space-x-1 bg-white bg-opacity-20 rounded p-1">
-                  <button
+                <div className="flex items-center space-x-1 bg-white bg-opacity-20 rounded-full p-1">
+                  <PearlButton
                     onClick={handleZoomOut}
-                    className="p-1 hover:bg-white hover:bg-opacity-20 rounded"
+                    variant="outline"
+                    size="sm"
                     title="Zoom Out"
                     disabled={zoom <= 0.3}
+                    className="!p-1 !px-2"
                   >
                     <ZoomOut className="w-4 h-4" />
-                  </button>
+                  </PearlButton>
                   <span className="px-2 text-sm font-medium min-w-[3rem] text-center">
                     {Math.round(zoom * 100)}%
                   </span>
-                  <button
+                  <PearlButton
                     onClick={handleZoomIn}
-                    className="p-1 hover:bg-white hover:bg-opacity-20 rounded"
+                    variant="outline"
+                    size="sm"
                     title="Zoom In"
                     disabled={zoom >= 3}
+                    className="!p-1 !px-2"
                   >
                     <ZoomIn className="w-4 h-4" />
-                  </button>
+                  </PearlButton>
                 </div>
 
                 {/* View Controls */}
-                <button
+                <PearlButton
                   onClick={fitToScreen}
-                  className="p-1 hover:bg-white hover:bg-opacity-20 rounded"
+                  variant="outline"
+                  size="sm"
                   title="Fit to Screen"
+                  className="!p-1 !px-2"
                 >
                   <Maximize2 className="w-4 h-4" />
-                </button>
-                <button
+                </PearlButton>
+                <PearlButton
                   onClick={resetView}
-                  className="p-1 hover:bg-white hover:bg-opacity-20 rounded"
+                  variant="outline"
+                  size="sm"
                   title="Reset View"
+                  className="!p-1 !px-2"
                 >
                   <RotateCcw className="w-4 h-4" />
-                </button>
+                </PearlButton>
                 
                 {/* Debug Refresh */}
                 {process.env.NODE_ENV === 'development' && (
@@ -772,22 +783,24 @@ export const OrganizationHierarchyChart: React.FC<OrganizationHierarchyChartProp
                 )}
 
                 {/* Close Button */}
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="p-1 hover:bg-white hover:bg-opacity-20 rounded ml-2"
+                <PearlButton
+                  onClick={() => onClose?.()}
+                  variant="secondary"
+                  size="sm"
                   title="Close"
+                  className="ml-2 !p-1 !px-2"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                </button>
+                </PearlButton>
               </div>
             </div>
 
             {/* Chart Content */}
             <div 
               ref={chartRef}
-              className="flex-1 overflow-hidden bg-gradient-to-br from-gray-50 to-blue-50 relative cursor-grab"
+              className="flex-1 overflow-hidden bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-950 dark:to-black relative cursor-grab"
               style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
@@ -797,18 +810,18 @@ export const OrganizationHierarchyChart: React.FC<OrganizationHierarchyChartProp
               data-testid="hierarchy-chart"
             >
               {/* Pan/Zoom Instructions */}
-              <div className="absolute top-4 left-4 bg-white bg-opacity-90 rounded-lg p-3 text-xs text-gray-600 shadow-sm z-10">
+              <div className="absolute top-4 left-4 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-lg p-3 text-xs text-gray-600 dark:text-gray-300 shadow-sm z-10">
                 <div className="flex items-center space-x-2 mb-1">
                   <Move className="w-3 h-3" />
                   <span>Click and drag to pan</span>
                 </div>
-                <div className="text-gray-500">Mouse wheel to zoom</div>
+                <div className="text-gray-500 dark:text-gray-400">Mouse wheel to zoom</div>
               </div>
 
               {/* Debug Panel */}
               {process.env.NODE_ENV === 'development' && (
-                <div className="absolute top-4 right-4 bg-white bg-opacity-90 rounded-lg p-3 text-xs text-gray-600 shadow-sm z-10 max-w-sm">
-                  <div className="font-bold mb-2">Debug Info</div>
+                <div className="absolute top-4 right-4 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-lg p-3 text-xs text-gray-600 dark:text-gray-300 shadow-sm z-10 max-w-sm">
+                  <div className="font-bold mb-2 dark:text-white">Debug Info</div>
                   <div>Positions tracked: {positions.size}</div>
                   <div>Connections: {generateConnections().length}</div>
                   <div className="mt-2 max-h-32 overflow-y-auto">
@@ -845,24 +858,15 @@ export const OrganizationHierarchyChart: React.FC<OrganizationHierarchyChartProp
                       <polygon points="0 0, 10 3.5, 0 7" fill="#6b7280" />
                     </marker>
                   </defs>
-                  {generateConnections().map((connection, index) => {
-                    if (process.env.NODE_ENV === 'development') {
-                      console.log(`Connection ${index}:`, {
-                        from: connection.from,
-                        to: connection.to,
-                        color: connection.color
-                      });
-                    }
-                    return (
-                      <ConnectionLine
-                        key={`connection-${index}-${Date.now()}`}
-                        from={{ x: connection.from.x, y: connection.from.y }}
-                        to={{ x: connection.to.x, y: connection.to.y }}
-                        color={connection.color}
-                        strokeWidth={2}
-                      />
-                    );
-                  })}
+                  {generateConnections().map((connection, index) => (
+                    <ConnectionLine
+                      key={`connection-${index}-${Date.now()}`}
+                      from={{ x: connection.from.x, y: connection.from.y }}
+                      to={{ x: connection.to.x, y: connection.to.y }}
+                      color={connection.color}
+                      strokeWidth={2}
+                    />
+                  ))}
                 </svg>
 
                 {/* Entity Nodes */}
@@ -885,18 +889,18 @@ export const OrganizationHierarchyChart: React.FC<OrganizationHierarchyChartProp
             </div>
 
             {/* Footer Stats */}
-            <div className="border-t bg-gray-50 px-6 py-3">
-              <div className="flex items-center justify-between text-sm text-gray-600">
+            <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-6 py-3">
+              <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
                 <div className="flex items-center space-x-4">
                   <div>
-                    Total Entities: <span className="font-medium">{getAllEntityCount(hierarchy)}</span>
+                    Total Entities: <span className="font-medium dark:text-white">{getAllEntityCount(hierarchy)}</span>
                   </div>
                   <div>
-                    Expanded: <span className="font-medium">{expandedNodes.size}</span> / 
-                    <span className="font-medium">{getAllEntityCount(hierarchy)}</span>
+                    Expanded: <span className="font-medium dark:text-white">{expandedNodes.size}</span> / 
+                    <span className="font-medium dark:text-white">{getAllEntityCount(hierarchy)}</span>
                   </div>
                 </div>
-                <div className="flex items-center space-x-4 text-xs text-gray-500">
+                <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
                   <div>Zoom: {Math.round(zoom * 100)}%</div>
                   <div>Pan: {Math.round(pan.x)}, {Math.round(pan.y)}</div>
                 </div>
@@ -905,7 +909,7 @@ export const OrganizationHierarchyChart: React.FC<OrganizationHierarchyChartProp
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

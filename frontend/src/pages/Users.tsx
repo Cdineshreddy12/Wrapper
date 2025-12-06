@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { tenantAPI, invitationAPI, permissionsAPI } from '@/lib/api'
+import api from '@/lib/api'
 import { formatDate, getInitials } from '@/lib/utils'
 import toast from 'react-hot-toast'
 import type { UnifiedUser } from '@/lib/api'
@@ -86,11 +87,97 @@ export function Users() {
       console.log('🔍 Fetching organizations...');
       return api.get('/api/organizations/hierarchy/current').then(res => {
         console.log('🔍 Organizations response:', res.data);
-        return res.data.hierarchy || [];
+        const hierarchy = res.data.hierarchy || [];
+        const expectedCount = res.data.totalOrganizations || 0;
+        console.log(`📊 Expected ${expectedCount} organizations, received ${hierarchy.length} root nodes`);
+        
+        // Track processed IDs to avoid duplicates
+        const processedIds = new Set<string>();
+        const flattened: any[] = [];
+        
+        // Flatten the nested hierarchy recursively to include all organizations
+        const processOrg = (org: any, depth: number = 0): void => {
+          // Skip invalid or empty organizations
+          if (!org || typeof org !== 'object') {
+            console.warn(`⚠️ Skipping invalid org at depth ${depth}:`, org);
+            return;
+          }
+          
+          // Check for empty object {}
+          if (Object.keys(org).length === 0) {
+            console.warn(`⚠️ Skipping empty object {} at depth ${depth}`);
+            return;
+          }
+          
+          // Must have organizationId
+          if (!org.organizationId || typeof org.organizationId !== 'string') {
+            console.warn(`⚠️ Skipping org without valid organizationId at depth ${depth}:`, org);
+            return;
+          }
+          
+          // Skip if already processed (avoid duplicates)
+          if (processedIds.has(org.organizationId)) {
+            console.warn(`⚠️ Skipping duplicate organization: ${org.organizationName} (${org.organizationId})`);
+            return;
+          }
+          
+          // Transform API format to UI format
+          const transformedOrg = {
+            entityId: org.organizationId,
+            entityName: org.organizationName || 'Unnamed Organization',
+            entityCode: org.organizationCode || org.organizationName?.toLowerCase().replace(/\s+/g, '-') || `org-${org.organizationId.slice(0, 8)}`,
+            organizationType: org.organizationType,
+            organizationLevel: org.organizationLevel,
+            parentOrganizationId: org.parentOrganizationId || null,
+            isActive: org.isActive !== undefined ? org.isActive : true,
+            description: org.description || ''
+          };
+          
+          flattened.push(transformedOrg);
+          processedIds.add(org.organizationId);
+          
+          // Recursively process children (aggressively filter out empty objects)
+          if (org.children && Array.isArray(org.children)) {
+            // Filter out empty objects, null, undefined, and invalid entries
+            const validChildren = org.children.filter((child: any) => {
+              if (!child || typeof child !== 'object') {
+                return false;
+              }
+              // Filter out empty objects {}
+              if (Object.keys(child).length === 0) {
+                return false;
+              }
+              // Must have organizationId
+              if (!child.organizationId || typeof child.organizationId !== 'string') {
+                return false;
+              }
+              return true;
+            });
+            
+            if (validChildren.length > 0) {
+              validChildren.forEach((child: any) => processOrg(child, depth + 1));
+            }
+          }
+        };
+        
+        // Process all root organizations in the hierarchy
+        hierarchy.forEach((org: any, index: number) => {
+          console.log(`🔄 Processing root org ${index + 1}/${hierarchy.length}:`, org.organizationName || org.organizationId);
+          processOrg(org, 0);
+        });
+        
+        console.log(`✅ Flattened ${flattened.length} organizations from hierarchy (expected: ${expectedCount})`);
+        
+        if (flattened.length !== expectedCount) {
+          console.warn(`⚠️ Mismatch: Expected ${expectedCount} organizations but flattened ${flattened.length}`);
+          console.warn(`📋 Flattened organization IDs:`, flattened.map(o => `${o.entityName} (${o.entityId})`));
+        }
+        
+        return flattened;
+      }).catch((error) => {
+        console.error('❌ Error fetching organizations:', error);
+        return []; // Return empty array on error
       });
-    },
-    onError: (error) => {
-      console.error('❌ Error fetching organizations:', error);
     }
   })
 
@@ -481,7 +568,7 @@ export function Users() {
         const token = invitationUrl.split('token=')[1];
         console.log(`🧪 Testing ${user.email} with token: ${token.substring(0, 20)}...`);
         
-        const response = await fetch(`${window.location.origin.replace('3001', '3000')}/api/invitations/details-by-token?token=${token}`);
+        const response = await fetch(`/api/invitations/details-by-token?token=${token}`);
         
         if (response.ok) {
           const data = await response.json();
@@ -563,7 +650,7 @@ export function Users() {
       const token = invitationUrl.split('token=')[1];
       
       // Test the backend API endpoint
-      const response = await fetch(`${window.location.origin.replace('3001', '3000')}/api/invitations/details-by-token?token=${token}`);
+      const response = await fetch(`/api/invitations/details-by-token?token=${token}`);
       
       if (response.ok) {
         const data = await response.json();
@@ -1209,7 +1296,9 @@ export function Users() {
                         <Building2 className="h-4 w-4 text-blue-600" />
                       </div>
                       <div>
-                        <p className="font-medium">{assignment.organizationName}</p>
+                        <p className="font-medium">
+                          {assignment.organizationName || assignment.organizationCode || 'Unknown Organization'}
+                        </p>
                         <p className="text-sm text-gray-600">
                           {assignment.userName} • {assignment.assignmentType} • Priority {assignment.priority}
                         </p>

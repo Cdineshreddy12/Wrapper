@@ -16,14 +16,29 @@ interface RoleDetailsModalProps {
   onClose: () => void;
 }
 
+// Normalize permissions - convert JSON strings to objects
+const normalizePermissions = (permissions: any): Record<string, any> | string[] => {
+  if (typeof permissions === 'string') {
+    try {
+      return JSON.parse(permissions);
+    } catch (error) {
+      console.error('Failed to parse permissions JSON string:', error);
+      return {};
+    }
+  }
+  return permissions;
+};
+
 export function RoleDetailsModal({ role, isOpen, onClose }: RoleDetailsModalProps) {
   if (!role) return null;
 
-  const permissionSummary = getPermissionSummary(role.permissions);
+  // Normalize permissions before calculating summary
+  const normalizedPermissions = normalizePermissions(role.permissions);
+  const permissionSummary = getPermissionSummary(normalizedPermissions);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto bg-white dark:bg-gray-900">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <div 
@@ -71,7 +86,7 @@ export function RoleDetailsModal({ role, isOpen, onClose }: RoleDetailsModalProp
 
           {/* Enhanced Permission Details */}
           <EnhancedPermissionSummary 
-            permissions={role.permissions}
+            permissions={normalizedPermissions}
             roleName={role.roleName}
             restrictions={role.restrictions}
             isSystemRole={role.isSystemRole}

@@ -10,6 +10,7 @@ import { deleteTenantData, deleteTenantsByDomain, getTenantDataSummary } from '.
 import Logger from '../utils/logger.js';
 import trialManager from '../utils/trial-manager.js';
 import ErrorResponses from '../utils/error-responses.js';
+import permissionService from '../services/permissionService.js';
 
 export default async function adminRoutes(fastify, options) {
   // Debug auth status endpoint
@@ -188,6 +189,51 @@ export default async function adminRoutes(fastify, options) {
       return reply.code(500).send({
         success: false,
         error: 'Failed to get auth status',
+        message: error.message
+      });
+    }
+  });
+
+  // Get user's accessible tenants
+  fastify.get('/user-tenants', async (request, reply) => {
+    try {
+      console.log('🏢 Getting user tenants for:', request.userContext?.email);
+
+      if (!request.userContext?.isAuthenticated) {
+        return reply.code(401).send({
+          success: false,
+          error: 'Authentication required'
+        });
+      }
+
+      // Get all tenants the user has access to
+      const userTenants = await db
+        .select({
+          tenantId: tenants.tenantId,
+          companyName: tenants.companyName,
+          subdomain: tenants.subdomain,
+          isActive: tenants.isActive
+        })
+        .from(tenants)
+        .innerJoin(tenantUsers, eq(tenants.tenantId, tenantUsers.tenantId))
+        .where(and(
+          eq(tenantUsers.kindeUserId, request.userContext.userId),
+          eq(tenants.isActive, true)
+        ))
+        .orderBy(tenants.createdAt);
+
+      console.log('✅ Found user tenants:', userTenants.length);
+
+      return {
+        success: true,
+        tenants: userTenants,
+        total: userTenants.length
+      };
+    } catch (error) {
+      console.error('❌ Error getting user tenants:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to get user tenants',
         message: error.message
       });
     }
@@ -697,10 +743,10 @@ export default async function adminRoutes(fastify, options) {
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('users-list');
     const tenantId = request.userContext.tenantId;
-    
+
     try {
       console.log(`🔍 [${requestId}] Getting users list for tenant: ${tenantId}`);
-      
+
       const users = await db
         .select({
           userId: tenantUsers.userId,
@@ -734,6 +780,67 @@ export default async function adminRoutes(fastify, options) {
       return reply.code(500).send({
         success: false,
         error: 'Failed to get users',
+        message: error.message,
+        requestId
+      });
+    }
+  });
+
+  // Get specific user details
+  fastify.get('/users/:userId', {
+    preHandler: [authenticateToken, requirePermission('user.view')]
+  }, async (request, reply) => {
+    const requestId = Logger.generateRequestId('user-details');
+    const { userId } = request.params;
+    const tenantId = request.userContext.tenantId;
+
+    try {
+      console.log(`🔍 [${requestId}] Getting user details: ${userId} for tenant: ${tenantId}`);
+
+      const [user] = await db
+        .select({
+          userId: tenantUsers.userId,
+          email: tenantUsers.email,
+          name: tenantUsers.name,
+          avatar: tenantUsers.avatar,
+          title: tenantUsers.title,
+          department: tenantUsers.department,
+          isActive: tenantUsers.isActive,
+          isTenantAdmin: tenantUsers.isTenantAdmin,
+          isVerified: tenantUsers.isVerified,
+          onboardingCompleted: tenantUsers.onboardingCompleted,
+          createdAt: tenantUsers.createdAt,
+          lastActiveAt: tenantUsers.lastActiveAt,
+          lastLoginAt: tenantUsers.lastLoginAt,
+          loginCount: tenantUsers.loginCount
+        })
+        .from(tenantUsers)
+        .where(and(
+          eq(tenantUsers.userId, userId),
+          eq(tenantUsers.tenantId, tenantId)
+        ))
+        .limit(1);
+
+      if (!user) {
+        return ErrorResponses.notFound(reply, 'User', 'User not found', {
+          userId,
+          tenantId,
+          requestId
+        });
+      }
+
+      console.log(`✅ [${requestId}] Found user: ${user.name} (${user.email})`);
+
+      return {
+        success: true,
+        data: user,
+        requestId
+      };
+    } catch (error) {
+      console.error(`❌ [${requestId}] Failed to get user details:`, error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to get user details',
         message: error.message,
         requestId
       });
@@ -789,6 +896,94 @@ export default async function adminRoutes(fastify, options) {
     }
   });
 
+  // Assign role to user
+  fastify.post('/users/assign-role', {
+    preHandler: [authenticateToken, requirePermission('roles:assign')]
+  }, async (request, reply) => {
+    const requestId = Logger.generateRequestId('assign-role');
+    const { userId, roleId, expiresAt } = request.body;
+    const tenantId = request.userContext.tenantId;
+    
+    try {
+      console.log(`🔄 [${requestId}] Assigning role:`, { userId, roleId, tenantId });
+      
+      const assignment = await permissionService.assignRole({
+        userId,
+        roleId,
+        expiresAt,
+        assignedBy: request.userContext?.kindeUserId || request.userContext?.internalUserId,
+        tenantId
+      });
+
+      console.log(`✅ [${requestId}] Role assigned successfully`);
+
+      return {
+        success: true,
+        message: 'Role assigned successfully',
+        data: assignment,
+        requestId
+      };
+    } catch (error) {
+      console.error(`❌ [${requestId}] Failed to assign role:`, error);
+      if (error.message.includes('already assigned')) {
+        return reply.code(409).send({
+          success: false,
+          error: error.message,
+          requestId
+        });
+      }
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to assign role',
+        message: error.message,
+        requestId
+      });
+    }
+  });
+
+  // Deassign role from user
+  fastify.delete('/users/:userId/roles/:roleId', {
+    preHandler: [authenticateToken, requirePermission('roles:assign')]
+  }, async (request, reply) => {
+    const requestId = Logger.generateRequestId('deassign-role');
+    const { userId, roleId } = request.params;
+    const tenantId = request.userContext.tenantId;
+    
+    try {
+      console.log(`🔄 [${requestId}] Deassigning role:`, { userId, roleId, tenantId });
+      
+      await permissionService.removeRoleAssignment(
+        tenantId,
+        userId,
+        roleId,
+        request.userContext?.kindeUserId || request.userContext?.internalUserId
+      );
+
+      console.log(`✅ [${requestId}] Role deassigned successfully`);
+
+      return {
+        success: true,
+        message: 'Role deassigned successfully',
+        requestId
+      };
+    } catch (error) {
+      console.error(`❌ [${requestId}] Failed to deassign role:`, error);
+      if (error.message === 'Role assignment not found') {
+        return reply.code(404).send({
+          success: false,
+          error: error.message,
+          requestId
+        });
+      }
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to deassign role',
+        message: error.message,
+        requestId
+      });
+    }
+  });
+
   // Remove user from tenant
   fastify.delete('/users/:userId', {
     preHandler: [authenticateToken, requirePermission('user.delete')]
@@ -800,6 +995,47 @@ export default async function adminRoutes(fastify, options) {
     try {
       console.log(`🗑️ [${requestId}] Removing user:`, { userId, tenantId });
       
+      // Get user data before deletion for event publishing
+      const [userToDelete] = await db
+        .select()
+        .from(tenantUsers)
+        .where(and(
+          eq(tenantUsers.userId, userId),
+          eq(tenantUsers.tenantId, tenantId)
+        ))
+        .limit(1);
+
+      if (!userToDelete) {
+        return ErrorResponses.notFound(reply, 'User', 'User not found', {
+          requestId
+        });
+      }
+
+      // Publish user deletion event to Redis streams before deletion
+      try {
+        const { crmSyncStreams } = await import('../utils/redis.js');
+        // Split name into firstName and lastName for CRM requirements
+        const nameParts = (userToDelete.name || '').split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+        
+        await crmSyncStreams.publishUserEvent(tenantId, 'user_deleted', {
+          userId: userToDelete.userId,
+          email: userToDelete.email,
+          firstName: firstName,
+          lastName: lastName,
+          name: userToDelete.name || `${firstName} ${lastName}`.trim(),
+          deletedAt: new Date().toISOString(),
+          deletedBy: request.userContext.internalUserId,
+          reason: 'user_deleted_permanently'
+        });
+        console.log(`📡 [${requestId}] Published user_deleted event to Redis streams`);
+      } catch (publishError) {
+        console.warn(`⚠️ [${requestId}] Failed to publish user_deleted event:`, publishError.message);
+        // Continue with deletion even if event publishing fails
+      }
+      
+      // Delete the user
       const result = await db
         .delete(tenantUsers)
         .where(and(
@@ -807,12 +1043,6 @@ export default async function adminRoutes(fastify, options) {
           eq(tenantUsers.tenantId, tenantId)
         ))
         .returning();
-
-      if (result.length === 0) {
-        return ErrorResponses.notFound(reply, 'User', 'User not found', {
-          requestId
-        });
-      }
 
       console.log(`✅ [${requestId}] User removed successfully`);
 
@@ -1145,6 +1375,29 @@ export default async function adminRoutes(fastify, options) {
       }
 
       console.log(`✅ [${requestId}] Role updated successfully`);
+
+      // Publish role update event to Redis streams
+      try {
+        const { crmSyncStreams } = await import('../utils/redis.js');
+        const updatedRole = result[0];
+        await crmSyncStreams.publishRoleEvent(tenantId, 'role_updated', {
+          roleId: updatedRole.roleId,
+          roleName: updatedRole.roleName,
+          description: updatedRole.description,
+          permissions: typeof updatedRole.permissions === 'string'
+            ? JSON.parse(updatedRole.permissions)
+            : updatedRole.permissions,
+          restrictions: typeof updatedRole.restrictions === 'string'
+            ? JSON.parse(updatedRole.restrictions)
+            : updatedRole.restrictions,
+          updatedBy: request.userContext.internalUserId,
+          updatedAt: updatedRole.updatedAt || new Date().toISOString()
+        });
+        console.log(`📡 [${requestId}] Published role_updated event to Redis streams`);
+      } catch (publishError) {
+        console.warn(`⚠️ [${requestId}] Failed to publish role_updated event:`, publishError.message);
+        // Don't fail the request if event publishing fails
+      }
 
       return {
         success: true,

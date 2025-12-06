@@ -22,9 +22,21 @@ export default async function creditRoutes(fastify, options) {
     preHandler: authenticateToken
   }, async (request, reply) => {
     try {
+      // Try to import Redis cache (may fail if Redis is not available)
+      let creditCache = null;
+      try {
+        const cacheModule = await import('../utils/redis-cache.js');
+        creditCache = cacheModule.creditCache;
+      } catch (cacheError) {
+        console.warn('⚠️ Redis cache not available, skipping cache:', cacheError.message);
+      }
+
       console.log('🔍 Credit API: Request received', request.userContext);
       const userId = request.userContext.userId;
       let tenantId = request.userContext.tenantId;
+      
+      // Generate cache key
+      const cacheKey = `credits:current:${userId}:${tenantId || 'no-tenant'}`;
 
       console.log('💰 Credit API: Request received', {
         userId,
@@ -130,14 +142,20 @@ export default async function creditRoutes(fastify, options) {
 
       // Find all organization entities for this tenant
       console.log('🔍 Credit API: Finding organization entities for tenant:', tenantId);
-      const organizationEntities = await db
-        .select()
-        .from(entities)
-        .where(and(
-          eq(entities.tenantId, tenantId),
-          eq(entities.entityType, 'organization'),
-          eq(entities.isActive, true)
-        ));
+      let organizationEntities = [];
+      try {
+        organizationEntities = await db
+          .select()
+          .from(entities)
+          .where(and(
+            eq(entities.tenantId, tenantId),
+            eq(entities.entityType, 'organization'),
+            eq(entities.isActive, true)
+          ));
+      } catch (dbError) {
+        console.error('❌ Error querying organization entities:', dbError);
+        throw new Error(`Database query failed: ${dbError.message}`);
+      }
 
       let creditBalance = null;
 
@@ -152,27 +170,42 @@ export default async function creditRoutes(fastify, options) {
         for (const entity of entitiesToCheck) {
           console.log('🔍 Checking credits for entity:', entity.entityId, entity.entityName);
 
-          const entityCreditBalance = await CreditService.getCurrentBalance(tenantId, 'organization', entity.entityId);
+          try {
+            const entityCreditBalance = await CreditService.getCurrentBalance(tenantId, 'organization', entity.entityId);
 
-          // If we found credits (not the default "no credits" response), use this balance
-          if (entityCreditBalance && entityCreditBalance.availableCredits > 0) {
-            console.log('💰 Credit API: Found credits on entity:', entity.entityId, entity.entityName);
-            creditBalance = entityCreditBalance;
-            creditBalance.entityId = entity.entityId; // Ensure correct entity ID is returned
-            break; // Use the first entity that has credits
+            // If we found credits (not the default "no credits" response), use this balance
+            if (entityCreditBalance && entityCreditBalance.availableCredits > 0) {
+              console.log('💰 Credit API: Found credits on entity:', entity.entityId, entity.entityName);
+              creditBalance = entityCreditBalance;
+              creditBalance.entityId = entity.entityId; // Ensure correct entity ID is returned
+              break; // Use the first entity that has credits
+            }
+          } catch (entityError) {
+            console.error(`❌ Error checking credits for entity ${entity.entityId}:`, entityError);
+            // Continue to next entity instead of failing
           }
         }
 
         // If no entity has credits, use the default entity for consistent API response
         if (!creditBalance && defaultEntity) {
           console.log('⚠️ Credit API: No credits found, using default entity for response');
-          creditBalance = await CreditService.getCurrentBalance(tenantId, 'organization', defaultEntity.entityId);
-          creditBalance.entityId = defaultEntity.entityId;
+          try {
+            creditBalance = await CreditService.getCurrentBalance(tenantId, 'organization', defaultEntity.entityId);
+            creditBalance.entityId = defaultEntity.entityId;
+          } catch (entityError) {
+            console.error(`❌ Error getting balance for default entity ${defaultEntity.entityId}:`, entityError);
+            // Will fall through to default response
+          }
         } else if (!creditBalance && organizationEntities.length > 0) {
           // Fallback to first entity if no default
           console.log('⚠️ Credit API: No credits found, using first entity for response');
-          creditBalance = await CreditService.getCurrentBalance(tenantId, 'organization', organizationEntities[0].entityId);
-          creditBalance.entityId = organizationEntities[0].entityId;
+          try {
+            creditBalance = await CreditService.getCurrentBalance(tenantId, 'organization', organizationEntities[0].entityId);
+            creditBalance.entityId = organizationEntities[0].entityId;
+          } catch (entityError) {
+            console.error(`❌ Error getting balance for first entity ${organizationEntities[0].entityId}:`, entityError);
+            // Will fall through to default response
+          }
         }
 
         console.log('💰 Credit API: Final credit balance:', creditBalance);
@@ -211,13 +244,51 @@ export default async function creditRoutes(fastify, options) {
         };
       }
 
+      // Try to get from cache first
+      if (creditCache) {
+        try {
+          const cachedBalance = await creditCache.get(cacheKey);
+          if (cachedBalance) {
+            console.log('✅ Credit balance retrieved from cache');
+            return {
+              success: true,
+              data: cachedBalance,
+              cached: true
+            };
+          }
+        } catch (cacheError) {
+          console.warn('⚠️ Cache read error (non-fatal):', cacheError.message);
+        }
+      }
+
+      // Cache the result for 60 seconds (short TTL for frequently changing data)
+      if (creditBalance && creditCache) {
+        try {
+          await creditCache.set(cacheKey, creditBalance, 60);
+          console.log('✅ Credit balance cached');
+        } catch (cacheError) {
+          console.warn('⚠️ Cache write error (non-fatal):', cacheError.message);
+          // Don't fail the request if caching fails
+        }
+      }
+
       return {
         success: true,
         data: creditBalance
       };
     } catch (error) {
+      console.error('❌ Error fetching current credit balance:', error);
       request.log.error('Error fetching current credit balance:', error);
-      return reply.code(500).send({ error: 'Failed to fetch credit balance' });
+      
+      // Provide more detailed error information
+      const errorMessage = error.message || 'Unknown error';
+      const errorStack = process.env.NODE_ENV === 'development' ? error.stack : undefined;
+      
+      return reply.code(500).send({ 
+        error: 'Failed to fetch credit balance',
+        message: errorMessage,
+        ...(errorStack && { stack: errorStack })
+      });
     }
   });
 
@@ -1239,6 +1310,144 @@ export default async function creditRoutes(fastify, options) {
       request.log.error('Error consuming application credits:', error);
       return reply.code(500).send({
         error: 'Failed to consume application credits',
+        message: error.message
+      });
+    }
+  });
+
+  // Synchronize credit balance with allocations
+  fastify.post('/sync-balance', {
+    preHandler: [authenticateToken, requirePermission('admin:credits')],
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          entityId: { type: 'string', format: 'uuid' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const tenantId = request.userContext.tenantId;
+      const { entityId } = request.body;
+
+      if (!tenantId) {
+        return reply.code(400).send({
+          error: 'No organization found',
+          message: 'User must be associated with an organization'
+        });
+      }
+
+      // If no entityId provided, find the default entity
+      let targetEntityId = entityId;
+      if (!targetEntityId) {
+        const organizationEntities = await db
+          .select()
+          .from(entities)
+          .where(and(
+            eq(entities.tenantId, tenantId),
+            eq(entities.entityType, 'organization'),
+            eq(entities.isActive, true)
+          ));
+
+        const defaultEntity = organizationEntities.find(entity => entity.isDefault);
+        targetEntityId = defaultEntity ? defaultEntity.entityId : organizationEntities[0]?.entityId;
+
+        if (!targetEntityId) {
+          return reply.code(400).send({
+            error: 'No entity found',
+            message: 'No organization entities found for this tenant'
+          });
+        }
+      }
+
+      console.log('🔄 Synchronizing credit balance for entity:', targetEntityId);
+      const result = await CreditAllocationService.synchronizeCreditBalance(tenantId, targetEntityId);
+
+      if (!result.success) {
+        return reply.code(500).send({
+          error: 'Synchronization failed',
+          message: result.error
+        });
+      }
+
+      return {
+        success: true,
+        data: {
+          entityId: targetEntityId,
+          totalAvailableCredits: result.totalAvailableCredits
+        },
+        message: result.message
+      };
+    } catch (error) {
+      request.log.error('Error synchronizing credit balance:', error);
+      return reply.code(500).send({
+        error: 'Failed to synchronize credit balance',
+        message: error.message
+      });
+    }
+  });
+
+  // Manually trigger credit balance synchronization check (admin only)
+  fastify.post('/sync-balance-check', {
+    preHandler: [authenticateToken, requirePermission('admin:credits')],
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          entityId: { type: 'string', format: 'uuid' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const tenantId = request.userContext.tenantId;
+      const { entityId } = request.body;
+
+      if (!tenantId) {
+        return reply.code(400).send({
+          error: 'No organization found',
+          message: 'User must be associated with an organization'
+        });
+      }
+
+      console.log('🔧 Manual credit balance check triggered');
+
+      // Import the monitor service
+      const creditBalanceMonitor = (await import('../services/credit-balance-monitor.js')).default;
+
+      // Trigger manual check
+      await creditBalanceMonitor.triggerCheck();
+
+      return {
+        success: true,
+        message: 'Credit balance check completed successfully'
+      };
+    } catch (error) {
+      request.log.error('Error during manual credit balance check:', error);
+      return reply.code(500).send({
+        error: 'Failed to complete credit balance check',
+        message: error.message
+      });
+    }
+  });
+
+  // Get credit balance monitor status (admin only)
+  fastify.get('/monitor-status', {
+    preHandler: [authenticateToken, requirePermission('admin:credits')]
+  }, async (request, reply) => {
+    try {
+      const creditBalanceMonitor = (await import('../services/credit-balance-monitor.js')).default;
+      const status = creditBalanceMonitor.getStatus();
+
+      return {
+        success: true,
+        data: status
+      };
+    } catch (error) {
+      request.log.error('Error fetching monitor status:', error);
+      return reply.code(500).send({
+        error: 'Failed to fetch monitor status',
         message: error.message
       });
     }

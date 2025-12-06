@@ -1,46 +1,40 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import {
-  Users,
-  Plus,
-  Search,
-  Filter,
   Mail,
-  MoreVertical,
   Edit,
   Trash2,
   Eye,
-  UserPlus,
-  Settings,
-  CheckSquare,
-  Square,
-  RefreshCw,
-  Shield,
   Crown,
-  Activity,
-  Clock,
-  ChevronDown,
-  Send,
   X,
-  Building,
-  Calendar,
   UserCog,
   UserX,
   UserCheck,
-  Save,
-  AlertTriangle,
-  Building2
+  Building2,
+  MoreVertical
 } from 'lucide-react';
 import api from '@/lib/api';
-import { ReusableTable, TableColumn, TableAction } from '@/components/common/ReusableTable';
+import { useUsers, useRoles, useInvalidateQueries } from '@/hooks/useSharedQueries';
+import { TableColumn, TableAction } from '@/components/table/ReusableTable';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { PearlButton } from '@/components/ui/pearl-button';
+import Pattern from '@/components/ui/pattern-background';
+import { useTheme } from '@/components/theme/ThemeProvider';
+
+// Import sub-components
+import { UserManagementHeader } from './UserManagementHeader';
+import { UserStatsCards } from './UserStatsCards';
+
+import { UserTable } from './UserTable';
+import { InviteUserModal } from './modals/InviteUserModal';
+import { UserDetailsModal } from './modals/UserDetailsModal';
+import { RoleAssignmentModal } from '@/features/users/components/RoleAssignmentModal';
 
 interface User {
   userId: string;
@@ -90,10 +84,44 @@ interface Entity {
   children?: Entity[];
 }
 
+interface OrganizationAssignment {
+  membershipId: string;
+  userId: string;
+  entityId: string;
+  entityType: string;
+  entityName: string;
+  entityCode: string;
+  entityParentId: string | null;
+  roleName: string | null;
+  membershipStatus: string;
+  accessLevel: string;
+  isPrimary: boolean;
+  department: string | null;
+  team: string | null;
+  jobTitle: string | null;
+  joinedAt: string | null;
+  userName?: string; // May be populated from user data
+}
+
+
+interface Entity {
+  entityId: string;
+  entityName: string;
+  entityType: string;
+  hierarchyPath?: string;
+  fullHierarchyPath?: string;
+  parentEntityId?: string | null;
+  displayName?: string;
+  hierarchyLevel?: number;
+  children?: Entity[];
+}
+
 export function UserManagementDashboard() {
+  const { actualTheme, glassmorphismEnabled } = useTheme();
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
+  const [usersLoading, setUsersLoading] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [viewingUser, setViewingUser] = useState<User | null>(null);
@@ -130,12 +158,13 @@ export function UserManagementDashboard() {
   const [roleFilter, setRoleFilter] = useState<string>('all');
 
   // Organization Assignment
-  const [organizationAssignments, setOrganizationAssignments] = useState<any[]>([]);
+  const [organizationAssignments, setOrganizationAssignments] = useState<OrganizationAssignment[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [showOrgAssignmentModal, setShowOrgAssignmentModal] = useState(false);
   const [showRemoveOrgModal, setShowRemoveOrgModal] = useState(false);
   const [selectedUserForOrg, setSelectedUserForOrg] = useState<User | null>(null);
-  const [orgToRemove, setOrgToRemove] = useState<{ userId: string; assignment: any } | null>(null);
+  const [orgToRemove, setOrgToRemove] = useState<{ userId: string; assignment: OrganizationAssignment } | null>(null);
+  const [viewingOrganizationsUser, setViewingOrganizationsUser] = useState<User | null>(null);
   const [orgAssignmentForm, setOrgAssignmentForm] = useState({
     organizationId: '',
     assignmentType: 'primary' as const,
@@ -163,18 +192,97 @@ export function UserManagementDashboard() {
 
   // Entity management state is already declared above
 
-  // Load users, roles, and entities
+  // Use shared hooks with caching instead of direct API calls
+  const { data: rolesData = [], isLoading: rolesLoading } = useRoles();
+  const { data: usersData = [], isLoading: usersQueryLoading, refetch: refetchUsers } = useUsers(selectedEntityId);
+
+  // Sync roles data to local state for compatibility
   useEffect(() => {
-    loadRoles();
+    if (rolesData.length > 0) {
+      setRoles(rolesData);
+    }
+  }, [rolesData]);
+
+  // Sync users data to local state for compatibility
+  useEffect(() => {
+    if (usersData.length > 0) {
+      // Transform users data to match expected format
+      const transformedUsers = usersData.map((item: any) => {
+        const user = item.user || item;
+        const roleString = item.role;
+        
+        let invitationStatus = 'active';
+        let userType = 'active_user';
+        
+        if (user.isActive && user.onboardingCompleted) {
+          invitationStatus = 'active';
+          userType = 'active_user';
+        } else if (!user.isActive && !user.onboardingCompleted) {
+          invitationStatus = 'pending';
+          userType = 'invited';
+        } else if (!user.onboardingCompleted) {
+          invitationStatus = 'setup_required';
+          userType = 'setup_required';
+        }
+        
+        let matchedRole = null;
+        if (roleString && roleString.trim() !== '' && rolesData.length > 0) {
+          matchedRole = rolesData.find((role: any) =>
+            role.roleName === roleString ||
+            role.roleId === roleString ||
+            role.description?.toLowerCase().includes(roleString.toLowerCase())
+          );
+        }
+        
+        return {
+          userId: user.id || user.userId,
+          email: user.email,
+          name: user.firstName && user.lastName ? `${user.firstName} ${user.lastName}`.trim() : user.firstName || user.lastName || 'Unnamed User',
+          isActive: user.isActive !== false,
+          isTenantAdmin: roleString === 'Super Administrator' || user.isTenantAdmin || false,
+          onboardingCompleted: user.onboardingCompleted !== false,
+          department: user.department,
+          title: user.title,
+          invitedBy: user.invitedBy,
+          invitedAt: user.invitedAt,
+          invitationAcceptedAt: user.invitationAcceptedAt,
+          lastLoginAt: user.lastActiveAt || user.lastLoginAt,
+          avatar: user.avatar,
+          roles: matchedRole ? [{
+            roleId: matchedRole.roleId,
+            roleName: matchedRole.roleName,
+            description: matchedRole.description || '',
+            color: matchedRole.color || '#6b7280',
+            icon: matchedRole.icon || '👤',
+            permissions: matchedRole.permissions || {}
+          }] : (roleString && roleString.trim() !== '' && roleString !== 'No role assigned') ? [{
+            roleId: roleString.trim() !== '' && roleString !== 'No role assigned' ? roleString : null,
+            roleName: roleString,
+            description: 'Role details not available',
+            color: '#6b7280',
+            icon: '👤',
+            permissions: {}
+          }].filter(role => role.roleId !== null) : [],
+          invitationStatus,
+          userType
+        };
+      });
+      
+      setUsers(transformedUsers);
+      setUsersLoading(false);
+      setLoading(false);
+    }
+  }, [usersData, rolesData]);
+
+  // Load entities on mount (still needed for entity filtering)
+  useEffect(() => {
     loadEntities();
   }, []);
 
-  // Load users after roles are loaded
+  // Load organization assignments on mount
   useEffect(() => {
-    if (roles.length > 0) {
-      loadUsers(selectedEntityId);
-    }
-  }, [roles, selectedEntityId]);
+    loadOrganizationAssignments();
+  }, []);
 
   // Load entities when invite modal opens (fallback, entities are now loaded on mount)
   useEffect(() => {
@@ -183,202 +291,61 @@ export function UserManagementDashboard() {
     }
   }, [showInviteModal, availableEntities.length]);
 
+  const { invalidateUsers } = useInvalidateQueries();
+
+  // Refetch users when entity filter changes
+  useEffect(() => {
+    if (rolesData.length >= 0) {
+      refetchUsers();
+    }
+  }, [selectedEntityId, refetchUsers, rolesData.length]);
+
+  // loadUsers function - now uses shared hook
   const loadUsers = async (entityId?: string | null) => {
-    setLoading(true);
-    try {
-      const params = entityId ? { entityId } : {};
-      const response = await api.get('/tenants/current/users', { params });
-      if (response.data.success) {
-        const userData = response.data.data || [];
-        console.log('📊 Raw user data from API:', userData);
-        
-        // Transform the data structure to include invitation information
-        const transformedUsers = userData.map((item: any) => {
-          const user = item.user || item; // Handle both structures
-          const roleString = item.role; // This is the role string from the API
-          
-          // Determine invitation status and type based on actual user state
-          let invitationStatus = 'active';
-          let userType = 'active_user';
-          
-          // Check if user is actually active and completed onboarding
-          if (user.isActive && user.onboardingCompleted) {
-            invitationStatus = 'active';
-            userType = 'active_user';
-          } else if (!user.isActive && !user.onboardingCompleted) {
-            invitationStatus = 'pending';
-            userType = 'invited';
-          } else if (!user.onboardingCompleted) {
-            invitationStatus = 'setup_required';
-            userType = 'setup_required';
-          }
-          
-          // Find the matching role object from the roles array
-          let matchedRole = null;
-          if (roleString && roleString.trim() !== '' && roles.length > 0) {
-            matchedRole = roles.find(role =>
-              role.roleName === roleString ||
-              role.roleId === roleString ||
-              role.description?.toLowerCase().includes(roleString.toLowerCase())
-            );
-
-            // Debug role matching
-            console.log(`🔍 Role matching for user ${user.email}:`, {
-              roleString,
-              availableRoles: roles.map(r => r.roleName),
-              matchedRole: matchedRole ? matchedRole.roleName : 'No match found'
-            });
-          }
-          
-          // Use the actual user data structure
-          return {
-            userId: user.id || user.userId, // Use 'id' from the API response
-            email: user.email,
-            name: user.firstName && user.lastName ? `${user.firstName} ${user.lastName}`.trim() : user.firstName || user.lastName || 'Unnamed User',
-            isActive: user.isActive !== false, // Default to true if undefined
-            isTenantAdmin: roleString === 'Super Administrator' || user.isTenantAdmin || false,
-            onboardingCompleted: user.onboardingCompleted !== false, // Default to true if undefined
-            department: user.department,
-            title: user.title,
-            invitedBy: user.invitedBy,
-            invitedAt: user.invitedAt,
-            invitationAcceptedAt: user.invitationAcceptedAt,
-            lastLoginAt: user.lastActiveAt || user.lastLoginAt,
-            avatar: user.avatar,
-            roles: matchedRole ? [{
-              roleId: matchedRole.roleId,
-              roleName: matchedRole.roleName,
-              description: matchedRole.description || '',
-              color: matchedRole.color || '#6b7280',
-              icon: matchedRole.icon || '👤',
-              permissions: matchedRole.permissions || {}
-            }] : (roleString && roleString.trim() !== '' && roleString !== 'No role assigned') ? [{
-              // Only create a fallback role if we have a valid roleString and it's not empty or 'No role assigned'
-              roleId: roleString.trim() !== '' && roleString !== 'No role assigned' ? roleString : null,
-              roleName: roleString,
-              description: 'Role details not available',
-              color: '#6b7280',
-              icon: '👤',
-              permissions: {}
-            }].filter(role => role.roleId !== null) : [], // Filter out roles with null roleId
-            invitationStatus,
-            userType,
-            // Store original data for invitation token extraction
-            originalData: item,
-            // Extract invitation token if available
-            invitationId: item.invitationToken || item.invitationId || null
-          };
-        });
-        
-        console.log('🔄 Transformed user data with invitation status:', transformedUsers);
-        
-        // Validate transformed user data
-        const validUsers = transformedUsers.filter(user => 
-          user && 
-          typeof user === 'object' && 
-          user.userId && 
-          typeof user.email === 'string'
-        );
-        
-        console.log('✅ Valid users after filtering:', validUsers);
-        
-        // Debug: Log the final transformed users to see their structure
-        console.log('🔍 Final transformed users structure:', transformedUsers.map(user => ({
-          userId: user.userId,
-          email: user.email,
-          name: user.name,
-          isActive: user.isActive,
-          onboardingCompleted: user.onboardingCompleted,
-          invitationStatus: user.invitationStatus,
-          userType: user.userType,
-          isTenantAdmin: user.isTenantAdmin,
-          roles: user.roles
-        })));
-        
-        setUsers(validUsers);
-
-        // Maintain per-entity user counts to annotate hierarchy options
-        if (!entityId) {
-          const entityCounts: Record<string, number> = {};
-
-          userData.forEach((item: any) => {
-            const membershipIds = new Set<string>();
-
-            if (Array.isArray(item.memberships)) {
-              item.memberships.forEach((membership: any) => {
-                if (membership?.entityId) {
-                  membershipIds.add(String(membership.entityId));
-                }
-              });
-            }
-
-            if (Array.isArray(item.entityMemberships)) {
-              item.entityMemberships.forEach((membership: any) => {
-                if (membership?.entityId) {
-                  membershipIds.add(String(membership.entityId));
-                }
-              });
-            }
-
-            const primaryEntity = item.primaryEntityId || item.primaryOrganizationId || item.user?.primaryOrganizationId;
-            if (primaryEntity) {
-              membershipIds.add(String(primaryEntity));
-            }
-
-            membershipIds.forEach((entityId: string) => {
-              entityCounts[entityId] = (entityCounts[entityId] || 0) + 1;
-            });
-          });
-
-          setEntityUserCounts(entityCounts);
-        }
-      } else {
-        console.log('❌ API response not successful:', response.data);
-        setUsers([]);
-      }
-    } catch (error) {
-      console.error('Failed to load users:', error);
-      toast.error('Failed to load users');
-      setUsers([]); // Set empty array on error
-    } finally {
-      setLoading(false);
-    }
-
-    // Load organization assignments
-    try {
-      setAssignmentsLoading(true);
-      const assignmentsResponse = await api.get('/tenants/current/organization-assignments');
-      if (assignmentsResponse.data.success) {
-        setOrganizationAssignments(assignmentsResponse.data.data || []);
-        console.log('✅ Organization assignments loaded:', assignmentsResponse.data.data?.length || 0);
-      }
-    } catch (error) {
-      console.error('Failed to load organization assignments:', error);
-      // Don't show error toast for assignments as it's not critical
-    } finally {
-      setAssignmentsLoading(false);
-    }
+    invalidateUsers(entityId);
+    await refetchUsers();
   };
 
-  const loadRoles = async () => {
+  // Load organization assignments (still needed for organization assignment feature)
+  const loadOrganizationAssignments = async () => {
     try {
-      console.log('🔄 Loading roles...');
-      const response = await api.get('/permissions/roles');
-      console.log('📊 Roles API response:', response.data);
-
-      if (response.data.success) {
-        // The backend returns: {success: true, data: {data: roleResults, total: ..., page: ..., limit: ...}}
-        // So we need to access response.data.data.data (not response.data.data.roles)
-        const rolesData = response.data.data?.data || [];
-        console.log('✅ Roles loaded successfully:', rolesData);
-        setRoles(rolesData);
+      setAssignmentsLoading(true);
+      console.log('🔄 Loading organization assignments...');
+      const assignmentsResponse = await api.get('/tenants/current/organization-assignments');
+      console.log('📦 Organization assignments API response:', assignmentsResponse.data);
+      
+      if (assignmentsResponse.data.success) {
+        // Map API response to match the interface (organizationName -> entityName, etc.)
+        const mappedAssignments = (assignmentsResponse.data.data || []).map((assignment: any) => ({
+          membershipId: assignment.assignmentId || assignment.membershipId,
+          userId: assignment.userId,
+          entityId: assignment.organizationId,
+          entityType: 'organization', // Default to organization
+          entityName: assignment.organizationName || assignment.organizationCode || 'Unknown Organization',
+          entityCode: assignment.organizationCode,
+          entityParentId: null, // Not provided by API
+          roleName: null, // Not provided by API
+          membershipStatus: assignment.isActive ? 'active' : 'inactive',
+          accessLevel: assignment.accessLevel || 'standard',
+          isPrimary: assignment.isPrimary || assignment.assignmentType === 'primary' || assignment.priority === 1,
+          department: null, // Not provided by API
+          team: null, // Not provided by API
+          jobTitle: null, // Not provided by API
+          joinedAt: assignment.assignedAt,
+          userName: assignment.userName || assignment.userEmail
+        }));
+        setOrganizationAssignments(mappedAssignments);
+        console.log('✅ Organization assignments loaded:', mappedAssignments.length, 'assignments');
+        console.log('📋 Sample assignment:', mappedAssignments[0]);
       } else {
-        console.error('❌ Roles API not successful:', response.data);
-        setRoles([]);
+        console.warn('⚠️ Organization assignments API returned success: false');
       }
-    } catch (error) {
-      console.error('❌ Failed to load roles:', error);
-      setRoles([]);
+    } catch (error: any) {
+      console.error('❌ Failed to load organization assignments:', error);
+      console.error('❌ Error details:', error.response?.data || error.message);
+      toast.error('Failed to load organization assignments');
+    } finally {
+      setAssignmentsLoading(false);
     }
   };
 
@@ -386,35 +353,79 @@ export function UserManagementDashboard() {
   const buildEntityTree = (entities: Entity[]): Entity[] => {
     const entityMap = new Map<string, Entity>();
     const rootEntities: Entity[] = [];
+    const processedIds = new Set<string>();
 
     // First pass: create map of all entities
     entities.forEach(entity => {
+      if (!entity || !entity.entityId) {
+        console.warn('⚠️ Skipping invalid entity in buildEntityTree:', entity);
+        return;
+      }
       entityMap.set(entity.entityId, { ...entity, children: [] });
     });
 
+    console.log(`📊 buildEntityTree: Created map with ${entityMap.size} entities`);
+
     // Second pass: build hierarchy
     entities.forEach(entity => {
-      const entityWithChildren = entityMap.get(entity.entityId)!;
+      if (!entity || !entity.entityId) {
+        return;
+      }
+
+      const entityWithChildren = entityMap.get(entity.entityId);
+      if (!entityWithChildren) {
+        console.warn(`⚠️ Entity ${entity.entityId} not found in map`);
+        return;
+      }
+
+      // Skip if already processed (shouldn't happen, but safety check)
+      if (processedIds.has(entity.entityId)) {
+        console.warn(`⚠️ Entity ${entity.entityId} already processed, skipping`);
+        return;
+      }
 
       if (entity.parentEntityId && entityMap.has(entity.parentEntityId)) {
         // Has parent, add to parent's children
-        const parent = entityMap.get(entity.parentEntityId)!;
-        if (!parent.children) parent.children = [];
-        parent.children.push(entityWithChildren);
+        const parent = entityMap.get(entity.parentEntityId);
+        if (parent) {
+          if (!parent.children) parent.children = [];
+          parent.children.push(entityWithChildren);
+          processedIds.add(entity.entityId);
+        }
       } else {
         // No parent, it's a root entity
         rootEntities.push(entityWithChildren);
+        processedIds.add(entity.entityId);
       }
     });
+
+    // Verify all entities were processed
+    const unprocessedCount = entities.length - processedIds.size;
+    if (unprocessedCount > 0) {
+      console.warn(`⚠️ ${unprocessedCount} entities were not processed in buildEntityTree`);
+    }
+
+    console.log(`✅ buildEntityTree: Built tree with ${rootEntities.length} root entities, ${processedIds.size} total processed`);
 
     return rootEntities;
   };
 
   // Helper function to flatten hierarchy for dropdown (with indentation)
-  const flattenEntityHierarchy = (entities: Entity[], prefix: string[] = []): Entity[] => {
+  // This recursively processes ALL nested children at any depth
+  const flattenEntityHierarchy = (entities: Entity[], prefix: string[] = [], depth: number = 0): Entity[] => {
     const result: Entity[] = [];
 
+    if (!Array.isArray(entities) || entities.length === 0) {
+      return result;
+    }
+
     entities.forEach((entity, index) => {
+      // Skip invalid entities
+      if (!entity || !entity.entityId || !entity.entityName) {
+        console.warn('⚠️ Skipping invalid entity in flattenEntityHierarchy:', entity);
+        return;
+      }
+
       const isLastChild = index === entities.length - 1;
       const branchPrefix = prefix.join('');
       const connector = prefix.length === 0 ? '' : isLastChild ? '└─ ' : '├─ ';
@@ -426,9 +437,24 @@ export function UserManagementDashboard() {
         hierarchyLevel: prefix.length
       });
 
-      if (entity.children && entity.children.length > 0) {
-        const childPrefix = [...prefix, isLastChild ? '   ' : '│  '];
-        result.push(...flattenEntityHierarchy(entity.children, childPrefix));
+      // Recursively process ALL nested children, no matter how deep
+      if (entity.children && Array.isArray(entity.children) && entity.children.length > 0) {
+        // Filter out invalid children before processing
+        const validChildren = entity.children.filter(
+          (child: Entity) => child && child.entityId && child.entityName
+        );
+
+        if (validChildren.length > 0) {
+          const childPrefix = [...prefix, isLastChild ? '   ' : '│  '];
+          const nestedChildren = flattenEntityHierarchy(validChildren, childPrefix, depth + 1);
+          result.push(...nestedChildren);
+          
+          if (depth === 0) {
+            console.log(`📊 Flattened ${nestedChildren.length} nested children for ${entity.entityName} (depth ${depth + 1})`);
+          }
+        } else if (entity.children.length > 0) {
+          console.warn(`⚠️ Entity ${entity.entityName} has ${entity.children.length} invalid children, skipping them`);
+        }
       }
     });
 
@@ -436,6 +462,11 @@ export function UserManagementDashboard() {
   };
 
   const loadEntities = async () => {
+    if (entitiesLoading) {
+      console.log('⚠️ loadEntities already in progress, skipping...');
+      return;
+    }
+
     setEntitiesLoading(true);
     try {
       console.log('🔄 Loading organizations for filtering...');
@@ -449,28 +480,99 @@ export function UserManagementDashboard() {
         console.log('✅ Raw organizations loaded successfully:', rawOrganizations.length);
 
         // Flatten the nested hierarchy into a flat array that includes all descendants
+        // This function preserves the original parent relationships from the API
         const flattenOrganizations = (
           orgs: Array<Record<string, any>>,
-          parentId: string | null = null
+          parentId: string | null = null,
+          depth: number = 0
         ): Entity[] => {
           const result: Entity[] = [];
 
+          if (!Array.isArray(orgs)) {
+            console.warn('⚠️ flattenOrganizations received non-array:', orgs);
+            return result;
+          }
+
           orgs.forEach((org) => {
+            // Skip invalid or empty organizations
+            // Check for empty objects {} - they have no keys or only empty values
+            if (!org || typeof org !== 'object' || Object.keys(org).length === 0) {
+              console.warn('⚠️ Skipping empty object in organizations:', org);
+              return;
+            }
+
+            // Skip if missing both organizationId and entityId
+            if (!org.organizationId && !org.entityId) {
+              console.warn('⚠️ Skipping invalid organization (no ID):', org);
+              return;
+            }
+
             const entityId = String(org.organizationId || org.entityId);
+            const entityName = org.organizationName || org.entityName;
+
+            // Skip if missing critical fields
+            if (!entityId || entityId === 'undefined' || !entityName || entityName === 'undefined') {
+              console.warn('⚠️ Skipping organization with missing fields:', { entityId, entityName, org });
+              return;
+            }
+
+            // Use the original parentOrganizationId from the API if available, otherwise use the passed parentId
+            // This ensures we preserve the correct hierarchy even for deeply nested structures
+            const originalParentId = org.parentOrganizationId || org.parentEntityId || parentId;
+
             const mappedOrg: Entity = {
               entityId,
-              entityName: org.organizationName || org.entityName,
+              entityName,
               entityType: org.entityType || (org.locationType ? 'location' : 'organization'),
-              hierarchyPath: org.hierarchyPath,
-              fullHierarchyPath: org.fullHierarchyPath,
-              parentEntityId: parentId,
+              hierarchyPath: org.hierarchyPath || '',
+              fullHierarchyPath: org.fullHierarchyPath || org.hierarchyPath || entityName,
+              parentEntityId: originalParentId, // Use original parent ID from API
               children: []
             };
 
             result.push(mappedOrg);
 
+            // Recursively process children, filtering out invalid entries
             if (org.children && Array.isArray(org.children) && org.children.length > 0) {
-              result.push(...flattenOrganizations(org.children, entityId));
+              // Filter out empty objects {} and invalid children
+              // Empty objects have no keys or are just {}
+              const validChildren = org.children.filter((child: any) => {
+                // Must be a valid object
+                if (!child || typeof child !== 'object') {
+                  return false;
+                }
+
+                // Must not be an empty object {}
+                if (Object.keys(child).length === 0) {
+                  console.warn('⚠️ Filtering out empty object {} from children');
+                  return false;
+                }
+
+                // Must have an ID
+                if (!child.organizationId && !child.entityId) {
+                  return false;
+                }
+
+                // Must have a name
+                if (!child.organizationName && !child.entityName) {
+                  return false;
+                }
+
+                return true;
+              });
+
+              if (validChildren.length > 0) {
+                // Recursively process children, passing the current entityId as parent
+                // This ensures all nested levels are processed
+                const nestedChildren = flattenOrganizations(validChildren, entityId, depth + 1);
+                result.push(...nestedChildren);
+                
+                if (depth === 0) {
+                  console.log(`📊 Processed ${nestedChildren.length} nested children for ${entityName} (depth ${depth + 1})`);
+                }
+              } else if (org.children.length > 0) {
+                console.warn(`⚠️ Organization ${entityName} has ${org.children.length} invalid children (all filtered out)`);
+              }
             }
           });
 
@@ -478,18 +580,48 @@ export function UserManagementDashboard() {
         };
 
         const flattenedHierarchy = flattenOrganizations(rawOrganizations);
+        console.log(`✅ Flattened hierarchy: ${flattenedHierarchy.length} total entities`);
+        console.log(`📊 Entity breakdown:`, {
+          organizations: flattenedHierarchy.filter(e => e.entityType === 'organization').length,
+          locations: flattenedHierarchy.filter(e => e.entityType === 'location').length,
+          withParent: flattenedHierarchy.filter(e => e.parentEntityId).length,
+          rootEntities: flattenedHierarchy.filter(e => !e.parentEntityId).length
+        });
 
         // Build hierarchical tree in a single pass
         const tree = buildEntityTree(flattenedHierarchy);
+        console.log(`🌳 Built tree with ${tree.length} root entities`);
+        
+        // Count total entities in tree including all nested children
+        const countTreeEntities = (nodes: Entity[]): number => {
+          let count = 0;
+          nodes.forEach(node => {
+            count++;
+            if (node.children && node.children.length > 0) {
+              count += countTreeEntities(node.children);
+            }
+          });
+          return count;
+        };
+        const totalInTree = countTreeEntities(tree);
+        console.log(`📊 Total entities in tree (including nested): ${totalInTree}`);
+        
+        if (totalInTree !== flattenedHierarchy.length) {
+          console.warn(`⚠️ Mismatch: ${flattenedHierarchy.length} flattened entities but ${totalInTree} in tree`);
+        }
+        
         setEntityHierarchy(tree);
 
-        // Flatten for dropdown display
+        // Flatten for dropdown display - this should include ALL nested children
         const flattened = flattenEntityHierarchy(tree);
+        console.log(`📋 Flattened for dropdown: ${flattened.length} entities`);
+        
         if (flattened.length === 0) {
           console.warn('⚠️ No entities available after hierarchy processing');
           setAvailableEntities([]);
         } else {
           setAvailableEntities(flattened);
+          console.log(`✅ Set ${flattened.length} entities as available for selection`);
         }
 
         // If an entity is selected but no longer exists in hierarchy, reset filter
@@ -685,6 +817,40 @@ export function UserManagementDashboard() {
     setShowRoleAssignModal(true);
   };
 
+  const handleDeassignRole = async (userId: string, roleId: string) => {
+    try {
+      console.log(`🔄 Deassigning role ${roleId} from user ${userId}...`);
+      
+      const response = await api.delete(`/admin/users/${userId}/roles/${roleId}`);
+      console.log('✅ Role deassignment response:', response.data);
+
+      if (response.data.success) {
+        const role = roles.find(r => r.roleId === roleId);
+        const user = users.find(u => u.userId === userId);
+        toast.success(`Role "${role?.roleName || roleId}" removed successfully from ${user?.name || user?.email}`);
+        
+        // Remove from selectedRoles if currently assigning to this user
+        if (assigningUser?.userId === userId) {
+          setSelectedRoles(selectedRoles.filter(id => id !== roleId));
+        }
+        
+        // Reload users to get fresh data
+        await loadUsers();
+        
+        // Trigger permission refresh notification
+        localStorage.setItem('user_permissions_changed', Date.now().toString());
+        console.log('🔔 Permission refresh notification triggered');
+      } else {
+        console.error('❌ Role deassignment failed:', response.data);
+        toast.error(response.data.message || 'Failed to remove role');
+      }
+    } catch (error: any) {
+      console.error('❌ Role deassignment error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to remove role';
+      toast.error(errorMessage);
+    }
+  };
+
   const handleSaveRoleAssignment = async () => {
     if (!assigningUser) return;
 
@@ -739,14 +905,6 @@ export function UserManagementDashboard() {
       }
       return newSet;
     });
-  }, []);
-
-  const selectAllUsers = useCallback(() => {
-    setSelectedUsers(new Set(filteredUsers.map(u => u.userId)));
-  }, [users]);
-
-  const clearSelection = useCallback(() => {
-    setSelectedUsers(new Set());
   }, []);
 
   const filteredUsers = useMemo(() => {
@@ -810,6 +968,14 @@ export function UserManagementDashboard() {
         }
       });
   }, [users, searchQuery, statusFilter, roleFilter, sortBy, sortOrder]);
+
+  const selectAllUsers = useCallback(() => {
+    setSelectedUsers(new Set(filteredUsers.map(u => u.userId)));
+  }, [filteredUsers]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedUsers(new Set());
+  }, []);
 
   const getUserStatus = (user: User) => {
     if (!user.isActive) return 'Pending';
@@ -898,11 +1064,11 @@ export function UserManagementDashboard() {
 
   // Organization Assignment Functions
   const getUserOrgAssignments = (userId: string) => {
-    return organizationAssignments?.filter((assignment: any) => assignment.userId === userId) || [];
+    return organizationAssignments?.filter((assignment) => assignment.userId === userId) || [];
   };
 
   const getUserPrimaryOrgAssignment = (userId: string) => {
-    return organizationAssignments?.find((assignment: any) =>
+    return organizationAssignments?.find((assignment) =>
       assignment.userId === userId && assignment.isPrimary
     );
   };
@@ -941,6 +1107,7 @@ export function UserManagementDashboard() {
         setShowOrgAssignmentModal(false);
         // Reload users and assignments
         await loadUsers();
+        await loadOrganizationAssignments();
       } else {
         toast.error(response.data.message || 'Failed to assign organization');
       }
@@ -969,7 +1136,7 @@ export function UserManagementDashboard() {
     try {
       const response = await api.delete(`/tenants/current/users/${orgToRemove.userId}/remove-organization`, {
         data: {
-          organizationId: orgToRemove.assignment.organizationId
+          organizationId: orgToRemove.assignment.entityId
         }
       });
 
@@ -1018,21 +1185,17 @@ export function UserManagementDashboard() {
         key: 'assignOrg',
         label: 'Assign Organization',
         icon: Building2,
-        onClick: (user) => handleAssignOrg(user),
-        variant: 'ghost' as const,
-        className: 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'
+        onClick: (user) => handleAssignOrg(user)
       }
     ];
 
     // Add dynamic remove buttons for each organization assignment
     const userAssignments = getUserOrgAssignments(user.userId);
     const removeActions: TableAction<User>[] = userAssignments.map((assignment: any) => ({
-      key: `removeOrg_${assignment.assignmentId}`,
-      label: `Remove from ${assignment.organizationName}`,
+      key: `removeOrg_${assignment.membershipId}`,
+      label: `Remove from ${assignment.entityName}`,
       icon: UserX,
-      onClick: () => handleRemoveOrgAssignment(user.userId, assignment),
-      variant: 'ghost' as const,
-      className: 'text-orange-600 hover:text-orange-700 hover:bg-orange-50'
+      onClick: () => handleRemoveOrgAssignment(user.userId, assignment)
     }));
 
     const finalActions: TableAction<User>[] = [
@@ -1091,12 +1254,12 @@ export function UserManagementDashboard() {
             {!user.avatar && (user.name?.charAt(0) || user.email?.charAt(0) || '?').toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="font-medium text-gray-900 truncate">
+            <div className="font-medium text-gray-900 dark:text-white truncate">
               {user.name || 'Unnamed User'}
             </div>
-            <div className="text-sm text-gray-500 truncate">{user.email}</div>
+            <div className="text-sm text-gray-500 dark:text-white truncate">{user.email}</div>
             {user.department && (
-              <div className="text-xs text-gray-400 truncate">{user.department}</div>
+              <div className="text-xs text-gray-400 dark:text-white truncate">{user.department}</div>
             )}
           </div>
         </div>
@@ -1121,7 +1284,7 @@ export function UserManagementDashboard() {
               </Badge>
             ))}
             {!user.isTenantAdmin && (!user.roles || user.roles.length === 0) && (
-              <Badge variant="outline" className="text-gray-500">No roles</Badge>
+              <Badge variant="outline" className="text-gray-500 dark:text-white">No roles</Badge>
             )}
           </div>
           <Badge className={getStatusColor(user)}>
@@ -1131,26 +1294,69 @@ export function UserManagementDashboard() {
           {/* Organization Assignment Display */}
           {(() => {
             const userAssignments = getUserOrgAssignments(user.userId);
+            const primaryAssignment = userAssignments.find(a => a.isPrimary);
+            const otherAssignments = userAssignments.filter(a => !a.isPrimary);
+
             return userAssignments.length > 0 ? (
-              <div className="space-y-1 mt-1">
-                {userAssignments.slice(0, 2).map((assignment: any) => (
-                  <div key={assignment.assignmentId} className="flex items-center gap-1 text-xs text-gray-600">
-                    <Building2 className="h-3 w-3" />
-                    <span>
-                      {assignment.organizationName}
-                      {assignment.isPrimary && <Badge className="ml-1 text-xs bg-blue-100 text-blue-800 px-1 py-0">Primary</Badge>}
-                      ({assignment.assignmentType})
-                    </span>
+              <div className="space-y-2 mt-2">
+                {/* Primary Organization */}
+                {primaryAssignment && (
+                  <div className="flex items-center gap-2">
+                    <div className={`p-1 rounded ${
+                      actualTheme === 'dark'
+                        ? 'bg-purple-500/20'
+                        : actualTheme === 'monochrome'
+                        ? 'bg-gray-500/20'
+                        : 'bg-blue-50'
+                    }`}>
+                      <Building2 className="h-3 w-3 text-blue-600" />
                   </div>
-                ))}
-                {userAssignments.length > 2 && (
-                  <div className="text-xs text-gray-500">
-                    +{userAssignments.length - 2} more organizations
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium truncate">
+                        {primaryAssignment.entityName}
+                      </div>
+                      <Badge className={`text-xs px-1 py-0 ${
+                        actualTheme === 'dark'
+                          ? 'bg-blue-600 text-blue-100'
+                          : actualTheme === 'monochrome'
+                          ? 'bg-blue-600 text-blue-100'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        Primary
+                      </Badge>
+                    </div>
                   </div>
                 )}
+
+                {/* Other Organizations Count */}
+                {otherAssignments.length > 0 && (
+                  <div className="text-xs text-gray-500 dark:text-white">
+                    +{otherAssignments.length} other organization{otherAssignments.length !== 1 ? 's' : ''}
+                  </div>
+                )}
+
+                {/* View All Button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setViewingOrganizationsUser(user)}
+                  className={`h-6 px-2 text-xs ${
+                    actualTheme === 'dark'
+                      ? 'text-purple-300 hover:text-purple-200 hover:bg-purple-500/20'
+                      : actualTheme === 'monochrome'
+                      ? 'text-gray-300 hover:text-gray-200 hover:bg-gray-500/20'
+                      : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'
+                  }`}
+                >
+                  <Eye className="w-3 h-3 mr-1" />
+                  View All
+                </Button>
               </div>
             ) : (
-              <div className="text-xs text-gray-500 mt-1">No organization assigned</div>
+              <div className="text-xs text-gray-500 dark:text-white mt-2">
+                <Building2 className="h-3 w-3 inline mr-1 opacity-50" />
+                No organization assigned
+              </div>
             );
           })()}
         </div>
@@ -1162,10 +1368,10 @@ export function UserManagementDashboard() {
       width: '150px',
       render: (user) => (
         <div className="text-sm">
-          <div className="text-gray-900">
+          <div className="text-gray-900 dark:text-white">
             {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never'}
           </div>
-          <div className="text-gray-500">
+          <div className="text-gray-500 dark:text-white">
             {user.lastLoginAt ? 'Last login' : 'No login'}
           </div>
         </div>
@@ -1177,10 +1383,10 @@ export function UserManagementDashboard() {
       width: '150px',
       render: (user) => (
         <div className="text-sm">
-          <div className="text-gray-900">
+          <div className="text-gray-900 dark:text-white">
             {user.invitedAt ? new Date(user.invitedAt).toLocaleDateString() : 'N/A'}
           </div>
-          <div className="text-gray-500">
+          <div className="text-gray-500 dark:text-white">
             {user.invitedBy ? `by ${user.invitedBy}` : ''}
           </div>
         </div>
@@ -1195,7 +1401,7 @@ export function UserManagementDashboard() {
           const invitationUrl = generateInvitationUrl(user);
           return (
             <div className="space-y-2">
-              <div className="text-xs text-gray-600">Pending Invitation</div>
+              <div className="text-xs text-gray-600 dark:text-white">Pending Invitation</div>
               {invitationUrl ? (
                 <div className="flex items-center gap-2">
                   <input
@@ -1218,34 +1424,107 @@ export function UserManagementDashboard() {
             </div>
           );
         }
-        return <div className="text-xs text-gray-400">-</div>;
+        return <div className="text-xs text-gray-400 dark:text-white">-</div>;
       }
     },
     {
       key: 'actions',
       label: 'Actions',
-      width: '400px',
+      width: '80px',
       render: (user) => {
         const userActions = getUserTableActions(user);
+        const primaryActions = userActions.filter(action => action.key === 'view' || action.key === 'edit');
+        const secondaryActions = userActions.filter(action => action.key !== 'view' && action.key !== 'edit');
+
         return (
-          <div className="flex flex-wrap gap-1">
-            {userActions.map((action) => (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <Button
-                key={action.key}
-                variant={action.variant || 'ghost'}
+                variant="ghost"
                 size="sm"
-                onClick={() => action.onClick(user)}
-                disabled={action.disabled?.(user)}
-                className={`text-xs ${action.className || ''}`}
-                title={typeof action.label === 'function' ? action.label(user) : action.label}
+                className={`h-8 w-8 p-0 ${
+                  actualTheme === 'dark'
+                    ? 'text-purple-300 hover:bg-purple-500/20'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-300 hover:bg-gray-500/20'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
               >
-                <action.icon className="w-3 h-3 mr-1" />
-                <span className="hidden sm:inline">
-                  {typeof action.label === 'function' ? action.label(user) : action.label}
-                </span>
+                <MoreVertical className="h-4 w-4" />
               </Button>
-            ))}
-          </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className={`w-56 ${
+                actualTheme === 'dark'
+                  ? 'bg-slate-800/95 border-purple-500/30'
+                  : actualTheme === 'monochrome'
+                  ? 'bg-gray-800/95 border-gray-500/30'
+                  : 'bg-white'
+              }`}
+            >
+              {/* Primary Actions */}
+              {primaryActions.map((action) => (
+                <DropdownMenuItem
+                  key={action.key}
+                  onClick={() => action.onClick(user)}
+                  disabled={action.disabled?.(user)}
+                  className={`${
+                    action.variant === 'destructive'
+                      ? actualTheme === 'dark'
+                        ? 'text-red-400 focus:text-red-300 focus:bg-red-500/20'
+                        : actualTheme === 'monochrome'
+                        ? 'text-red-400 focus:text-red-300 focus:bg-red-500/20'
+                        : 'text-red-600 focus:text-red-500 focus:bg-red-50'
+                      : actualTheme === 'dark'
+                      ? 'text-purple-300 focus:text-purple-200 focus:bg-purple-500/20'
+                      : actualTheme === 'monochrome'
+                      ? 'text-gray-300 focus:text-gray-200 focus:bg-gray-500/20'
+                      : 'text-gray-700 focus:text-gray-900 focus:bg-gray-100'
+                  }`}
+                >
+                  <action.icon className="mr-2 h-4 w-4" />
+                  {typeof action.label === 'function' ? action.label(user) : action.label}
+                </DropdownMenuItem>
+              ))}
+
+              {/* Separator if there are both primary and secondary actions */}
+              {primaryActions.length > 0 && secondaryActions.length > 0 && (
+                <DropdownMenuSeparator className={
+                  actualTheme === 'dark'
+                    ? 'bg-purple-500/30'
+                    : actualTheme === 'monochrome'
+                    ? 'bg-gray-500/30'
+                    : 'bg-gray-200'
+                } />
+              )}
+
+              {/* Secondary Actions */}
+              {secondaryActions.map((action) => (
+                <DropdownMenuItem
+                  key={action.key}
+                  onClick={() => action.onClick(user)}
+                  disabled={action.disabled?.(user)}
+                  className={`${
+                    action.variant === 'destructive'
+                      ? actualTheme === 'dark'
+                        ? 'text-red-400 focus:text-red-300 focus:bg-red-500/20'
+                        : actualTheme === 'monochrome'
+                        ? 'text-red-400 focus:text-red-300 focus:bg-red-500/20'
+                        : 'text-red-600 focus:text-red-500 focus:bg-red-50'
+                      : actualTheme === 'dark'
+                      ? 'text-purple-300 focus:text-purple-200 focus:bg-purple-500/20'
+                      : actualTheme === 'monochrome'
+                      ? 'text-gray-300 focus:text-gray-200 focus:bg-gray-500/20'
+                      : 'text-gray-700 focus:text-gray-900 focus:bg-gray-100'
+                  }`}
+                >
+                  <action.icon className="mr-2 h-4 w-4" />
+                  {typeof action.label === 'function' ? action.label(user) : action.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         );
       }
     }
@@ -1254,325 +1533,66 @@ export function UserManagementDashboard() {
   // Table actions configuration
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
-          <p className="text-gray-600 mt-1">Manage team members, roles, and permissions</p>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowInviteModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-          >
-            <UserPlus className="w-4 h-4" />
-            Invite User
-          </button>
-        </div>
-      </div>
+    <div className={`min-h-screen relative ${
+      glassmorphismEnabled
+        ? 'dark:bg-gradient-to-br dark:from-slate-900 dark:via-purple-900 dark:to-slate-900 dark:text-white bg-white text-gray-900'
+        : 'dark:bg-black dark:text-white bg-white text-gray-900'
+    }`}>
+      {/* Background */}
+      <div className={`absolute inset-0 ${glassmorphismEnabled ? 'bg-gradient-to-br from-violet-100/30 via-purple-100/15 to-indigo-100/10 dark:from-slate-950/40 dark:via-slate-900/25 dark:to-slate-950/40 backdrop-blur-3xl' : ''}`}></div>
 
-      {/* Entity Filter */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Building className="w-4 h-4 text-gray-600" />
-            <span className="text-sm font-medium text-gray-700">Filter by Organization:</span>
-          </div>
-          <Select value={selectedEntityId || "all"} onValueChange={(value) => setSelectedEntityId(value === "all" ? null : value)}>
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="All Organizations" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Organizations</SelectItem>
-              {availableEntities.map((entity) => (
-                <SelectItem key={entity.entityId} value={entity.entityId}>
-                  <div className="flex items-center gap-2 w-full">
-                    <div className="flex-1 text-left">
-                      <div className="flex items-center gap-2">
-                        <Building className="w-3 h-3 flex-shrink-0" />
-                        <span className="font-mono">
-                          {entity.displayName || entity.entityName}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                        <Badge variant="outline" className="flex-shrink-0">
-                          {entity.entityType}
-                        </Badge>
-                        {entityUserCounts[entity.entityId] !== undefined && (
-                          <span>
-                            {entityUserCounts[entity.entityId]} user
-                            {entityUserCounts[entity.entityId] === 1 ? '' : 's'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {selectedEntityId && (
-            <button
-              onClick={() => setSelectedEntityId(null)}
-              className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
-            >
-              <X className="w-3 h-3" />
-              Clear filter
-            </button>
-          )}
-          <button
-            onClick={() => loadEntities()}
-            disabled={entitiesLoading}
-            className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3 h-3 ${entitiesLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-        </div>
-        {selectedEntityId && (
-          <div className="mt-2 text-sm text-gray-600">
-            Showing users for: <span className="font-medium">
-              {availableEntities.find(e => e.entityId === selectedEntityId)?.entityName || 'Unknown Organization'}
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-6 rounded-xl border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">
-                Total Users {selectedEntityId ? '(Filtered)' : ''}
-              </p>
-              <p className="text-2xl font-bold text-gray-900">{users.length}</p>
-            </div>
-            <Users className="w-8 h-8 text-blue-600" />
-          </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-xl border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Active Users</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {users.filter(u => u.isActive && u.onboardingCompleted).length}
-              </p>
-            </div>
-            <Activity className="w-8 h-8 text-green-600" />
-          </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-xl border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Pending Invites</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {users.filter(u => !u.isActive).length}
-              </p>
-            </div>
-            <Clock className="w-8 h-8 text-orange-600" />
-          </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-xl border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Admins</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {users.filter(u => u.isTenantAdmin).length}
-              </p>
-            </div>
-            <Crown className="w-8 h-8 text-purple-600" />
-          </div>
-        </div>
-      </div>
-
-      {/* Filters and Search */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="space-y-4">
-          {/* Search Bar */}
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="Search by name or email..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-            
-            <button
-              onClick={() => {
-                setSearchQuery('');
-                setStatusFilter('all');
-                setRoleFilter('all');
-              }}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Clear All
-            </button>
-          </div>
-          
-          {/* Filter Row */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="pending">Pending</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Role</label>
-              <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Roles</option>
-                <option value="admin">Organization Admin</option>
-                {roles.map(role => (
-                  <option key={role.roleId} value={role.roleId}>{role.roleName}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Sort By</label>
-              <select
-                value={`${sortBy}-${sortOrder}`}
-                onChange={(e) => {
-                  const [field, order] = e.target.value.split('-');
-                  setSortBy(field as any);
-                  setSortOrder(order as any);
-                }}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="name-asc">Name A-Z</option>
-                <option value="name-desc">Name Z-A</option>
-                <option value="email-asc">Email A-Z</option>
-                <option value="email-desc">Email Z-A</option>
-                <option value="created-desc">Newest First</option>
-                <option value="created-asc">Oldest First</option>
-                <option value="lastLogin-desc">Recent Login</option>
-              </select>
-            </div>
-            
-            <div className="flex items-end">
-              <button
-                onClick={loadUsers}
-                className="w-full px-4 py-2 text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Refresh
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Bulk Actions */}
-      {selectedUsers.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-blue-800 font-medium">
-                {selectedUsers.size} user{selectedUsers.size !== 1 ? 's' : ''} selected
-              </span>
-            </div>
-            
-            <div className="flex gap-2">
-              <button className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">
-                Bulk Actions
-              </button>
-              <button
-                onClick={clearSelection}
-                className="px-3 py-1 text-sm text-blue-600 hover:text-blue-800"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Purple gradient glassy effect */}
+      {glassmorphismEnabled && (
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-200/12 via-violet-200/8 to-indigo-200/10 dark:from-purple-500/10 dark:via-violet-500/6 dark:to-indigo-500/8 backdrop-blur-3xl"></div>
       )}
 
-      {/* Organization Assignments Overview */}
-      <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-blue-600" />
-            <h3 className="text-lg font-semibold text-gray-900">Organization Assignments</h3>
-          </div>
-          <span className="text-sm text-gray-500">{organizationAssignments.length} assignments</span>
-        </div>
+      {/* Background Pattern */}
+      <div className="absolute inset-0 opacity-30 dark:block hidden">
+        <Pattern />
+      </div>
 
-        {assignmentsLoading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="text-sm text-gray-600 mt-2">Loading assignments...</p>
-          </div>
-        ) : organizationAssignments.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {organizationAssignments.slice(0, 6).map((assignment: any) => (
-              <div key={assignment.assignmentId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-blue-600" />
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">{assignment.userName}</div>
-                    <div className="text-xs text-gray-600">{assignment.organizationName}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {assignment.isPrimary && (
-                    <Badge className="text-xs bg-blue-100 text-blue-800">Primary</Badge>
-                  )}
-                  <Badge variant="outline" className="text-xs">
-                    {assignment.assignmentType}
-                  </Badge>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-8 text-gray-500">
-            <Building2 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <p className="text-sm">No organization assignments yet</p>
-            <p className="text-xs">Assign users to organizations to get started</p>
-          </div>
-        )}
+      {/* Floating decorative elements for glassy mode */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className={`absolute top-16 left-16 w-48 h-48 rounded-full blur-3xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-purple-200/20 to-violet-200/20 dark:from-purple-400/12 dark:to-violet-400/12 backdrop-blur-3xl border border-purple-300/30 dark:border-purple-600/30' : 'hidden'}`}></div>
+        <div className={`absolute top-32 right-32 w-44 h-44 rounded-full blur-3xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-violet-200/20 to-indigo-200/20 dark:from-violet-400/10 dark:to-indigo-400/10 backdrop-blur-3xl border border-violet-300/30 dark:border-violet-600/30' : 'hidden'}`} style={{animationDelay: '1.5s'}}></div>
+        <div className={`absolute bottom-48 left-20 w-36 h-36 rounded-full blur-3xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-indigo-200/20 to-purple-200/20 dark:from-indigo-400/8 dark:to-purple-400/8 backdrop-blur-3xl border border-indigo-300/30 dark:border-indigo-600/30' : 'hidden'}`} style={{animationDelay: '3s'}}></div>
+        <div className={`absolute top-1/2 right-16 w-28 h-28 rounded-full blur-2xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-pink-200/15 to-purple-200/15 dark:from-pink-400/6 dark:to-purple-400/6 backdrop-blur-3xl border border-pink-300/30 dark:border-pink-600/30' : 'hidden'}`} style={{animationDelay: '4.5s'}}></div>
 
-        {organizationAssignments.length > 6 && (
-          <div className="text-sm text-gray-500 text-center mt-4">
-            And {organizationAssignments.length - 6} more assignments...
-          </div>
+        {/* Purple gradient glassy floating elements */}
+        {glassmorphismEnabled && (
+          <>
+            <div className="absolute top-1/4 left-1/3 w-32 h-32 rounded-full blur-2xl animate-pulse bg-gradient-to-r from-purple-200/12 to-violet-200/8 dark:from-purple-400/6 dark:to-violet-400/4 backdrop-blur-3xl border border-purple-300/40 dark:border-purple-600/25" style={{animationDelay: '2s'}}></div>
+            <div className="absolute bottom-1/4 right-1/3 w-24 h-24 rounded-full blur-xl animate-pulse bg-gradient-to-r from-violet-200/10 to-indigo-200/6 dark:from-violet-400/5 dark:to-indigo-400/3 backdrop-blur-3xl border border-violet-300/35 dark:border-violet-600/20" style={{animationDelay: '5.5s'}}></div>
+            <div className="absolute top-3/4 left-1/2 w-20 h-20 rounded-full blur-lg animate-pulse bg-gradient-to-r from-indigo-200/8 to-purple-200/6 dark:from-indigo-400/4 dark:to-purple-400/3 backdrop-blur-3xl border border-indigo-300/30 dark:border-indigo-600/15" style={{animationDelay: '7s'}}></div>
+          </>
         )}
       </div>
 
+      {/* Content with enhanced glassmorphism card effect */}
+      <div className="relative rounded-2xl z-10">
+        {/* Purple gradient glassy effect */}
+        {glassmorphismEnabled && (
+          <div className="absolute inset-0 backdrop-blur-3xl bg-gradient-to-br from-purple-200/8 via-violet-200/5 to-indigo-200/6 dark:from-purple-500/6 dark:via-violet-500/3 dark:to-indigo-500/4 rounded-3xl"></div>
+        )}
+        <div className="bg-white dark:bg-black border dark:border-gray-600 rounded-lg">
+          <div className="p-4 space-y-4">
+      {/* Header */}
+      <UserManagementHeader onInviteClick={() => setShowInviteModal(true)} />
+
+
+      {/* Statistics Cards */}
+      <UserStatsCards users={users} selectedEntityId={selectedEntityId} />
+
+
+  
+
       {/* Users Table */}
-      <ReusableTable<User>
-        data={filteredUsers}
+      <UserTable
+        users={filteredUsers}
         columns={userTableColumns}
-        selectable={true}
-        selectedItems={selectedUsers}
-        onSelectionChange={setSelectedUsers}
-        getItemId={(user) => user.userId}
         loading={loading}
-        emptyMessage="No users found matching your filters"
+        selectedUsers={selectedUsers}
+        onSelectionChange={setSelectedUsers}
       />
 
       {/* Enhanced Invite User Modal */}
@@ -1600,164 +1620,172 @@ export function UserManagementDashboard() {
       />
 
       {/* Role Assignment Modal */}
-      <Dialog open={showRoleAssignModal} onOpenChange={setShowRoleAssignModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Assign Roles</DialogTitle>
-            <DialogDescription>
-              Assign roles to {assigningUser?.name || assigningUser?.email}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">Available Roles</Label>
-              
-              {/* Debug info */}
-              <div className="text-xs text-gray-500 p-2 bg-gray-100 rounded">
-                Debug: {roles.length} roles loaded
-                {roles.length > 0 && (
-                  <div className="mt-1">
-                    {roles.map(role => `${role.roleName} (${role.roleId})`).join(', ')}
-                  </div>
-                )}
-              </div>
-              
-              {roles.length === 0 ? (
-                <div className="text-center py-4 text-gray-500">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                  <p>Loading roles...</p>
-                  <p className="text-xs">Please wait while we fetch available roles</p>
-                </div>
-              ) : (
-                roles.map((role) => (
-                  <div key={role.roleId} className="flex items-center space-x-3">
-                    <Checkbox
-                      id={role.roleId}
-                      checked={selectedRoles.includes(role.roleId)}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setSelectedRoles([...selectedRoles, role.roleId]);
-                        } else {
-                          setSelectedRoles(selectedRoles.filter(id => id !== role.roleId));
-                        }
-                      }}
-                    />
-                    <label htmlFor={role.roleId} className="flex items-center gap-2 cursor-pointer">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center"
-                          style={{ backgroundColor: `${role.color}20`, color: role.color }}
-                        >
-                          {role.icon || '👤'}
-                        </div>
-                        <div>
-                          <div className="font-medium text-sm">{role.roleName}</div>
-                          <div className="text-xs text-gray-500">{role.description}</div>
-                        </div>
-                      </div>
-                    </label>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => setShowRoleAssignModal(false)}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSaveRoleAssignment}
-                className="flex-1"
-              >
-                Save Changes
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <RoleAssignmentModal
+        isOpen={showRoleAssignModal}
+        onClose={() => {
+          setShowRoleAssignModal(false);
+          setAssigningUser(null);
+          setSelectedRoles([]);
+        }}
+        user={assigningUser}
+        roles={roles}
+        selectedRoles={selectedRoles}
+        setSelectedRoles={setSelectedRoles}
+        onSave={handleSaveRoleAssignment}
+        onDeassignRole={handleDeassignRole}
+      />
 
       {/* Edit User Modal */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-md">
+        <DialogContent className={`max-w-md ${
+          glassmorphismEnabled
+            ? actualTheme === 'dark'
+              ? 'backdrop-blur-3xl bg-black/95 border border-purple-500/30 text-white'
+              : actualTheme === 'monochrome'
+              ? 'backdrop-blur-3xl bg-black/95 border border-gray-500/30 text-gray-100'
+              : 'backdrop-blur-3xl bg-white/95 border border-purple-300/60 text-gray-900'
+            : actualTheme === 'dark'
+            ? 'bg-black/95 border border-slate-700 text-white'
+            : actualTheme === 'monochrome'
+            ? 'bg-black/95 border border-gray-500/30 text-gray-100'
+            : 'bg-white border border-gray-200 text-gray-900'
+        }`}>
           <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className={
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-100'
+                : 'text-gray-900'
+            }>
+              Edit User
+            </DialogTitle>
+            <DialogDescription className={
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-300'
+                : 'text-gray-600'
+            }>
               Edit user details for {editingUser?.name || editingUser?.email}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className={`block text-sm font-medium mb-2 ${
+                actualTheme === 'dark'
+                  ? 'text-white'
+                  : actualTheme === 'monochrome'
+                  ? 'text-gray-200'
+                  : 'text-gray-700'
+              }`}>
                 Name *
               </label>
               <input
                 type="text"
                 value={editForm.name}
                 onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className={`w-full px-3 py-2 rounded-lg focus:ring-2 transition-colors ${
+                  actualTheme === 'dark'
+                    ? 'bg-slate-800/50 border-purple-500/30 text-white placeholder-purple-300 focus:ring-purple-500'
+                    : actualTheme === 'monochrome'
+                    ? 'bg-gray-800/50 border-gray-500/30 text-gray-100 placeholder-gray-400 focus:ring-gray-400'
+                    : 'border-gray-300 focus:ring-blue-500'
+                }`}
                 placeholder="John Doe"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className={`block text-sm font-medium mb-2 ${
+                actualTheme === 'dark'
+                  ? 'text-white'
+                  : actualTheme === 'monochrome'
+                  ? 'text-gray-200'
+                  : 'text-gray-700'
+              }`}>
                 Email *
               </label>
               <input
                 type="email"
                 value={editForm.email}
                 onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className={`w-full px-3 py-2 rounded-lg focus:ring-2 transition-colors ${
+                  actualTheme === 'dark'
+                    ? 'bg-slate-800/50 border-purple-500/30 text-white placeholder-purple-300 focus:ring-purple-500'
+                    : actualTheme === 'monochrome'
+                    ? 'bg-gray-800/50 border-gray-500/30 text-gray-100 placeholder-gray-400 focus:ring-gray-400'
+                    : 'border-gray-300 focus:ring-blue-500'
+                }`}
                 placeholder="user@example.com"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className={`block text-sm font-medium mb-2 ${
+                actualTheme === 'dark'
+                  ? 'text-white'
+                  : actualTheme === 'monochrome'
+                  ? 'text-gray-200'
+                  : 'text-gray-700'
+              }`}>
                 Title
               </label>
               <input
                 type="text"
                 value={editForm.title}
                 onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className={`w-full px-3 py-2 rounded-lg focus:ring-2 transition-colors ${
+                  actualTheme === 'dark'
+                    ? 'bg-slate-800/50 border-purple-500/30 text-white placeholder-purple-300 focus:ring-purple-500'
+                    : actualTheme === 'monochrome'
+                    ? 'bg-gray-800/50 border-gray-500/30 text-gray-100 placeholder-gray-400 focus:ring-gray-400'
+                    : 'border-gray-300 focus:ring-blue-500'
+                }`}
                 placeholder="Software Engineer"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className={`block text-sm font-medium mb-2 ${
+                actualTheme === 'dark'
+                  ? 'text-white'
+                  : actualTheme === 'monochrome'
+                  ? 'text-gray-200'
+                  : 'text-gray-700'
+              }`}>
                 Department
               </label>
               <input
                 type="text"
                 value={editForm.department}
                 onChange={(e) => setEditForm(prev => ({ ...prev, department: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className={`w-full px-3 py-2 rounded-lg focus:ring-2 transition-colors ${
+                  actualTheme === 'dark'
+                    ? 'bg-slate-800/50 border-purple-500/30 text-white placeholder-purple-300 focus:ring-purple-500'
+                    : actualTheme === 'monochrome'
+                    ? 'bg-gray-800/50 border-gray-500/30 text-gray-100 placeholder-gray-400 focus:ring-gray-400'
+                    : 'border-gray-300 focus:ring-blue-500'
+                }`}
                 placeholder="Technology"
               />
             </div>
 
             <div className="flex gap-3 pt-4">
-              <Button
-                variant="outline"
+              <PearlButton
+                variant="secondary"
                 onClick={() => setShowEditModal(false)}
                 className="flex-1"
               >
                 Cancel
-              </Button>
-              <Button
+              </PearlButton>
+              <PearlButton
                 onClick={handleSaveUserEdit}
-                className="flex-1"
+                className="flex-1 text-xs px-3 py-2"
               >
                 Save Changes
-              </Button>
+              </PearlButton>
             </div>
           </div>
         </DialogContent>
@@ -1765,10 +1793,36 @@ export function UserManagementDashboard() {
 
       {/* Delete User Modal */}
       <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
-        <DialogContent className="max-w-md">
+        <DialogContent className={`max-w-md ${
+          glassmorphismEnabled
+            ? actualTheme === 'dark'
+              ? 'backdrop-blur-3xl bg-black/95 border border-purple-500/30 text-white'
+              : actualTheme === 'monochrome'
+              ? 'backdrop-blur-3xl bg-black/95 border border-gray-500/30 text-gray-100'
+              : 'backdrop-blur-3xl bg-white/95 border border-purple-300/60 text-gray-900'
+            : actualTheme === 'dark'
+            ? 'bg-black/95 border border-slate-700 text-white'
+            : actualTheme === 'monochrome'
+            ? 'bg-black/95 border border-gray-500/30 text-gray-100'
+            : 'bg-white border border-gray-200 text-gray-900'
+        }`}>
           <DialogHeader>
-            <DialogTitle>Delete User</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className={
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-100'
+                : 'text-gray-900'
+            }>
+              Delete User
+            </DialogTitle>
+            <DialogDescription className={
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-300'
+                : 'text-gray-600'
+            }>
               Are you sure you want to delete {deletingUser?.name || deletingUser?.email}?
             </DialogDescription>
           </DialogHeader>
@@ -1777,13 +1831,25 @@ export function UserManagementDashboard() {
             <Button
               variant="outline"
               onClick={() => setShowDeleteModal(false)}
-              className="flex-1"
+              className={`flex-1 ${
+                actualTheme === 'dark'
+                  ? 'border-purple-500/30 text-purple-200 hover:bg-purple-500/10'
+                  : actualTheme === 'monochrome'
+                  ? 'border-gray-500/30 text-gray-200 hover:bg-gray-500/10'
+                  : ''
+              }`}
             >
               Cancel
             </Button>
             <Button
               onClick={handleDeleteUser}
-              className="flex-1"
+              className={`flex-1 ${
+                actualTheme === 'dark'
+                  ? 'bg-red-600 hover:bg-red-700'
+                  : actualTheme === 'monochrome'
+                  ? 'bg-red-600 hover:bg-red-700'
+                  : ''
+              }`}
             >
               Delete
             </Button>
@@ -1793,14 +1859,48 @@ export function UserManagementDashboard() {
 
       {/* Organization Assignment Modal */}
       {showOrgAssignmentModal && selectedUserForOrg && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="flex items-center justify-between p-6 border-b">
+        <div className={`fixed inset-0 flex items-center justify-center z-50 ${
+          glassmorphismEnabled
+            ? 'bg-black/60 backdrop-blur-sm'
+            : 'bg-black bg-opacity-50'
+        }`}>
+          <div className={`rounded-lg shadow-xl max-w-md w-full mx-4 ${
+            glassmorphismEnabled
+              ? actualTheme === 'dark'
+                ? 'backdrop-blur-3xl bg-black/95 border border-purple-500/30'
+                : actualTheme === 'monochrome'
+                ? 'backdrop-blur-3xl bg-black/95 border border-gray-500/30'
+                : 'backdrop-blur-3xl bg-white/95 border border-purple-300/60'
+              : actualTheme === 'dark'
+              ? 'bg-black border border-slate-700'
+              : actualTheme === 'monochrome'
+              ? 'bg-black border border-gray-500/30'
+              : 'bg-white border border-gray-200'
+          }`}>
+            <div className={`flex items-center justify-between p-6 border-b ${
+              actualTheme === 'dark'
+                ? 'border-purple-500/30'
+                : actualTheme === 'monochrome'
+                ? 'border-gray-500/30'
+                : 'border-gray-200'
+            }`}>
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">
+                <h2 className={`text-xl font-semibold ${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-100'
+                    : 'text-gray-900'
+                }`}>
                   Assign to Organization
                 </h2>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className={`text-sm mt-1 ${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-300'
+                    : 'text-gray-600'
+                }`}>
                   {getUserOrgAssignment(selectedUserForOrg.userId)
                     ? 'Assign this user to an additional organization'
                     : 'Assign this user to an organization (users can belong to multiple organizations)'}
@@ -1808,7 +1908,13 @@ export function UserManagementDashboard() {
               </div>
               <button
                 onClick={() => setShowOrgAssignmentModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className={`p-2 rounded-lg transition-colors ${
+                  actualTheme === 'dark'
+                    ? 'hover:bg-purple-500/20 text-purple-200'
+                    : actualTheme === 'monochrome'
+                    ? 'hover:bg-gray-500/20 text-gray-200'
+                    : 'hover:bg-gray-100 text-gray-600'
+                }`}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1816,43 +1922,72 @@ export function UserManagementDashboard() {
 
             <form onSubmit={handleSubmitOrgAssignment} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className={`block text-sm font-medium mb-2 ${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-200'
+                    : 'text-gray-700'
+                }`}>
                   Organization *
                 </label>
                 <Select
                   value={orgAssignmentForm.organizationId}
                   onValueChange={(value) => setOrgAssignmentForm(prev => ({ ...prev, organizationId: value }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={
+                    actualTheme === 'dark'
+                      ? 'bg-slate-800/50 border-purple-500/30 text-white'
+                      : actualTheme === 'monochrome'
+                      ? 'bg-gray-800/50 border-gray-500/30 text-gray-100'
+                      : ''
+                  }>
                     <SelectValue placeholder={entitiesLoading ? "Loading organizations..." : "Select organization"} />
                   </SelectTrigger>
                   <SelectContent>
                     {entitiesLoading ? (
                       <SelectItem value="loading" disabled>Loading organizations...</SelectItem>
-                    ) : availableEntities.filter(entity => entity.entityType === 'organization').length > 0 ? (
-                      availableEntities
-                        .filter(entity => entity.entityType === 'organization')
-                        .map((org) => (
+                    ) : (() => {
+                      const orgs = availableEntities.filter(entity => entity.entityType && entity.entityType === 'organization');
+                      console.log(`📋 Organization dropdown: ${orgs.length} organizations available (out of ${availableEntities.length} total entities)`);
+                      if (orgs.length > 0) {
+                        console.log(`📋 Organization names:`, orgs.map(o => o.displayName || o.entityName).slice(0, 10));
+                      }
+                      return orgs.length > 0 ? (
+                        orgs.map((org) => (
                           <SelectItem key={org.entityId} value={org.entityId}>
-                            {org.displayName || org.entityName} ({org.entityCode})
+                            {org.displayName || org.entityName}
                           </SelectItem>
                         ))
-                    ) : (
-                      <SelectItem value="none" disabled>No organizations available</SelectItem>
-                    )}
+                      ) : (
+                        <SelectItem value="none" disabled>No organizations available</SelectItem>
+                      );
+                    })()}
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className={`block text-sm font-medium mb-2 ${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-200'
+                    : 'text-gray-700'
+                }`}>
                   Assignment Type
                 </label>
                 <Select
                   value={orgAssignmentForm.assignmentType}
                   onValueChange={(value: any) => setOrgAssignmentForm(prev => ({ ...prev, assignmentType: value }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={
+                    actualTheme === 'dark'
+                      ? 'bg-slate-800/50 border-purple-500/30 text-white'
+                      : actualTheme === 'monochrome'
+                      ? 'bg-gray-800/50 border-gray-500/30 text-gray-100'
+                      : ''
+                  }>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1865,7 +2000,13 @@ export function UserManagementDashboard() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className={`block text-sm font-medium mb-2 ${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-200'
+                    : 'text-gray-700'
+                }`}>
                   Priority (1-10)
                 </label>
                 <input
@@ -1874,21 +2015,30 @@ export function UserManagementDashboard() {
                   max="10"
                   value={orgAssignmentForm.priority}
                   onChange={(e) => setOrgAssignmentForm(prev => ({ ...prev, priority: parseInt(e.target.value) || 1 }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full px-3 py-2 rounded-md focus:ring-2 transition-colors ${
+                    actualTheme === 'dark'
+                      ? 'bg-slate-800/50 border-purple-500/30 text-white placeholder-purple-300 focus:ring-purple-500'
+                      : actualTheme === 'monochrome'
+                      ? 'bg-gray-800/50 border-gray-500/30 text-gray-100 placeholder-gray-400 focus:ring-gray-400'
+                      : 'border-gray-300 focus:ring-blue-500'
+                  }`}
                 />
               </div>
 
               <div className="flex justify-end gap-3 pt-4">
-                <Button
+                <PearlButton
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   onClick={() => setShowOrgAssignmentModal(false)}
                 >
                   Cancel
-                </Button>
-                <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
+                </PearlButton>
+                <PearlButton
+                  type="submit"
+                  className="text-xs px-3 py-2"
+                >
                   Assign Organization
-                </Button>
+                </PearlButton>
               </div>
             </form>
           </div>
@@ -1897,622 +2047,229 @@ export function UserManagementDashboard() {
 
       {/* Remove Organization Modal */}
       <Dialog open={showRemoveOrgModal} onOpenChange={setShowRemoveOrgModal}>
-        <DialogContent className="max-w-md">
+        <DialogContent className={`max-w-md ${
+          glassmorphismEnabled
+            ? actualTheme === 'dark'
+              ? 'backdrop-blur-3xl bg-black/95 border border-purple-500/30 text-white'
+              : actualTheme === 'monochrome'
+              ? 'backdrop-blur-3xl bg-black/95 border border-gray-500/30 text-gray-100'
+              : 'backdrop-blur-3xl bg-white/95 border border-purple-300/60 text-gray-900'
+            : actualTheme === 'dark'
+            ? 'bg-black/95 border border-slate-700 text-white'
+            : actualTheme === 'monochrome'
+            ? 'bg-black/95 border border-gray-500/30 text-gray-100'
+            : 'bg-white border border-gray-200 text-gray-900'
+        }`}>
           <DialogHeader>
-            <DialogTitle>Remove Organization Assignment</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to remove {orgToRemove?.assignment.organizationName} from{' '}
+            <DialogTitle className={
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-100'
+                : 'text-gray-900'
+            }>
+              Remove Organization Assignment
+            </DialogTitle>
+            <DialogDescription className={
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-300'
+                : 'text-gray-600'
+            }>
+              Are you sure you want to remove {orgToRemove?.assignment.entityName} from{' '}
               {orgToRemove && users.find(u => u.userId === orgToRemove.userId)?.name}?
               {orgToRemove?.assignment.isPrimary && (
-                <span className="block mt-2 text-orange-600 font-medium">
+                <span className={`block mt-2 font-medium ${
+                  actualTheme === 'dark'
+                    ? 'text-orange-400'
+                    : actualTheme === 'monochrome'
+                    ? 'text-orange-400'
+                    : 'text-orange-600'
+                }`}>
                   ⚠️ This is their primary organization. Another organization will be set as primary if available.
                 </span>
               )}
             </DialogDescription>
           </DialogHeader>
 
+          {/* Action Buttons */}
           <div className="flex gap-3 pt-4">
-            <Button
-              variant="outline"
+            <PearlButton
+              variant="secondary"
               onClick={() => setShowRemoveOrgModal(false)}
               className="flex-1"
             >
               Cancel
-            </Button>
-            <Button
+            </PearlButton>
+            <PearlButton
               onClick={confirmRemoveOrgAssignment}
-              className="flex-1 bg-red-600 hover:bg-red-700"
+              className="flex-1"
             >
               Remove
-            </Button>
+            </PearlButton>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* View All Organizations Modal */}
+      <Dialog open={!!viewingOrganizationsUser} onOpenChange={() => setViewingOrganizationsUser(null)}>
+        <DialogContent className={`max-w-2xl max-h-[80vh] overflow-y-auto ${
+          glassmorphismEnabled
+            ? actualTheme === 'dark'
+              ? 'backdrop-blur-3xl bg-black/95 border border-purple-500/30 text-white'
+              : actualTheme === 'monochrome'
+              ? 'backdrop-blur-3xl bg-black/95 border border-gray-500/30 text-gray-100'
+              : 'backdrop-blur-3xl bg-white/95 border border-purple-300/60 text-gray-900'
+            : actualTheme === 'dark'
+            ? 'bg-black/95 border border-slate-700 text-white'
+            : actualTheme === 'monochrome'
+            ? 'bg-black/95 border border-gray-500/30 text-gray-100'
+            : 'bg-white border border-gray-200 text-gray-900'
+        }`}>
+          <DialogHeader>
+            <DialogTitle className={
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-100'
+                : 'text-gray-900'
+            }>
+              Organizations Assigned to {viewingOrganizationsUser?.name || viewingOrganizationsUser?.email}
+            </DialogTitle>
+            <DialogDescription className={
+              actualTheme === 'dark'
+                ? 'text-white'
+                : actualTheme === 'monochrome'
+                ? 'text-gray-300'
+                : 'text-gray-600'
+            }>
+              {viewingOrganizationsUser && (() => {
+                const assignments = getUserOrgAssignments(viewingOrganizationsUser.userId);
+                return `${assignments.length} organization${assignments.length !== 1 ? 's' : ''} assigned`;
+              })()}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 mt-4">
+            {viewingOrganizationsUser && (() => {
+              const assignments = getUserOrgAssignments(viewingOrganizationsUser.userId);
+              return assignments.length > 0 ? (
+                assignments.map((assignment) => (
+                  <div
+                    key={assignment.membershipId}
+                    className={`p-4 rounded-lg border ${
+                      actualTheme === 'dark'
+                        ? 'bg-slate-800/50 border-purple-500/20'
+                        : actualTheme === 'monochrome'
+                        ? 'bg-gray-800/50 border-gray-500/20'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${
+                          actualTheme === 'dark'
+                            ? 'bg-purple-500/20 text-purple-300'
+                            : actualTheme === 'monochrome'
+                            ? 'bg-gray-500/20 text-gray-300'
+                            : 'bg-blue-50 text-blue-600'
+                        }`}>
+                          <Building2 className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className={`font-medium ${
+                            actualTheme === 'dark'
+                              ? 'text-white'
+                              : actualTheme === 'monochrome'
+                              ? 'text-gray-100'
+                              : 'text-gray-900'
+                          }`}>
+                            {assignment.entityName}
+                          </div>
+                          <div className={`text-sm ${
+                            actualTheme === 'dark'
+                              ? 'text-white'
+                              : actualTheme === 'monochrome'
+                              ? 'text-gray-300'
+                              : 'text-gray-600'
+                          }`}>
+                            Access Level: {assignment.accessLevel}
+                            {assignment.department && ` • Department: ${assignment.department}`}
+                            {assignment.jobTitle && ` • ${assignment.jobTitle}`}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {assignment.isPrimary && (
+                          <Badge className={`${
+                            actualTheme === 'dark'
+                              ? 'bg-blue-600 text-blue-100'
+                              : actualTheme === 'monochrome'
+                              ? 'bg-blue-600 text-blue-100'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            Primary
+                          </Badge>
+                        )}
+            <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveOrgAssignment(viewingOrganizationsUser.userId, assignment)}
+                          className={`${
+                actualTheme === 'dark'
+                              ? 'text-red-400 hover:text-red-300 hover:bg-red-500/20'
+                  : actualTheme === 'monochrome'
+                              ? 'text-red-400 hover:text-red-300 hover:bg-red-500/20'
+                              : 'text-red-600 hover:text-red-500 hover:bg-red-50'
+              }`}
+                          title={`Remove from ${assignment.entityName}`}
+            >
+                          <UserX className="w-4 h-4" />
+            </Button>
+                      </div>
+                    </div>
+                    {assignment.joinedAt && (
+                      <div className={`text-xs mt-2 ${
+                        actualTheme === 'dark'
+                          ? 'text-white'
+                          : actualTheme === 'monochrome'
+                          ? 'text-gray-400'
+                          : 'text-gray-500'
+                      }`}>
+                        Joined: {new Date(assignment.joinedAt).toLocaleDateString()}
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className={`text-center py-8 ${
+                  actualTheme === 'dark'
+                    ? 'text-white'
+                    : actualTheme === 'monochrome'
+                    ? 'text-gray-300'
+                    : 'text-gray-500'
+                }`}>
+                  <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>No organizations assigned</p>
+                </div>
+              );
+            })()}
+          </div>
+
+          <div className="flex justify-end pt-4">
+            <PearlButton
+              variant="secondary"
+              onClick={() => setViewingOrganizationsUser(null)}
+            >
+              Close
+            </PearlButton>
+          </div>
+        </DialogContent>
+      </Dialog>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
-
-// User Row Component
-const UserRow = ({ 
-  user, 
-  isSelected, 
-  onToggleSelect, 
-  onView, 
-  onPromote, 
-  onDeactivate, 
-  onResendInvite,
-  getStatusColor,
-  getUserStatus 
-}: {
-  user: User;
-  isSelected: boolean;
-  onToggleSelect: () => void;
-  onView: () => void;
-  onPromote: () => void;
-  onDeactivate: () => void;
-  onResendInvite: () => void;
-  getStatusColor: (user: User) => string;
-  getUserStatus: (user: User) => string;
-}) => {
-  const [showActions, setShowActions] = useState(false);
-
-  // Safety check to prevent errors with invalid user data
-  if (!user || !user.userId) {
-    return null;
-  }
-
-  return (
-    <div className="grid grid-cols-12 gap-4 p-4 hover:bg-gray-50">
-      <div className="flex items-center gap-2">
-        <button
-          onClick={onToggleSelect}
-          className="text-gray-400 hover:text-gray-600"
-        >
-          {isSelected ? 
-            <CheckSquare className="w-4 h-4" /> : 
-            <Square className="w-4 h-4" />
-          }
-        </button>
-      </div>
-      
-      <div className="col-span-4 flex items-center gap-3">
-        <div 
-          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-medium"
-          style={{ 
-            background: user.avatar ? `url(${user.avatar})` : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-          }}
-        >
-          {!user.avatar && (user.name?.charAt(0) || user.email?.charAt(0) || '?').toUpperCase()}
-        </div>
-        <div>
-          <div className="font-medium text-gray-900">{user.name || 'Unnamed User'}</div>
-          <div className="text-sm text-gray-600">{user.email || 'No email provided'}</div>
-          {user.department && (
-            <div className="text-xs text-gray-500">{user.department} • {user.title}</div>
-          )}
-        </div>
-      </div>
-      
-      <div className="col-span-2 flex flex-col gap-1">
-        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(user)}`}>
-          {getUserStatus(user)}
-        </span>
-        {user.isTenantAdmin && (
-          <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
-            Admin
-          </span>
-        )}
-      </div>
-      
-      <div className="col-span-2 text-sm text-gray-600">
-        {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never'}
-      </div>
-      
-      <div className="col-span-2 text-sm text-gray-600">
-        {user.invitedAt ? new Date(user.invitedAt).toLocaleDateString() : 'N/A'}
-      </div>
-      
-      <div className="col-span-1 flex items-center justify-end">
-        <div className="relative">
-          <button
-            onClick={() => setShowActions(!showActions)}
-            className="p-1 hover:bg-gray-200 rounded"
-          >
-            <MoreVertical className="w-4 h-4" />
-          </button>
-          
-          {showActions && (
-            <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-              <button
-                onClick={() => {
-                  onView();
-                  setShowActions(false);
-                }}
-                className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-2 text-gray-700"
-              >
-                <Eye className="w-4 h-4" />
-                View Details
-              </button>
-              
-              {!user.onboardingCompleted && (
-                <button
-                  onClick={() => {
-                    onResendInvite();
-                    setShowActions(false);
-                  }}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-2 text-blue-700"
-                >
-                  <Send className="w-4 h-4" />
-                  Resend Invite
-                </button>
-              )}
-              
-              {!user.isTenantAdmin && (
-                <button
-                  onClick={() => {
-                    onPromote();
-                    setShowActions(false);
-                  }}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-2 text-purple-700"
-                >
-                  <Crown className="w-4 h-4" />
-                  Promote to Admin
-                </button>
-              )}
-              
-              {user.isActive && !user.isTenantAdmin && (
-                <button
-                  onClick={() => {
-                    onDeactivate();
-                    setShowActions(false);
-                  }}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 text-red-700 flex items-center gap-2"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Deactivate User
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Enhanced Invite User Modal Component with Multi-Entity Support
-const InviteUserModal = ({
-  isOpen,
-  onClose,
-  roles,
-  inviteForm,
-  setInviteForm,
-  onInvite,
-  availableEntities,
-  entitiesLoading
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  roles: Role[];
-  inviteForm: any;
-  setInviteForm: (form: any) => void;
-  onInvite: () => void;
-  availableEntities: any[];
-  entitiesLoading: boolean;
-}) => {
-  if (!isOpen) return null;
-
-  // Flatten entities for easier selection (recursive function)
-  const flattenEntities = (entities: any[], level = 0): any[] => {
-    let result: any[] = [];
-    entities.forEach(entity => {
-      result.push({ ...entity, displayLevel: level });
-      if (entity.children && entity.children.length > 0) {
-        result = result.concat(flattenEntities(entity.children, level + 1));
-      }
-    });
-    return result;
-  };
-
-  const flattenedEntities = flattenEntities(availableEntities);
-
-  const handleEntityToggle = (entityId: string, entityType: string) => {
-    const isSelected = inviteForm.entities.some((e: any) => e.entityId === entityId);
-
-    if (isSelected) {
-      // Remove entity
-      setInviteForm((prev: any) => ({
-        ...prev,
-        entities: prev.entities.filter((e: any) => e.entityId !== entityId),
-        primaryEntityId: prev.primaryEntityId === entityId ? '' : prev.primaryEntityId
-      }));
-    } else {
-      // Add entity
-      setInviteForm((prev: any) => ({
-        ...prev,
-        entities: [...prev.entities, {
-          entityId,
-          roleId: '',
-          entityType,
-          membershipType: 'direct'
-        }]
-      }));
-    }
-  };
-
-  const handleEntityRoleChange = (entityId: string, roleId: string) => {
-    setInviteForm((prev: any) => ({
-      ...prev,
-      entities: prev.entities.map((e: any) =>
-        e.entityId === entityId ? { ...e, roleId } : e
-      )
-    }));
-  };
-
-  const isEntitySelected = (entityId: string) => {
-    return inviteForm.entities.some((e: any) => e.entityId === entityId);
-  };
-
-  const getSelectedEntityRole = (entityId: string) => {
-    const entity = inviteForm.entities.find((e: any) => e.entityId === entityId);
-    return entity?.roleId || '';
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-gray-900">Invite User to Organizations & Locations</h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-6">
-          {/* Basic User Information */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address *
-              </label>
-              <input
-                type="email"
-                value={inviteForm.email}
-                onChange={(e) => setInviteForm((prev: any) => ({ ...prev, email: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="user@example.com"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Full Name *
-              </label>
-              <input
-                type="text"
-                value={inviteForm.name}
-                onChange={(e) => setInviteForm((prev: any) => ({ ...prev, name: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="John Doe"
-              />
-            </div>
-          </div>
-
-          {/* Entity Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Select Organizations & Locations *
-            </label>
-
-            {entitiesLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                <span className="ml-2 text-gray-600">Loading organizations...</span>
-              </div>
-            ) : flattenedEntities.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                No organizations available. Please create organizations first.
-              </div>
-            ) : (
-              <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
-                {flattenedEntities.map((entity) => (
-                  <div
-                    key={entity.entityId}
-                    className={`border-b border-gray-100 last:border-b-0 ${
-                      isEntitySelected(entity.entityId) ? 'bg-blue-50' : 'hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-center p-3">
-                      <input
-                        type="checkbox"
-                        checked={isEntitySelected(entity.entityId)}
-                        onChange={() => handleEntityToggle(entity.entityId, entity.entityType)}
-                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                      />
-
-                      <div className="ml-3 flex-1">
-                        <div className="flex items-center">
-                          <div style={{ marginLeft: `${entity.displayLevel * 20}px` }}>
-                            {entity.displayLevel > 0 && <span className="text-gray-400 mr-2">└─</span>}
-                            <span className="font-medium text-gray-900">{entity.entityName}</span>
-                            <Badge variant="outline" className="ml-2 text-xs">
-                              {entity.entityType}
-                            </Badge>
-                          </div>
-                        </div>
-
-                        {isEntitySelected(entity.entityId) && (
-                          <div className="mt-2 ml-6">
-                            <select
-                              value={getSelectedEntityRole(entity.entityId)}
-                              onChange={(e) => handleEntityRoleChange(entity.entityId, e.target.value)}
-                              className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-blue-500"
-                            >
-                              <option value="">Select Role</option>
-                              {roles.map((role) => (
-                                <option key={role.roleId} value={role.roleId}>
-                                  {role.roleName}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                      </div>
-
-                      {isEntitySelected(entity.entityId) && (
-                        <input
-                          type="radio"
-                          name="primaryEntity"
-                          checked={inviteForm.primaryEntityId === entity.entityId}
-                          onChange={() => setInviteForm((prev: any) => ({ ...prev, primaryEntityId: entity.entityId }))}
-                          className="w-4 h-4 text-blue-600 focus:ring-blue-500"
-                          title="Set as primary organization"
-                        />
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <p className="text-xs text-gray-500 mt-2">
-              • Select organizations and locations where the user should have access<br/>
-              • Assign appropriate roles for each selected entity<br/>
-              • Choose one entity as the user's primary organization (marked with radio button)
-            </p>
-          </div>
-
-          {/* Selected Entities Summary */}
-          {inviteForm.entities.length > 0 && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h4 className="font-medium text-gray-900 mb-2">Selected Entities Summary</h4>
-              <div className="space-y-1">
-                {inviteForm.entities.map((entity: any) => {
-                  const entityData = flattenedEntities.find(e => e.entityId === entity.entityId);
-                  const roleData = roles.find(r => r.roleId === entity.roleId);
-                  return (
-                    <div key={entity.entityId} className="flex items-center justify-between text-sm">
-                      <div className="flex items-center">
-                        <span className="font-medium">{entityData?.entityName}</span>
-                        <Badge variant="outline" className="ml-2 text-xs">
-                          {entityData?.entityType}
-                        </Badge>
-                        {inviteForm.primaryEntityId === entity.entityId && (
-                          <Badge className="ml-2 text-xs bg-blue-600">Primary</Badge>
-                        )}
-                      </div>
-                      <span className="text-gray-600">
-                        {roleData?.roleName || 'No role selected'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Personal Message */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Personal Message (Optional)
-            </label>
-            <textarea
-              value={inviteForm.message}
-              onChange={(e) => setInviteForm((prev: any) => ({ ...prev, message: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              rows={3}
-              placeholder="Welcome to our team! We're excited to have you join us."
-            />
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex gap-3 pt-4">
-            <button
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onInvite}
-              disabled={!inviteForm.email || !inviteForm.name || inviteForm.entities.length === 0}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Send Multi-Entity Invitation
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// User Details Modal Component
-const UserDetailsModal = ({ 
-  user, 
-  isOpen, 
-  onClose, 
-  generateInvitationUrl,
-  copyInvitationUrl
-}: {
-  user: User | null;
-  isOpen: boolean;
-  onClose: () => void;
-  generateInvitationUrl: (user: User) => string | null;
-  copyInvitationUrl: (user: User) => Promise<void>;
-}) => {
-  if (!isOpen || !user) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div 
-              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-medium"
-              style={{ 
-                background: user.avatar ? `url(${user.avatar})` : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-              }}
-            >
-              {!user.avatar && (user.name?.charAt(0) || user.email?.charAt(0) || '?').toUpperCase()}
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">{user.name || 'Unnamed User'}</h2>
-              <p className="text-sm text-gray-600">{user.email || 'No email provided'}</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-6">
-          {/* Status & Role Information */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="font-medium text-gray-900 mb-2">Account Status</h3>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Status:</span>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    user.invitationStatus === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                    user.isActive ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
-                  }`}>
-                    {user.invitationStatus === 'pending' ? 'Pending Invitation' :
-                     user.isActive ? 'Active' : 'Setup Required'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Role:</span>
-                  <span className="text-gray-900">
-                    {user.roles && user.roles.length > 0 
-                      ? user.roles.map(role => role.roleName).join(', ')
-                      : 'No roles assigned'
-                    }
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="font-medium text-gray-900 mb-2">Activity</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Invited:</span>
-                  <span className="text-gray-900">{user.invitedAt ? new Date(user.invitedAt).toLocaleDateString() : 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Last Login:</span>
-                  <span className="text-gray-900">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Onboarding:</span>
-                  <span className={user.onboardingCompleted ? 'text-green-600' : 'text-orange-600'}>
-                    {user.onboardingCompleted ? 'Completed' : 'Pending'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Invitation URL Section - Show prominently for pending invitations */}
-          {user.invitationStatus === 'pending' && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h3 className="font-medium text-blue-900 mb-3 flex items-center gap-2">
-                <Mail className="w-4 h-4" />
-                Invitation URL
-              </h3>
-              <div className="space-y-3">
-                <p className="text-sm text-blue-800">
-                  Share this URL with {user.name || user.email} to complete their invitation:
-                </p>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={generateInvitationUrl(user) || 'No invitation URL available'}
-                    readOnly
-                    className="flex-1 px-3 py-2 border border-blue-300 rounded bg-white text-sm font-mono"
-                  />
-                  <button
-                    onClick={() => copyInvitationUrl(user)}
-                    className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm flex items-center gap-2"
-                  >
-                    <Mail className="w-4 h-4" />
-                    Copy
-                  </button>
-                </div>
-                <p className="text-xs text-blue-600">
-                  The user can click this link to accept the invitation and join your organization.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Assigned Roles */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="font-medium text-gray-900 mb-3">Assigned Roles</h3>
-            {user.roles && user.roles.length > 0 ? (
-              <div className="space-y-2">
-                {user.roles.map(role => (
-                  <div key={role.roleId} className="flex items-center gap-3 p-2 bg-white rounded border">
-                    <span style={{ color: role.color }}>{role.icon}</span>
-                    <div>
-                      <div className="font-medium text-gray-900">{role.roleName}</div>
-                      <div className="text-sm text-gray-600">{role.description}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-600">No roles assigned</p>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div className="border-t pt-4">
-            <h3 className="font-medium text-gray-900 mb-3">Actions</h3>
-            <div className="flex flex-wrap gap-2">
-              <button className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
-                Edit User
-              </button>
-              <button className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
-                Reset Password
-              </button>
-              {!user.onboardingCompleted && (
-                <button className="px-3 py-2 border border-blue-300 text-blue-600 rounded-lg hover:bg-blue-50 text-sm">
-                  Resend Invite
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}; 

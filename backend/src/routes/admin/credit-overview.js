@@ -5,8 +5,10 @@
 
 import { authenticateToken, requirePermission } from '../../middleware/auth.js';
 import { db } from '../../db/index.js';
-import { credits, creditTransactions, tenants, entities, creditAllocations } from '../../db/schema/index.js';
-import { eq, and, desc, sql, count, sum, gte, lte, between } from 'drizzle-orm';
+import { credits, creditTransactions, tenants, entities, creditAllocations, subscriptions } from '../../db/schema/index.js';
+import { eq, and, desc, sql, count, sum, gte, lte, between, isNotNull, inArray } from 'drizzle-orm';
+import CreditAllocationService from '../../services/credit-allocation-service.js';
+import { SeasonalCreditService } from '../../services/seasonal-credit-service.js';
 
 export default async function adminCreditOverviewRoutes(fastify, options) {
 
@@ -478,8 +480,7 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
           entityCode: entities.entityCode,
           companyName: tenants.companyName,
           availableCredits: sql`coalesce(${credits.availableCredits}, 0)`,
-          reservedCredits: sql`coalesce(${credits.reservedCredits}, 0)`,
-          totalCredits: sql`coalesce(${credits.availableCredits} + ${credits.reservedCredits}, 0)`,
+          totalCredits: sql`coalesce(${credits.availableCredits}, 0)`,
           isActive: entities.isActive,
           lastUpdatedAt: credits.lastUpdatedAt,
           createdAt: entities.createdAt
@@ -657,7 +658,7 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
     }
   });
 
-  // Get all application credit allocations (admin only)
+  // Get all application allocations across all tenants (admin view)
   fastify.get('/application-allocations', {
     preHandler: [authenticateToken, requirePermission('admin.credits.view')],
     schema: {
@@ -665,11 +666,16 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
     }
   }, async (request, reply) => {
     try {
+      console.log('🔍 Getting all application allocations (admin view)');
+
+      // Get all active application allocations with tenant and entity information
       const allocations = await db
         .select({
           allocationId: creditAllocations.allocationId,
           tenantId: creditAllocations.tenantId,
+          companyName: tenants.companyName,
           sourceEntityId: creditAllocations.sourceEntityId,
+          entityName: entities.entityName,
           targetApplication: creditAllocations.targetApplication,
           allocatedCredits: creditAllocations.allocatedCredits,
           usedCredits: creditAllocations.usedCredits,
@@ -681,201 +687,322 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
           autoReplenish: creditAllocations.autoReplenish
         })
         .from(creditAllocations)
-        .leftJoin(tenants, eq(creditAllocations.tenantId, tenants.tenantId))
+        .innerJoin(tenants, eq(creditAllocations.tenantId, tenants.tenantId))
         .leftJoin(entities, eq(creditAllocations.sourceEntityId, entities.entityId))
         .where(eq(creditAllocations.isActive, true))
         .orderBy(desc(creditAllocations.allocatedAt));
 
-      // Get company names for allocations
-      const allocationsWithNames = await Promise.all(
-        allocations.map(async (allocation) => {
-          const [tenant] = await db
-            .select({ companyName: tenants.companyName })
-            .from(tenants)
-            .where(eq(tenants.tenantId, allocation.tenantId))
-            .limit(1);
+      // Calculate summary statistics
+      const summary = {
+        totalAllocations: allocations.length,
+        totalAllocatedCredits: 0,
+        totalUsedCredits: 0,
+        totalAvailableCredits: 0,
+        allocationsByApplication: {}
+      };
 
-          const [entity] = await db
-            .select({ entityName: entities.entityName })
-            .from(entities)
-            .where(eq(entities.entityId, allocation.sourceEntityId))
-            .limit(1);
+      // Process allocations and build summary
+      allocations.forEach((allocation) => {
+        const allocated = parseFloat(allocation.allocatedCredits || '0');
+        const used = parseFloat(allocation.usedCredits || '0');
+        const available = parseFloat(allocation.availableCredits || '0');
 
-          return {
-            ...allocation,
-            companyName: tenant?.companyName,
-            entityName: entity?.entityName,
-            allocatedCredits: parseFloat(allocation.allocatedCredits),
-            usedCredits: parseFloat(allocation.usedCredits),
-            availableCredits: parseFloat(allocation.availableCredits)
-          };
-        })
-      );
+        summary.totalAllocatedCredits += allocated;
+        summary.totalUsedCredits += used;
+        summary.totalAvailableCredits += available;
 
-      // Calculate summary
-      const summary = allocationsWithNames.reduce((acc, allocation) => {
-        acc.totalAllocations++;
-        acc.totalAllocatedCredits += allocation.allocatedCredits;
-        acc.totalUsedCredits += allocation.usedCredits;
-        acc.totalAvailableCredits += allocation.availableCredits;
-
-        // Group by application
-        const appKey = allocation.targetApplication;
-        if (!acc.allocationsByApplication[appKey]) {
-          acc.allocationsByApplication[appKey] = {
-            application: appKey,
+        const app = allocation.targetApplication;
+        if (!summary.allocationsByApplication[app]) {
+          summary.allocationsByApplication[app] = {
+            application: app,
             allocationCount: 0,
             totalAllocated: 0,
             totalUsed: 0,
             totalAvailable: 0
           };
         }
-        acc.allocationsByApplication[appKey].allocationCount++;
-        acc.allocationsByApplication[appKey].totalAllocated += allocation.allocatedCredits;
-        acc.allocationsByApplication[appKey].totalUsed += allocation.usedCredits;
-        acc.allocationsByApplication[appKey].totalAvailable += allocation.availableCredits;
 
-        return acc;
-      }, {
-        totalAllocations: 0,
-        totalAllocatedCredits: 0,
-        totalUsedCredits: 0,
-        totalAvailableCredits: 0,
-        allocationsByApplication: {}
+        summary.allocationsByApplication[app].allocationCount++;
+        summary.allocationsByApplication[app].totalAllocated += allocated;
+        summary.allocationsByApplication[app].totalUsed += used;
+        summary.allocationsByApplication[app].totalAvailable += available;
       });
 
-      summary.allocationsByApplication = Object.values(summary.allocationsByApplication);
+      // Convert allocationsByApplication object to array
+      const allocationsByApplicationArray = Object.values(summary.allocationsByApplication);
 
       return {
         success: true,
         data: {
-          allocations: allocationsWithNames,
-          summary
+          allocations: allocations.map(allocation => ({
+            ...allocation,
+            allocatedCredits: parseFloat(allocation.allocatedCredits || '0'),
+            usedCredits: parseFloat(allocation.usedCredits || '0'),
+            availableCredits: parseFloat(allocation.availableCredits || '0')
+          })),
+          summary: {
+            ...summary,
+            allocationsByApplication: allocationsByApplicationArray
+          }
         }
       };
     } catch (error) {
-      console.error('Error fetching admin application allocations:', error);
-      return reply.code(500).send({ error: 'Failed to fetch application allocations' });
+      console.error('❌ Failed to get application allocations:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to get application allocations',
+        message: error.message
+      });
     }
   });
 
-  // Get application credit allocations for a specific entity
+  // Get application allocations for an entity
   fastify.get('/entity/:entityId/application-allocations', {
-    preHandler: [authenticateToken, requirePermission('admin.credits.view')],
-    schema: {
-      description: 'Get application credit allocations for a specific entity',
-      params: {
-        type: 'object',
-        properties: {
-          entityId: { type: 'string', format: 'uuid' }
-        },
-        required: ['entityId']
-      }
-    }
+    preHandler: [authenticateToken]
   }, async (request, reply) => {
     try {
       const { entityId } = request.params;
+      const { tenantId } = request.userContext;
 
-      // Get entity details first
-      const [entity] = await db
-        .select({
-          entityId: entities.entityId,
-          entityName: entities.entityName,
-          entityType: entities.entityType,
-          tenantId: entities.tenantId
-        })
-        .from(entities)
-        .where(eq(entities.entityId, entityId))
-        .limit(1);
+      console.log('🔍 Getting application allocations for entity:', { entityId, tenantId });
 
-      if (!entity) {
-        return reply.code(404).send({
-          success: false,
-          error: 'Entity not found'
-        });
-      }
-
-      // Get application allocations for this entity
-      const allocations = await db
-        .select({
-          allocationId: creditAllocations.allocationId,
-          tenantId: creditAllocations.tenantId,
-          sourceEntityId: creditAllocations.sourceEntityId,
-          targetApplication: creditAllocations.targetApplication,
-          allocatedCredits: creditAllocations.allocatedCredits,
-          usedCredits: creditAllocations.usedCredits,
-          availableCredits: creditAllocations.availableCredits,
-          allocationType: creditAllocations.allocationType,
-          allocationPurpose: creditAllocations.allocationPurpose,
-          allocatedAt: creditAllocations.allocatedAt,
-          expiresAt: creditAllocations.expiresAt,
-          autoReplenish: creditAllocations.autoReplenish
-        })
-        .from(creditAllocations)
-        .where(and(
-          eq(creditAllocations.sourceEntityId, entityId),
-          eq(creditAllocations.isActive, true)
-        ))
-        .orderBy(desc(creditAllocations.allocatedAt));
-
-      // Calculate summary
-      const summary = allocations.reduce((acc, allocation) => {
-        acc.totalAllocations++;
-        acc.totalAllocatedCredits += parseFloat(allocation.allocatedCredits);
-        acc.totalUsedCredits += parseFloat(allocation.usedCredits);
-        acc.totalAvailableCredits += parseFloat(allocation.availableCredits);
-
-        // Group by application
-        const appKey = allocation.targetApplication;
-        if (!acc.allocationsByApplication[appKey]) {
-          acc.allocationsByApplication[appKey] = {
-            application: appKey,
-            allocationCount: 1,
-            totalAllocated: parseFloat(allocation.allocatedCredits),
-            totalUsed: parseFloat(allocation.usedCredits),
-            totalAvailable: parseFloat(allocation.availableCredits)
-          };
-        } else {
-          acc.allocationsByApplication[appKey].allocationCount++;
-          acc.allocationsByApplication[appKey].totalAllocated += parseFloat(allocation.allocatedCredits);
-          acc.allocationsByApplication[appKey].totalUsed += parseFloat(allocation.usedCredits);
-          acc.allocationsByApplication[appKey].totalAvailable += parseFloat(allocation.availableCredits);
-        }
-
-        return acc;
-      }, {
-        totalAllocations: 0,
-        totalAllocatedCredits: 0,
-        totalUsedCredits: 0,
-        totalAvailableCredits: 0,
-        allocationsByApplication: {}
-      });
-
-      summary.allocationsByApplication = Object.values(summary.allocationsByApplication);
+      const allocations = await CreditAllocationService.getApplicationAllocations(tenantId, entityId);
 
       return {
         success: true,
         data: {
-          entity: {
-            entityId: entity.entityId,
-            entityName: entity.entityName,
-            entityType: entity.entityType,
-            tenantId: entity.tenantId
-          },
-          allocations: allocations.map(allocation => ({
-            ...allocation,
-            allocatedCredits: parseFloat(allocation.allocatedCredits),
-            usedCredits: parseFloat(allocation.usedCredits),
-            availableCredits: parseFloat(allocation.availableCredits)
-          })),
-          summary
+          allocations: allocations || []
         }
       };
     } catch (error) {
-      console.error('Error fetching entity application allocations:', error);
+      console.error('❌ Failed to get application allocations:', error);
       return reply.code(500).send({
         success: false,
-        error: 'Failed to fetch entity application allocations'
+        error: 'Failed to get application allocations',
+        message: error.message
+      });
+    }
+  });
+
+  /**
+   * POST /api/admin/credits/process-expiries
+   * Process all credit expiries (free, seasonal, subscription)
+   */
+  fastify.post('/process-expiries', {
+    preHandler: [authenticateToken, requirePermission('admin.credits.manage')],
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          creditTypes: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional: Filter by credit types (e.g., ["free", "seasonal"]). If not provided, processes all types.'
+          },
+          processSubscriptionCredits: {
+            type: 'boolean',
+            default: true,
+            description: 'Whether to process subscription-related credit expiries'
+          }
+        }
+      },
+      description: 'Manually trigger credit expiry processing for all expired allocations'
+    }
+  }, async (request, reply) => {
+    try {
+      const { creditTypes, processSubscriptionCredits = true } = request.body;
+      
+      console.log(`🔧 Admin ${request.userContext.userId} triggered credit expiry processing`, {
+        creditTypes,
+        processSubscriptionCredits
+      });
+
+      const results = {
+        freeCredits: null,
+        seasonalCredits: null,
+        subscriptionCredits: null
+      };
+
+      // Process free credits expiry
+      if (!creditTypes || creditTypes.includes('free')) {
+        try {
+          results.freeCredits = await CreditAllocationService.processCreditExpiries(['free']);
+        } catch (error) {
+          console.error('Error processing free credits expiry:', error);
+          results.freeCredits = { error: error.message };
+        }
+      }
+
+      // Process seasonal credits expiry
+      if (!creditTypes || creditTypes.some(type => ['seasonal', 'bonus', 'promotional', 'event', 'partnership', 'trial_extension'].includes(type))) {
+        try {
+          const seasonalService = new SeasonalCreditService();
+          results.seasonalCredits = await seasonalService.processSeasonalCreditExpiries();
+        } catch (error) {
+          console.error('Error processing seasonal credits expiry:', error);
+          results.seasonalCredits = { error: error.message };
+        }
+      }
+
+      // Process subscription-related credits expiry
+      if (processSubscriptionCredits) {
+        try {
+          // Find expired subscriptions and expire their credits
+          const now = new Date();
+          const expiredSubscriptions = await db
+            .select()
+            .from(subscriptions)
+            .where(and(
+              eq(subscriptions.status, 'active'),
+              sql`${subscriptions.currentPeriodEnd} IS NOT NULL`,
+              sql`${subscriptions.currentPeriodEnd} <= ${now}`
+            ));
+
+          console.log(`📅 Found ${expiredSubscriptions.length} expired subscriptions`);
+
+          let subscriptionCreditsExpired = 0;
+          for (const subscription of expiredSubscriptions) {
+            try {
+              // Update subscription status
+              await db
+                .update(subscriptions)
+                .set({
+                  status: 'expired',
+                  updatedAt: new Date()
+                })
+                .where(eq(subscriptions.subscriptionId, subscription.subscriptionId));
+
+              // Expire credits for this tenant
+              await CreditAllocationService.expireAllCreditsForTenant(
+                subscription.tenantId,
+                'subscription_expired'
+              );
+              subscriptionCreditsExpired++;
+            } catch (subError) {
+              console.error(`Failed to expire credits for subscription ${subscription.subscriptionId}:`, subError.message);
+            }
+          }
+
+          results.subscriptionCredits = {
+            expiredSubscriptions: expiredSubscriptions.length,
+            creditsExpired: subscriptionCreditsExpired
+          };
+        } catch (error) {
+          console.error('Error processing subscription credits expiry:', error);
+          results.subscriptionCredits = { error: error.message };
+        }
+      }
+
+      return {
+        success: true,
+        message: 'Credit expiry processing completed',
+        data: results
+      };
+    } catch (error) {
+      console.error('Error processing credit expiries:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to process credit expiries',
+        message: error.message
+      });
+    }
+  });
+
+  /**
+   * GET /api/admin/credits/expiring-summary
+   * Get summary of all expiring credits (free, seasonal, subscription)
+   */
+  fastify.get('/expiring-summary', {
+    preHandler: [authenticateToken, requirePermission('admin.credits.view')],
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          daysAhead: { type: 'integer', default: 30 },
+          creditType: { type: 'string' }
+        }
+      },
+      description: 'Get summary of all expiring credits across all types'
+    }
+  }, async (request, reply) => {
+    try {
+      const { daysAhead = 30, creditType } = request.query;
+      const now = new Date();
+      const futureDate = new Date(now.getTime() + (parseInt(daysAhead) * 24 * 60 * 60 * 1000));
+
+      let whereConditions = [
+        eq(creditAllocations.isActive, true),
+        isNotNull(creditAllocations.expiresAt),
+        sql`${creditAllocations.expiresAt} > ${now}`,
+        sql`${creditAllocations.expiresAt} <= ${futureDate}`
+      ];
+
+      if (creditType) {
+        whereConditions.push(eq(creditAllocations.creditType, creditType));
+      }
+
+      // Get expiring allocations grouped by type
+      const expiringByType = await db
+        .select({
+          creditType: creditAllocations.creditType,
+          count: sql`COUNT(*)`,
+          totalAllocated: sql`SUM(${creditAllocations.allocatedCredits}::numeric)`,
+          totalAvailable: sql`SUM(${creditAllocations.availableCredits}::numeric)`,
+          earliestExpiry: sql`MIN(${creditAllocations.expiresAt})`,
+          latestExpiry: sql`MAX(${creditAllocations.expiresAt})`
+        })
+        .from(creditAllocations)
+        .where(and(...whereConditions))
+        .groupBy(creditAllocations.creditType);
+
+      // Get expiring subscriptions
+      const expiringSubscriptions = await db
+        .select({
+          subscriptionId: subscriptions.subscriptionId,
+          tenantId: subscriptions.tenantId,
+          plan: subscriptions.plan,
+          currentPeriodEnd: subscriptions.currentPeriodEnd,
+          daysUntilExpiry: sql`EXTRACT(EPOCH FROM (${subscriptions.currentPeriodEnd} - ${now})) / 86400`
+        })
+        .from(subscriptions)
+        .where(and(
+          eq(subscriptions.status, 'active'),
+          isNotNull(subscriptions.currentPeriodEnd),
+          sql`${subscriptions.currentPeriodEnd} > ${now}`,
+          sql`${subscriptions.currentPeriodEnd} <= ${futureDate}`
+        ));
+
+      return {
+        success: true,
+        data: {
+          allocations: expiringByType.map(item => ({
+            creditType: item.creditType,
+            count: parseInt(item.count),
+            totalAllocated: parseFloat(item.totalAllocated || '0'),
+            totalAvailable: parseFloat(item.totalAvailable || '0'),
+            earliestExpiry: item.earliestExpiry,
+            latestExpiry: item.latestExpiry
+          })),
+          subscriptions: expiringSubscriptions.map(sub => ({
+            subscriptionId: sub.subscriptionId,
+            tenantId: sub.tenantId,
+            plan: sub.plan,
+            currentPeriodEnd: sub.currentPeriodEnd,
+            daysUntilExpiry: Math.floor(parseFloat(sub.daysUntilExpiry))
+          })),
+          summary: {
+            totalAllocations: expiringByType.reduce((sum, item) => sum + parseInt(item.count), 0),
+            totalSubscriptionExpiries: expiringSubscriptions.length,
+            daysAhead: parseInt(daysAhead)
+          }
+        }
+      };
+    } catch (error) {
+      console.error('Error getting expiring summary:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to retrieve expiring summary',
+        message: error.message
       });
     }
   });

@@ -2,7 +2,7 @@ import { TenantService } from '../services/tenant-service.js';
 import { getUserPermissions } from '../middleware/permission-middleware.js';
 import { eq, and, gte, desc, count } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { tenantUsers, userRoleAssignments, customRoles } from '../db/schema/index.js';
+import { tenantUsers, userRoleAssignments, customRoles, tenants, entities } from '../db/schema/index.js';
 import ActivityLogger, { ACTIVITY_TYPES, RESOURCE_TYPES } from '../services/activityLogger.js';
 
 export default async function userRoutes(fastify, options) {
@@ -267,6 +267,204 @@ export default async function userRoutes(fastify, options) {
     } catch (error) {
       request.log.error('Error fetching user permissions:', error);
       return reply.code(500).send({ error: 'Failed to fetch permissions' });
+    }
+  });
+
+  // CRM Integration: User Tenant Verification
+  fastify.get('/tenant/:email', async (request, reply) => {
+    try {
+      const { email } = request.params;
+
+      console.log('🔍 CRM Tenant Verification for email:', email);
+
+      // Verify authentication
+      if (!request.userContext?.isAuthenticated) {
+        console.log('❌ Authentication failed');
+        return reply.code(401).send({
+          success: false,
+          message: 'Authentication failed'
+        });
+      }
+
+      // Check if request comes from CRM backend
+      const requestSource = request.headers['x-request-source'];
+      if (requestSource !== 'crm-backend') {
+        console.log('❌ Invalid request source:', requestSource);
+        return reply.code(403).send({
+          success: false,
+          message: 'Access restricted to CRM backend'
+        });
+      }
+
+      console.log('✅ Authentication passed, proceeding with query');
+
+      try {
+        console.log('🔍 Executing database query for email:', email);
+        // Find user by email across all tenants
+        const [user] = await db
+          .select({
+            userId: tenantUsers.userId,
+            tenantId: tenantUsers.tenantId,
+            email: tenantUsers.email,
+            name: tenantUsers.name,
+            firstName: tenantUsers.firstName,
+            lastName: tenantUsers.lastName,
+            isActive: tenantUsers.isActive,
+            // Get tenant details
+            tenantName: tenants.companyName,
+            tenantIsActive: tenants.isActive
+          })
+          .from(tenantUsers)
+          .innerJoin(
+            tenants,
+            eq(tenantUsers.tenantId, tenants.tenantId)
+          )
+          .where(and(
+            eq(tenantUsers.email, email),
+            eq(tenantUsers.isActive, true),
+            eq(tenants.isActive, true)
+          ))
+          .limit(1);
+
+        console.log('✅ Database query completed, user found:', !!user);
+
+        if (!user) {
+          console.log('ℹ️ User not found or inactive:', email);
+          // CRM expects 200 OK with null data for "no tenant assigned"
+          return reply.send({
+            success: true,
+            data: null
+          });
+        }
+
+        console.log('🔍 Getting organization details for tenant:', user.tenantId);
+        // Get organization details (assuming first organization for the tenant)
+        const [org] = await db
+          .select({
+            orgCode: entities.entityCode,
+            orgName: entities.entityName
+          })
+          .from(entities)
+          .where(and(
+            eq(entities.tenantId, user.tenantId),
+            eq(entities.entityType, 'organization'),
+            eq(entities.isActive, true)
+          ))
+          .limit(1);
+
+        console.log('✅ Organization query completed, org found:', !!org);
+
+        const response = {
+          success: true,
+          data: {
+            tenantId: user.tenantId,
+            userId: user.userId,
+            entityId: org?.orgCode || `tenant_${user.tenantId}`, // Maps to orgCode in CRM
+            tenantName: user.tenantName,
+            organization: {
+              orgName: org?.orgName || user.tenantName
+            },
+            tenantIsActive: user.tenantIsActive,
+            userIsActive: user.isActive
+          }
+        };
+
+        console.log('✅ CRM Tenant Verification success:', response.data);
+        return reply.send(response);
+
+      } catch (dbError) {
+        console.error('❌ Database error in CRM Tenant Verification:', dbError);
+        return reply.code(500).send({
+          success: false,
+          message: 'Database error'
+        });
+      }
+
+    } catch (error) {
+      console.error('❌ CRM Tenant Verification failed:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  });
+
+  // CRM Sync endpoints using WrapperSyncService
+  fastify.post('/tenant/:tenantId/sync', async (request, reply) => {
+    try {
+      const { tenantId } = request.params;
+      const { skipReferenceData = false, forceSync = false } = request.body || {};
+
+      console.log('🔄 Triggering tenant sync via WrapperSyncService:', { tenantId, skipReferenceData, forceSync });
+
+      const { WrapperSyncService } = await import('../services/wrapper-sync-service.js');
+
+      const syncResults = await WrapperSyncService.triggerTenantSync(tenantId, {
+        skipReferenceData,
+        forceSync,
+        requestedBy: request.userContext?.userId || 'system'
+      });
+
+      return reply.send({
+        success: true,
+        data: syncResults
+      });
+
+    } catch (error) {
+      console.error('❌ Tenant sync failed:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'Tenant sync failed',
+        error: error.message
+      });
+    }
+  });
+
+  fastify.get('/tenant/:tenantId/sync-status', async (request, reply) => {
+    try {
+      const { tenantId } = request.params;
+
+      console.log('📊 Getting sync status for tenant:', tenantId);
+
+      const { WrapperSyncService } = await import('../services/wrapper-sync-service.js');
+
+      const syncStatus = await WrapperSyncService.getSyncStatus(tenantId);
+
+      return reply.send({
+        success: true,
+        data: syncStatus
+      });
+
+    } catch (error) {
+      console.error('❌ Failed to get sync status:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'Failed to get sync status',
+        error: error.message
+      });
+    }
+  });
+
+  fastify.get('/sync/data-requirements', async (request, reply) => {
+    try {
+      console.log('📋 Getting data requirements specification');
+
+      const { WrapperSyncService } = await import('../services/wrapper-sync-service.js');
+
+      const requirements = WrapperSyncService.getDataRequirements();
+
+      return reply.send({
+        success: true,
+        data: requirements
+      });
+
+    } catch (error) {
+      console.error('❌ Failed to get data requirements:', error);
+      return reply.code(500).send({
+        success: false,
+        message: 'Failed to get data requirements',
+        error: error.message
+      });
     }
   });
 } 

@@ -1,9 +1,8 @@
 import { authenticateToken } from '../../middleware/auth.js';
 import { db } from '../../db/index.js';
-import { tenants, tenantUsers, customRoles, tenantInvitations } from '../../db/schema/index.js';
+import { tenants, tenantUsers, customRoles } from '../../db/schema/index.js';
 import { eq } from 'drizzle-orm';
 import { TenantService } from '../../services/tenant-service.js';
-import { SubscriptionService } from '../../services/subscription-service.js';
 import kindeService from '../../services/kinde-service.js';
 
 /**
@@ -200,17 +199,34 @@ export default async function statusManagementRoutes(fastify, options) {
             kindeUserId,
             userId,
             email,
-            hasOrganization: !!kindeUser.organization
+            hasTenant: !!kindeUser.organization
           });
         }
       } catch (authError) {
-        console.log('📝 Token validation failed, checking for email in query:', authError.message);
+        console.log('📝 Token validation failed, trying fallback methods:', authError.message);
+        
+        // Fallback 1: Check if kindeUserId is provided in query (from frontend)
+        if (request.query?.kindeUserId) {
+          kindeUserId = request.query.kindeUserId;
+          console.log('🔍 Using kindeUserId from query parameter:', kindeUserId);
+        }
+        
+        // Fallback 2: Check if email is provided in query
+        if (request.query?.email) {
+          email = request.query.email;
+          console.log('🔍 Using email from query parameter:', email);
+        }
       }
 
-      // If no authenticated user, check if email is provided in query
-      if (!userId && request.query?.email) {
+      // Additional fallback: Check query params even if token validation succeeded but no user info
+      if (!kindeUserId && !userId && request.query?.kindeUserId) {
+        kindeUserId = request.query.kindeUserId;
+        console.log('🔍 Using kindeUserId from query parameter (fallback):', kindeUserId);
+      }
+      
+      if (!email && request.query?.email) {
         email = request.query.email;
-        console.log('🔍 Using email from query parameter:', email);
+        console.log('🔍 Using email from query parameter (fallback):', email);
       }
 
       if (!userId && !email) {
@@ -291,6 +307,14 @@ export default async function statusManagementRoutes(fastify, options) {
         isActive: user.isActive
       });
 
+      // IMPORTANT: Existing users with onboardingCompleted=true should NOT be forced to onboard again
+      // They will be redirected directly to dashboard
+      if (user.onboardingCompleted) {
+        console.log('✅ Existing user detected - onboarding already completed, will skip onboarding flow');
+      } else {
+        console.log('🔄 New user or incomplete onboarding - user needs to complete onboarding');
+      }
+
       // Get tenant information if user exists
       console.log('🔍 Looking up tenant for user...');
       const [tenant] = await db
@@ -303,7 +327,9 @@ export default async function statusManagementRoutes(fastify, options) {
         console.log('✅ Tenant found:', {
           tenantId: tenant.tenantId,
           companyName: tenant.companyName,
-          subdomain: tenant.subdomain
+          subdomain: tenant.subdomain,
+          hasInitialSetupData: !!tenant.initialSetupData,
+          initialSetupDataKeys: tenant.initialSetupData ? Object.keys(tenant.initialSetupData) : []
         });
       } else {
         console.log('⚠️ No tenant found for user');
@@ -311,20 +337,62 @@ export default async function statusManagementRoutes(fastify, options) {
 
       // Extract onboarding data from preferences
       const onboardingData = user.preferences?.onboarding || {};
-      const formData = onboardingData.formData || {};
+      let formData = onboardingData.formData || {};
+
+      // If no form data exists, try to populate from tenant initial setup data
+      if (Object.keys(formData).length === 0 && tenant?.initialSetupData) {
+        console.log('🔄 No form data found, populating from tenant initial setup data');
+        console.log('📋 Initial setup data:', tenant.initialSetupData);
+        const setupData = tenant.initialSetupData;
+        formData = {
+          businessType: setupData.businessType || undefined,
+          companySize: setupData.companySize || undefined,
+          country: setupData.country || undefined,
+          timezone: setupData.timezone || undefined,
+          currency: setupData.currency || undefined,
+          hasGstin: setupData.hasGstin || undefined,
+          gstin: setupData.gstin || undefined,
+          selectedPlan: setupData.selectedPlan || undefined,
+          planName: setupData.planName || undefined,
+          maxUsers: setupData.maxUsers || undefined,
+          maxProjects: setupData.maxProjects || undefined
+        };
+        // Remove undefined values
+        Object.keys(formData).forEach(key => {
+          if (formData[key] === undefined) {
+            delete formData[key];
+          }
+        });
+        console.log('📋 Populated form data:', formData);
+      } else if (Object.keys(formData).length === 0) {
+        console.log('⚠️ No form data found and no initial setup data available');
+      }
+
+
+
+      // Determine if user is invited (invited users have onboardingCompleted=true)
+      const isInvitedUser = user.onboardingCompleted === true && 
+                           (user.preferences?.userType === 'INVITED_USER' || 
+                            user.preferences?.isInvitedUser === true);
+
+      // CRITICAL: Respect existing users' onboarding status
+      // - If onboardingCompleted=true → isOnboarded=true, needsOnboarding=false → redirect to dashboard
+      // - If onboardingCompleted=false → isOnboarded=false, needsOnboarding=true → show onboarding
+      // This ensures existing users NEVER have to onboard again
+      const isOnboarded = user.onboardingCompleted === true;
+      const needsOnboarding = !user.onboardingCompleted;
 
       const result = {
         success: true,
         data: {
-          isOnboarded: user.onboardingCompleted,
-          needsOnboarding: !user.onboardingCompleted,
-          onboardingStep: user.onboardingStep || (user.onboardingCompleted ? 'completed' : '1'),
+          isOnboarded: isOnboarded,
+          needsOnboarding: needsOnboarding,
+          onboardingStep: user.onboardingStep || (isOnboarded ? 'completed' : '1'),
           savedFormData: formData,
           onboardingProgress: onboardingData,
-          organization: tenant ? {
+          tenant: tenant ? {
             id: tenant.tenantId,
             name: tenant.companyName,
-            domain: tenant.domain,
             subdomain: tenant.subdomain
           } : null,
           user: {
@@ -333,14 +401,31 @@ export default async function statusManagementRoutes(fastify, options) {
             name: user.name,
             kindeUserId: user.kindeUserId
           }
+        },
+        // Add authStatus object for frontend compatibility
+        authStatus: {
+          isAuthenticated: true,
+          userId: kindeUserId || userId,
+          internalUserId: user.userId,
+          tenantId: user.tenantId,
+          email: user.email,
+          isTenantAdmin: user.isTenantAdmin || false,
+          needsOnboarding: needsOnboarding,
+          onboardingCompleted: isOnboarded,
+          userType: isInvitedUser ? 'INVITED_USER' : (isOnboarded ? 'EXISTING_USER' : 'REGULAR_USER'),
+          isInvitedUser: isInvitedUser
         }
       };
 
       console.log('✅ Final onboarding status result:', {
         isOnboarded: result.data.isOnboarded,
         needsOnboarding: result.data.needsOnboarding,
-        hasOrganization: !!result.data.organization,
-        userExists: !!result.data.user
+        hasTenant: !!result.data.tenant,
+        userExists: !!result.data.user,
+        userType: result.authStatus.userType,
+        message: isOnboarded 
+          ? '✅ Existing user - will redirect to dashboard (no onboarding required)' 
+          : '🔄 User needs to complete onboarding'
       });
 
       console.log('🔍 === ONBOARDING STATUS CHECK END ===');

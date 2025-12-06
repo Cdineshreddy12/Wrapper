@@ -161,7 +161,8 @@ export function TabNavigation({
           value={tab.id}
           className={cn("mt-4", tabsContentClassName)}
         >
-          {tab.content}
+          {/* Only render content when tab is active to prevent unnecessary API calls */}
+          {currentValue === tab.id ? tab.content : null}
         </TabsContent>
       ))}
     </Tabs>

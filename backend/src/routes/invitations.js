@@ -300,26 +300,50 @@ async function validateMultiEntityInvitationPermissions(inviterId, tenantId, tar
 }
 
 // Helper function to generate proper invitation URLs
-function generateInvitationUrl(invitationToken, request) {
-  // Priority 1: Use INVITATION_BASE_URL if set (for production)
+async function generateInvitationUrl(invitationToken, request, tenantId = null) {
+  // Priority 1: Use tenant subdomain in production
+  if (process.env.NODE_ENV === 'production' && tenantId) {
+    try {
+      const [tenant] = await db
+        .select({
+          subdomain: tenants.subdomain
+        })
+        .from(tenants)
+        .where(eq(tenants.tenantId, tenantId))
+        .limit(1);
+
+      if (tenant?.subdomain) {
+        const baseDomain = process.env.BASE_DOMAIN || 'myapp.com';
+        const protocol = process.env.PROTOCOL || 'https';
+        const baseUrl = `${protocol}://${tenant.subdomain}.${baseDomain}`;
+        const invitationUrl = `${baseUrl}/invite/accept?token=${invitationToken}`;
+        console.log('🔗 Generated invitation URL using tenant subdomain:', invitationUrl);
+        return invitationUrl;
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to get tenant subdomain, falling back to other methods:', error.message);
+    }
+  }
+
+  // Priority 2: Use INVITATION_BASE_URL if set (for production)
   let baseUrl = process.env.INVITATION_BASE_URL;
   
-  // Priority 2: Use FRONTEND_URL if INVITATION_BASE_URL not set
+  // Priority 3: Use FRONTEND_URL if INVITATION_BASE_URL not set
   if (!baseUrl) {
     baseUrl = process.env.FRONTEND_URL;
   }
   
-  // Priority 3: Use request origin if environment variables are localhost
+  // Priority 4: Use request origin if environment variables are localhost
   if (!baseUrl || baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
     // Get the origin from the request headers
-    const origin = request.headers.origin || request.headers.referer;
+    const origin = request?.headers?.origin || request?.headers?.referer;
     if (origin) {
       // Extract the base URL from origin (remove path and query)
       const url = new URL(origin);
       baseUrl = `${url.protocol}//${url.host}`;
       console.log('🔗 Using request origin for invitation URL:', baseUrl);
     } else {
-      // Priority 4: Use a sensible default based on environment
+      // Priority 5: Use a sensible default based on environment
       if (process.env.NODE_ENV === 'production') {
         baseUrl = 'https://yourdomain.com'; // Replace with your actual domain
         console.log('⚠️ No origin found, using production default:', baseUrl);
@@ -343,7 +367,8 @@ export default async function invitationRoutes(fastify, options) {
   fastify.get('/debug/url-generation', async (request, reply) => {
     try {
       const testToken = 'test-token-123';
-      const generatedUrl = generateInvitationUrl(testToken, request);
+      const tenantId = request.userContext?.tenantId || null;
+      const generatedUrl = await generateInvitationUrl(testToken, request, tenantId);
       
       return {
         success: true,
@@ -351,12 +376,14 @@ export default async function invitationRoutes(fastify, options) {
           env: {
             INVITATION_BASE_URL: process.env.INVITATION_BASE_URL,
             FRONTEND_URL: process.env.FRONTEND_URL,
+            BASE_DOMAIN: process.env.BASE_DOMAIN,
             NODE_ENV: process.env.NODE_ENV
           },
           request: {
             origin: request.headers.origin,
             referer: request.headers.referer,
-            host: request.headers.host
+            host: request.headers.host,
+            tenantId: tenantId
           },
           generatedUrl,
           functionCalled: true
@@ -638,8 +665,8 @@ export default async function invitationRoutes(fastify, options) {
         .orderBy(desc(tenantInvitations.createdAt));
 
       // Format invitations with invitation URLs
-      const formattedInvitations = invitations.map(({ invitation, role, inviter }) => {
-        const invitationUrl = generateInvitationUrl(invitation.invitationToken, request);
+      const formattedInvitations = await Promise.all(invitations.map(async ({ invitation, role, inviter }) => {
+        const invitationUrl = await generateInvitationUrl(invitation.invitationToken, request, tenant.tenantId);
         
         return {
           invitationId: invitation.invitationId,
@@ -654,7 +681,7 @@ export default async function invitationRoutes(fastify, options) {
           isExpired: invitation.expiresAt < new Date(),
           daysUntilExpiry: Math.ceil((new Date(invitation.expiresAt) - new Date()) / (1000 * 60 * 60 * 24))
         };
-      });
+      }));
 
       console.log(`✅ Found ${formattedInvitations.length} invitations for organization ${tenant.companyName}`);
 
@@ -750,11 +777,14 @@ export default async function invitationRoutes(fastify, options) {
         // Import EmailService dynamically to avoid circular dependencies
         const EmailService = (await import('../utils/email.js')).default;
         
+        // Regenerate invitation URL to ensure it uses the correct subdomain
+        const invitationUrl = await generateInvitationUrl(invitation.invitation.invitationToken, request, tenant.tenantId);
+        
         await EmailService.sendUserInvitation({
           email: invitation.invitation.email,
           tenantName: tenant.companyName,
           roleName: invitation.role?.roleName || 'Member',
-          invitationToken: invitation.invitation.invitationToken,
+          invitationToken: invitationUrl, // Pass full URL instead of token
           invitedByName: invitation.inviter?.name || 'Team Administrator',
           message: 'Your invitation has been resent by an administrator.'
         });
@@ -769,10 +799,11 @@ export default async function invitationRoutes(fastify, options) {
       } catch (emailError) {
         console.error(`❌ Failed to resend invitation email to ${invitation.invitation.email}:`, emailError.message);
         
+        const fallbackUrl = await generateInvitationUrl(invitation.invitation.invitationToken, request, tenant.tenantId);
         return reply.code(500).send({
           error: 'Failed to resend invitation email',
           message: emailError.message,
-          invitationUrl: generateInvitationUrl(invitation.invitation.invitationToken, request)
+          invitationUrl: fallbackUrl
         });
       }
     } catch (error) {
@@ -947,9 +978,8 @@ export default async function invitationRoutes(fastify, options) {
       const invitationToken = uuidv4();
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
       
-      // Generate the full invitation URL
-      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-      const invitationUrl = `${baseUrl}/invite/accept?token=${invitationToken}`;
+      // Generate the full invitation URL using tenant subdomain
+      const invitationUrl = await generateInvitationUrl(invitationToken, request, tenant.tenantId);
       
       const [newInvitation] = await db.insert(tenantInvitations).values({
         tenantId: tenant.tenantId,
@@ -1089,9 +1119,8 @@ export default async function invitationRoutes(fastify, options) {
       const invitationToken = uuidv4();
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
       
-      // Generate the full invitation URL
-      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-      const invitationUrl = `${baseUrl}/invite/accept?token=${invitationToken}`;
+      // Generate the full invitation URL using tenant subdomain
+      const invitationUrl = await generateInvitationUrl(invitationToken, request, tenant.tenantId);
       
       const [newInvitation] = await db.insert(tenantInvitations).values({
         tenantId: tenant.tenantId,
@@ -1350,9 +1379,8 @@ export default async function invitationRoutes(fastify, options) {
       const invitationToken = uuidv4();
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-      // Generate the full invitation URL
-      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-      const invitationUrl = `${baseUrl}/invite/accept?token=${invitationToken}`;
+      // Generate the full invitation URL using tenant subdomain
+      const invitationUrl = await generateInvitationUrl(invitationToken, request, tenant.tenantId);
 
       // Try simple raw SQL with string interpolation (temporary workaround)
       // Ensure we have a valid primary entity ID
@@ -1420,6 +1448,7 @@ export default async function invitationRoutes(fastify, options) {
           tenantName: tenant.companyName,
           roleName,
           invitationToken: newInvitation.invitation_token.substring(0, 8) + '...',
+          invitationUrl: invitationUrl,
           invitedByName: request.userContext.name || 'Team Administrator',
           entityCount: validatedEntities.length
         });
@@ -1428,7 +1457,7 @@ export default async function invitationRoutes(fastify, options) {
           email: newInvitation.email,
           tenantName: tenant.companyName,
           roleName,
-          invitationToken: newInvitation.invitation_token,
+          invitationToken: invitationUrl, // Pass full URL instead of token
           invitedByName: request.userContext.name || 'Team Administrator',
           message: request.body.message || `You've been invited to join ${tenant.companyName} with access to ${validatedEntities.length} organization${validatedEntities.length > 1 ? 's' : ''}.`
         });
@@ -2096,6 +2125,29 @@ export default async function invitationRoutes(fastify, options) {
             updatedAt: new Date()
           })
           .returning();
+
+        // Publish user creation event to Redis streams
+        try {
+          const { crmSyncStreams } = await import('../utils/redis.js');
+          // Split name into firstName and lastName for CRM requirements
+          const nameParts = (newUser.name || '').split(' ');
+          const firstName = nameParts[0] || '';
+          const lastName = nameParts.slice(1).join(' ') || '';
+          
+          await crmSyncStreams.publishUserEvent(invitation.tenantId, 'user_created', {
+            userId: newUser.userId,
+            email: newUser.email,
+            firstName: firstName,
+            lastName: lastName,
+            name: newUser.name || `${firstName} ${lastName}`.trim(),
+            isActive: newUser.isActive !== undefined ? newUser.isActive : true,
+            createdAt: newUser.createdAt ? (typeof newUser.createdAt === 'string' ? newUser.createdAt : newUser.createdAt.toISOString()) : new Date().toISOString()
+          });
+          console.log('📡 Published user_created event to Redis streams');
+        } catch (streamError) {
+          console.warn('⚠️ Failed to publish user creation event to Redis streams:', streamError.message);
+          // Don't fail the user creation if stream publishing fails
+        }
       }
 
       // Handle role/entity assignments based on invitation type

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -105,6 +106,8 @@ interface EntityApplicationAllocations {
 }
 
 export const EntityManagement: React.FC = () => {
+  const queryClient = useQueryClient();
+
   const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -210,6 +213,18 @@ export const EntityManagement: React.FC = () => {
 
       if (response.data.success) {
         toast.success(`Successfully allocated ${allocationForm.creditAmount} credits to ${allocationForm.targetApplication}`);
+
+        // Invalidate credit queries to update the UI immediately
+        try {
+          queryClient.invalidateQueries({ queryKey: ['credit'] });
+          queryClient.invalidateQueries({ queryKey: ['creditStatus'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['admin', 'entities'] });
+
+          console.log('✅ Credit queries invalidated, UI should update automatically');
+        } catch (invalidateError) {
+          console.warn('Failed to invalidate queries:', invalidateError);
+          // Don't show error to user as this is not critical
+        }
 
         // Reset form
         setAllocationForm({

@@ -1,32 +1,48 @@
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import { useUserContext } from '@/contexts/UserContextProvider';
-import api from '@/lib/api';
-
-interface UserContext {
-  userId: string;
-  internalUserId?: string;
-  tenantId: string;
-  roles?: string[];
-  permissions?: string[];
-}
+import { useAuthStatus } from '@/hooks/useSharedQueries';
+import axios from 'axios';
 
 export function useOrganizationAuth() {
   const { user, tenant, isAuthenticated, loading: contextLoading } = useUserContext();
-  const [userContext, setUserContext] = useState<UserContext | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: authData, isLoading: authLoading } = useAuthStatus();
+
+  // Create user context from shared auth data
+  const userContext = useMemo(() => {
+    if (!user || !authData?.authStatus) return null;
+
+    return {
+      userId: user.kindeUserId || user.userId,
+      internalUserId: authData.authStatus.userId,
+      tenantId: authData.authStatus.tenantId || user.tenantId || tenant?.tenantId,
+      roles: authData.authStatus.userRoles || [],
+      permissions: authData.authStatus.userPermissions || authData.authStatus.legacyPermissions || []
+    };
+  }, [user, authData, tenant]);
 
   // Get the current tenant ID - use the one from user context first
-  const tenantId = userContext?.tenantId || user?.tenantId || tenant?.tenantId || 'c27a0bd8-6f4f-48b1-9fc2-8bb58874c8ad';
+  const tenantId = userContext?.tenantId || user?.tenantId || tenant?.tenantId;
 
   console.log('🔑 useOrganizationAuth tenant ID sources:', {
     userContextTenantId: userContext?.tenantId,
     userTenantId: user?.tenantId,
     tenantTenantId: tenant?.tenantId,
-    finalTenantId: tenantId
+    finalTenantId: tenantId,
+    authStatusTenantId: authData?.authStatus?.tenantId
   });
 
-  // Enhanced request function with proper headers using the api object
-  const makeRequest = async (endpoint: string, options: { method?: string; headers?: Record<string, string>; body?: any } = {}) => {
+  // If no tenant ID is available, this is an error condition
+  if (!tenantId) {
+    console.error('❌ CRITICAL: No tenant ID available in useOrganizationAuth!');
+    console.error('Auth data:', authData);
+    console.error('User data:', user);
+    console.error('Tenant data:', tenant);
+  }
+
+  // Enhanced request function with proper headers using axios instead of fetch
+  const makeRequest = async (endpoint: string, options: RequestInit = {}) => {
+    const baseURL = import.meta.env.VITE_API_URL || '';
+
     // Ensure endpoint starts with /
     const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
@@ -46,92 +62,38 @@ export function useOrganizationAuth() {
       tenantId
     });
 
-    try {
-      const config = {
-        method: options.method || 'GET',
-        headers: allHeaders,
-        ...(options.body && { data: options.body }),
-      };
+    // Use axios for better CORS handling and consistency
+    const response = await axios(fullURL, {
+      headers: {
+        ...defaultHeaders,
+        ...options.headers,
+      },
+      withCredentials: true,
+    });
 
-      const response = await api.request({
-        url: normalizedEndpoint,
-        ...config,
-      });
+    console.log('✅ Request successful:', {
+      url: fullURL,
+      result: response.data
+    });
 
-      console.log('✅ Request successful:', {
-        endpoint: normalizedEndpoint,
-        result: response.data
-      });
-
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ Request failed:', {
-        endpoint: normalizedEndpoint,
-        status: error.response?.status,
-        error: error.response?.data || error.message
-      });
-
-      // Throw a more descriptive error
-      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Request failed';
-      throw new Error(errorMessage);
-    }
+    return response.data;
   };
 
-  // Load user context
-  useEffect(() => {
-    const loadUserContext = async () => {
-      if (!isAuthenticated || !user) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        console.log('🔄 Loading user context for:', user.kindeUserId || user.email);
-
-        // Try to get user context from API using existing auth-status endpoint
-        const contextResponse = await makeRequest('/admin/auth-status', {
-          headers: { 'X-Application': 'crm' }
-        });
-
-        console.log('✅ User context loaded:', contextResponse);
-
-        setUserContext({
-          userId: user.kindeUserId || user.userId,
-          internalUserId: contextResponse.authStatus?.userId,
-          tenantId: contextResponse.authStatus?.tenantId || user.tenantId || tenant?.tenantId,
-          roles: contextResponse.authStatus?.roles || [],
-          permissions: contextResponse.authStatus?.permissions || []
-        });
-      } catch (error) {
-        console.warn('Could not load user context from API, using fallback:', error);
-
-        // Fallback to basic context with available tenant info
-        const fallbackTenantId = user.tenantId || tenant?.tenantId || 'c27a0bd8-6f4f-48b1-9fc2-8bb58874c8ad';
-
-        console.log('🔄 Using fallback tenant ID:', fallbackTenantId);
-
-        setUserContext({
-          userId: user.kindeUserId || user.userId,
-          tenantId: fallbackTenantId,
-          roles: [],
-          permissions: []
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadUserContext();
-  }, [isAuthenticated, user, tenant]);
+  // Permission checking function
+  const hasPermission = (permission: string): boolean => {
+    if (!userContext?.permissions) return false;
+    if (user?.isTenantAdmin) return true; // Admin has all permissions
+    return userContext.permissions.includes(permission);
+  };
 
   return {
     userContext,
     tenantId,
     isAuthenticated,
-    loading: contextLoading || loading,
+    loading: contextLoading || authLoading,
     makeRequest,
     isAdmin: user?.isTenantAdmin || false,
-    hasPermission: (_permission: string) => false // TODO: implement permission checking
+    hasPermission
   };
 }
 

@@ -5,6 +5,7 @@ import { cacheHelpers, CACHE_KEYS } from '@/lib/cache';
 import toast from 'react-hot-toast';
 import { useTrialStatus } from './useTrialStatus';
 import { useOrganizationAuth } from './useOrganizationAuth';
+import { useTenantApplications } from './useSharedQueries';
 
 export interface DashboardMetrics {
   totalUsers: number;
@@ -78,6 +79,9 @@ export function useDashboardData() {
     return isTrialExpired || expiredData?.expired || localStorage.getItem('trialExpired');
   }, [isTrialExpired, expiredData]);
 
+  // Use shared hook with caching for tenant applications
+  const { data: cachedApplications = [], isLoading: applicationsLoading } = useTenantApplications(tenantId);
+
   // Dashboard queries with trial-aware error handling
   const dashboardQueries = useBatchedQueries([
     {
@@ -113,6 +117,12 @@ export function useDashboardData() {
           }
         } catch (onboardingError) {
           console.log('⚠️ Could not check onboarding status, proceeding with applications call');
+        }
+
+        // Use cached applications from shared hook if available
+        if (cachedApplications && cachedApplications.length > 0) {
+          console.log('✅ Using cached tenant applications:', cachedApplications.length);
+          return cachedApplications;
         }
 
         console.log('🔄 Fetching tenant-specific applications for tenant:', tenantId);
@@ -212,7 +222,14 @@ export function useDashboardData() {
   ]);
 
   // Extract data with defaults and type safety
-  const applications = Array.isArray(dashboardQueries.results[0]?.data) ? dashboardQueries.results[0].data : [];
+  // Prefer cached applications from shared hook, then fallback to query result
+  const applications = useMemo(() => {
+    if (cachedApplications && cachedApplications.length > 0) {
+      return cachedApplications;
+    }
+    return Array.isArray(dashboardQueries.results[0]?.data) ? dashboardQueries.results[0].data : [];
+  }, [cachedApplications, dashboardQueries.results]);
+  
   const users = Array.isArray(dashboardQueries.results[1]?.data) ? dashboardQueries.results[1].data : [];
   const paymentStats = dashboardQueries.results[2]?.data || {
     totalRevenue: 0,
@@ -343,7 +360,7 @@ export function useDashboardData() {
     invalidateApplications,
     
     // Individual loading states for granular UI updates
-    applicationsLoading: dashboardQueries.results[0]?.isLoading && !isTrialExpiredWithData || false,
+    applicationsLoading: (applicationsLoading || dashboardQueries.results[0]?.isLoading) && !isTrialExpiredWithData || false,
     usersLoading: dashboardQueries.results[1]?.isLoading && !isTrialExpiredWithData || false,
     metricsLoading: dashboardQueries.results[2]?.isLoading && !isTrialExpiredWithData || false,
     

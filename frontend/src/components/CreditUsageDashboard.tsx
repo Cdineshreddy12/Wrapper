@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,8 +15,8 @@ import {
   PieChart,
   Activity
 } from 'lucide-react';
-import { creditAPI } from '@/lib/api';
 import { formatDate, formatCurrency } from '@/lib/utils';
+import { useCreditStats, useCreditTransactionHistory, useCreditUsageSummary } from '@/hooks/useSharedQueries';
 
 interface CreditUsageDashboardProps {
   tenantId?: string;
@@ -36,53 +35,39 @@ export function CreditUsageDashboard({
     endDate: new Date().toISOString().split('T')[0]
   });
 
-  // Fetch credit statistics
+  // Fetch credit statistics using shared hook
   const {
-    data: statsData,
+    data: statsResponse,
     isLoading: statsLoading,
     refetch: refetchStats
-  } = useQuery({
-    queryKey: ['credit', 'stats', tenantId],
-    queryFn: async () => {
-      const response = await creditAPI.getCreditStats();
-      return response.data.data;
-    }
-  });
+  } = useCreditStats();
 
-  // Fetch transaction history
+  // Fetch transaction history using shared hook
   const {
-    data: transactionsData,
+    data: transactionsResponse,
     isLoading: transactionsLoading,
     refetch: refetchTransactions
-  } = useQuery({
-    queryKey: ['credit', 'transactions', selectedPeriod, selectedDateRange],
-    queryFn: async () => {
-      const response = await creditAPI.getTransactionHistory({
-        limit: 100,
-        type: undefined, // Get all types
-        startDate: selectedDateRange.startDate,
-        endDate: selectedDateRange.endDate
-      });
-      return response.data.data;
-    }
+  } = useCreditTransactionHistory({
+    limit: 100,
+    type: undefined, // Get all types
+    startDate: selectedDateRange.startDate,
+    endDate: selectedDateRange.endDate
   });
 
-  // Fetch usage summary
+  // Fetch usage summary using shared hook
   const {
-    data: usageData,
+    data: usageResponse,
     isLoading: usageLoading,
     refetch: refetchUsage
-  } = useQuery({
-    queryKey: ['credit', 'usage-summary', selectedPeriod, selectedDateRange],
-    queryFn: async () => {
-      const response = await creditAPI.getUsageSummary({
-        period: selectedPeriod,
-        startDate: selectedDateRange.startDate,
-        endDate: selectedDateRange.endDate
-      });
-      return response.data.data;
-    }
+  } = useCreditUsageSummary({
+    period: selectedPeriod,
+    startDate: selectedDateRange.startDate,
+    endDate: selectedDateRange.endDate
   });
+
+  const statsData = statsResponse?.data;
+  const transactionsData = transactionsResponse?.data;
+  const usageData = usageResponse?.data;
 
   const handleRefresh = async () => {
     await Promise.all([

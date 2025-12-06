@@ -1,37 +1,32 @@
-import { pgTable, text, timestamp, boolean, jsonb, uuid, integer } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, text, jsonb, boolean, integer, index } from 'drizzle-orm/pg-core';
 
-/**
- * Event Tracking Schema
- * Tracks events published to external systems and their acknowledgment status
- */
 export const eventTracking = pgTable('event_tracking', {
-  trackingId: uuid('tracking_id').primaryKey().defaultRandom(),
-  eventId: text('event_id').notNull(), // Unique event identifier
-  eventType: text('event_type').notNull(), // 'credit.allocated', 'credit.consumed', etc.
-  tenantId: text('tenant_id').notNull(),
-  entityId: text('entity_id'), // Associated entity (organization, user, etc.)
-  streamKey: text('stream_key').notNull(), // Redis stream key
-  sourceApplication: text('source_application').default('wrapper').notNull(), // Which app sent the event
-  targetApplication: text('target_application').notNull(), // Which app should process it
-  eventData: jsonb('event_data'), // Original event payload
-
-  // Publication tracking
-  publishedAt: timestamp('published_at').defaultNow().notNull(),
-  publishedBy: text('published_by'), // User/system that published
-
-  // Acknowledgment tracking
-  acknowledged: boolean('acknowledged').default(false).notNull(),
-  acknowledgedAt: timestamp('acknowledged_at'),
-  acknowledgmentData: jsonb('acknowledgment_data'), // CRM response data
-
-  // Status and error tracking
-  status: text('status').default('published').notNull(), // 'published', 'acknowledged', 'failed', 'timeout'
+  id: uuid('id').defaultRandom().primaryKey(),
+  eventId: varchar('event_id', { length: 255 }).notNull().unique(),
+  eventType: varchar('event_type', { length: 100 }).notNull(),
+  tenantId: varchar('tenant_id', { length: 255 }).notNull(),
+  entityId: varchar('entity_id', { length: 255 }),
+  streamKey: varchar('stream_key', { length: 100 }).notNull(),
+  sourceApplication: varchar('source_application', { length: 50 }).notNull(),
+  targetApplication: varchar('target_application', { length: 50 }).notNull(),
+  eventData: jsonb('event_data').default({}),
+  publishedBy: varchar('published_by', { length: 255 }),
+  metadata: jsonb('metadata').default({}),
+  status: varchar('status', { length: 50 }).notNull(), // 'published', 'failed'
   errorMessage: text('error_message'),
-  retryCount: integer('retry_count').default(0).notNull(),
+  isRetryable: boolean('is_retryable').default(true),
+  retryCount: integer('retry_count').default(0),
   lastRetryAt: timestamp('last_retry_at'),
-
-  // Metadata
-  metadata: jsonb('metadata'), // Additional context
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull()
-});
+  publishedAt: timestamp('published_at').defaultNow(),
+  acknowledged: boolean('acknowledged').default(false),
+  acknowledgedAt: timestamp('acknowledged_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow()
+}, (table) => ({
+  eventIdIdx: index('event_tracking_event_id_idx').on(table.eventId),
+  eventTypeIdx: index('event_tracking_event_type_idx').on(table.eventType),
+  tenantIdIdx: index('event_tracking_tenant_id_idx').on(table.tenantId),
+  statusIdx: index('event_tracking_status_idx').on(table.status),
+  publishedAtIdx: index('event_tracking_published_at_idx').on(table.publishedAt),
+  createdAtIdx: index('event_tracking_created_at_idx').on(table.createdAt)
+}));

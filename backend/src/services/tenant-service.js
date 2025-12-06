@@ -1,4 +1,4 @@
-import { eq, and, desc, count } from 'drizzle-orm';
+import { eq, and, desc, count, ne } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   tenants,
@@ -614,15 +614,21 @@ export class TenantService {
 
         // Publish user creation event to Redis streams for CRM sync
         try {
+          // Split name into firstName and lastName for CRM requirements
+          const nameParts = (user.name || '').split(' ');
+          const firstName = nameParts[0] || '';
+          const lastName = nameParts.slice(1).join(' ') || '';
+          
           await crmSyncStreams.publishUserEvent(invitation.tenantId, 'user_created', {
             userId: user.userId,
             email: user.email,
-            name: user.name,
-            avatar: user.avatar,
-            isVerified: user.isVerified,
-            createdAt: user.createdAt,
-            kindeUserId: user.kindeUserId
+            firstName: firstName,
+            lastName: lastName,
+            name: user.name || `${firstName} ${lastName}`.trim(),
+            isActive: user.isActive !== undefined ? user.isActive : true,
+            createdAt: user.createdAt ? (typeof user.createdAt === 'string' ? user.createdAt : user.createdAt.toISOString()) : new Date().toISOString()
           });
+          console.log('📡 Published user_created event to Redis streams');
         } catch (streamError) {
           console.warn('⚠️ Failed to publish user creation event to Redis streams:', streamError.message);
           // Don't fail the user creation if stream publishing fails
@@ -1455,7 +1461,71 @@ export class TenantService {
           .delete(userRoleAssignments)
           .where(eq(userRoleAssignments.userId, userId));
 
-        // 2. Cancel any pending invitations for this user
+        // 2. Remove responsible person assignments (where user is the responsible person)
+        try {
+          const { responsiblePersons } = await import('../db/schema/responsible_persons.js');
+          const deletedAssignments = await tx
+            .delete(responsiblePersons)
+            .where(eq(responsiblePersons.userId, userId))
+            .returning();
+          console.log(`✅ Removed ${deletedAssignments.length} responsible person assignments`);
+        } catch (rpError) {
+          console.warn('⚠️ Error removing responsible person assignments:', rpError.message);
+          // Continue even if this fails - might not exist
+        }
+
+        // 3. Handle responsible person assignments where user is the assigner (assignedBy)
+        // Set assignedBy to another admin user if possible, otherwise delete the assignments
+        try {
+          const { responsiblePersons, responsibilityHistory } = await import('../db/schema/responsible_persons.js');
+          // Find another admin user in the tenant to reassign
+          const [replacementAdmin] = await tx
+            .select({ userId: tenantUsers.userId })
+            .from(tenantUsers)
+            .where(and(
+              eq(tenantUsers.tenantId, tenantId),
+              eq(tenantUsers.isTenantAdmin, true),
+              eq(tenantUsers.isActive, true),
+              ne(tenantUsers.userId, userId) // Not the user being deleted
+            ))
+            .limit(1);
+
+          if (replacementAdmin) {
+            const updatedAssignments = await tx
+              .update(responsiblePersons)
+              .set({ assignedBy: replacementAdmin.userId })
+              .where(eq(responsiblePersons.assignedBy, userId))
+              .returning();
+            console.log(`✅ Reassigned ${updatedAssignments.length} responsible person assignments to admin`);
+            
+            // Also update responsibility history where user is the changer
+            const updatedHistory = await tx
+              .update(responsibilityHistory)
+              .set({ changedBy: replacementAdmin.userId })
+              .where(eq(responsibilityHistory.changedBy, userId))
+              .returning();
+            console.log(`✅ Reassigned ${updatedHistory.length} responsibility history records to admin`);
+          } else {
+            // If no replacement admin, delete these assignments
+            const deletedAssignments = await tx
+              .delete(responsiblePersons)
+              .where(eq(responsiblePersons.assignedBy, userId))
+              .returning();
+            console.log(`✅ Deleted ${deletedAssignments.length} responsible person assignments (no replacement admin)`);
+            
+            // Delete responsibility history records where user is the changer
+            const deletedHistory = await tx
+              .delete(responsibilityHistory)
+              .where(eq(responsibilityHistory.changedBy, userId))
+              .returning();
+            console.log(`✅ Deleted ${deletedHistory.length} responsibility history records`);
+          }
+        } catch (rpError) {
+          console.warn('⚠️ Error handling responsible person assignments:', rpError.message);
+          // Continue even if this fails
+        }
+
+        // 4. Cancel any pending invitations for this user
         await tx
           .update(tenantInvitations)
           .set({
@@ -1469,23 +1539,30 @@ export class TenantService {
             eq(tenantInvitations.status, 'pending')
           ));
 
-        // 3. Publish user deactivation event to Redis streams before deletion
+        // 5. Publish user deletion event to Redis streams before deletion
         try {
-          await crmSyncStreams.publishUserEvent(tenantId, 'user_deactivated', {
+          // Split name into firstName and lastName for CRM requirements
+          const nameParts = (user.name || '').split(' ');
+          const firstName = nameParts[0] || '';
+          const lastName = nameParts.slice(1).join(' ') || '';
+          
+          await crmSyncStreams.publishUserEvent(tenantId, 'user_deleted', {
             userId: user.userId,
             email: user.email,
-            name: user.name,
-            avatar: user.avatar,
-            deactivatedAt: new Date(),
-            deactivatedBy: removedBy,
-            reason: 'User removed from tenant'
+            firstName: firstName,
+            lastName: lastName,
+            name: user.name || `${firstName} ${lastName}`.trim(),
+            deletedAt: new Date().toISOString(),
+            deletedBy: removedBy,
+            reason: 'user_removed_from_tenant'
           });
+          console.log('📡 Published user_deleted event to Redis streams');
         } catch (streamError) {
-          console.warn('⚠️ Failed to publish user deactivation event to Redis streams:', streamError.message);
+          console.warn('⚠️ Failed to publish user deletion event to Redis streams:', streamError.message);
           // Continue with user deletion even if stream publishing fails
         }
 
-        // 4. Remove the user from tenant_users
+        // 6. Remove the user from tenant_users
         await tx
           .delete(tenantUsers)
           .where(and(
@@ -1564,6 +1641,30 @@ export class TenantService {
         throw new Error('User not found');
       }
 
+      // Publish user deactivation event to Redis streams
+      try {
+        const { crmSyncStreams } = await import('../utils/redis.js');
+        // Split name into firstName and lastName for CRM requirements
+        const nameParts = (updatedUser.name || '').split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+        
+        await crmSyncStreams.publishUserEvent(tenantId, 'user_deactivated', {
+          userId: updatedUser.userId,
+          email: updatedUser.email,
+          firstName: firstName,
+          lastName: lastName,
+          name: updatedUser.name || `${firstName} ${lastName}`.trim(),
+          deactivatedAt: new Date().toISOString(),
+          deactivatedBy: null, // System-initiated deactivation
+          reason: 'user_deactivated'
+        });
+        console.log('📡 Published user_deactivated event to Redis streams');
+      } catch (publishError) {
+        console.warn('⚠️ Failed to publish user_deactivated event:', publishError.message);
+        // Don't fail the operation if event publishing fails
+      }
+
       return {
         success: true,
         message: 'User removed successfully',
@@ -1607,26 +1708,25 @@ export class TenantService {
         // First remove existing role assignments and publish unassignment events
         const existingAssignments = await db
           .select({
-            assignmentId: userRoleAssignments.id,
+            id: userRoleAssignments.id,
             roleId: userRoleAssignments.roleId,
             assignedAt: userRoleAssignments.assignedAt
           })
           .from(userRoleAssignments)
-          .where(and(
-            eq(userRoleAssignments.userId, userId),
-            eq(userRoleAssignments.tenantId, tenantId)
-          ));
+          .where(eq(userRoleAssignments.userId, userId));
 
         // Publish role unassignment events for removed roles
         for (const assignment of existingAssignments) {
           try {
             await crmSyncStreams.publishRoleEvent(tenantId, 'role_unassigned', {
-              assignmentId: assignment.assignmentId,
+              assignmentId: assignment.id,
               userId: userId,
               roleId: assignment.roleId,
-              unassignedAt: new Date(),
+              unassignedAt: new Date().toISOString(),
+              unassignedBy: null, // Will be set by caller if available
               reason: 'Role updated to new assignment'
             });
+            console.log('📡 Published role unassignment event successfully');
           } catch (streamError) {
             console.warn('⚠️ Failed to publish role unassignment event:', streamError.message);
           }
@@ -1635,10 +1735,7 @@ export class TenantService {
         // Remove existing role assignments
         await db
           .delete(userRoleAssignments)
-          .where(and(
-            eq(userRoleAssignments.userId, userId),
-            eq(userRoleAssignments.tenantId, tenantId)
-          ));
+          .where(eq(userRoleAssignments.userId, userId));
 
         // Add new role assignment
         const [newRoleAssignment] = await db
@@ -1646,8 +1743,9 @@ export class TenantService {
           .values({
             userId: userId,
             roleId: roleId,
-            tenantId: tenantId,
-            assignedAt: new Date()
+            assignedBy: null, // Will be set by caller if available
+            assignedAt: new Date(),
+            isActive: true
           })
           .returning();
 
@@ -1657,9 +1755,11 @@ export class TenantService {
             assignmentId: newRoleAssignment.id,
             userId: userId,
             roleId: roleId,
-            assignedAt: newRoleAssignment.assignedAt,
+            assignedAt: newRoleAssignment.assignedAt ? (typeof newRoleAssignment.assignedAt === 'string' ? newRoleAssignment.assignedAt : newRoleAssignment.assignedAt.toISOString()) : new Date().toISOString(),
+            assignedBy: null, // Will be set by caller if available
             reason: 'Role assigned via update'
           });
+          console.log('📡 Published role assignment event successfully');
         } catch (streamError) {
           console.warn('⚠️ Failed to publish role assignment event:', streamError.message);
         }
