@@ -194,8 +194,12 @@ export const GoogleGeminiEffect = ({
 
               <foreignObject x={centerX - 40} y={centerY - 40} width="80" height="80">
                 <div className="w-full h-full flex flex-col items-center justify-center text-center">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-violet-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg mb-1">
-                    Z
+                  <div className="w-12 h-12 rounded-xl overflow-hidden shadow-lg mb-1">
+                    <img
+                      src="/src/public/Zopkit Simple Logo.jpg"
+                      alt="Zopkit"
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   <span className="text-[10px] font-bold text-slate-500 uppercase">Unified Core</span>
                 </div>

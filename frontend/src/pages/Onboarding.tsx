@@ -191,13 +191,13 @@ const OnboardingPage: React.FC = () => {
                         helpText: isLoadingUser
                             ? 'Loading your email from authentication...'
                             : isUserAuthenticated && userEmail
-                            ? 'Email securely loaded from your authentication'
-                            : 'Please enter your email address'
+                                ? 'Email securely loaded from your authentication'
+                                : 'Please enter your email address'
                     },
-                  
+
                 ]
             },
-           
+
             {
                 id: 'preferences',
                 title: 'Preferences',
@@ -282,7 +282,7 @@ const OnboardingPage: React.FC = () => {
 
 By checking the box below, you acknowledge that you have read, understood, and agree to these terms and conditions.`,
                         rows: 8,
-                        className: 'col-span-2 text-foreground',
+                        className: 'col-span-2 text-slate-900',
                         helpText: 'Please read the terms and conditions carefully before proceeding.'
                     },
                     {
@@ -391,7 +391,7 @@ By checking the box below, you acknowledge that you have read, understood, and a
                         onSubmit={handleSubmit}
                         ProgressIndicator={CustomProgressIndicator}
                         initialValues={initialValues}
-                        // StepNavigation={CustomStepNavigation}
+                    // StepNavigation={CustomStepNavigation}
                     />
                 </CardContent>
             </Card>

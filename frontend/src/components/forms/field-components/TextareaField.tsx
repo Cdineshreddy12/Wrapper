@@ -16,6 +16,14 @@ export const TextareaField: React.FC<FieldComponentProps> = ({
   disabled,
   className
 }) => {
+  // Type guard to ensure field is TextareaField
+  const textareaField = field.type === 'textarea' ? field : null;
+
+  // Get the display value - prioritize current value, then defaultValue
+  const displayValue = value !== undefined && value !== null
+    ? String(value)
+    : (field.defaultValue !== undefined && field.defaultValue !== null ? String(field.defaultValue) : '');
+
   return (
     <FormField
       name={field.id}
@@ -26,34 +34,35 @@ export const TextareaField: React.FC<FieldComponentProps> = ({
           )}>
             {field.label}
           </FormLabel>
-          
+
           <FormControl>
             <Textarea
               {...formField}
-              value={value || ''}
+              value={displayValue}
               onChange={(e) => {
                 formField.onChange(e);
                 onChange(e.target.value);
               }}
               onBlur={(e) => {
-                formField.onBlur(e);
+                formField.onBlur();
                 onBlur?.();
               }}
               placeholder={field.placeholder}
               disabled={disabled || field.disabled}
-              rows={field.rows || 3}
-              minLength={field.minLength}
-              maxLength={field.maxLength}
+              rows={textareaField?.rows || 3}
+              minLength={textareaField?.minLength}
+              maxLength={textareaField?.maxLength}
               required={field.required}
+              className={field.className}
             />
           </FormControl>
-          
+
           {field.helpText && (
             <FormDescription>
               {field.helpText}
             </FormDescription>
           )}
-          
+
           <ConditionalErrorMessage fieldName={field.id} />
         </FormItem>
       )}

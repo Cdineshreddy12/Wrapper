@@ -9,7 +9,8 @@ import {
   tenantUsers,
   credits,
   creditPurchases,
-  creditAllocations
+  creditAllocations,
+  creditTransactions
 } from '../db/schema/index.js';
 import { webhookLogs } from '../db/schema/webhook-logs.js';
 import { EmailService } from '../utils/email.js';
@@ -21,23 +22,23 @@ import { CreditService } from './credit-service.js';
 const validateStripeConfig = () => {
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  
+
   if (!stripeSecretKey) {
     console.warn('⚠️ STRIPE_SECRET_KEY not configured - payments will use mock mode');
     return false;
   }
-  
+
   if (!webhookSecret) {
     console.warn('⚠️ STRIPE_WEBHOOK_SECRET not configured - webhook verification will fail');
   }
-  
+
   // Check if using test keys
   if (stripeSecretKey.startsWith('sk_test_')) {
     console.log('🧪 Using Stripe test mode');
   } else if (stripeSecretKey.startsWith('sk_live_')) {
     console.log('🚀 Using Stripe live mode');
   }
-  
+
   return true;
 };
 
@@ -69,9 +70,9 @@ export class SubscriptionService {
       stripeType: typeof stripe,
       stripeWebhooksAvailable: stripe ? !!stripe.webhooks : false,
       environment: process.env.NODE_ENV || 'development',
-      secretKeyStart: process.env.STRIPE_SECRET_KEY ? 
+      secretKeyStart: process.env.STRIPE_SECRET_KEY ?
         process.env.STRIPE_SECRET_KEY.substring(0, 10) + '...' : 'not set',
-      webhookSecretStart: process.env.STRIPE_WEBHOOK_SECRET ? 
+      webhookSecretStart: process.env.STRIPE_WEBHOOK_SECRET ?
         process.env.STRIPE_WEBHOOK_SECRET.substring(0, 10) + '...' : 'not set'
     };
   }
@@ -86,7 +87,7 @@ export class SubscriptionService {
       let totalAvailableFromAllocations = 0;
       let totalAllocatedFromAllocations = 0;
       let totalUsedFromAllocations = 0;
-      
+
       try {
         const allocations = await db
           .select({
@@ -166,7 +167,7 @@ export class SubscriptionService {
       };
     } catch (error) {
       console.error('Error getting current subscription:', error);
-      
+
       // Fallback: try to get traditional subscription if no credits found
       try {
         const [subscription] = await db
@@ -260,6 +261,83 @@ export class SubscriptionService {
     }
   }
 
+  // Create free subscription for new tenant with expiry period
+  static async createFreeSubscription(tenantId, planData = {}) {
+    console.log('🆓 Creating free subscription for tenant:', tenantId);
+    console.log('📋 Plan data:', planData);
+
+    try {
+      // Free plan configuration
+      const freeCredits = planData.credits || 1000; // Default 1000 credits for free plan
+      const validityMonths = planData.validityMonths || 3; // Free plan valid for 3 months
+
+      // Calculate expiry date
+      const expiryDate = new Date();
+      expiryDate.setMonth(expiryDate.getMonth() + validityMonths);
+
+      // Create credit record for free plan
+      const [creditRecord] = await db
+        .insert(credits)
+        .values({
+          tenantId,
+          entityType: 'organization',
+          availableCredits: freeCredits.toString(),
+          totalCredits: freeCredits.toString(),
+          periodType: 'month',
+          creditExpiry: expiryDate,
+          lastUpdatedBy: planData.userId
+        })
+        .returning();
+
+      console.log('✅ Created free plan credit balance:', creditRecord);
+
+      // Create transaction record for free plan credits
+      await db
+        .insert(creditTransactions)
+        .values({
+          tenantId,
+          transactionType: 'purchase',
+          amount: freeCredits.toString(),
+          description: `Free plan initial credits (${validityMonths} months validity)`,
+          metadata: {
+            package: 'free',
+            validityMonths,
+            source: 'onboarding',
+            expiryDate: expiryDate.toISOString()
+          },
+          initiatedBy: planData.userId
+        });
+
+      // Return subscription-like object for backward compatibility
+      const subscriptionData = {
+        tenantId: tenantId,
+        plan: 'free',
+        status: 'active',
+        isTrialUser: false,
+        subscribedTools: ['crm'],
+        usageLimits: {
+          users: 5,
+          apiCalls: 10000,
+          storage: 5000000000 // 5GB
+        },
+        monthlyPrice: 0,
+        yearlyPrice: 0,
+        billingCycle: 'prepaid',
+        trialStart: new Date(),
+        trialEnd: expiryDate,
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: expiryDate,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      console.log('✅ Free subscription created successfully');
+      return { subscription: subscriptionData };
+    } catch (error) {
+      console.error('❌ Error creating free subscription:', error);
+      throw error;
+    }
+  }
   // Get available credit packages (replaces plans)
   static async getAvailablePlans() {
     return [
@@ -284,7 +362,7 @@ export class SubscriptionService {
           projectsPerCredit: 20
         },
         applications: ['crm'],
-        modules: { 
+        modules: {
           crm: ['leads', 'contacts', 'accounts', 'opportunities', 'quotations', 'tickets', 'communications', 'dashboard', 'users'],
           hr: ['employees', 'payroll', 'leave', 'documents']
         },
@@ -369,7 +447,7 @@ export class SubscriptionService {
           projectsPerCredit: 5
         },
         applications: ['crm', 'hr', 'affiliate', 'accounting', 'inventory'],
-        modules: { 
+        modules: {
           crm: '*', // All CRM modules
           hr: '*',  // All HR modules  
           affiliate: '*', // All affiliate modules
@@ -617,7 +695,7 @@ export class SubscriptionService {
 
       // If table doesn't exist, return empty array instead of throwing
       if (error.message?.includes('relation "credit_purchases" does not exist') ||
-          error.code === '42P01') {
+        error.code === '42P01') {
         console.log('⚠️ Credit purchases table not found, returning empty history');
         return [];
       }
@@ -630,7 +708,7 @@ export class SubscriptionService {
   static async cancelSubscription(tenantId, reason = 'User requested cancellation') {
     try {
       const currentSubscription = await this.getCurrentSubscription(tenantId);
-      
+
       if (!currentSubscription) {
         throw new Error('No subscription found to cancel');
       }
@@ -674,7 +752,7 @@ export class SubscriptionService {
           createdAt: new Date()
         });
 
-      return {
+        return {
           subscriptionId: currentSubscription.subscriptionId,
           stripeSubscriptionId: currentSubscription.stripeSubscriptionId,
           status: 'canceled',
@@ -741,10 +819,10 @@ export class SubscriptionService {
         const now = new Date();
         const currentPeriodEnd = new Date(currentSubscription.currentPeriodEnd);
         const billingCycleType = currentSubscription.billingCycle || 'monthly';
-        
+
         // Calculate days remaining in current billing cycle
         const daysRemaining = Math.ceil((currentPeriodEnd - now) / (1000 * 60 * 60 * 24));
-        
+
         if (daysRemaining > 7) { // More than a week remaining
           const endDateStr = currentPeriodEnd.toLocaleDateString();
           throw new Error(
@@ -757,7 +835,7 @@ export class SubscriptionService {
 
         // If within 7 days of renewal, allow but schedule for end of period
         console.log(`⏰ Downgrade scheduled for end of billing period: ${endDateStr}`);
-        
+
         // Schedule the downgrade instead of processing immediately
         return await this.scheduleDowngrade({ tenantId, planId, effectiveDate: currentPeriodEnd });
       }
@@ -775,22 +853,22 @@ export class SubscriptionService {
       // Allow upgrades immediately (no billing cycle restrictions)
       if (!isDowngrade) {
         console.log('⬆️ Processing immediate upgrade');
-        return await this.processImmediatePlanChange({ 
-          tenantId, 
-          currentSubscription, 
-          targetPlan, 
-          planId, 
-          billingCycle 
+        return await this.processImmediatePlanChange({
+          tenantId,
+          currentSubscription,
+          targetPlan,
+          planId,
+          billingCycle
         });
       }
 
       // Process immediate plan change for same-level changes or allowed downgrades
-      return await this.processImmediatePlanChange({ 
-        tenantId, 
-        currentSubscription, 
-        targetPlan, 
-        planId, 
-        billingCycle 
+      return await this.processImmediatePlanChange({
+        tenantId,
+        currentSubscription,
+        targetPlan,
+        planId,
+        billingCycle
       });
 
     } catch (error) {
@@ -834,7 +912,7 @@ export class SubscriptionService {
       if (currentSubscription.stripeSubscriptionId && this.isStripeConfigured()) {
         // Update existing Stripe subscription
         const priceId = billingCycle === 'yearly' ? targetPlan.stripeYearlyPriceId : targetPlan.stripePriceId;
-        
+
         if (!priceId) {
           throw new Error(`Stripe price ID not configured for ${planId} plan (${billingCycle})`);
         }
@@ -925,17 +1003,17 @@ export class SubscriptionService {
   static async updateAdministratorRolesForPlan(tenantId, newPlanId) {
     try {
       console.log(`🔐 Updating Administrator roles for tenant ${tenantId} to ${newPlanId} plan`);
-      
+
       // Import required utilities
       const { createSuperAdminRoleConfig, generateSuperAdminPermissions, getSuperAdminRestrictions } = await import('../utils/super-admin-permissions.js');
       const { PLAN_ACCESS_MATRIX } = await import('../data/permission-matrix.js');
-      
+
       // Get plan details
       const planAccess = PLAN_ACCESS_MATRIX[newPlanId];
       if (!planAccess) {
         throw new Error(`Plan ${newPlanId} not found in access matrix`);
       }
-      
+
       // Find all administrator roles for this tenant (both system and custom admin roles)
       const adminRoles = await db
         .select()
@@ -960,31 +1038,31 @@ export class SubscriptionService {
             )
           )
         ));
-      
+
       console.log(`📋 Found ${adminRoles.length} administrator role(s) to update`);
-      
+
       // Update each administrator role
       for (const role of adminRoles) {
         try {
           let updatedPermissions, updatedRestrictions, updatedDescription;
-          
+
           if (role.roleName === 'Super Administrator' && role.isSystemRole) {
             // Use comprehensive Super Admin configuration
             const newRoleConfig = createSuperAdminRoleConfig(newPlanId, tenantId, role.createdBy);
             updatedPermissions = newRoleConfig.permissions;
             updatedRestrictions = newRoleConfig.restrictions;
             updatedDescription = newRoleConfig.description;
-            
+
             console.log(`   🎯 Updating Super Administrator with full ${newPlanId} plan access`);
           } else {
             // For custom admin roles, enhance their existing permissions with new plan features
             updatedPermissions = await this.enhanceAdminPermissionsForPlan(role.permissions, newPlanId, planAccess);
             updatedRestrictions = await this.updateAdminRestrictionsForPlan(role.restrictions, newPlanId, planAccess);
             updatedDescription = `${role.description} (Updated for ${newPlanId.charAt(0).toUpperCase() + newPlanId.slice(1)} Plan)`;
-            
+
             console.log(`   🔧 Enhancing custom admin role: ${role.roleName}`);
           }
-          
+
           // Update the role in database
           await db
             .update(customRoles)
@@ -995,20 +1073,20 @@ export class SubscriptionService {
               updatedAt: new Date()
             })
             .where(eq(customRoles.roleId, role.roleId));
-          
+
           console.log(`   ✅ Updated role: ${role.roleName}`);
-          
+
         } catch (roleError) {
           console.error(`   ❌ Failed to update role ${role.roleName}:`, roleError.message);
           // Continue with other roles
         }
       }
-      
+
       // Also update any tenant admin users to ensure they get new permissions
       await this.updateTenantAdminUsersForPlan(tenantId, newPlanId);
-      
+
       console.log(`✅ Completed administrator role updates for tenant ${tenantId} with ${newPlanId} plan`);
-      
+
     } catch (error) {
       console.error(`❌ Failed to update administrator roles for tenant ${tenantId}:`, error);
       // Don't throw error - this shouldn't break the subscription update
@@ -1019,19 +1097,19 @@ export class SubscriptionService {
   static async enhanceAdminPermissionsForPlan(existingPermissions, newPlanId, planAccess) {
     try {
       const { generateSuperAdminPermissions } = await import('../utils/super-admin-permissions.js');
-      
+
       // Get new plan permissions
       const newPlanPermissions = generateSuperAdminPermissions(newPlanId);
-      
+
       // Merge existing permissions with new plan permissions
       const enhancedPermissions = { ...existingPermissions };
-      
+
       // Add new applications that are now available
       planAccess.applications.forEach(appCode => {
         if (!enhancedPermissions[appCode]) {
           enhancedPermissions[appCode] = {};
         }
-        
+
         // Add new modules for this application
         const appModules = planAccess.modules[appCode];
         if (appModules === '*') {
@@ -1046,7 +1124,7 @@ export class SubscriptionService {
           });
         }
       });
-      
+
       // Enhance system-level permissions
       if (newPlanPermissions.system) {
         enhancedPermissions.system = {
@@ -1054,7 +1132,7 @@ export class SubscriptionService {
           ...newPlanPermissions.system
         };
       }
-      
+
       return enhancedPermissions;
     } catch (error) {
       console.error('Failed to enhance admin permissions:', error);
@@ -1066,10 +1144,10 @@ export class SubscriptionService {
   static async updateAdminRestrictionsForPlan(existingRestrictions, newPlanId, planAccess) {
     try {
       const { getSuperAdminRestrictions } = await import('../utils/super-admin-permissions.js');
-      
+
       // Get new plan restrictions
       const newPlanRestrictions = getSuperAdminRestrictions(newPlanId);
-      
+
       // Update restrictions with new plan limits
       const updatedRestrictions = {
         ...existingRestrictions,
@@ -1077,7 +1155,7 @@ export class SubscriptionService {
         planType: newPlanId,
         lastUpgraded: new Date().toISOString()
       };
-      
+
       // Remove restrictions that are no longer applicable
       if (planAccess.limitations.users === -1) {
         delete updatedRestrictions.maxUsers;
@@ -1091,7 +1169,7 @@ export class SubscriptionService {
       if (planAccess.limitations.apiCalls === -1) {
         delete updatedRestrictions.apiCallLimit;
       }
-      
+
       return updatedRestrictions;
     } catch (error) {
       console.error('Failed to update admin restrictions:', error);
@@ -1103,7 +1181,7 @@ export class SubscriptionService {
   static async updateTenantAdminUsersForPlan(tenantId, newPlanId) {
     try {
       console.log(`👥 Checking tenant admin users for plan update...`);
-      
+
       // Find users with tenant admin privileges
       const tenantAdminUsers = await db
         .select()
@@ -1112,10 +1190,10 @@ export class SubscriptionService {
           eq(tenantUsers.tenantId, tenantId),
           eq(tenantUsers.isTenantAdmin, true)
         ));
-      
+
       if (tenantAdminUsers.length > 0) {
         console.log(`   📝 Found ${tenantAdminUsers.length} tenant admin user(s) - permissions will be refreshed on next login`);
-        
+
         // Update their last updated timestamp to trigger permission refresh
         await db
           .update(tenantUsers)
@@ -1127,7 +1205,7 @@ export class SubscriptionService {
             eq(tenantUsers.isTenantAdmin, true)
           ));
       }
-      
+
     } catch (error) {
       console.error('Failed to update tenant admin users:', error);
     }
@@ -1142,13 +1220,13 @@ export class SubscriptionService {
   static async getPlanIdFromPriceId(priceId) {
     try {
       const plans = await this.getAvailablePlans();
-      
+
       for (const plan of plans) {
         if (plan.stripePriceId === priceId || plan.stripeYearlyPriceId === priceId) {
           return plan.id;
         }
       }
-      
+
       console.warn(`⚠️ Plan not found for price ID: ${priceId}`);
       return null;
     } catch (error) {
@@ -1179,7 +1257,7 @@ export class SubscriptionService {
       hasSignature: !!signature,
       hasSecret: !!endpointSecret
     });
-    
+
     try {
       console.log('🔍 Environment variables for webhook processing:', {
         NODE_ENV: process.env.NODE_ENV,
@@ -1214,49 +1292,49 @@ export class SubscriptionService {
 
       // Verify webhook signature with detailed error handling
       let event = null;
-      
+
       try {
         console.log('🔐 Attempting to construct Stripe webhook event...');
-        
+
         // In development mode, allow bypassing signature verification for ngrok testing
         if (process.env.NODE_ENV === 'development' && (process.env.BYPASS_WEBHOOK_SIGNATURE === 'true' || true)) {
           console.log('⚠️ DEVELOPMENT MODE: Bypassing webhook signature verification');
-          
+
           // Try to parse the raw body as JSON to get event data
           const eventData = JSON.parse(rawBody.toString());
           console.log('📝 Parsed webhook body:', eventData);
-          
+
           event = {
             id: eventData.id || 'dev_' + Date.now(),
             type: eventData.type || 'unknown',
             data: eventData.data || eventData,
             created: eventData.created || Math.floor(Date.now() / 1000)
           };
-          
+
           console.log('✅ Development mode: Created mock event from raw body:', event);
         } else {
           console.log('🔐 Production mode: Verifying webhook signature');
           // Production mode: Always verify signature
           event = stripe.webhooks.constructEvent(rawBody, signature, endpointSecret);
         }
-        
+
         console.log('🔍 Event variable after construction:', {
           eventDefined: typeof event !== 'undefined',
           eventValue: event,
           eventType: typeof event
         });
-        
+
         if (!event) {
           throw new Error('Failed to construct webhook event - event is undefined');
         }
-        
+
       } catch (stripeError) {
         console.error('❌ Stripe webhook signature verification failed:', {
           error: stripeError.message,
           errorType: stripeError.constructor.name,
           errorStack: stripeError.stack
         });
-        
+
         // Check for specific Stripe error types
         if (stripeError.message.includes('No signatures found')) {
           throw new Error('Webhook signature missing - check Stripe-Signature header');
@@ -1331,44 +1409,44 @@ export class SubscriptionService {
             await this.handleCheckoutCompleted(event.data.object);
           }
           break;
-          
+
         case 'invoice.paid':
         case 'invoice.payment_succeeded':
           await this.handlePaymentSucceeded(event.data.object);
           break;
-          
+
         case 'invoice_payment.paid':
           await this.handleInvoicePaymentPaid(event.data.object);
           break;
-          
+
         case 'invoice.payment_failed':
           await this.handlePaymentFailed(event.data.object);
           break;
-          
+
         case 'customer.subscription.created':
           await this.handleSubscriptionCreated(event.data.object);
           break;
-          
+
         case 'customer.subscription.updated':
           await this.handleSubscriptionUpdated(event.data.object);
           break;
-          
+
         case 'customer.subscription.deleted':
           await this.handleSubscriptionDeleted(event.data.object);
           break;
-          
+
         case 'charge.dispute.created':
           await this.handleChargeDispute(event.data.object);
           break;
-          
+
         case 'charge.succeeded':
           await this.handleChargeSucceeded(event.data.object);
           break;
-          
+
         case 'refund.created':
           await this.handleRefund(event.data.object);
           break;
-          
+
         default:
           console.log(`⚠️ Unhandled webhook event type: ${event.type}`);
       }
@@ -1385,10 +1463,10 @@ export class SubscriptionService {
       */
 
       return { processed: true, eventType: event.type };
-      
+
     } catch (error) {
       console.error('❌ Webhook processing error:', error);
-      
+
       // Mark webhook as failed if we have an event ID (temporarily disabled due to missing table)
       // TODO: Re-enable when webhook_logs table is created
       /*
@@ -1406,20 +1484,20 @@ export class SubscriptionService {
         }
       }
       */
-      
+
       // Don't throw error for test webhooks or missing metadata (should not retry)
-      if (error.message.includes('Missing tenantId or planId') || 
-          error.message.includes('test webhook') ||
-          error.message.includes('already_processed')) {
+      if (error.message.includes('Missing tenantId or planId') ||
+        error.message.includes('test webhook') ||
+        error.message.includes('already_processed')) {
         console.log('🔄 Returning success for test webhook to prevent 500 error');
-        return { 
-          processed: true, 
-          eventType: event?.type || 'unknown', 
-          skipped: true, 
-          reason: error.message 
+        return {
+          processed: true,
+          eventType: event?.type || 'unknown',
+          skipped: true,
+          reason: error.message
         };
       }
-      
+
       // Re-throw the error for other cases
       throw error;
     }
@@ -1521,118 +1599,118 @@ export class SubscriptionService {
           throw new Error(`Invalid plan ID: ${planId}`);
         }
 
-      // Check if subscription already exists
-      const existingSubscription = await this.getCurrentSubscription(tenantId);
-      
-      let subscriptionRecord;
-      
-      if (existingSubscription) {
-        console.log('🔄 Updating existing subscription for tenant:', tenantId);
-        
-        // Update existing subscription with upgrade tracking
-        const updateData = {
-          plan: planId,
-          status: 'active',
-          stripeSubscriptionId: session.subscription,
-          stripeCustomerId: session.customer,
-          subscribedTools: plan.tools,
-          usageLimits: plan.limits,
-          monthlyPrice: plan.monthlyPrice,
-          yearlyPrice: plan.yearlyPrice,
-          billingCycle: billingCycle,
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: new Date(Date.now() + (billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000),
-          trialToggledOff: true, // Disable trial restrictions after upgrade
-          updatedAt: new Date()
-        };
-        
-        // Track if this is their first upgrade from trial
-        if (existingSubscription.plan === 'trial' || existingSubscription.isTrialUser) {
-          updateData.hasEverUpgraded = true;
-          updateData.firstUpgradeAt = new Date();
-          updateData.isTrialUser = false;
+        // Check if subscription already exists
+        const existingSubscription = await this.getCurrentSubscription(tenantId);
+
+        let subscriptionRecord;
+
+        if (existingSubscription) {
+          console.log('🔄 Updating existing subscription for tenant:', tenantId);
+
+          // Update existing subscription with upgrade tracking
+          const updateData = {
+            plan: planId,
+            status: 'active',
+            stripeSubscriptionId: session.subscription,
+            stripeCustomerId: session.customer,
+            subscribedTools: plan.tools,
+            usageLimits: plan.limits,
+            monthlyPrice: plan.monthlyPrice,
+            yearlyPrice: plan.yearlyPrice,
+            billingCycle: billingCycle,
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: new Date(Date.now() + (billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000),
+            trialToggledOff: true, // Disable trial restrictions after upgrade
+            updatedAt: new Date()
+          };
+
+          // Track if this is their first upgrade from trial
+          if (existingSubscription.plan === 'trial' || existingSubscription.isTrialUser) {
+            updateData.hasEverUpgraded = true;
+            updateData.firstUpgradeAt = new Date();
+            updateData.isTrialUser = false;
+          }
+
+          const [updatedSubscription] = await db
+            .update(subscriptions)
+            .set(updateData)
+            .where(eq(subscriptions.tenantId, tenantId))
+            .returning();
+
+          if (!updatedSubscription) {
+            throw new Error(`Failed to update subscription for tenant: ${tenantId}`);
+          }
+
+          console.log('✅ Subscription updated successfully:', updatedSubscription.subscriptionId);
+
+          // Update administrator roles for the new plan
+          await this.updateAdministratorRolesForPlan(tenantId, planId);
+
+          // Update organization applications for the new plan
+          try {
+            const { OnboardingOrganizationSetupService } = await import('./onboarding-organization-setup.js');
+            await OnboardingOrganizationSetupService.updateOrganizationApplicationsForPlanChange(
+              tenantId,
+              planId,
+              { skipIfRecentlyUpdated: true } // Enable idempotency
+            );
+            console.log('✅ Organization applications updated for new plan');
+          } catch (orgAppError) {
+            console.error('❌ Failed to update organization applications:', orgAppError.message);
+            // Don't fail the checkout, but log for manual intervention
+          }
+
+          subscriptionRecord = existingSubscription;
+        } else {
+          console.log('🆕 Creating new subscription for tenant:', tenantId);
+
+          // Create new subscription with upgrade tracking
+          const [newSubscription] = await db.insert(subscriptions).values({
+            subscriptionId: uuidv4(),
+            tenantId,
+            plan: planId,
+            status: 'active',
+            stripeSubscriptionId: session.subscription,
+            stripeCustomerId: session.customer,
+            subscribedTools: plan.tools,
+            usageLimits: plan.limits,
+            monthlyPrice: plan.monthlyPrice,
+            yearlyPrice: plan.yearlyPrice,
+            billingCycle: billingCycle,
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: new Date(Date.now() + (billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000),
+            hasEverUpgraded: true, // New subscription is automatically an upgrade
+            firstUpgradeAt: new Date(),
+            trialToggledOff: true, // Disable trial restrictions for new paid subscriptions
+            isTrialUser: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }).returning();
+
+          subscriptionRecord = newSubscription;
         }
-        
-        const [updatedSubscription] = await db
-          .update(subscriptions)
-          .set(updateData)
-          .where(eq(subscriptions.tenantId, tenantId))
+
+        // Don't create payment record here - it will be created by handlePaymentSucceeded webhook
+        // This prevents duplicate payment records for the same transaction
+        console.log('💰 Checkout completed - payment will be recorded by invoice.payment_succeeded webhook');
+
+        // Update tenant with Stripe customer ID if not already set
+        const [updatedTenant] = await db
+          .update(tenants)
+          .set({
+            stripeCustomerId: session.customer,
+            updatedAt: new Date()
+          })
+          .where(eq(tenants.tenantId, tenantId))
           .returning();
-          
-        if (!updatedSubscription) {
-          throw new Error(`Failed to update subscription for tenant: ${tenantId}`);
+
+        if (!updatedTenant) {
+          console.warn('⚠️ Failed to update tenant with Stripe customer ID:', tenantId);
+        } else {
+          console.log('✅ Tenant updated with Stripe customer ID:', updatedTenant.tenantId);
         }
-        
-        console.log('✅ Subscription updated successfully:', updatedSubscription.subscriptionId);
-          
-        // Update administrator roles for the new plan
-        await this.updateAdministratorRolesForPlan(tenantId, planId);
-        
-        // Update organization applications for the new plan
-        try {
-          const { OnboardingOrganizationSetupService } = await import('./onboarding-organization-setup.js');
-          await OnboardingOrganizationSetupService.updateOrganizationApplicationsForPlanChange(
-            tenantId, 
-            planId,
-            { skipIfRecentlyUpdated: true } // Enable idempotency
-          );
-          console.log('✅ Organization applications updated for new plan');
-        } catch (orgAppError) {
-          console.error('❌ Failed to update organization applications:', orgAppError.message);
-          // Don't fail the checkout, but log for manual intervention
-        }
-          
-        subscriptionRecord = existingSubscription;
-      } else {
-        console.log('🆕 Creating new subscription for tenant:', tenantId);
-        
-        // Create new subscription with upgrade tracking
-        const [newSubscription] = await db.insert(subscriptions).values({
-          subscriptionId: uuidv4(),
-          tenantId,
-          plan: planId,
-          status: 'active',
-          stripeSubscriptionId: session.subscription,
-          stripeCustomerId: session.customer,
-          subscribedTools: plan.tools,
-          usageLimits: plan.limits,
-          monthlyPrice: plan.monthlyPrice,
-          yearlyPrice: plan.yearlyPrice,
-          billingCycle: billingCycle,
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: new Date(Date.now() + (billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000),
-          hasEverUpgraded: true, // New subscription is automatically an upgrade
-          firstUpgradeAt: new Date(),
-          trialToggledOff: true, // Disable trial restrictions for new paid subscriptions
-          isTrialUser: false,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        }).returning();
-        
-        subscriptionRecord = newSubscription;
-      }
 
-      // Don't create payment record here - it will be created by handlePaymentSucceeded webhook
-      // This prevents duplicate payment records for the same transaction
-      console.log('💰 Checkout completed - payment will be recorded by invoice.payment_succeeded webhook');
-
-      // Update tenant with Stripe customer ID if not already set
-      const [updatedTenant] = await db
-        .update(tenants)
-        .set({
-          stripeCustomerId: session.customer,
-          updatedAt: new Date()
-        })
-        .where(eq(tenants.tenantId, tenantId))
-        .returning();
-        
-      if (!updatedTenant) {
-        console.warn('⚠️ Failed to update tenant with Stripe customer ID:', tenantId);
-      } else {
-        console.log('✅ Tenant updated with Stripe customer ID:', updatedTenant.tenantId);
-      }
-
-      console.log('✅ Checkout completed successfully for tenant:', tenantId, 'plan:', planId);
+        console.log('✅ Checkout completed successfully for tenant:', tenantId, 'plan:', planId);
       }
 
     } catch (error) {
@@ -1653,9 +1731,9 @@ export class SubscriptionService {
         currency: invoice.currency,
         status: invoice.status
       });
-      
+
       const subscriptionId = invoice.subscription;
-      
+
       if (subscriptionId) {
         // Get subscription to find tenantId
         const [subscription] = await db
@@ -1666,17 +1744,17 @@ export class SubscriptionService {
 
         if (!subscription) {
           console.error('❌ Subscription not found for payment:', subscriptionId);
-          
+
           // Try to find by customer ID as fallback
           const [fallbackSubscription] = await db
             .select()
             .from(subscriptions)
             .where(eq(subscriptions.stripeCustomerId, invoice.customer))
             .limit(1);
-            
+
           if (fallbackSubscription) {
             console.log('✅ Found subscription by customer ID:', invoice.customer);
-            
+
             // Update with the subscription ID
             await db
               .update(subscriptions)
@@ -1686,14 +1764,14 @@ export class SubscriptionService {
                 updatedAt: new Date()
               })
               .where(eq(subscriptions.subscriptionId, fallbackSubscription.subscriptionId));
-              
+
             // Trigger role upgrade for the new plan
             if (invoice.lines?.data?.[0]?.price?.id) {
               const planId = await this.getPlanIdFromPriceId(invoice.lines.data[0].price.id);
               if (planId) {
                 console.log(`🔄 Triggering role upgrade for plan: ${planId}`);
                 await this.updateAdministratorRolesForPlan(fallbackSubscription.tenantId, planId);
-                
+
                 // Also update organization applications
                 try {
                   const { OnboardingOrganizationSetupService } = await import('./onboarding-organization-setup.js');
@@ -1704,10 +1782,10 @@ export class SubscriptionService {
                 }
               }
             }
-            
+
             return;
           }
-          
+
           throw new Error(`Subscription not found: ${subscriptionId}`);
         }
 
@@ -1719,23 +1797,23 @@ export class SubscriptionService {
             updatedAt: new Date()
           })
           .where(eq(subscriptions.stripeSubscriptionId, subscriptionId));
-          
+
         // Trigger role upgrade for the active plan
         if (invoice.lines?.data?.[0]?.price?.id) {
           const planId = await this.getPlanIdFromPriceId(invoice.lines.data[0].price.id);
           if (planId) {
             console.log(`🔄 Triggering role upgrade for plan: ${planId}`);
             await this.updateAdministratorRolesForPlan(subscription.tenantId, planId);
-            
+
             // Also update organization applications (with idempotency)
             try {
               const { OnboardingOrganizationSetupService } = await import('./onboarding-organization-setup.js');
               const result = await OnboardingOrganizationSetupService.updateOrganizationApplicationsForPlanChange(
-                subscription.tenantId, 
+                subscription.tenantId,
                 planId,
                 { skipIfRecentlyUpdated: true } // Enable idempotency
               );
-              
+
               if (result.skipped) {
                 console.log('⏭️ Organization applications update skipped - recently updated');
               } else {
@@ -1751,29 +1829,29 @@ export class SubscriptionService {
         await this.createPaymentRecord({
           tenantId: subscription.tenantId,
           subscriptionId: subscription.subscriptionId,
-        stripePaymentIntentId: invoice.payment_intent,
-        stripeInvoiceId: invoice.id,
+          stripePaymentIntentId: invoice.payment_intent,
+          stripeInvoiceId: invoice.id,
           stripeChargeId: invoice.charge,
           amount: invoice.amount_paid / 100, // Convert from cents
-        currency: invoice.currency.toUpperCase(),
-        status: 'succeeded',
+          currency: invoice.currency.toUpperCase(),
+          status: 'succeeded',
           paymentMethod: 'card',
           paymentType: 'subscription',
           billingReason: invoice.billing_reason,
           invoiceNumber: invoice.number,
           description: `Subscription payment for ${subscription.plan} plan`,
-          
+
           // Enhanced financial breakdown
           taxAmount: (invoice.tax || 0) / 100,
           processingFees: 0, // Stripe doesn't provide this in invoice, would need to calculate
           netAmount: (invoice.amount_paid - (invoice.tax || 0)) / 100,
-          
+
           // Payment method details (if available)
           paymentMethodDetails: invoice.payment_intent ? {} : {}, // Would need to fetch from payment_intent
-          
+
           // Risk assessment (if available)
           riskLevel: 'normal', // Would need to assess based on invoice details
-          
+
           // Comprehensive metadata
           metadata: {
             stripeCustomerId: invoice.customer,
@@ -1786,7 +1864,7 @@ export class SubscriptionService {
             nextPaymentAttempt: invoice.next_payment_attempt ? new Date(invoice.next_payment_attempt * 1000) : null
           },
           stripeRawData: invoice,
-          
+
           paidAt: new Date(invoice.status_transitions.paid_at * 1000)
         });
 
@@ -1812,13 +1890,13 @@ export class SubscriptionService {
         status: invoicePayment.status,
         payment_intent: invoicePayment.payment?.payment_intent
       });
-      
+
       // Get the invoice to find subscription and customer details
       if (!this.isStripeConfigured()) {
         console.log('⚠️ Stripe not configured - skipping invoice payment processing');
         return;
       }
-      
+
       try {
         const invoice = await stripe.invoices.retrieve(invoicePayment.invoice);
         console.log('📄 Retrieved invoice:', {
@@ -1827,13 +1905,13 @@ export class SubscriptionService {
           subscription: invoice.subscription,
           status: invoice.status
         });
-        
+
         // Process this like a regular invoice payment
         await this.handlePaymentSucceeded(invoice);
-        
+
       } catch (stripeError) {
         console.error('❌ Failed to retrieve invoice from Stripe:', stripeError);
-        
+
         // Fallback: try to find subscription by invoice payment details
         if (invoicePayment.payment?.payment_intent) {
           const [payment] = await db
@@ -1841,7 +1919,7 @@ export class SubscriptionService {
             .from(payments)
             .where(eq(payments.stripePaymentIntentId, invoicePayment.payment.payment_intent))
             .limit(1);
-            
+
           if (payment) {
             console.log('✅ Found payment record, updating status');
             await db
@@ -1855,7 +1933,7 @@ export class SubscriptionService {
           }
         }
       }
-      
+
     } catch (error) {
       console.error('Error handling invoice payment paid:', error);
       throw error;
@@ -1866,9 +1944,9 @@ export class SubscriptionService {
   static async handlePaymentFailed(invoice) {
     try {
       console.log('❌ Processing payment failed for invoice:', invoice.id);
-      
+
       const subscriptionId = invoice.subscription;
-      
+
       if (subscriptionId) {
         // Get subscription to find tenantId
         const [subscription] = await db
@@ -1882,9 +1960,9 @@ export class SubscriptionService {
           return;
         }
 
-      // Update subscription status
-      await db
-        .update(subscriptions)
+        // Update subscription status
+        await db
+          .update(subscriptions)
           .set({
             status: 'past_due',
             updatedAt: new Date()
@@ -1905,7 +1983,7 @@ export class SubscriptionService {
           billingReason: invoice.billing_reason,
           invoiceNumber: invoice.number,
           description: `Failed subscription payment for ${subscription.plan} plan`,
-          
+
           // Failure details
           metadata: {
             stripeCustomerId: invoice.customer,
@@ -1916,12 +1994,12 @@ export class SubscriptionService {
             billingReason: invoice.billing_reason
           },
           stripeRawData: invoice,
-          
+
           failedAt: new Date()
         });
 
         console.log('❌ Payment failed and recorded for tenant:', subscription.tenantId);
-        
+
         // Send payment failure notification email
         await EmailService.sendPaymentFailedNotification({
           tenantId: subscription.tenantId,
@@ -1941,7 +2019,7 @@ export class SubscriptionService {
   static async handleChargeDispute(dispute) {
     try {
       console.log('⚖️ Processing charge dispute:', dispute.id);
-      
+
       // Find the payment record
       const [payment] = await db
         .select()
@@ -2005,7 +2083,7 @@ export class SubscriptionService {
   static async handleRefund(refund) {
     try {
       console.log('💸 Processing refund:', refund.id);
-      
+
       // Find the original payment
       const [payment] = await db
         .select()
@@ -2022,15 +2100,15 @@ export class SubscriptionService {
       const isPartialRefund = refundAmount < parseFloat(payment.amount);
 
       // Update original payment record
-    await db
+      await db
         .update(payments)
-      .set({
+        .set({
           amountRefunded: refundAmount.toString(),
           status: isPartialRefund ? 'partially_refunded' : 'refunded',
           stripeRefundId: refund.id,
           isPartialRefund,
           refundedAt: new Date(refund.created * 1000),
-        updatedAt: new Date(),
+          updatedAt: new Date(),
           metadata: {
             ...payment.metadata,
             refund: {
@@ -2096,7 +2174,7 @@ export class SubscriptionService {
   static async handleSubscriptionCreated(subscription) {
     try {
       console.log('🆕 Processing subscription created:', subscription.id);
-      
+
       // Find existing subscription by customer ID
       const [existingSubscription] = await db
         .select()
@@ -2116,7 +2194,7 @@ export class SubscriptionService {
             updatedAt: new Date()
           })
           .where(eq(subscriptions.subscriptionId, existingSubscription.subscriptionId));
-        
+
         console.log('✅ Updated existing subscription with Stripe subscription ID');
       }
     } catch (error) {
@@ -2129,7 +2207,7 @@ export class SubscriptionService {
   static async handleChargeSucceeded(charge) {
     try {
       console.log('💳 Processing charge succeeded:', charge.id);
-      
+
       // Find subscription by customer
       const [subscription] = await db
         .select()
@@ -2202,7 +2280,7 @@ export class SubscriptionService {
           await db.execute(sql`SELECT set_config('app.tenant_id', ${tenantId}, false)`);
           await db.execute(sql`SELECT set_config('app.is_admin', 'true', false)`);
           console.log('✅ RLS context set for user lookup');
-          
+
           // Use raw SQL to avoid Drizzle schema issues
           const adminUsers = await db.execute(sql`
             SELECT user_id 
@@ -2212,7 +2290,7 @@ export class SubscriptionService {
             AND is_active = true
             LIMIT 1
           `);
-          
+
           if (adminUsers.length > 0) {
             finalUserId = adminUsers[0].user_id;
             console.log('✅ Found admin user:', finalUserId);
@@ -2226,7 +2304,7 @@ export class SubscriptionService {
               AND is_active = true
               LIMIT 1
             `);
-            
+
             if (anyUsers.length > 0) {
               finalUserId = anyUsers[0].user_id;
               console.log('✅ Found active user:', finalUserId);
@@ -2287,11 +2365,11 @@ export class SubscriptionService {
   // Handle subscription deleted webhook
   static async handleSubscriptionDeleted(subscription) {
     try {
-    await db
-      .update(subscriptions)
-      .set({
-        status: 'canceled',
-        canceledAt: new Date(),
+      await db
+        .update(subscriptions)
+        .set({
+          status: 'canceled',
+          canceledAt: new Date(),
           updatedAt: new Date()
         })
         .where(eq(subscriptions.stripeSubscriptionId, subscription.id));
@@ -2310,27 +2388,27 @@ export class SubscriptionService {
         paymentId: uuidv4(),
         tenantId: paymentData.tenantId,
         subscriptionId: paymentData.subscriptionId,
-        
+
         // Stripe IDs
         stripePaymentIntentId: paymentData.stripePaymentIntentId,
         stripeInvoiceId: paymentData.stripeInvoiceId,
         stripeChargeId: paymentData.stripeChargeId,
-        
+
         // Payment amounts
         amount: paymentData.amount.toString(),
         currency: paymentData.currency?.toUpperCase() || 'USD',
         status: paymentData.status,
-        
+
         // Payment details
         paymentMethod: paymentData.paymentMethod || 'card',
         paymentMethodDetails: paymentData.paymentMethodDetails || {},
         paymentType: paymentData.paymentType || 'subscription',
         billingReason: paymentData.billingReason,
-        
+
         // Invoice info
         invoiceNumber: paymentData.invoiceNumber,
         description: paymentData.description,
-        
+
         // Financial breakdown
         prorationAmount: paymentData.prorationAmount?.toString() || '0',
         taxAmount: paymentData.taxAmount?.toString() || '0',
@@ -2338,23 +2416,23 @@ export class SubscriptionService {
         taxRegion: paymentData.taxRegion,
         processingFees: paymentData.processingFees?.toString() || '0',
         netAmount: paymentData.netAmount?.toString(),
-        
+
         // Risk assessment
         riskLevel: paymentData.riskLevel || 'normal',
         riskScore: paymentData.riskScore,
         fraudDetails: paymentData.fraudDetails || {},
-        
+
         // Metadata
         metadata: paymentData.metadata || {},
         stripeRawData: paymentData.stripeRawData || {},
-        
+
         // Timestamps
         paidAt: paymentData.paidAt || new Date(),
         createdAt: new Date()
       };
 
       const [payment] = await db.insert(payments).values(paymentRecord).returning();
-      
+
       console.log('✅ Payment record created:', payment.paymentId);
       return payment;
     } catch (error) {
@@ -2481,29 +2559,29 @@ export class SubscriptionService {
 
       if (refundRequested && currentSubscription.stripeSubscriptionId) {
         // Calculate prorated refund amount
-        const remainingDays = Math.max(0, 
+        const remainingDays = Math.max(0,
           Math.ceil((new Date(currentSubscription.currentPeriodEnd) - new Date()) / (1000 * 60 * 60 * 24))
         );
         const totalDays = currentSubscription.billingCycle === 'yearly' ? 365 : 30;
         const prorationRatio = remainingDays / totalDays;
-        
-        const currentAmount = currentSubscription.billingCycle === 'yearly' 
+
+        const currentAmount = currentSubscription.billingCycle === 'yearly'
           ? parseFloat(currentSubscription.yearlyPrice || 0)
           : parseFloat(currentSubscription.monthlyPrice || 0);
-          
+
         prorationAmount = currentAmount * prorationRatio;
         refundAmount = prorationAmount;
       } else if (refundRequested && !currentSubscription.stripeSubscriptionId) {
         // For non-Stripe subscriptions, calculate based on last payment
         const [lastPayment] = await db
-      .select()
-      .from(payments)
+          .select()
+          .from(payments)
           .where(and(
             eq(payments.tenantId, tenantId),
             eq(payments.status, 'succeeded'),
             eq(payments.paymentType, 'subscription')
           ))
-      .orderBy(desc(payments.createdAt))
+          .orderBy(desc(payments.createdAt))
           .limit(1);
 
         if (lastPayment) {
@@ -2512,7 +2590,7 @@ export class SubscriptionService {
           const totalPeriod = currentSubscription.billingCycle === 'yearly' ? 365 : 30;
           const daysSincePayment = Math.ceil((new Date() - paymentDate) / (1000 * 60 * 60 * 24));
           const remainingDays = Math.max(0, totalPeriod - daysSincePayment);
-          
+
           if (remainingDays > 0) {
             const prorationRatio = remainingDays / totalPeriod;
             refundAmount = parseFloat(lastPayment.amount) * prorationRatio;
@@ -2534,7 +2612,7 @@ export class SubscriptionService {
         // Update Stripe subscription to new plan
         const plans = await this.getAvailablePlans();
         const targetPlan = plans.find(p => p.id === newPlan);
-        
+
         if (targetPlan && targetPlan.stripePriceId) {
           await stripe.subscriptions.update(currentSubscription.stripeSubscriptionId, {
             items: [{
@@ -2566,7 +2644,7 @@ export class SubscriptionService {
 
       // Update administrator roles for the downgraded plan
       await this.updateAdministratorRolesForPlan(tenantId, newPlan);
-      
+
       // Update organization applications for the downgraded plan
       try {
         const { OnboardingOrganizationSetupService } = await import('./onboarding-organization-setup.js');
@@ -2576,7 +2654,7 @@ export class SubscriptionService {
         console.error('❌ Failed to update organization applications:', orgAppError.message);
         // Don't fail the downgrade, but log for manual intervention
       }
-      
+
       // Get the updated subscription
       const updatedSubscription = await this.getCurrentSubscription(tenantId);
 
@@ -2623,7 +2701,7 @@ export class SubscriptionService {
         // Find the most recent payment to refund
         const [recentPayment] = await db
           .select()
-      .from(payments)
+          .from(payments)
           .where(and(
             eq(payments.tenantId, tenantId),
             eq(payments.status, 'succeeded'),
@@ -2697,7 +2775,7 @@ export class SubscriptionService {
 
     const fromFeatures = planFeatures[fromPlan] || [];
     const toFeatures = planFeatures[toPlan] || [];
-    
+
     return fromFeatures.filter(feature => !toFeatures.includes(feature));
   }
 
@@ -2745,7 +2823,7 @@ export class SubscriptionService {
 
     for (const subscription of expiredTrials) {
       console.log(`🚨 Trial expired for tenant: ${subscription.tenantId}`);
-      
+
       // Suspend the subscription
       await db
         .update(subscriptions)
@@ -2775,7 +2853,7 @@ export class SubscriptionService {
   static async sendTrialReminders() {
     // Find trials expiring in 3 days
     const threeDaysFromNow = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-    
+
     const expiringTrials = await db
       .select()
       .from(subscriptions)
@@ -2789,9 +2867,9 @@ export class SubscriptionService {
       const daysRemaining = Math.ceil(
         (new Date(subscription.trialEnd) - new Date()) / (1000 * 60 * 60 * 24)
       );
-      
+
       console.log(`📧 Sending ${daysRemaining}-day trial reminder to tenant: ${subscription.tenantId}`);
-      
+
       // Record trial reminder event (NOT as payment)
       await SubscriptionService.recordTrialEvent(subscription.tenantId, subscription.subscriptionId, 'reminder_sent', {
         reminderType: 'trial_expiring',

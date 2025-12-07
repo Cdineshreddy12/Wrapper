@@ -541,8 +541,14 @@ export const StackedCard: React.FC<CardProps> = ({
                 <span className="text-2xl font-bold text-slate-900">{app.stats[0].value}</span>
                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{app.stats[0].label}</span>
               </div>
-              <button className={`flex items-center justify-center px-5 py-2.5 rounded-xl bg-slate-900 text-white hover:bg-${app.color}-600 transition-colors font-semibold text-sm group`}>
-                View Demo <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.location.href = `/products/${app.id}`;
+                }}
+                className={`flex items-center justify-center px-5 py-2.5 rounded-xl bg-slate-900 text-white hover:bg-${app.color}-600 transition-colors font-semibold text-sm group`}
+              >
+                Know More <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
             </div>
           </motion.div>

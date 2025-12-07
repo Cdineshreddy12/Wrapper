@@ -14,7 +14,7 @@ const DISABLE_ALL_LOGGING = process.env.DISABLE_LOGGING === 'true' || 'true' ===
 
 // Optionally suppress all console output (uncomment if you want to disable console.log too)
 if (DISABLE_ALL_LOGGING && process.env.SUPPRESS_CONSOLE === 'true') {
-  const noop = () => {};
+  const noop = () => { };
   console.log = noop;
   console.info = noop;
   console.warn = noop;
@@ -112,7 +112,7 @@ if (!DISABLE_ALL_LOGGING) {
   if (enhancedLogger && enhancedLogger.winstonLogger) {
     // Override Fastify's log methods to also send to Elasticsearch
     const originalLog = fastify.log;
-    
+
     fastify.addHook('onRequest', async (request, reply) => {
       // Log incoming requests to Elasticsearch
       enhancedLogger.winstonLogger.info('Incoming request', {
@@ -156,7 +156,7 @@ if (!DISABLE_ALL_LOGGING) {
         env: process.env.NODE_ENV || 'development'
       });
     });
-    
+
     console.log('✅ Fastify logs will be sent to Elasticsearch');
   }
 } else {
@@ -167,7 +167,7 @@ if (!DISABLE_ALL_LOGGING) {
 // Usage: logToES('info', 'Important message', { key: 'value' })
 global.logToES = (level, message, data = {}) => {
   if (DISABLE_ALL_LOGGING) return; // Skip logging if disabled
-  
+
   console.log(`[${level.toUpperCase()}] ${message}`, data);
   if (enhancedLogger && enhancedLogger.winstonLogger) {
     const logData = {
@@ -176,7 +176,7 @@ global.logToES = (level, message, data = {}) => {
       service: process.env.SERVICE_NAME || 'wrapper-backend',
       env: process.env.NODE_ENV || 'development'
     };
-    
+
     switch (level.toLowerCase()) {
       case 'error':
         enhancedLogger.winstonLogger.error(message, logData);
@@ -206,10 +206,10 @@ fastify.addContentTypeParser(['application/json'], { parseAs: 'buffer' }, functi
     done(null, body);
     return;
   }
-  
+
   try {
     const json = JSON.parse(body);
-    
+
     // Handle double-stringified restrictions field issue
     if (json.restrictions && typeof json.restrictions === 'string') {
       try {
@@ -220,7 +220,7 @@ fastify.addContentTypeParser(['application/json'], { parseAs: 'buffer' }, functi
         console.log('⚠️ Could not parse restrictions string, keeping as is for validation');
       }
     }
-    
+
     done(null, json);
   } catch (err) {
     err.statusCode = 400;
@@ -238,16 +238,42 @@ async function registerPlugins() {
   // CORS
   await fastify.register(cors, {
     // Allow localhost for dev and *.zopkit.com for production
-    origin: [
-      process.env.FRONTEND_URL,
-      /localhost:3001$/, // Frontend (dev)
-      /localhost:3000$/, // Backend (dev)
-      /localhost:5173$/, // CRM app (dev)
-      /localhost:5174$/, // Alt port (dev)
-      /localhost:3002$/, // Alt port (dev)
-      /^https?:\/\/[a-z0-9-]+\.zopkit\.com$/i, // Any subdomain of zopkit.com (prod)
-      /^https?:\/\/zopkit\.com$/i // Root domain if used
-    ],
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      // Always allow localhost origins (for development)
+      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        console.log(`✅ CORS allowed origin: ${origin}`);
+        callback(null, true);
+        return;
+      }
+
+      // Check against allowed production origins
+      const allowedOrigins = [
+        process.env.FRONTEND_URL,
+        /^https?:\/\/[a-z0-9-]+\.zopkit\.com$/i, // Any subdomain of zopkit.com (prod)
+        /^https?:\/\/zopkit\.com$/i // Root domain if used
+      ];
+
+      const isAllowed = allowedOrigins.some(allowed => {
+        if (typeof allowed === 'string') {
+          return origin === allowed;
+        }
+        return allowed.test(origin);
+      });
+
+      if (isAllowed) {
+        console.log(`✅ CORS allowed origin: ${origin}`);
+        callback(null, true);
+      } else {
+        console.warn(`⚠️ CORS blocked origin: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true, // Required so browser can send cookies
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: [
@@ -378,7 +404,7 @@ async function registerPlugins() {
 
   // Usage tracking plugin
   await fastify.register(usageTrackingPlugin);
-  
+
   // Cache metrics plugin
   await fastify.register(fastifyCacheMetrics);
 }
@@ -439,8 +465,8 @@ async function registerMiddleware() {
 async function registerRoutes() {
   // Health check
   fastify.get('/health', async (request, reply) => {
-    return { 
-      status: 'ok', 
+    return {
+      status: 'ok',
       timestamp: new Date().toISOString(),
       version: '1.0.0',
       environment: process.env.NODE_ENV,
@@ -457,7 +483,7 @@ async function registerRoutes() {
         prefix: route.prefix
       });
     });
-    
+
     return {
       success: true,
       message: 'Route debugging info',
@@ -486,7 +512,7 @@ async function registerRoutes() {
   await fastify.register(tenantRoutes, { prefix: '/api/tenants' });
   await fastify.register(userRoutes, { prefix: '/api/users' });
   await fastify.register(subscriptionRoutes, { prefix: '/api/subscriptions' });
-  
+
   // Handle double /api/api/ prefix issue (register routes with both prefixes)
   // This happens when frontend API base URL already includes /api
 
@@ -609,16 +635,16 @@ async function registerRoutes() {
   // Redirect root /auth to /api/auth/auth for CRM compatibility
   fastify.get('/auth', async (request, reply) => {
     const { app_code, redirect_url, ...otherParams } = request.query;
-    
-    console.log('🎯 ROOT /auth ENDPOINT HIT!', { 
-      app_code, 
-      redirect_url, 
+
+    console.log('🎯 ROOT /auth ENDPOINT HIT!', {
+      app_code,
+      redirect_url,
       method: request.method,
       url: request.url,
       fullUrl: request.protocol + '://' + request.hostname + request.url,
       headers: request.headers['user-agent']
     });
-    
+
     // Instead of redirecting, let's handle it directly here
     // This avoids redirect loops and ensures proper handling
     try {
@@ -651,13 +677,13 @@ async function registerRoutes() {
         redirect_url,
         timestamp: Date.now()
       };
-      
+
       console.log('🔍 Generating Kinde auth URL with:', {
         redirectUri,
         stateData,
         fullState: JSON.stringify(stateData)
       });
-      
+
       const kindeAuthUrl = kindeService.default.generateSocialLoginUrl({
         redirectUri,
         state: JSON.stringify(stateData),
@@ -680,27 +706,27 @@ async function registerRoutes() {
   // Test endpoint for CRM authentication (bypasses Kinde for testing)
   fastify.get('/test-auth', async (request, reply) => {
     const { app_code, redirect_url } = request.query;
-    
+
     console.log('🧪 Test auth endpoint called:', { app_code, redirect_url });
-    
+
     if (!app_code || !redirect_url) {
       return reply.code(400).send({
         error: 'Missing parameters',
         message: 'app_code and redirect_url are required'
       });
     }
-    
+
     try {
       // Create a simple test token without database queries
       const jwt = await import('jsonwebtoken');
-      
+
       const testTokenPayload = {
         iss: 'unified-wrapper-sso',
         sub: 'test-user-123',
         aud: app_code,
         iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + (8 * 60 * 60), // 8 hours
-        
+
         // Test user data
         user: {
           id: 'test-user-123',
@@ -710,7 +736,7 @@ async function registerRoutes() {
           isAdmin: true,
           isActive: true
         },
-        
+
         // Test organization data
         organization: {
           id: 'test-org-123',
@@ -718,7 +744,7 @@ async function registerRoutes() {
           subdomain: 'test',
           kindeOrgId: 'test-org'
         },
-        
+
         // Test permissions
         permissions: {
           crm: {
@@ -727,7 +753,7 @@ async function registerRoutes() {
             reports: ['read']
           }
         },
-        
+
         // Test subscription
         subscription: {
           tier: 'premium',
@@ -735,29 +761,29 @@ async function registerRoutes() {
           subscribedFeatures: ['crm', 'analytics', 'billing']
         }
       };
-      
+
       const testToken = jwt.default.sign(
         testTokenPayload,
         process.env.JWT_SECRET || 'test-secret-key',
         { algorithm: 'HS256' }
       );
-      
+
       const expiresAt = new Date(Date.now() + (8 * 60 * 60 * 1000)); // 8 hours from now
-      
+
       const targetUrl = new URL(redirect_url);
       targetUrl.searchParams.set('token', testToken);
       targetUrl.searchParams.set('expires_at', expiresAt.toISOString());
       targetUrl.searchParams.set('app_code', app_code);
       targetUrl.searchParams.set('test_mode', 'true');
-      
+
       console.log('🧪 Test auth: Redirecting to CRM with test token');
       console.log('🔍 Target URL:', targetUrl.toString());
       console.log('🔍 Token length:', testToken.length);
       console.log('🔍 App code:', app_code);
       console.log('🔍 Test mode:', 'true');
-      
+
       return reply.redirect(targetUrl.toString());
-      
+
     } catch (error) {
       console.error('❌ Test auth error:', error);
       return reply.code(500).send({
@@ -770,21 +796,21 @@ async function registerRoutes() {
   // Redirect root /logout to /api/auth/logout for CRM compatibility
   fastify.get('/logout', async (request, reply) => {
     const { app_code, redirect_url, ...otherParams } = request.query;
-    
+
     console.log('🔍 Root /logout redirect:', { app_code, redirect_url });
-    
+
     // Build the redirect URL
     const redirectUrl = new URL('/api/auth/logout', `${process.env.BACKEND_URL || 'http://localhost:3000'}`);
-    
+
     // Add all query parameters
     if (app_code) redirectUrl.searchParams.set('app_code', app_code);
     if (redirect_url) redirectUrl.searchParams.set('redirect_url', redirect_url);
-    
+
     // Add any other parameters
     Object.keys(otherParams).forEach(key => {
       redirectUrl.searchParams.set(key, otherParams[key]);
     });
-    
+
     console.log('🚀 Redirecting to:', redirectUrl.toString());
     return reply.redirect(redirectUrl.toString());
   });
@@ -841,9 +867,9 @@ async function start() {
     // Start the server
     const port = parseInt(process.env.PORT || '3000');
     const host = process.env.HOST || '0.0.0.0';
-    
-    const server =     await fastify.listen({ port, host });
-    
+
+    const server = await fastify.listen({ port, host });
+
     // Initialize WebSocket server for real-time notifications
     try {
       const { initWebSocketServer } = await import('./utils/websocket-server.js');
@@ -854,11 +880,11 @@ async function start() {
       console.warn('⚠️ Failed to initialize WebSocket server:', error.message);
       // Don't fail startup if WebSocket fails
     }
-    
+
     console.log(`✅ Server listening on http://${host}:${port}`);
     console.log(`📚 API Documentation: http://${host}:${port}/docs`);
     console.log(`🏥 Health Check: http://${host}:${port}/health`);
-    
+
     // TEST: Force a log to Elasticsearch
     try {
       const enhancedLogger = (await import('./utils/logger-enhanced.js')).default;
@@ -879,10 +905,10 @@ async function start() {
         console.warn('   Check ELASTICSEARCH_URL environment variable');
       }
     }
-    
+
     // // Initialize trial monitoring system after app setup
     // await initializeTrialSystem();
-    
+
     // Initialize Redis connection for sync services
     try {
       const redisManager = (await import('./utils/redis.js')).default;
@@ -900,11 +926,11 @@ async function start() {
       console.error('Redis error details:', error.message);
       // Don't fail startup for Redis issues, but log prominently
     }
-    
+
     // Setup graceful shutdown
     process.on('SIGTERM', gracefulShutdown);
     process.on('SIGINT', gracefulShutdown);
-    
+
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
@@ -932,10 +958,10 @@ if (import.meta.url === `file://${process.argv[1]}` || process.env.NODE_ENV !== 
 // export async function initializeTrialSystem() {
 //   try {
 //     console.log('🚀 Initializing trial monitoring system...');
-    
+
 //     // Start trial monitoring
 //     trialManager.startTrialMonitoring();
-    
+
 //     // Verify it's running
 //     const status = trialManager.getMonitoringStatus();
 //     if (status.isRunning) {
@@ -944,7 +970,7 @@ if (import.meta.url === `file://${process.argv[1]}` || process.env.NODE_ENV !== 
 //     } else {
 //       console.error('❌ Failed to initialize trial monitoring system');
 //     }
-    
+
 //   } catch (error) {
 //     console.error('❌ Error initializing trial system:', error);
 //   }

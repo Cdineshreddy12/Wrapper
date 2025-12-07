@@ -32,6 +32,7 @@ import { OnboardingPageGuard } from '@/components/auth/OnboardingPageGuard'
 
 // Pages
 import Landing from '@/pages/Landing'
+import ProductPage from '@/pages/ProductPage'
 import { Login } from '@/pages/Login'
 import { AuthCallback } from '@/pages/AuthCallback'
 import { InviteAccept } from '@/pages/InviteAccept'
@@ -108,13 +109,19 @@ function AppContent() {
       <TrialBannerSpacer /> */}
 
 
-        <Routes>
-          {/* Public Routes */}
-          <Route
-            path="/landing"
-            element={
+      <Routes>
+        {/* Public Routes */}
+        <Route
+          path="/landing"
+          element={
             authState.isAuthenticated ? <Navigate to="/" replace /> : <Landing />
           }
+        />
+
+        {/* Product Pages - Public */}
+        <Route
+          path="/products/:productId"
+          element={<ProductPage />}
         />
 
         {/* Root redirect based on auth status */}
@@ -123,7 +130,7 @@ function AppContent() {
           element={<RootRedirect />}
         />
 
-       
+
 
         <Route
           path="/onboarding"
@@ -170,35 +177,35 @@ function AppContent() {
         />
 
         {/* Business Suite Dashboard Route */}
-        <Route 
-          path="/suite" 
+        <Route
+          path="/suite"
           element={
             <ProtectedRoute>
               <SuiteDashboard />
             </ProtectedRoute>
-          } 
+          }
         />
-        
 
-        
 
-        
 
-        
 
-        
 
-        
 
-        
 
-        
 
-        
 
-        
 
-        
+
+
+
+
+
+
+
+
+
+
+
         {/* Protected dashboard routes with onboarding guard */}
         <Route
           path="/dashboard"
@@ -255,19 +262,19 @@ function AppContent() {
           <Route path="settings" element={<Settings />} />
         </Route> */}
 
-          {/* Catch all - show NotFound page for invalid routes */}
-          <Route 
-            path="*" 
-            element={
+        {/* Catch all - show NotFound page for invalid routes */}
+        <Route
+          path="*"
+          element={
             authState.isLoading ? (
               <LoadingScreen />
             ) : (
               <NotFound />
             )
-            } 
-          />
-        </Routes>
-      </div>
+          }
+        />
+      </Routes>
+    </div>
   )
 }
 
@@ -292,7 +299,7 @@ function RootRedirect() {
       // Check if this is a CRM authentication flow (from Kinde callback)
       const urlParams = new URLSearchParams(window.location.search);
       const stateParam = urlParams.get('state');
-      
+
       if (stateParam && isAuthenticated) {
         try {
           const stateData = JSON.parse(stateParam);
@@ -301,7 +308,7 @@ function RootRedirect() {
             // Get the token from Kinde
             const { getToken } = useKindeAuth();
             const token = await getToken();
-            
+
             if (token) {
               // Generate app-specific token using backend
               const backendUrl = 'https://zopkit.com/api';
@@ -313,7 +320,7 @@ function RootRedirect() {
 
               if (response.ok) {
                 const validation = await response.json();
-                
+
                 if (validation.success) {
                   // Generate app-specific token
                   const appTokenResponse = await fetch(`${backendUrl}/auth/generate-app-token`, {
@@ -324,7 +331,7 @@ function RootRedirect() {
 
                   if (appTokenResponse.ok) {
                     const appTokenData = await appTokenResponse.json();
-                    
+
                     // Redirect to CRM with token
                     const redirectUrl = new URL(stateData.redirect_url);
                     redirectUrl.searchParams.set('token', appTokenData.token);
@@ -388,21 +395,21 @@ function RootRedirect() {
 
   // Check if this is an invited user (they should never need onboarding)
   const isInvitedUser = onboardingStatus.authStatus?.userType === 'INVITED_USER' ||
-                        onboardingStatus.authStatus?.isInvitedUser === true ||
-                        onboardingStatus.authStatus?.onboardingCompleted === true
+    onboardingStatus.authStatus?.isInvitedUser === true ||
+    onboardingStatus.authStatus?.onboardingCompleted === true
 
   // Check if there's a pending invitation (user should complete invitation flow first)
   const hasPendingInvitation = localStorage.getItem('pendingInvitationToken')
-  
+
   if (needsOnboarding && !isInvitedUser && !hasPendingInvitation) {
     return <Navigate to="/onboarding" replace />
   }
-  
+
   // INVITED USERS: Always go to dashboard (they skip onboarding)
   if (isInvitedUser) {
     return <Navigate to="/dashboard" replace />
   }
-  
+
   // If there's a pending invitation, redirect to invitation acceptance
   if (hasPendingInvitation) {
     const token = localStorage.getItem('pendingInvitationToken')

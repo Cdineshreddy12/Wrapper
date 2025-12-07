@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -6,12 +6,25 @@ import { StackedCardsSection, DemoSection, TrustIndicators } from '@/components/
 import EcosystemDemo from './EcosystemDemo'
 import { VisualHub } from '@/components/landing/VisualHub'
 import { DynamicIcon } from '@/components/landing/Icons'
-import { ArrowRight, Play, Menu, X } from 'lucide-react'
+import { ArrowRight, Play } from 'lucide-react'
 import api from '@/lib/api'
 import { Product } from '@/types'
 
 import { WorkflowVisualizer } from '@/components/landing/WorkflowVisualizer'
 import { products } from '@/data/content'
+
+// Import the new resizable navbar components
+import {
+  Navbar,
+  NavBody,
+  NavItems,
+  MobileNav,
+  NavbarLogo,
+  NavbarButton,
+  MobileNavHeader,
+  MobileNavToggle,
+  MobileNavMenu,
+} from "@/components/ui/resizable-navbar"
 
 // Removed local products definition
 
@@ -23,7 +36,11 @@ const Landing: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [showDemo, setShowDemo] = useState(false)
   const [activeProduct, setActiveProduct] = useState<Product>(products[0])
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+
+  // Refs for auto-scrolling
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const productRefs = useRef<Map<string | number, HTMLButtonElement>>(new Map())
 
   // Check authentication status quietly in background
   useEffect(() => {
@@ -62,6 +79,27 @@ const Landing: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Auto-scroll to active product
+  useEffect(() => {
+    const activeButton = productRefs.current.get(activeProduct.id);
+    const scrollContainer = scrollContainerRef.current;
+
+    if (activeButton && scrollContainer) {
+      // Calculate the position to scroll to center the active button
+      const containerWidth = scrollContainer.offsetWidth;
+      const buttonLeft = activeButton.offsetLeft;
+      const buttonWidth = activeButton.offsetWidth;
+
+      // Center the button in the container
+      const scrollPosition = buttonLeft - (containerWidth / 2) + (buttonWidth / 2);
+
+      scrollContainer.scrollTo({
+        left: scrollPosition,
+        behavior: 'smooth'
+      });
+    }
+  }, [activeProduct]);
+
   const handleLogin = async () => {
     setIsLoading(true)
     try {
@@ -73,7 +111,13 @@ const Landing: React.FC = () => {
     }
   }
 
-
+  const navItems = [
+    { name: "Products", link: "/products/affiliate-connect" },
+    { name: "Solutions", link: "#solutions" },
+    { name: "Workflows", link: "#workflows" },
+    { name: "Pricing", link: "#pricing" },
+    { name: "Resources", link: "#resources" },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 selection:bg-blue-100 selection:text-blue-900 font-sans overflow-x-hidden relative">
@@ -96,69 +140,84 @@ const Landing: React.FC = () => {
         />
       </div>
 
-      {/* Navigation */}
-      <nav className="fixed w-full top-0 z-50 border-b border-slate-200 bg-white/70 backdrop-blur-xl supports-[backdrop-filter]:bg-white/70">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3 group cursor-pointer">
-            <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${activeProduct.gradient} flex items-center justify-center shadow-lg transition-all duration-500 group-hover:rotate-12`}>
-              <DynamicIcon name={activeProduct.iconName} className="text-white w-5 h-5" />
-            </div>
-            <span className="font-bold text-xl tracking-tight text-slate-900 group-hover:text-slate-700 transition-colors">Zopkit</span>
+      {/* Resizable Navbar */}
+      <Navbar>
+        {/* Desktop Navigation */}
+        <NavBody>
+          <NavbarLogo />
+          <NavItems items={navItems} />
+          <div className="flex items-center gap-4">
+            <NavbarButton
+              variant="secondary"
+              onClick={handleLogin}
+              disabled={isLoading}
+              as="button"
+              className='rounded-xl bg-black '
+            >
+              {isLoading ? 'Loading...' : 'Sign In'}
+            </NavbarButton>
+            <NavbarButton
+              variant="dark"
+              onClick={() => setShowDemo(true)}
+              as="button"
+            >
+              Start Free Trial
+            </NavbarButton>
           </div>
+        </NavBody>
 
-          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-500">
-            {['Platform', 'Solutions', 'Products', 'Pricing'].map((item) => (
-              <a key={item} href="#" className="hover:text-slate-900 transition-colors relative group py-2">
-                {item}
-                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-600 to-cyan-500 transition-all duration-300 group-hover:w-full"></span>
+        {/* Mobile Navigation */}
+        <MobileNav>
+          <MobileNavHeader>
+            <NavbarLogo />
+            <MobileNavToggle
+              isOpen={isMobileMenuOpen}
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            />
+          </MobileNavHeader>
+
+          <MobileNavMenu
+            isOpen={isMobileMenuOpen}
+            onClose={() => setIsMobileMenuOpen(false)}
+          >
+            {navItems.map((item, idx) => (
+              <a
+                key={`mobile-link-${idx}`}
+                href={item.link}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="relative text-neutral-600 dark:text-neutral-300"
+              >
+                <span className="block">{item.name}</span>
               </a>
             ))}
-          </div>
-          <div className="hidden md:flex items-center gap-4">
-            <button className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors" onClick={handleLogin} disabled={isLoading}>
-              {isLoading ? 'Loading...' : 'Sign In'}
-            </button>
-            <button onClick={() => setShowDemo(true)} className={`
-               px-5 py-2.5 rounded-full text-sm font-bold text-white transition-all duration-300
-               bg-slate-900 hover:bg-slate-800
-               shadow-lg shadow-slate-200
-            `}>
-              Start Free Trial
-            </button>
-          </div>
-          <button className="md:hidden text-slate-900 p-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-            {mobileMenuOpen ? <X /> : <Menu />}
-          </button>
-        </div>
-      </nav>
-
-      {/* Mobile Menu */}
-      <AnimatePresence>
-        {mobileMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="md:hidden fixed top-20 left-0 right-0 bg-white/95 backdrop-blur-xl border-b border-slate-200 shadow-lg z-40"
-          >
-            <div className="px-4 py-6 space-y-4">
-              {['Platform', 'Solutions', 'Products', 'Pricing'].map((item) => (
-                <a key={item} href="#" className="block py-2 text-slate-600 hover:text-slate-900 transition-colors">
-                  {item}
-                </a>
-              ))}
-              <div className="pt-4 border-t border-slate-200 space-y-3">
-                <button className="w-full text-left py-2 text-slate-600 hover:text-slate-900 transition-colors" onClick={handleLogin} disabled={isLoading}>
-                  {isLoading ? 'Loading...' : 'Sign In'}
-                </button>
-                <button onClick={() => setShowDemo(true)} className="w-full bg-slate-900 text-white py-3 rounded-lg font-medium hover:bg-slate-800 transition-colors">
-                  Start Free Trial
-                </button>
-              </div>
+            <div className="flex w-full flex-col gap-4">
+              <NavbarButton
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  handleLogin();
+                }}
+                variant="primary"
+                className="w-full"
+                as="button"
+                disabled={isLoading}
+              >
+                {isLoading ? 'Loading...' : 'Sign In'}
+              </NavbarButton>
+              <NavbarButton
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setShowDemo(true);
+                }}
+                variant="dark"
+                className="w-full"
+                as="button"
+              >
+                Start Free Trial
+              </NavbarButton>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </MobileNavMenu>
+        </MobileNav>
+      </Navbar>
 
       {/* Main Content */}
       <main className="relative pt-24 lg:pt-36 pb-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 z-10 overflow-visible">
@@ -234,7 +293,7 @@ const Landing: React.FC = () => {
             {/* Product "Launchpad" Selector */}
             <div className="mt-6 pt-8 border-t border-slate-200">
               <div className="flex justify-between items-center mb-4">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Module</p>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Application</p>
                 <span className="text-xs text-slate-400">0{activeProduct.id} / {products.length}</span>
               </div>
 
@@ -255,17 +314,22 @@ const Landing: React.FC = () => {
                 }
               `}</style>
 
-              <div className="flex flex-row gap-3 overflow-x-auto gradient-scrollbar pb-4">
+              <div ref={scrollContainerRef} className="flex flex-row gap-3 overflow-x-auto gradient-scrollbar pb-4">
                 {products.map((product) => (
                   <button
                     key={product.id}
+                    ref={(el) => {
+                      if (el) productRefs.current.set(product.id, el);
+                    }}
                     onClick={() => setActiveProduct(product)}
+                    onDoubleClick={() => navigate(`/products/${product.id}`)}
                     className={`
-                        relative group flex flex-col items-start justify-between p-3 rounded-xl border transition-all duration-300 h-24 w-32 min-w-[128px] overflow-hidden text-left shrink-0
+                        relative group flex flex-col items-start justify-between p-3 rounded-xl border transition-all duration-300 h-28 w-32 min-w-[128px] overflow-hidden text-left shrink-0
                         ${activeProduct.id === product.id
                         ? 'bg-white border-slate-300 ring-2 ring-slate-200 shadow-lg'
                         : 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-md'}
                       `}
+                    title="Double-click to view details"
                   >
                     {/* Hover Glow */}
                     <div className={`absolute inset-0 bg-gradient-to-br ${product.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
@@ -283,9 +347,14 @@ const Landing: React.FC = () => {
                       )}
                     </div>
 
-                    <span className={`text-[11px] font-semibold tracking-wide mt-auto ${activeProduct.id === product.id ? 'text-slate-900' : 'text-slate-500 group-hover:text-slate-900'}`}>
-                      {product.name}
-                    </span>
+                    <div className="flex flex-col gap-1 mt-auto w-full">
+                      <span className={`text-[11px] font-semibold tracking-wide ${activeProduct.id === product.id ? 'text-slate-900' : 'text-slate-500 group-hover:text-slate-900'}`}>
+                        {product.name}
+                      </span>
+                      <span className="text-[9px] text-blue-600 dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                        Double-click for details →
+                      </span>
+                    </div>
                   </button>
                 ))}
               </div>

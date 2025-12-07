@@ -38,7 +38,7 @@ export const CustomProgressIndicator: React.FC<{ className?: string }> = ({ clas
       const value = formValues[field.id];
       return value !== null && value !== undefined && value !== '';
     }).length;
-    
+
     return {
       completed: completedFields,
       total: stepFields.length,
@@ -51,30 +51,34 @@ export const CustomProgressIndicator: React.FC<{ className?: string }> = ({ clas
       {/* Enhanced Header */}
       <div className="mb-8">
         <div className="flex items-center space-x-3 mb-4">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center shadow-lg">
-            <span className="text-white font-bold text-lg">G</span>
+          <div className="w-24 h-24 rounded-xl overflow-hidden shadow-lg">
+            <img
+              src="/src/public/Zopkit Simple Logo.jpg"
+              alt="Zopkit"
+              className="w-full h-full object-fit"
+            />
           </div>
           <div>
             <span className="text-xl font-bold text-gray-800">Zopkit</span>
             <p className="text-xs text-gray-500">Business Setup</p>
           </div>
         </div>
-        
+
         {/* Enhanced Progress Bar */}
         <div className="space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-sm font-medium text-gray-700">Progress</span>
             <span className="text-sm font-bold text-blue-600">{Math.round(fieldCompletionPercentage)}%</span>
           </div>
-          
+
           <div className="space-y-2">
             <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-              <div 
+              <div
                 className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${fieldCompletionPercentage}%` }}
               />
             </div>
-            
+
             <div className="flex justify-between text-xs text-gray-500">
               <span>Step {currentStep + 1} of {totalSteps}</span>
               <span>{completedFields} of {totalFields} fields</span>
@@ -128,7 +132,7 @@ export const CustomProgressIndicator: React.FC<{ className?: string }> = ({ clas
                       <span className="text-sm font-bold">{index + 1}</span>
                     )}
                   </div>
-                  
+
                   {/* Progress ring for current step */}
                   {isCurrent && !hasErrors && (
                     <div className="absolute -inset-1 rounded-full border-2 border-blue-300 animate-pulse" />
@@ -149,7 +153,7 @@ export const CustomProgressIndicator: React.FC<{ className?: string }> = ({ clas
                     >
                       {title.toUpperCase()}
                     </p>
-                    
+
                     {/* Status Icons */}
                     <div className="flex items-center space-x-1">
                       {isCurrent && !hasErrors && (
@@ -163,7 +167,7 @@ export const CustomProgressIndicator: React.FC<{ className?: string }> = ({ clas
                       )}
                     </div>
                   </div>
-                  
+
                   {/* Step completion details */}
                   <div className="mt-1">
                     <div className="flex items-center space-x-2">
@@ -172,7 +176,7 @@ export const CustomProgressIndicator: React.FC<{ className?: string }> = ({ clas
                         {stepStatus.completed}/{stepStatus.total} fields
                       </span>
                       <div className="flex-1 bg-gray-200 rounded-full h-1.5 ml-2">
-                        <div 
+                        <div
                           className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
                           style={{ width: `${stepStatus.percentage}%` }}
                         />
@@ -192,8 +196,8 @@ export const CustomProgressIndicator: React.FC<{ className?: string }> = ({ clas
                 <div className="ml-14 space-y-1">
                   <div className={cn(
                     'flex items-center space-x-2 py-2 px-3 rounded-lg text-xs font-medium',
-                    hasErrors 
-                      ? 'bg-red-100 text-red-700' 
+                    hasErrors
+                      ? 'bg-red-100 text-red-700'
                       : 'bg-blue-100 text-blue-700'
                   )}>
                     {hasErrors ? (
@@ -202,10 +206,10 @@ export const CustomProgressIndicator: React.FC<{ className?: string }> = ({ clas
                       <CheckCircle2 className="w-3 h-3" />
                     )}
                     <span>
-                      {hasErrors 
-                        ? 'Please fix errors to continue' 
-                        : isCurrentStepValid 
-                          ? 'Ready to proceed' 
+                      {hasErrors
+                        ? 'Please fix errors to continue'
+                        : isCurrentStepValid
+                          ? 'Ready to proceed'
                           : 'Complete required fields'
                       }
                     </span>

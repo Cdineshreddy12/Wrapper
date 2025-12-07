@@ -155,9 +155,7 @@ export const WorkflowVisualizer = () => {
                 <div className="w-full lg:w-72 bg-slate-50 border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col shrink-0">
                     <div className="p-6 border-b border-slate-200 bg-white">
                         <div className="flex items-center gap-3 text-slate-900 mb-1">
-                            <div className="p-2 bg-blue-600 rounded-lg shadow-md shadow-blue-200 text-white">
-                                <Zap className="w-5 h-5" />
-                            </div>
+                            <img src="/src/public/Zopkit Simple Logo.jpg" alt="Zopkit" className="w-12 h-12 rounded-xl overflow-hidden shadow-lg" />
                             <h3 className="font-bold text-base tracking-tight">Automation Hub</h3>
                         </div>
                         <div className="flex items-center gap-2 mt-4">
@@ -375,19 +373,7 @@ export const WorkflowVisualizer = () => {
 
                         {/* Business Metrics Panel */}
                         <div className="w-72 border-l border-slate-200 bg-white p-6 hidden md:flex flex-col gap-6">
-                            <div>
-                                <div className="flex items-center gap-2 mb-2">
-                                    <BarChart3 className="w-4 h-4 text-slate-400" />
-                                    <div className="text-xs text-slate-500 uppercase font-bold tracking-wider">Success Rate</div>
-                                </div>
-                                <div className="flex items-end gap-2">
-                                    <span className="text-3xl font-bold text-slate-900">99.9%</span>
-                                    <span className="text-xs text-emerald-600 mb-1 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">+0.2%</span>
-                                </div>
-                                <div className="h-1.5 w-full bg-slate-100 rounded-full mt-3 overflow-hidden">
-                                    <div className="h-full bg-emerald-500 w-[99%]"></div>
-                                </div>
-                            </div>
+                            
                             <div>
                                 <div className="flex items-center gap-2 mb-2">
                                     <Clock className="w-4 h-4 text-slate-400" />

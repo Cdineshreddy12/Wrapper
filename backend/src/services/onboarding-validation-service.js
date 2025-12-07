@@ -74,8 +74,135 @@ class OnboardingValidationService {
 
     const isAvailable = existingTenant.length === 0;
     console.log(isAvailable ? '✅ Subdomain available' : '❌ Subdomain taken:', subdomain);
-    
+
     return isAvailable;
+  }
+
+  /**
+   * Validate complete onboarding data
+   * @param {Object} data - Onboarding data to validate
+   * @param {string} type - Type of onboarding ('frontend' or 'enhanced')
+   * @returns {Object} Validation result with success status and data
+   */
+  static async validateCompleteOnboarding(data, type) {
+    console.log('🔍 Validating complete onboarding data for type:', type);
+
+    const errors = [];
+
+    // Common validations
+    if (!data.email && !data.adminEmail) {
+      errors.push({ field: 'email', message: 'Email is required' });
+    }
+
+    const email = data.email || data.adminEmail;
+
+    // Email format validation
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.push({ field: 'email', message: 'Invalid email format' });
+    }
+
+    // Type-specific validations
+    if (type === 'frontend') {
+      if (!data.legalCompanyName) {
+        errors.push({ field: 'legalCompanyName', message: 'Company name is required' });
+      }
+      if (!data.firstName) {
+        errors.push({ field: 'firstName', message: 'First name is required' });
+      }
+      if (!data.lastName) {
+        errors.push({ field: 'lastName', message: 'Last name is required' });
+      }
+      if (data.termsAccepted !== true) {
+        errors.push({ field: 'termsAccepted', message: 'You must accept the terms and conditions' });
+      }
+      if (data.hasGstin && !data.gstin) {
+        errors.push({ field: 'gstin', message: 'GSTIN is required when hasGstin is true' });
+      }
+    } else if (type === 'enhanced') {
+      if (!data.companyName) {
+        errors.push({ field: 'companyName', message: 'Company name is required' });
+      }
+      if (!data.subdomain) {
+        errors.push({ field: 'subdomain', message: 'Subdomain is required' });
+      }
+    }
+
+    // Check for duplicate email
+    if (email && errors.length === 0) {
+      try {
+        await this.checkForDuplicates({ adminEmail: email });
+      } catch (duplicateError) {
+        errors.push({ field: 'email', message: duplicateError.message });
+      }
+    }
+
+    // Generate subdomain if needed (for frontend type)
+    let generatedSubdomain = null;
+    if (type === 'frontend' && data.legalCompanyName && errors.length === 0) {
+      generatedSubdomain = await this.generateUniqueSubdomain(data.legalCompanyName);
+    }
+
+    if (errors.length > 0) {
+      console.log('❌ Validation failed:', errors);
+      return {
+        success: false,
+        errors
+      };
+    }
+
+    console.log('✅ Validation successful');
+    return {
+      success: true,
+      data: {
+        generatedSubdomain
+      }
+    };
+  }
+
+  /**
+   * Generate a unique subdomain from company name
+   * @param {string} companyName - Company name to generate subdomain from
+   * @returns {string} Unique subdomain
+   */
+  static async generateUniqueSubdomain(companyName) {
+    if (!companyName) {
+      throw new Error('Company name is required to generate subdomain');
+    }
+
+    console.log('🔧 Generating unique subdomain for:', companyName);
+
+    // Convert company name to subdomain-friendly format
+    let baseSubdomain = companyName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '-') // Replace non-alphanumeric with hyphens
+      .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+      .replace(/^-|-$/g, '') // Remove leading/trailing hyphens
+      .substring(0, 30); // Limit length
+
+    // Ensure it doesn't start with a number
+    if (/^\d/.test(baseSubdomain)) {
+      baseSubdomain = 'org-' + baseSubdomain;
+    }
+
+    // Check availability and add suffix if needed
+    let subdomain = baseSubdomain;
+    let suffix = 1;
+    let isAvailable = await this.checkSubdomainAvailability(subdomain);
+
+    while (!isAvailable) {
+      subdomain = `${baseSubdomain}-${suffix}`;
+      isAvailable = await this.checkSubdomainAvailability(subdomain);
+      suffix++;
+
+      // Safety check to prevent infinite loop
+      if (suffix > 100) {
+        subdomain = `${baseSubdomain}-${Date.now()}`;
+        break;
+      }
+    }
+
+    console.log('✅ Generated unique subdomain:', subdomain);
+    return subdomain;
   }
 }
 

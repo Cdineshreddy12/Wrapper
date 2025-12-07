@@ -16,6 +16,7 @@ import creditAllocationService from './credit-allocation-service.js';
 import { OnboardingTrackingService } from './onboarding-tracking-service.js';
 import { TenantService } from './tenant-service.js';
 import { SubscriptionService } from './subscription-service.js';
+import OnboardingValidationService from './onboarding-validation-service.js';
 
 export class UnifiedOnboardingService {
 
@@ -80,7 +81,7 @@ export class UnifiedOnboardingService {
 
       // 2. GENERATE/CONfirm SUBDOMAIN
       const finalSubdomain = validation.data.generatedSubdomain || subdomain ||
-                           await OnboardingValidationService.generateUniqueSubdomain(companyName);
+        await OnboardingValidationService.generateUniqueSubdomain(companyName);
 
       // 3. EXTRACT AND VALIDATE AUTHENTICATION (if request provided)
       const authResult = await this.extractAndValidateAuthentication(request);
@@ -102,7 +103,7 @@ export class UnifiedOnboardingService {
         subdomain: finalSubdomain,
         adminEmail,
         adminName: firstName && lastName ? `${firstName} ${lastName}`.trim() :
-                   kindeResult.userName || adminEmail.split('@')[0],
+          kindeResult.userName || adminEmail.split('@')[0],
         firstName,
         lastName,
         termsAccepted,
