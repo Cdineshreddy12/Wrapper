@@ -155,7 +155,7 @@ export const WorkflowVisualizer = () => {
                 <div className="w-full lg:w-72 bg-slate-50 border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col shrink-0">
                     <div className="p-6 border-b border-slate-200 bg-white">
                         <div className="flex items-center gap-3 text-slate-900 mb-1">
-                            <img src="/src/public/Zopkit Simple Logo.jpg" alt="Zopkit" className="w-12 h-12 rounded-xl overflow-hidden shadow-lg" />
+                            <img src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg" alt="Zopkit" className="w-12 h-12 rounded-xl overflow-hidden shadow-lg" />
                             <h3 className="font-bold text-base tracking-tight">Automation Hub</h3>
                         </div>
                         <div className="flex items-center gap-2 mt-4">
@@ -373,7 +373,7 @@ export const WorkflowVisualizer = () => {
 
                         {/* Business Metrics Panel */}
                         <div className="w-72 border-l border-slate-200 bg-white p-6 hidden md:flex flex-col gap-6">
-                            
+
                             <div>
                                 <div className="flex items-center gap-2 mb-2">
                                     <Clock className="w-4 h-4 text-slate-400" />
