@@ -236,7 +236,7 @@ export const NavbarLogo = () => {
             className="relative z-20 mr-4 flex items-center space-x-2 px-2 py-1 text-sm font-normal text-black"
         >
             <img
-                src="/src/public/Zopkit Full Logo.jpg"
+                src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Full_Logo_kezq1b.jpg"
                 alt="Zopkit"
                 className="h-10 rounded-xl w-auto object-contain"
             />

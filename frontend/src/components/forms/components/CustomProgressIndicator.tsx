@@ -53,7 +53,7 @@ export const CustomProgressIndicator: React.FC<{ className?: string }> = ({ clas
         <div className="flex items-center space-x-3 mb-4">
           <div className="w-24 h-24 rounded-xl overflow-hidden shadow-lg">
             <img
-              src="/src/public/Zopkit Simple Logo.jpg"
+              src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg"
               alt="Zopkit"
               className="w-full h-full object-fit"
             />

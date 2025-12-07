@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { ChevronRight } from 'lucide-react'
 import { StackedCardsSection, DemoSection, TrustIndicators } from '@/components/landing'
 import EcosystemDemo from './EcosystemDemo'
 import { VisualHub } from '@/components/landing/VisualHub'
@@ -17,7 +18,6 @@ import { products } from '@/data/content'
 import {
   Navbar,
   NavBody,
-  NavItems,
   MobileNav,
   NavbarLogo,
   NavbarButton,
@@ -36,6 +36,8 @@ const Landing: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [showDemo, setShowDemo] = useState(false)
   const [activeProduct, setActiveProduct] = useState<Product>(products[0])
+  const [showProductsDropdown, setShowProductsDropdown] = useState(false)
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   // Refs for auto-scrolling
@@ -111,13 +113,38 @@ const Landing: React.FC = () => {
     }
   }
 
+  const handleMouseEnter = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+    setShowProductsDropdown(true)
+  }
+
+  const handleMouseLeave = () => {
+    timeoutRef.current = setTimeout(() => {
+      setShowProductsDropdown(false)
+    }, 300) // 300ms delay
+  }
+
   const navItems = [
-    { name: "Products", link: "/products/affiliate-connect" },
     { name: "Solutions", link: "#solutions" },
     { name: "Workflows", link: "#workflows" },
     { name: "Pricing", link: "#pricing" },
     { name: "Resources", link: "#resources" },
-  ];
+  ]
+
+  const allProducts = [
+    { id: 'affiliate-connect', name: 'Affiliate Connect' },
+    { id: 'b2b-crm', name: 'B2B CRM' },
+    { id: 'operations-management', name: 'Operations Management' },
+    { id: 'project-management', name: 'Project Management' },
+    { id: 'financial-accounting', name: 'Financial Accounting' },
+    { id: 'hrms', name: 'HRMS' },
+    { id: 'esop-system', name: 'ESOP System' },
+    { id: 'flowtilla', name: 'Flowtilla' },
+    { id: 'zopkit-academy', name: 'Zopkit Academy' },
+    { id: 'zopkit-itsm', name: 'Zopkit ITSM' },
+  ]
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 selection:bg-blue-100 selection:text-blue-900 font-sans overflow-x-hidden relative">
@@ -145,7 +172,44 @@ const Landing: React.FC = () => {
         {/* Desktop Navigation */}
         <NavBody>
           <NavbarLogo />
-          <NavItems items={navItems} />
+          <div className="absolute inset-0 hidden flex-1 flex-row items-center justify-center space-x-1 text-sm font-medium text-slate-700 transition duration-200 lg:flex lg:space-x-1">
+            {/* Products Dropdown */}
+            <div
+              className="relative"
+              onMouseEnter={handleMouseEnter}
+              onMouseLeave={handleMouseLeave}
+            >
+              <button
+                onClick={() => navigate('/products/affiliate-connect')}
+                className="px-4 py-2 text-slate-700 hover:text-slate-900 font-medium flex items-center gap-1"
+              >
+                Products
+                <ChevronRight size={16} className={`transition-transform ${showProductsDropdown ? 'rotate-90' : ''}`} />
+              </button>
+              {showProductsDropdown && (
+                <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
+                  {allProducts.map((product) => (
+                    <button
+                      key={product.id}
+                      onClick={() => navigate(`/products/${product.id}`)}
+                      className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      {product.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {navItems.map((item, idx) => (
+              <a
+                key={`link-${idx}`}
+                href={item.link}
+                className="px-4 py-2 text-slate-700 hover:text-slate-900 font-medium"
+              >
+                {item.name}
+              </a>
+            ))}
+          </div>
           <div className="flex items-center gap-4">
             <NavbarButton
               variant="secondary"
@@ -180,6 +244,32 @@ const Landing: React.FC = () => {
             isOpen={isMobileMenuOpen}
             onClose={() => setIsMobileMenuOpen(false)}
           >
+            {/* Products Dropdown for Mobile */}
+            <div className="w-full">
+              <button
+                onClick={() => setShowProductsDropdown(!showProductsDropdown)}
+                className="w-full text-left relative text-neutral-600 dark:text-neutral-300 flex items-center justify-between"
+              >
+                <span className="block">Products</span>
+                <ChevronRight size={16} className={`transition-transform ${showProductsDropdown ? 'rotate-90' : ''}`} />
+              </button>
+              {showProductsDropdown && (
+                <div className="mt-2 ml-4 space-y-2">
+                  {allProducts.map((product) => (
+                    <button
+                      key={product.id}
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        navigate(`/products/${product.id}`);
+                      }}
+                      className="w-full text-left text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 py-1"
+                    >
+                      {product.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             {navItems.map((item, idx) => (
               <a
                 key={`mobile-link-${idx}`}
