@@ -304,7 +304,7 @@ function RootRedirect() {
             
             if (token) {
               // Generate app-specific token using backend
-              const backendUrl = 'https://wrapper.zopkit.com';
+              const backendUrl = 'https://zopkit.com/api';
               const response = await fetch(`${backendUrl}/auth/validate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

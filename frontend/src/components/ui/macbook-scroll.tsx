@@ -144,7 +144,7 @@ export const MacbookScroll = ({
           </div>
         </div>
         <Trackpad />
-       
+
       </div>
     </div>
   );
@@ -260,9 +260,8 @@ export const Lid = ({
               {businessSuiteImages.map((_, index) => (
                 <div
                   key={index}
-                  className={`w-2 h-2 rounded-full transition-colors duration-300 ${
-                    index === currentImageIndex ? 'bg-white' : 'bg-white/40'
-                  }`}
+                  className={`w-2 h-2 rounded-full transition-colors duration-300 ${index === currentImageIndex ? 'bg-white' : 'bg-white/40'
+                    }`}
                 />
               ))}
             </div>
@@ -733,8 +732,8 @@ export const OptionKey = ({ className }: { className: string }) => {
 
 const AceternityLogo = () => {
   return (
-   <div className="text-white text-sm text-xl font-bold">
-        Welcome to Zopkit
-   </div>
+    <div className="text-white text-sm text-xl font-bold">
+      Welcome to Zopkit
+    </div>
   );
 };

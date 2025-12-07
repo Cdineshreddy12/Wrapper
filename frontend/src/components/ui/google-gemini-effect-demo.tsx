@@ -10,15 +10,15 @@ export default function GoogleGeminiEffectDemo() {
     offset: ["start start", "end start"],
   });
 
-  const pathLengthFirst = useTransform(scrollYProgress, [0, 0.8], [0.2, 1.2]);
-  const pathLengthSecond = useTransform(scrollYProgress, [0, 0.8], [0.15, 1.2]);
-  const pathLengthThird = useTransform(scrollYProgress, [0, 0.8], [0.1, 1.2]);
-  const pathLengthFourth = useTransform(scrollYProgress, [0, 0.8], [0.05, 1.2]);
-  const pathLengthFifth = useTransform(scrollYProgress, [0, 0.8], [0, 1.2]);
+  const pathLengthFirst = useTransform(scrollYProgress, [0, 0.2], [0.2, 1]);
+  const pathLengthSecond = useTransform(scrollYProgress, [0, 0.2], [0.15, 1]);
+  const pathLengthThird = useTransform(scrollYProgress, [0, 0.2], [0.1, 1]);
+  const pathLengthFourth = useTransform(scrollYProgress, [0, 0.2], [0.05, 1]);
+  const pathLengthFifth = useTransform(scrollYProgress, [0, 0.2], [0, 1]);
 
   return (
     <div
-      className="h-[400vh] bg-white w-full border border-gray-200 rounded-md relative pt-40 overflow-clip"
+      className="h-[150vh] bg-white w-full border border-gray-200 rounded-md relative pt-40 overflow-clip"
       ref={ref}
     >
       <GoogleGeminiEffect

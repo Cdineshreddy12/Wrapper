@@ -2,17 +2,28 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { HeroSection, StackedCardsSection, DemoSection, TrustIndicators } from '@/components/landing'
-import { ZopkitNavbar } from '@/components/ui/zopkit-navbar'
-import { AuroraBackground } from '@/components/ui/aurora-background'
+import { StackedCardsSection, DemoSection, TrustIndicators } from '@/components/landing'
 import EcosystemDemo from './EcosystemDemo'
+import { VisualHub } from '@/components/landing/VisualHub'
+import { DynamicIcon } from '@/components/landing/Icons'
+import { ArrowRight, Play, Menu, X } from 'lucide-react'
 import api from '@/lib/api'
+import { Product } from '@/types'
+
+import { WorkflowVisualizer } from '@/components/landing/WorkflowVisualizer'
+import { products } from '@/data/content'
+
+// Removed local products definition
+
+
 
 const Landing: React.FC = () => {
   const navigate = useNavigate()
   const { login, isAuthenticated } = useKindeAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [showDemo, setShowDemo] = useState(false)
+  const [activeProduct, setActiveProduct] = useState<Product>(products[0])
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // Check authentication status quietly in background
   useEffect(() => {
@@ -38,115 +49,277 @@ const Landing: React.FC = () => {
     return () => clearTimeout(timer)
   }, [isAuthenticated, navigate])
 
+  // Auto-rotate products every 4 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveProduct((prev) => {
+        const currentIndex = products.findIndex((p) => p.id === prev.id);
+        const nextIndex = (currentIndex + 1) % products.length;
+        return products[nextIndex];
+      });
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const handleLogin = async () => {
     setIsLoading(true)
     try {
-        await login()
+      await login()
     } catch (error) {
       console.error('Login error:', error)
     } finally {
       setIsLoading(false)
-      }
-  }
-
-  const handleAppSelect = (appId: number | null) => {
-    // For now, just open demo modal. In production, this could navigate to specific app pages
-    if (appId) {
-      setShowDemo(true)
     }
   }
 
-  // Business Suite Applications
-  const businessApps = [
-    {
-      id: 1,
-      name: 'CRM',
-      description: 'Customer Relationship Management',
-      icon: null,
-      image: '/crm-dashboard.svg',
-      color: 'from-blue-500 to-cyan-500',
-      features: ['Leads Management', 'Contact Database', 'Opportunities Tracking', 'AI Agent Assistant', 'Product Orders', 'Invoice Management', 'Sales Orders', 'Advanced Reports']
-    },
-    {
-      id: 2,
-      name: 'HRMS',
-      description: 'Human Resource Management System',
-      icon: null,
-      image: '/hrms.svg',
-      color: 'from-green-500 to-emerald-500',
-      features: ['Employee Management', 'Payroll Processing', 'Performance Tracking', 'Recruitment']
-    },
-    {
-      id: 3,
-      name: 'Project Management',
-      description: 'Advanced Project Tracking',
-      icon: null,
-      image: '/project-management.svg',
-      color: 'from-purple-500 to-pink-500',
-      features: ['Kanban Boards', 'Gantt Charts', 'Time Tracking', 'Resource Management']
-    },
-    {
-      id: 4,
-      name: 'Operations Management',
-      description: 'Streamline Operations',
-      icon: null,
-      image: '/operations-management.svg',
-      color: 'from-orange-500 to-red-500',
-      features: ['Process Automation', 'Workflow Designer', 'Task Management', 'Performance Metrics']
-    },
-    {
-      id: 5,
-      name: 'Finance Management',
-      description: 'Financial Operations Suite',
-      icon: null,
-      image: '/finance-management.svg',
-      color: 'from-indigo-500 to-purple-500',
-      features: ['Accounting', 'Budgeting', 'Financial Reporting', 'Expense Tracking']
-    },
-    {
-      id: 6,
-      name: 'Zopkit Academy',
-      description: 'Learning & Development',
-      icon: null,
-      image: '/zopkit-academy.svg',
-      color: 'from-teal-500 to-green-500',
-      features: ['Course Management', 'Employee Training', 'Certifications', 'Learning Analytics']
-    }
-  ]
+
 
   return (
-    <div className="relative">
-      <AuroraBackground className="min-h-screen">
-          {/* Navigation */}
-          <ZopkitNavbar
-            isAuthenticated={isAuthenticated}
-            isLoading={isLoading}
-            onLogin={handleLogin}
-            onShowDemo={() => setShowDemo(true)}
-          />
+    <div className="min-h-screen bg-slate-50 text-slate-900 selection:bg-blue-100 selection:text-blue-900 font-sans overflow-x-hidden relative">
 
-        {/* Main Content */}
-        <main className="pt-20 w-full">
-          <HeroSection
-            isAuthenticated={isAuthenticated}
-            isLoading={isLoading}
-            onLogin={handleLogin}
-          />
-      
-          <StackedCardsSection
-            businessApps={businessApps}
-            setActiveApp={handleAppSelect}
-          />
-           <EcosystemDemo/>
-          {/* <CostSavingsSection /> */}
-      
-          <DemoSection
-            showDemo={showDemo}
-            setShowDemo={setShowDemo}
-          />
-          <TrustIndicators />
-        </main>
-      </AuroraBackground>
+      {/* Ambient Background Effects */}
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+        <div className="absolute inset-0 bg-grid opacity-100" />
+
+        {/* Dynamic Spotlight - Shifted Left to match content */}
+        <motion.div
+          animate={{
+            background: `radial-gradient(circle at 60% 40%, ${activeProduct.color === 'blue' ? '#3b82f6' :
+              activeProduct.color === 'green' ? '#10b981' :
+                activeProduct.color === 'purple' ? '#a855f7' :
+                  activeProduct.color === 'orange' ? '#f97316' :
+                    activeProduct.color === 'indigo' ? '#6366f1' : '#14b8a6'
+              }15 0%, transparent 60%)`
+          }}
+          className="absolute top-[-20%] right-[-10%] w-[100vw] h-[100vh] blur-[120px] transition-colors duration-1000 ease-in-out"
+        />
+      </div>
+
+      {/* Navigation */}
+      <nav className="fixed w-full top-0 z-50 border-b border-slate-200 bg-white/70 backdrop-blur-xl supports-[backdrop-filter]:bg-white/70">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-3 group cursor-pointer">
+            <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${activeProduct.gradient} flex items-center justify-center shadow-lg transition-all duration-500 group-hover:rotate-12`}>
+              <DynamicIcon name={activeProduct.iconName} className="text-white w-5 h-5" />
+            </div>
+            <span className="font-bold text-xl tracking-tight text-slate-900 group-hover:text-slate-700 transition-colors">Zopkit</span>
+          </div>
+
+          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-500">
+            {['Platform', 'Solutions', 'Products', 'Pricing'].map((item) => (
+              <a key={item} href="#" className="hover:text-slate-900 transition-colors relative group py-2">
+                {item}
+                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-600 to-cyan-500 transition-all duration-300 group-hover:w-full"></span>
+              </a>
+            ))}
+          </div>
+          <div className="hidden md:flex items-center gap-4">
+            <button className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors" onClick={handleLogin} disabled={isLoading}>
+              {isLoading ? 'Loading...' : 'Sign In'}
+            </button>
+            <button onClick={() => setShowDemo(true)} className={`
+               px-5 py-2.5 rounded-full text-sm font-bold text-white transition-all duration-300
+               bg-slate-900 hover:bg-slate-800
+               shadow-lg shadow-slate-200
+            `}>
+              Start Free Trial
+            </button>
+          </div>
+          <button className="md:hidden text-slate-900 p-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+            {mobileMenuOpen ? <X /> : <Menu />}
+          </button>
+        </div>
+      </nav>
+
+      {/* Mobile Menu */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="md:hidden fixed top-20 left-0 right-0 bg-white/95 backdrop-blur-xl border-b border-slate-200 shadow-lg z-40"
+          >
+            <div className="px-4 py-6 space-y-4">
+              {['Platform', 'Solutions', 'Products', 'Pricing'].map((item) => (
+                <a key={item} href="#" className="block py-2 text-slate-600 hover:text-slate-900 transition-colors">
+                  {item}
+                </a>
+              ))}
+              <div className="pt-4 border-t border-slate-200 space-y-3">
+                <button className="w-full text-left py-2 text-slate-600 hover:text-slate-900 transition-colors" onClick={handleLogin} disabled={isLoading}>
+                  {isLoading ? 'Loading...' : 'Sign In'}
+                </button>
+                <button onClick={() => setShowDemo(true)} className="w-full bg-slate-900 text-white py-3 rounded-lg font-medium hover:bg-slate-800 transition-colors">
+                  Start Free Trial
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Main Content */}
+      <main className="relative pt-24 lg:pt-36 pb-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 z-10 overflow-visible">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-0 items-center">
+
+          {/* Left Column: Content (Compressed to 5 cols) */}
+          <div className="lg:col-span-5 flex flex-col gap-8 lg:pr-6 relative z-20">
+
+            <div className="space-y-6 relative">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 w-fit shadow-sm"
+              >
+                <span className={`w-2 h-2 rounded-full bg-gradient-to-r ${activeProduct.gradient} animate-pulse`}></span>
+                <span className="text-xs font-bold text-slate-600 tracking-wide uppercase">Complete Business Operations Suite</span>
+              </motion.div>
+
+              <div className="relative h-[160px] lg:h-[200px] w-full z-20">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeProduct.id}
+                    initial={{ opacity: 0, y: 10, filter: 'blur(10px)' }}
+                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                    exit={{ opacity: 0, y: -10, filter: 'blur(10px)' }}
+                    transition={{ duration: 0.4, ease: "easeOut" }}
+                    className="absolute top-0 left-0 w-full"
+                  >
+                    <h1 className="text-5xl lg:text-7xl font-bold tracking-tight leading-[1.05] mb-5 text-slate-900">
+                      <span className={`bg-clip-text text-transparent bg-gradient-to-r ${activeProduct.gradient}`}>
+                        {activeProduct.name}
+                      </span>
+                    </h1>
+                    <p className="text-lg text-slate-500 leading-relaxed max-w-md font-normal border-l-2 border-slate-200 pl-4">
+                      {activeProduct.description}
+                    </p>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center mt-24 gap-4 z-20">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleLogin}
+                disabled={isLoading}
+                className={`
+                    w-full sm:w-auto relative px-8 py-4 rounded-xl font-bold text-white transition-all duration-300
+                    bg-gradient-to-r ${activeProduct.gradient} shadow-lg shadow-blue-500/20
+                    overflow-hidden group
+                  `}
+              >
+                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                <span className="relative flex items-center justify-center gap-2">
+                  {isLoading ? 'Loading...' : 'Start Free Trial →'} <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </span>
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="w-full sm:w-auto flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 transition-all group shadow-sm"
+              >
+                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-slate-200 group-hover:text-slate-900 transition-colors">
+                  <Play className="w-3 h-3 fill-current ml-0.5 text-slate-700" />
+                </div>
+                <span>Watch 2-Min Demo</span>
+              </motion.button>
+            </div>
+
+            {/* Product "Launchpad" Selector */}
+            <div className="mt-6 pt-8 border-t border-slate-200">
+              <div className="flex justify-between items-center mb-4">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Module</p>
+                <span className="text-xs text-slate-400">0{activeProduct.id} / {products.length}</span>
+              </div>
+
+              <style>{`
+                .gradient-scrollbar::-webkit-scrollbar {
+                  height: 6px;
+                }
+                .gradient-scrollbar::-webkit-scrollbar-track {
+                  background: rgba(241, 245, 249, 0.5);
+                  border-radius: 4px;
+                }
+                .gradient-scrollbar::-webkit-scrollbar-thumb {
+                  background: linear-gradient(to right, #8bade2ff, #bba0f8ff, #e9a1c5ff);
+                  border-radius: 4px;
+                }
+                .gradient-scrollbar::-webkit-scrollbar-thumb:hover {
+                  background: linear-gradient(to right, #9fbdffff, #bc98faff, rgba(236, 160, 194, 1));
+                }
+              `}</style>
+
+              <div className="flex flex-row gap-3 overflow-x-auto gradient-scrollbar pb-4">
+                {products.map((product) => (
+                  <button
+                    key={product.id}
+                    onClick={() => setActiveProduct(product)}
+                    className={`
+                        relative group flex flex-col items-start justify-between p-3 rounded-xl border transition-all duration-300 h-24 w-32 min-w-[128px] overflow-hidden text-left shrink-0
+                        ${activeProduct.id === product.id
+                        ? 'bg-white border-slate-300 ring-2 ring-slate-200 shadow-lg'
+                        : 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-md'}
+                      `}
+                  >
+                    {/* Hover Glow */}
+                    <div className={`absolute inset-0 bg-gradient-to-br ${product.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
+
+                    <div className="flex justify-between w-full items-start">
+                      <div className={`
+                           p-1.5 rounded-lg transition-colors duration-300
+                           ${activeProduct.id === product.id ? `bg-gradient-to-br ${product.gradient} text-white` : 'bg-slate-100 text-slate-500 group-hover:text-slate-700 group-hover:bg-slate-200'}
+                         `}>
+                        <DynamicIcon name={product.iconName} className="w-4 h-4" />
+                      </div>
+
+                      {activeProduct.id === product.id && (
+                        <motion.div layoutId="active-indicator" className="w-1.5 h-1.5 rounded-full bg-slate-900" />
+                      )}
+                    </div>
+
+                    <span className={`text-[11px] font-semibold tracking-wide mt-auto ${activeProduct.id === product.id ? 'text-slate-900' : 'text-slate-500 group-hover:text-slate-900'}`}>
+                      {product.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Visual Hub (Expanded to 7 cols and shifted left) */}
+          <div className="lg:col-span-7 relative z-10 flex justify-center lg:justify-start items-center h-full min-h-[500px]">
+            {/* The w-[90%] constrains the width, and lg:-ml-6 pulls the center point to the left */}
+            <div className="w-full lg:w-[100%] flex justify-center lg:-ml-6">
+              <VisualHub product={activeProduct} />
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Additional sections from original landing page */}
+      <StackedCardsSection
+        businessApps={products.map(p => ({
+          ...p,
+          icon: (props: any) => <DynamicIcon name={p.iconName} {...props} />
+        }))}
+        activeProduct={activeProduct}
+        onProductChange={setActiveProduct}
+      />
+      <div className="py-10 bg-white">
+        <WorkflowVisualizer />
+      </div>
+      <EcosystemDemo />
+      <DemoSection
+        showDemo={showDemo}
+        setShowDemo={setShowDemo}
+      />
+      <TrustIndicators />
 
       {/* Demo Modal - Outside Aurora Background */}
       <AnimatePresence>
@@ -306,7 +479,7 @@ const Landing: React.FC = () => {
                     >
                       Schedule Demo
                     </button>
-                </div>
+                  </div>
 
                   <p className="text-xs text-gray-500 text-center mt-4">
                     By submitting this form, you agree to receive communication about Zopkit's services.

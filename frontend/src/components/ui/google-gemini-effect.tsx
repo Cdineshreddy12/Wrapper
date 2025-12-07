@@ -1,10 +1,9 @@
 "use client";
 import { cn } from "@/lib/utils";
-import { motion, MotionValue } from "motion/react";
-
-const transition = {
-  duration: 0,
-};
+import { motion, MotionValue, useTransform } from "motion/react";
+import React from "react";
+import { products } from "../../data/content";
+import { DynamicIcon } from "../landing/Icons";
 
 export const GoogleGeminiEffect = ({
   pathLengths,
@@ -17,397 +16,195 @@ export const GoogleGeminiEffect = ({
   description?: string;
   className?: string;
 }) => {
+  // SVG Configuration
+  const width = 1440;
+  const height = 900; // Increased height for better mobile scaling
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const radius = 300; // Radius of the satellite nodes circle
+
+  // Calculate node positions dynamically based on products array
+  const nodes = products.map((product, index) => {
+    const angle = (index * 360) / products.length; // Even distribution
+    const radian = (angle * Math.PI) / 180;
+    const x = centerX + radius * Math.cos(radian);
+    const y = centerY + radius * Math.sin(radian);
+    return { ...product, x, y, angle };
+  });
+
   return (
-    <div className={cn("sticky top-60", className)}>
-      <p className="text-lg  md:text-7xl font-normal pb-4 text-center bg-clip-text text-transparent bg-gradient-to-b from-gray-800 to-gray-600">
-        {title || `Build with Aceternity UI`}
-      </p>
-      <p className="text-xs md:text-xl font-normal text-center text-gray-600 mt-4 max-w-lg mx-auto">
-        {description ||
-          `Scroll this component and see the bottom SVG come to life wow this
-        works!`}
-      </p>
-      <div className="w-full h-[890px] -top-60 md:-top-40  flex items-center justify-center bg-red-transparent absolute ">
-        <button className="font-bold bg-white rounded-full md:px-4 md:py-4 px-4 py-1 md:mt-24 mt-8 z-30 md:text-base text-black text-xs  w-32 mx-auto ">
-          Zopkit
-        </button>
+    <div className={cn("sticky top-0 h-screen w-full overflow-hidden bg-slate-50", className)}>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-slate-50 to-slate-100 z-0 pointer-events-none" />
+
+      {/* Header Content */}
+      <div className="relative z-20 max-w-7xl mx-auto px-4 md:px-8 h-full flex flex-col items-center pt-12 md:pt-20">
+        <motion.h2
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="text-3xl md:text-7xl font-bold text-center bg-clip-text text-transparent bg-gradient-to-b from-slate-900 to-slate-600 tracking-tight"
+        >
+          {title || `Ecosystem Interconnectivity`}
+        </motion.h2>
+        <motion.p
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+          className="text-sm md:text-xl font-light text-center text-slate-500 mt-4 md:mt-6 max-w-2xl mx-auto"
+        >
+          {description ||
+            `Data flows effortlessly between all your applications, eliminating data silos and ensuring consistency.`}
+        </motion.p>
       </div>
-      <svg
-        width="1440"
-        height="890"
-        viewBox="0 0 1440 890"
-        xmlns="http://www.w3.org/2000/svg"
-        className=" absolute -top-60  md:-top-40 w-full"
-      >
-        {/* Professional Application Nodes */}
-        <g>
-          <defs>
-            <filter id="shadow1" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.1"/>
-            </filter>
-            <filter id="textShadow1" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.3"/>
-            </filter>
-            <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style={{stopColor:'#FF6B7A', stopOpacity:1}} />
-              <stop offset="100%" style={{stopColor:'#FF4757', stopOpacity:1}} />
-            </linearGradient>
-          </defs>
-          <circle cx="12" cy="670" r="14" fill="url(#grad1)" filter="url(#shadow1)"/>
-          <circle cx="12" cy="670" r="10" fill="rgba(255,255,255,0.2)"/>
-          <motion.circle
-            cx="12"
-            cy="670"
-            r="18"
+
+      {/* Dynamic Ecosystem SVG */}
+      <div className="absolute top-0 mt-16 md:mt-32 p-4 md:p-8 left-0 w-full h-full flex items-center justify-center z-10 pointer-events-none">
+        <div className="w-full h-full relative">
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
             fill="none"
-            stroke="rgba(255,107,122,0.4)"
-            strokeWidth="1"
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{
-              scale: [0, 1.2, 1],
-              opacity: [0, 0.6, 0]
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              delay: 0.5
-            }}
-          />
-          <motion.text
-            x="35"
-            y="676"
-            className="fill-black font-semibold"
-            style={{
-              fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
-              fontSize: '13px',
-              fontWeight: '600',
-              letterSpacing: '0.5px',
-              textShadow: '0 1px 2px rgba(0,0,0,0.3)'
-            }}
-            initial={{ opacity: 0, x: -5 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
+            xmlns="http://www.w3.org/2000/svg"
+            className="w-full h-full"
+            preserveAspectRatio="xMidYMid meet"
           >
-            CRM
-          </motion.text>
-        </g>
+            <defs>
+              {/* Gradients for each product category */}
+              {nodes.map((node) => (
+                <linearGradient key={node.id} id={`grad-${node.id}`} x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.2" />
+                  <stop offset="100%" stopColor="#2563eb" stopOpacity="1" />
+                </linearGradient>
+              ))}
+            </defs>
 
-        <g>
-          <defs>
-            <filter id="shadow2" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.1"/>
-            </filter>
-            <filter id="textShadow2" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.3"/>
-            </filter>
-            <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style={{stopColor:'#FF8C42', stopOpacity:1}} />
-              <stop offset="100%" style={{stopColor:'#FF6B1B', stopOpacity:1}} />
-            </linearGradient>
-          </defs>
-          <circle cx="12" cy="595" r="14" fill="url(#grad2)" filter="url(#shadow2)"/>
-          <circle cx="12" cy="595" r="10" fill="rgba(255,255,255,0.2)"/>
-          <motion.circle
-            cx="12"
-            cy="595"
-            r="18"
-            fill="none"
-            stroke="rgba(255,140,66,0.4)"
-            strokeWidth="1"
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{
-              scale: [0, 1.2, 1],
-              opacity: [0, 0.6, 0]
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              delay: 0.8
-            }}
-          />
-          <motion.text
-            x="35"
-            y="601"
-            className="fill-black font-semibold"
-            style={{
-              fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
-              fontSize: '13px',
-              fontWeight: '600',
-              letterSpacing: '0.5px',
-              textShadow: '0 1px 2px rgba(0,0,0,0.3)'
-            }}
-            initial={{ opacity: 0, x: -5 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 0.4 }}
-          >
-            HRMS
-          </motion.text>
-        </g>
+            {/* Connection Lines (Scroll Driven) */}
+            {nodes.map((node, index) => {
+              // We use modulus to cycle through the 5 provided pathLengths if we have more products
+              const pathLength = pathLengths[index % pathLengths.length];
 
-        <g>
-          <defs>
-            <filter id="shadow3" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.1"/>
-            </filter>
-            <filter id="textShadow3" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.3"/>
-            </filter>
-            <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style={{stopColor:'#3B82F6', stopOpacity:1}} />
-              <stop offset="100%" style={{stopColor:'#1E40AF', stopOpacity:1}} />
-            </linearGradient>
-          </defs>
-          <circle cx="12" cy="520" r="14" fill="url(#grad3)" filter="url(#shadow3)"/>
-          <circle cx="12" cy="520" r="10" fill="rgba(255,255,255,0.2)"/>
-          <motion.circle
-            cx="12"
-            cy="520"
-            r="18"
-            fill="none"
-            stroke="rgba(59,130,246,0.4)"
-            strokeWidth="1"
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{
-              scale: [0, 1.2, 1],
-              opacity: [0, 0.6, 0]
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              delay: 1.1
-            }}
-          />
-          <motion.text
-            x="35"
-            y="526"
-            className="fill-black font-semibold"
-            style={{
-              fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
-              fontSize: '13px',
-              fontWeight: '600',
-              letterSpacing: '0.5px',
-              textShadow: '0 1px 2px rgba(0,0,0,0.3)'
-            }}
-            initial={{ opacity: 0, x: -5 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 0.6 }}
-          >
-            PROJECTS
-          </motion.text>
-        </g>
+              return (
+                <g key={`path-group-${node.id}`}>
+                  {/* Background faint line */}
+                  <path
+                    d={`M${node.x},${node.y} C${node.x},${centerY} ${centerX},${node.y} ${centerX},${centerY}`}
+                    stroke="#e2e8f0"
+                    strokeWidth="1"
+                    fill="none"
+                  />
+                  {/* Animated drawing line */}
+                  <motion.path
+                    d={`M${node.x},${node.y} C${node.x},${centerY} ${centerX},${node.y} ${centerX},${centerY}`}
+                    stroke={`url(#grad-${node.id})`}
+                    strokeWidth="2"
+                    fill="none"
+                    style={{ pathLength }}
+                  />
 
-        <g>
-          <defs>
-            <filter id="shadow4" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.1"/>
-            </filter>
-            <linearGradient id="grad4" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style={{stopColor:'#2563EB', stopOpacity:1}} />
-              <stop offset="100%" style={{stopColor:'#1D4ED8', stopOpacity:1}} />
-            </linearGradient>
-          </defs>
-          <circle cx="12" cy="445" r="14" fill="url(#grad4)" filter="url(#shadow4)"/>
-          <circle cx="12" cy="445" r="10" fill="rgba(255,255,255,0.2)"/>
-          <motion.circle
-            cx="12"
-            cy="445"
-            r="18"
-            fill="none"
-            stroke="rgba(37,99,235,0.4)"
-            strokeWidth="1"
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{
-              scale: [0, 1.2, 1],
-              opacity: [0, 0.6, 0]
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              delay: 1.4
-            }}
-          />
-          <motion.text
-            x="35"
-            y="451"
-            className="fill-black font-semibold"
-            style={{
-              fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
-              fontSize: '13px',
-              fontWeight: '600',
-              letterSpacing: '0.5px',
-              textShadow: '0 1px 2px rgba(0,0,0,0.3)'
-            }}
-            initial={{ opacity: 0, x: -5 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 0.8 }}
-          >
-            OPERATIONS
-          </motion.text>
-        </g>
+                  {/* Data Packets (Continuous Flow) - Moving Inwards */}
+                  <motion.circle
+                    r="3"
+                    fill="#3b82f6"
+                    initial={{ offsetDistance: "0%" }}
+                    animate={{ offsetDistance: "100%" }}
+                    transition={{
+                      duration: 2 + (index * 0.2), // Stagger speeds
+                      repeat: Infinity,
+                      ease: "linear",
+                      repeatDelay: 1
+                    }}
+                    style={{
+                      offsetPath: `path("M${node.x},${node.y} C${node.x},${centerY} ${centerX},${node.y} ${centerX},${centerY}")`
+                    }}
+                  />
 
-        <g>
-          <defs>
-            <filter id="shadow5" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.1"/>
-            </filter>
-            <linearGradient id="grad5" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style={{stopColor:'#1D4ED8', stopOpacity:1}} />
-              <stop offset="100%" style={{stopColor:'#1E3A8A', stopOpacity:1}} />
-            </linearGradient>
-          </defs>
-          <circle cx="12" cy="370" r="14" fill="url(#grad5)" filter="url(#shadow5)"/>
-          <circle cx="12" cy="370" r="10" fill="rgba(255,255,255,0.2)"/>
-          <motion.circle
-            cx="12"
-            cy="370"
-            r="18"
-            fill="none"
-            stroke="rgba(29,78,216,0.4)"
-            strokeWidth="1"
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{
-              scale: [0, 1.2, 1],
-              opacity: [0, 0.6, 0]
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              delay: 1.7
-            }}
-          />
-          <motion.text
-            x="35"
-            y="376"
-            className="fill-black font-semibold"
-            style={{
-              fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
-              fontSize: '13px',
-              fontWeight: '600',
-              letterSpacing: '0.5px',
-              textShadow: '0 1px 2px rgba(0,0,0,0.3)'
-            }}
-            initial={{ opacity: 0, x: -5 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 1.0 }}
-          >
-            FINANCE
-          </motion.text>
-        </g>
-        <motion.path
-          d="M0 663C145.5 663 191 666.265 269 647C326.5 630 339.5 621 397.5 566C439 531.5 455 529.5 490 523C509.664 519.348 521 503.736 538 504.236C553.591 504.236 562.429 514.739 584.66 522.749C592.042 525.408 600.2 526.237 607.356 523.019C624.755 515.195 641.446 496.324 657 496.735C673.408 496.735 693.545 519.572 712.903 526.769C718.727 528.934 725.184 528.395 730.902 525.965C751.726 517.115 764.085 497.106 782 496.735C794.831 496.47 804.103 508.859 822.469 518.515C835.13 525.171 850.214 526.815 862.827 520.069C875.952 513.049 889.748 502.706 903.5 503.736C922.677 505.171 935.293 510.562 945.817 515.673C954.234 519.76 963.095 522.792 972.199 524.954C996.012 530.611 1007.42 534.118 1034 549C1077.5 573.359 1082.5 594.5 1140 629C1206 670 1328.5 662.5 1440 662.5"
-          stroke="#FF6B7A"
-          strokeWidth="2"
-          fill="none"
-          initial={{
-            pathLength: 0,
-          }}
-          style={{
-            pathLength: pathLengths[0],
-          }}
-          transition={transition}
-        />
-        <motion.path
-          d="M0 587.5C147 587.5 277 587.5 310 573.5C348 563 392.5 543.5 408 535C434 523.5 426 526.235 479 515.235C494 512.729 523 510.435 534.5 512.735C554.5 516.735 555.5 523.235 576 523.735C592 523.735 616 496.735 633 497.235C648.671 497.235 661.31 515.052 684.774 524.942C692.004 527.989 700.2 528.738 707.349 525.505C724.886 517.575 741.932 498.33 757.5 498.742C773.864 498.742 791.711 520.623 810.403 527.654C816.218 529.841 822.661 529.246 828.451 526.991C849.246 518.893 861.599 502.112 879.5 501.742C886.47 501.597 896.865 506.047 907.429 510.911C930.879 521.707 957.139 519.639 982.951 520.063C1020.91 520.686 1037.5 530.797 1056.5 537C1102.24 556.627 1116.5 570.704 1180.5 579.235C1257.5 589.5 1279 587 1440 588"
-          stroke="#FF8C42"
-          strokeWidth="2"
-          fill="none"
-          initial={{
-            pathLength: 0,
-          }}
-          style={{
-            pathLength: pathLengths[1],
-          }}
-          transition={transition}
-        />
-        <motion.path
-          d="M0 514C147.5 514.333 294.5 513.735 380.5 513.735C405.976 514.94 422.849 515.228 436.37 515.123C477.503 514.803 518.631 506.605 559.508 511.197C564.04 511.706 569.162 512.524 575 513.735C588 516.433 616 521.702 627.5 519.402C647.5 515.402 659 499.235 680.5 499.235C700.5 499.235 725 529.235 742 528.735C757.654 528.735 768.77 510.583 791.793 500.59C798.991 497.465 807.16 496.777 814.423 499.745C832.335 507.064 850.418 524.648 866 524.235C882.791 524.235 902.316 509.786 921.814 505.392C926.856 504.255 932.097 504.674 937.176 505.631C966.993 511.248 970.679 514.346 989.5 514.735C1006.3 515.083 1036.5 513.235 1055.5 513.235C1114.5 513.235 1090.5 513.235 1124 513.235C1177.5 513.235 1178.99 514.402 1241 514.402C1317.5 514.402 1274.5 512.568 1440 513.235"
-          stroke="#3B82F6"
-          strokeWidth="2"
-          fill="none"
-          initial={{
-            pathLength: 0,
-          }}
-          style={{
-            pathLength: pathLengths[2],
-          }}
-          transition={transition}
-        />
-        <motion.path
-          d="M0 438.5C150.5 438.5 261 438.318 323.5 456.5C351 464.5 387.517 484.001 423.5 494.5C447.371 501.465 472 503.735 487 507.735C503.786 512.212 504.5 516.808 523 518.735C547 521.235 564.814 501.235 584.5 501.235C604.5 501.235 626 529.069 643 528.569C658.676 528.569 672.076 511.63 695.751 501.972C703.017 499.008 711.231 498.208 718.298 501.617C735.448 509.889 751.454 529.98 767 529.569C783.364 529.569 801.211 507.687 819.903 500.657C825.718 498.469 832.141 499.104 837.992 501.194C859.178 508.764 873.089 523.365 891 523.735C907.8 524.083 923 504.235 963 506.735C1034.5 506.735 1047.5 492.68 1071 481.5C1122.5 457 1142.23 452.871 1185 446.5C1255.5 436 1294 439 1439.5 439"
-          stroke="#2563EB"
-          strokeWidth="2"
-          fill="none"
-          initial={{
-            pathLength: 0,
-          }}
-          style={{
-            pathLength: pathLengths[3],
-          }}
-          transition={transition}
-        />
-        <motion.path
-          d="M0.5 364C145.288 362.349 195 361.5 265.5 378C322 391.223 399.182 457.5 411 467.5C424.176 478.649 456.916 491.677 496.259 502.699C498.746 503.396 501.16 504.304 503.511 505.374C517.104 511.558 541.149 520.911 551.5 521.236C571.5 521.236 590 498.736 611.5 498.736C631.5 498.736 652.5 529.236 669.5 528.736C685.171 528.736 697.81 510.924 721.274 501.036C728.505 497.988 736.716 497.231 743.812 500.579C761.362 508.857 778.421 529.148 794 528.736C810.375 528.736 829.35 508.68 848.364 502.179C854.243 500.169 860.624 500.802 866.535 502.718C886.961 509.338 898.141 519.866 916 520.236C932.8 520.583 934.5 510.236 967.5 501.736C1011.5 491 1007.5 493.5 1029.5 480C1069.5 453.5 1072 440.442 1128.5 403.5C1180.5 369.5 1275 360.374 1439 364"
-          stroke="#1D4ED8"
-          strokeWidth="2"
-          fill="none"
-          initial={{
-            pathLength: 0,
-          }}
-          style={{
-            pathLength: pathLengths[4],
-          }}
-          transition={transition}
-        />
+                  {/* Data Packets (Continuous Flow) - Moving Outwards */}
+                  <motion.circle
+                    r="2"
+                    fill="#a855f7" // Different color for outbound
+                    initial={{ offsetDistance: "0%" }}
+                    animate={{ offsetDistance: "100%" }}
+                    transition={{
+                      duration: 3 + (index * 0.2),
+                      repeat: Infinity,
+                      ease: "linear",
+                      delay: 1
+                    }}
+                    style={{
+                      offsetPath: `path("M${centerX},${centerY} C${centerX},${node.y} ${node.x},${centerY} ${node.x},${node.y}")`
+                    }}
+                  />
+                </g>
+              );
+            })}
 
-        {/* Gaussian blur for the background paths */}
+            {/* Satellite Nodes */}
+            {nodes.map((node, index) => (
+              <g key={`node-${node.id}`}>
+                {/* Pulse Effect */}
+                <motion.circle
+                  cx={node.x}
+                  cy={node.y}
+                  r="25"
+                  fill="none"
+                  stroke={index % 2 === 0 ? "#3b82f6" : "#8b5cf6"}
+                  strokeOpacity="0.5"
+                  initial={{ scale: 1, opacity: 0.8 }}
+                  animate={{ scale: 1.5, opacity: 0 }}
+                  transition={{ duration: 2, repeat: Infinity, delay: index * 0.1 }}
+                />
 
-        <path
-          d="M0 663C145.5 663 191 666.265 269 647C326.5 630 339.5 621 397.5 566C439 531.5 455 529.5 490 523C509.664 519.348 521 503.736 538 504.236C553.591 504.236 562.429 514.739 584.66 522.749C592.042 525.408 600.2 526.237 607.356 523.019C624.755 515.195 641.446 496.324 657 496.735C673.408 496.735 693.545 519.572 712.903 526.769C718.727 528.934 725.184 528.395 730.902 525.965C751.726 517.115 764.085 497.106 782 496.735C794.831 496.47 804.103 508.859 822.469 518.515C835.13 525.171 850.214 526.815 862.827 520.069C875.952 513.049 889.748 502.706 903.5 503.736C922.677 505.171 935.293 510.562 945.817 515.673C954.234 519.76 963.095 522.792 972.199 524.954C996.012 530.611 1007.42 534.118 1034 549C1077.5 573.359 1082.5 594.5 1140 629C1206 670 1328.5 662.5 1440 662.5"
-          stroke="#FF6B7A"
-          strokeWidth="2"
-          fill="none"
-          pathLength={1}
-          filter="url(#blurMe)"
-        />
-        <path
-          d="M0 587.5C147 587.5 277 587.5 310 573.5C348 563 392.5 543.5 408 535C434 523.5 426 526.235 479 515.235C494 512.729 523 510.435 534.5 512.735C554.5 516.735 555.5 523.235 576 523.735C592 523.735 616 496.735 633 497.235C648.671 497.235 661.31 515.052 684.774 524.942C692.004 527.989 700.2 528.738 707.349 525.505C724.886 517.575 741.932 498.33 757.5 498.742C773.864 498.742 791.711 520.623 810.403 527.654C816.218 529.841 822.661 529.246 828.451 526.991C849.246 518.893 861.599 502.112 879.5 501.742C886.47 501.597 896.865 506.047 907.429 510.911C930.879 521.707 957.139 519.639 982.951 520.063C1020.91 520.686 1037.5 530.797 1056.5 537C1102.24 556.627 1116.5 570.704 1180.5 579.235C1257.5 589.5 1279 587 1440 588"
-          stroke="#FF8C42"
-          strokeWidth="2"
-          fill="none"
-          pathLength={1}
-          filter="url(#blurMe)"
-        />
-        <path
-          d="M0 514C147.5 514.333 294.5 513.735 380.5 513.735C405.976 514.94 422.849 515.228 436.37 515.123C477.503 514.803 518.631 506.605 559.508 511.197C564.04 511.706 569.162 512.524 575 513.735C588 516.433 616 521.702 627.5 519.402C647.5 515.402 659 499.235 680.5 499.235C700.5 499.235 725 529.235 742 528.735C757.654 528.735 768.77 510.583 791.793 500.59C798.991 497.465 807.16 496.777 814.423 499.745C832.335 507.064 850.418 524.648 866 524.235C882.791 524.235 902.316 509.786 921.814 505.392C926.856 504.255 932.097 504.674 937.176 505.631C966.993 511.248 970.679 514.346 989.5 514.735C1006.3 515.083 1036.5 513.235 1055.5 513.235C1114.5 513.235 1090.5 513.235 1124 513.235C1177.5 513.235 1178.99 514.402 1241 514.402C1317.5 514.402 1274.5 512.568 1440 513.235"
-          stroke="#3B82F6"
-          strokeWidth="2"
-          fill="none"
-          pathLength={1}
-          filter="url(#blurMe)"
-        />
-        <path
-          d="M0 438.5C150.5 438.5 261 438.318 323.5 456.5C351 464.5 387.517 484.001 423.5 494.5C447.371 501.465 472 503.735 487 507.735C503.786 512.212 504.5 516.808 523 518.735C547 521.235 564.814 501.235 584.5 501.235C604.5 501.235 626 529.069 643 528.569C658.676 528.569 672.076 511.63 695.751 501.972C703.017 499.008 711.231 498.208 718.298 501.617C735.448 509.889 751.454 529.98 767 529.569C783.364 529.569 801.211 507.687 819.903 500.657C825.718 498.469 832.141 499.104 837.992 501.194C859.178 508.764 873.089 523.365 891 523.735C907.8 524.083 923 504.235 963 506.735C1034.5 506.735 1047.5 492.68 1071 481.5C1122.5 457 1142.23 452.871 1185 446.5C1255.5 436 1294 439 1439.5 439"
-          stroke="#2563EB"
-          strokeWidth="2"
-          fill="none"
-          pathLength={1}
-          filter="url(#blurMe)"
-        />
-        <path
-          d="M0.5 364C145.288 362.349 195 361.5 265.5 378C322 391.223 399.182 457.5 411 467.5C424.176 478.649 456.916 491.677 496.259 502.699C498.746 503.396 501.16 504.304 503.511 505.374C517.104 511.558 541.149 520.911 551.5 521.236C571.5 521.236 590 498.736 611.5 498.736C631.5 498.736 652.5 529.236 669.5 528.736C685.171 528.736 697.81 510.924 721.274 501.036C728.505 497.988 736.716 497.231 743.812 500.579C761.362 508.857 778.421 529.148 794 528.736C810.375 528.736 829.35 508.68 848.364 502.179C854.243 500.169 860.624 500.802 866.535 502.718C886.961 509.338 898.141 519.866 916 520.236C932.8 520.583 934.5 510.236 967.5 501.736C1011.5 491 1007.5 493.5 1029.5 480C1069.5 453.5 1072 440.442 1128.5 403.5C1180.5 369.5 1275 360.374 1439 364"
-          stroke="#1D4ED8"
-          strokeWidth="2"
-          fill="none"
-          pathLength={1}
-          filter="url(#blurMe)"
-        />
+                {/* Node Circle */}
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r="24"
+                  fill="white"
+                  stroke="#cbd5e1"
+                  strokeWidth="1"
+                  className="drop-shadow-md"
+                />
 
-        <defs>
-          <filter id="blurMe">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="5" />
-          </filter>
-        </defs>
-      </svg>
+                {/* Icon */}
+                <foreignObject x={node.x - 12} y={node.y - 12} width="24" height="24">
+                  <div className="w-full h-full flex items-center justify-center text-slate-600">
+                    <DynamicIcon name={node.iconName} className="w-5 h-5" />
+                  </div>
+                </foreignObject>
+
+                {/* Text Label */}
+                <text
+                  x={node.x}
+                  y={node.y + 40}
+                  textAnchor="middle"
+                  fill="#475569"
+                  fontSize="11"
+                  fontWeight="600"
+                  className="uppercase tracking-wider"
+                >
+                  {node.name.split(" ")[0]}
+                </text>
+              </g>
+            ))}
+
+            {/* Central Hub */}
+            <g>
+              <circle cx={centerX} cy={centerY} r="60" fill="white" className="drop-shadow-2xl" />
+              <circle cx={centerX} cy={centerY} r="60" stroke="#e2e8f0" strokeWidth="1" />
+              <circle cx={centerX} cy={centerY} r="50" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 4" className="animate-[spin_10s_linear_infinite]" />
+
+              <foreignObject x={centerX - 40} y={centerY - 40} width="80" height="80">
+                <div className="w-full h-full flex flex-col items-center justify-center text-center">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-violet-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg mb-1">
+                    Z
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">Unified Core</span>
+                </div>
+              </foreignObject>
+            </g>
+
+          </svg>
+        </div>
+      </div>
     </div>
   );
 };

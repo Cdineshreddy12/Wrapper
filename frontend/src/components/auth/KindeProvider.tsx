@@ -16,9 +16,9 @@ function TokenSetupComponent() {
     setKindeTokenGetter(async () => {
       try {
         console.log('🔑 TokenGetter: Called - isAuthenticated:', isAuthenticated, 'user:', !!user);
-        
+
         const token = await getToken();
-        
+
         if (token) {
           console.log('✅ TokenGetter: Successfully retrieved token from Kinde');
           // Always store as backup when we get a valid token
@@ -89,7 +89,7 @@ function SilentAuthInitializer() {
     if (!isLoading && !initStarted && !hasChecked && !isChecking) {
       console.log('🔄 SilentAuth: Initializing silent authentication...');
       setInitStarted(true);
-      
+
       // Add a small delay to ensure everything is properly initialized
       const timer = setTimeout(() => {
         checkSilentAuth().then((result) => {
@@ -106,13 +106,17 @@ function SilentAuthInitializer() {
   return null; // This component doesn't render anything
 }
 
-export const KindeProvider: React.FC<KindeProviderProps> = ({ 
+export const KindeProvider: React.FC<KindeProviderProps> = ({
   children
 }) => {
   // Keep the auth subdomain - Kinde handles domain-wide cookies automatically
   const domain = import.meta.env.VITE_KINDE_DOMAIN || 'https://auth.zopkit.com';
   const clientId = import.meta.env.VITE_KINDE_CLIENT_ID;
-  const redirectUri = import.meta.env.VITE_KINDE_REDIRECT_URI || window.location.origin;
+
+  // CRITICAL: Set a consistent redirect URI to prevent OAuth 400 errors
+  // The redirect URI must match between authorization and token requests
+  // Default to the standard callback path if not explicitly configured
+  const redirectUri = import.meta.env.VITE_KINDE_REDIRECT_URI || `${window.location.origin}/auth/callback`;
   const logoutUri = import.meta.env.VITE_KINDE_LOGOUT_URI || window.location.origin;
 
   if (!domain || !clientId) {
@@ -127,7 +131,7 @@ export const KindeProvider: React.FC<KindeProviderProps> = ({
           </div>
           <h2 className="text-2xl font-bold text-red-600 mb-4">Configuration Error</h2>
           <p className="text-red-700 mb-4">
-            Authentication is not properly configured. 
+            Authentication is not properly configured.
             Please check your environment variables.
           </p>
           <div className="text-sm text-red-600">
@@ -145,6 +149,38 @@ export const KindeProvider: React.FC<KindeProviderProps> = ({
   // Let Kinde handle organization management automatically
   console.log('🔄 KindeProvider: Using Kinde built-in organization handling');
 
+  // Validate configuration to prevent OAuth 400 errors
+  useEffect(() => {
+    const validateConfig = () => {
+      console.log('🔍 KindeProvider: Validating OAuth configuration...');
+
+      // Check domain format
+      if (!domain.startsWith('https://')) {
+        console.error('❌ VITE_KINDE_DOMAIN must start with https://');
+      }
+
+      // Check client ID format
+      if (!clientId || clientId.trim() === '') {
+        console.error('❌ VITE_KINDE_CLIENT_ID is empty or missing');
+      }
+
+      // Check redirect URI format
+      if (!redirectUri || !redirectUri.startsWith('http')) {
+        console.error('❌ Redirect URI is invalid:', redirectUri);
+      }
+
+      // Log configuration (without sensitive data)
+      console.log('✅ OAuth Configuration:', {
+        domain,
+        clientIdLength: clientId?.length,
+        redirectUri, // Log full redirect URI for debugging
+        logoutUri,
+        environment: import.meta.env.MODE
+      });
+    };
+
+    validateConfig();
+  }, [domain, clientId, redirectUri, logoutUri]);
 
 
   return (

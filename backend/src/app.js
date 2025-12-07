@@ -489,7 +489,7 @@ async function registerRoutes() {
   
   // Handle double /api/api/ prefix issue (register routes with both prefixes)
   // This happens when frontend API base URL already includes /api
-  await fastify.register(subscriptionRoutes, { prefix: '/api/api/subscriptions' });
+
   await fastify.register(permissionRoutes, { prefix: '/api/permissions' });
   await fastify.register(roleRoutes, { prefix: '/api/roles' });
   // Register custom-roles routes with both prefixes for compatibility

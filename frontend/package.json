@@ -32,6 +32,8 @@
     "postinstall": "husky install"
   },
   "dependencies": {
+    "@google/genai": "^1.31.0",
+    "@google/generative-ai": "^0.24.1",
     "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^5.2.2",
     "@kinde-oss/kinde-auth-react": "^5.4.1",

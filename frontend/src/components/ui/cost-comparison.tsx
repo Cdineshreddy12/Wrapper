@@ -1,534 +1,776 @@
-"use client";
-import { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Check,
-  Users,
-  Globe,
-  Receipt,
-  ShoppingCart,
-  Settings,
-  Link,
-  Zap,
-  Puzzle,
-  Shield,
-  Headphones,
-  Plug,
+  X,
+  HelpCircle,
   ChevronDown,
-  Star,
+  ChevronRight,
+  Filter,
   ArrowRight,
-  Target,
-  Layers
+  Minus,
+  Search,
+  Sliders,
+  Calculator,
+  EyeOff,
+  Eye,
+  Info,
+  Users,
+  Briefcase,
+  CreditCard,
+  LayoutGrid,
+  Box,
+  ShieldCheck,
+  Zap,
+  Globe,
+  Database,
+  Lock,
+  Headphones,
+  LucideIcon
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
 
-const CostComparison = () => {
-  const [isAnnual, setIsAnnual] = useState(true);
-  const [showAllFeatures, setShowAllFeatures] = useState(false);
+// --- Types ---
 
-  const INITIAL_FEATURES_COUNT = 10;
+export type PlanTier = 'starter' | 'professional' | 'enterprise';
 
-  const plans = [
-    {
-      name: 'Essential',
-      monthlyPrice: 35,
-      annualPrice: 29,
-      description: 'Perfect for small businesses getting started',
-      popular: false,
-      color: 'bg-gradient-to-br from-blue-500 to-blue-600',
-      textColor: 'text-blue-600',
-      buttonVariant: 'outline' as const,
-      features: [
-        { icon: Check, text: 'Everything you need to get started' }
-      ]
-    },
-    {
-      name: 'Perform',
-      monthlyPrice: 54,
-      annualPrice: 49,
-      description: 'Most popular choice for growing businesses',
-      popular: true,
-      color: 'bg-gradient-to-br from-emerald-500 to-emerald-600',
-      textColor: 'text-emerald-600',
-      buttonVariant: 'default' as const,
-      features: [
-        { icon: Check, text: 'Advanced features for growing teams' }
-      ]
-    },
-    {
-      name: 'Enterprise',
-      monthlyPrice: 85,
-      annualPrice: 79,
-      description: 'Complete solution for large organizations',
-      popular: false,
-      color: 'bg-gradient-to-br from-purple-500 to-purple-600',
-      textColor: 'text-purple-600',
-      buttonVariant: 'outline' as const,
-      features: [
-        { icon: Check, text: 'Enterprise-grade features and support' }
-      ]
-    }
-  ];
+export type FeatureValuePrimitive = string | number | boolean;
 
-  const features = [
-    // Core Platform Features (First 5 - always visible)
-    {
-      name: 'Platform Access',
-      icon: Settings,
-      category: 'Core',
-      essential: true,
-      perform: true,
-      enterprise: true,
-      description: 'Complete platform access with dashboard',
-      priority: 'high'
-    },
-    {
-      name: 'Account Management',
-      icon: Users,
-      category: 'Core',
-      essential: '400 users',
-      perform: '800 users',
-      enterprise: 'Unlimited users',
-      description: 'User account management and permissions',
-      priority: 'high'
-    },
-    {
-      name: 'Custom Domains',
-      icon: Globe,
-      category: 'Core',
-      essential: '4 domains',
-      perform: '10 domains',
-      enterprise: 'Unlimited domains',
-      description: 'Custom domain support and SSL',
-      priority: 'high'
-    },
-    {
-      name: 'Receipt Processing',
-      icon: Receipt,
-      category: 'Core',
-      essential: 'Unlimited',
-      perform: 'Unlimited',
-      enterprise: 'Unlimited',
-      description: 'Automated receipt forwarding and processing',
-      priority: 'high'
-    },
-    {
-      name: 'Supplier Tools',
-      icon: ShoppingCart,
-      category: 'Core',
-      essential: '1 supplier',
-      perform: '10 suppliers',
-      enterprise: 'Unlimited suppliers',
-      description: 'Supplier management and integration',
-      priority: 'high'
-    },
+export interface FeatureValueObject {
+  value: FeatureValuePrimitive;
+  tooltip?: string;
+  highlight?: boolean;
+}
 
-    // Advanced Features (Next 5 - show initially)
-    {
-      name: 'Core Features',
-      icon: Zap,
-      category: 'Advanced',
-      essential: true,
-      perform: true,
-      enterprise: true,
-      description: 'All core business management features',
-      priority: 'medium'
-    },
-    {
-      name: 'Public URL Generator',
-      icon: Link,
-      category: 'Advanced',
-      essential: true,
-      perform: true,
-      enterprise: true,
-      description: 'Generate and manage public URLs',
-      priority: 'medium'
-    },
-    {
-      name: 'API Integrations',
-      icon: Plug,
-      category: 'Advanced',
-      essential: true,
-      perform: true,
-      enterprise: true,
-      description: 'Third-party service integrations',
-      priority: 'medium'
-    },
-    {
-      name: 'Add-on Features',
-      icon: Puzzle,
-      category: 'Advanced',
-      essential: true,
-      perform: true,
-      enterprise: true,
-      description: 'Additional feature add-ons',
-      priority: 'medium'
-    },
-    {
-      name: 'Customer Support',
-      icon: Headphones,
-      category: 'Advanced',
-      essential: 'Standard',
-      perform: 'Priority',
-      enterprise: '24/7 Premium',
-      description: 'Customer support access and response times',
-      priority: 'medium'
-    },
+export type FeatureValue = FeatureValuePrimitive | FeatureValueObject;
 
-    // Enterprise Features (Last 3 - hidden initially)
-    {
-      name: 'Advanced Admin Roles',
-      icon: Shield,
-      category: 'Enterprise',
-      essential: false,
-      perform: false,
-      enterprise: true,
-      description: 'Advanced administrative controls and permissions',
-      priority: 'low'
-    },
-    {
-      name: 'Enterprise Add-ons',
-      icon: Settings,
-      category: 'Enterprise',
-      essential: false,
-      perform: false,
-      enterprise: true,
-      description: 'Specialized enterprise-only features',
-      priority: 'low'
-    },
-    {
-      name: 'Custom Integrations',
-      icon: Plug,
-      category: 'Enterprise',
-      essential: false,
-      perform: false,
-      enterprise: true,
-      description: 'Custom integration development and support',
-      priority: 'low'
-    }
-  ];
+export interface PlanDefinition {
+  id: PlanTier;
+  name: string;
+  description: string;
+  basePrice: number | null;
+  model: 'flat' | 'per_user' | 'custom';
+  annualDiscountPercent: number;
+  buttonText: string;
+  highlightColor: string;
+  badge?: string;
+  popular?: boolean;
+}
 
-  const visibleFeatures = showAllFeatures ? features : features.slice(0, INITIAL_FEATURES_COUNT);
-  const hasMoreFeatures = features.length > INITIAL_FEATURES_COUNT;
+export interface Feature {
+  id: string;
+  name: string;
+  description?: string;
+  tiers: Record<PlanTier, FeatureValue>;
+}
 
-  const getFeatureValue = (feature: Record<string, any>, planName: string) => {
-    const key = planName.toLowerCase();
-    const value = feature[key];
-    if (typeof value === 'boolean') {
-      return value ? '✓' : '—';
-    }
-    return value;
-  };
+export interface Module {
+  id: string;
+  name: string;
+  features: Feature[];
+}
+
+export interface Application {
+  id: string;
+  name: string;
+  icon: LucideIcon;
+  description: string;
+  modules: Module[];
+}
+
+// --- Data ---
+
+export const PLANS: PlanDefinition[] = [
+  {
+    id: 'starter',
+    name: 'Starter',
+    description: 'Perfect for small teams and startups.',
+    basePrice: 29, // Flat fee implies simplified starting point
+    model: 'flat',
+    annualDiscountPercent: 0, // No discount on starter
+    buttonText: 'Start Free Trial',
+    highlightColor: 'border-slate-200 hover:border-slate-300',
+    badge: 'Best Value'
+  },
+  {
+    id: 'professional',
+    name: 'Professional',
+    description: 'For growing businesses requiring scale.',
+    basePrice: 19, // Per user
+    model: 'per_user',
+    annualDiscountPercent: 20,
+    popular: true,
+    buttonText: 'Get Started',
+    highlightColor: 'border-blue-500 ring-1 ring-blue-500 shadow-blue-100'
+  },
+  {
+    id: 'enterprise',
+    name: 'Enterprise',
+    description: 'Maximum security and control.',
+    basePrice: null,
+    model: 'custom',
+    annualDiscountPercent: 0,
+    buttonText: 'Contact Sales',
+    highlightColor: 'border-purple-500 hover:shadow-purple-100',
+    badge: 'Custom Solutions'
+  }
+];
+
+export const APPLICATIONS: Application[] = [
+  {
+    id: 'platform_core',
+    name: 'Platform Foundation',
+    icon: LayoutGrid,
+    description: 'Identity, security, and administration.',
+    modules: [
+      {
+        id: 'security',
+        name: 'Security & Identity',
+        features: [
+          {
+            id: 'sso',
+            name: 'Single Sign-On (SSO)',
+            tiers: { starter: false, professional: 'Google & Microsoft', enterprise: 'SAML, OIDC & Custom' }
+          },
+          {
+            id: 'mfa',
+            name: 'Multi-Factor Auth',
+            tiers: { starter: 'SMS', professional: 'Authenticator App', enterprise: 'Hardware Keys (YubiKey)' }
+          },
+          {
+            id: 'audit_logs',
+            name: 'Audit Logs',
+            tiers: { starter: '7 Days', professional: '90 Days', enterprise: 'Unlimited / Exportable' }
+          }
+        ]
+      },
+      {
+        id: 'admin',
+        name: 'Administration',
+        features: [
+          {
+            id: 'roles',
+            name: 'Custom Roles',
+            tiers: { starter: 3, professional: 10, enterprise: 'Unlimited' }
+          },
+          {
+            id: 'api',
+            name: 'API Access',
+            tiers: { starter: 'Read-only', professional: 'Standard (1000/min)', enterprise: 'High-Volume (10k/min)' }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'crm',
+    name: 'Sales CRM',
+    icon: Users,
+    description: 'Pipeline management and sales automation.',
+    modules: [
+      {
+        id: 'pipelines',
+        name: 'Pipeline Management',
+        features: [
+          {
+            id: 'active_pipelines',
+            name: 'Active Pipelines',
+            tiers: { starter: 1, professional: 5, enterprise: 'Unlimited' }
+          },
+          {
+            id: 'lead_enrichment',
+            name: 'Auto-Enrichment',
+            description: 'Automatically populate company data from email domains.',
+            tiers: { starter: false, professional: true, enterprise: true }
+          }
+        ]
+      },
+      {
+        id: 'automation',
+        name: 'Sales Automation',
+        features: [
+          {
+            id: 'sequences',
+            name: 'Email Sequences',
+            tiers: { starter: false, professional: true, enterprise: true }
+          },
+          {
+            id: 'dialer',
+            name: 'Power Dialer',
+            tiers: { starter: false, professional: false, enterprise: { value: true, tooltip: 'Includes 1000 minutes/user' } }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'finance',
+    name: 'Finance OS',
+    icon: CreditCard,
+    description: 'Accounting, invoicing, and expense management.',
+    modules: [
+      {
+        id: 'invoicing',
+        name: 'Invoicing & Payments',
+        features: [
+          {
+            id: 'invoices',
+            name: 'Monthly Invoices',
+            tiers: { starter: 50, professional: 500, enterprise: 'Unlimited' }
+          },
+          {
+            id: 'currencies',
+            name: 'Multi-Currency',
+            tiers: { starter: false, professional: true, enterprise: true }
+          }
+        ]
+      },
+      {
+        id: 'compliance',
+        name: 'Tax & Compliance',
+        features: [
+          {
+            id: 'auto_tax',
+            name: 'Automated Tax Calculation',
+            tiers: { starter: false, professional: true, enterprise: true }
+          },
+          {
+            id: 'erp_sync',
+            name: 'NetSuite/SAP Sync',
+            tiers: { starter: false, professional: false, enterprise: true }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'operations',
+    name: 'Inventory & Ops',
+    icon: Box,
+    description: 'Multi-location inventory and logistics.',
+    modules: [
+      {
+        id: 'inventory',
+        name: 'Inventory Management',
+        features: [
+          {
+            id: 'locations',
+            name: 'Warehouse Locations',
+            tiers: { starter: 1, professional: 5, enterprise: 'Unlimited' }
+          },
+          {
+            id: 'forecasting',
+            name: 'Demand Forecasting',
+            tiers: { starter: false, professional: 'Basic', enterprise: 'AI-Powered' }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'support',
+    name: 'Support & Success',
+    icon: Headphones,
+    description: 'Service level agreements and training.',
+    modules: [
+      {
+        id: 'sla',
+        name: 'Service Level',
+        features: [
+          {
+            id: 'support_channel',
+            name: 'Support Channels',
+            tiers: { starter: 'Email', professional: 'Email & Chat', enterprise: '24/7 Phone & Slack' }
+          },
+          {
+            id: 'onboarding',
+            name: 'Onboarding',
+            tiers: { starter: 'Self-serve', professional: 'Guided Session', enterprise: 'Dedicated Success Manager' }
+          }
+        ]
+      }
+    ]
+  }
+];
+
+// --- Helpers ---
+
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
+
+const Tooltip = ({ text }: { text: string }) => (
+  <div className="group relative inline-block ml-1.5 align-middle">
+    <Info className="w-3.5 h-3.5 text-slate-400 hover:text-blue-500 cursor-help transition-colors" />
+    <div className="invisible group-hover:visible absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2.5 bg-slate-800 text-white text-xs rounded-lg shadow-xl z-50 text-center leading-relaxed pointer-events-none">
+      {text}
+      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+    </div>
+  </div>
+);
+
+const ValueRenderer = ({ valueObj }: { valueObj: FeatureValueObject }) => {
+  const { value, tooltip, highlight } = valueObj;
+
+  if (value === true) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className={`w-6 h-6 rounded-full flex items-center justify-center ${highlight ? 'bg-blue-100 ring-2 ring-blue-200' : 'bg-emerald-100'}`}>
+          <Check className={`w-4 h-4 ${highlight ? 'text-blue-600' : 'text-emerald-600'}`} />
+        </div>
+        {tooltip && <Tooltip text={tooltip} />}
+      </div>
+    );
+  }
+
+  if (value === false) {
+    return (
+      <div className="flex items-center justify-center h-full opacity-40">
+        <Minus className="w-4 h-4 text-slate-400" />
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-3 md:px-4 py-8">
-      {/* Professional Header */}
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center gap-2 bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-semibold mb-4">
-          <Target className="w-3 h-3" />
-          Plan Comparison
-        </div>
-        <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-          Choose Your Plan
-        </h2>
-        <p className="text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-6 text-base">
-          Select the perfect plan for your business needs with our comprehensive feature comparison.
-        </p>
-
-        {/* Compact Pricing Toggle */}
-        <div className="flex items-center justify-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg max-w-sm mx-auto border border-gray-200 dark:border-gray-700">
-          <span className={`text-sm font-medium ${!isAnnual ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400'}`}>
-            Monthly
-          </span>
-          <Switch
-            checked={isAnnual}
-            onCheckedChange={setIsAnnual}
-            aria-label="Toggle annual pricing"
-          />
-          <span className={`text-sm font-medium flex items-center gap-1 ${isAnnual ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400'}`}>
-            Annual
-            <Badge variant="secondary" className="text-xs px-1 py-0.5 ml-1">
-              20% off
-            </Badge>
-          </span>
-        </div>
-      </div>
-
-      {/* Compact Fixed Pricing Cards Header */}
-      <div className="sticky top-0 z-50 bg-white dark:bg-gray-900 shadow-lg border-b border-gray-200 dark:border-gray-700 mb-4">
-        <div className="max-w-6xl mx-auto px-4 md:px-6 py-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 lg:gap-4">
-            {plans.map((plan) => (
-              <Card
-                key={plan.name}
-                className={`relative overflow-hidden transition-all duration-200 hover:shadow-lg ${
-                  plan.popular ? 'ring-1 ring-blue-500 ring-offset-2 bg-blue-50/50 dark:bg-blue-950/20' : 'bg-white dark:bg-gray-900'
-                }`}
-              >
-                {plan.popular && (
-                  <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 z-[100]">
-                    <Badge variant="default" className="px-3 py-1 text-xs font-bold shadow-md bg-blue-600">
-                      <Star className="w-3 h-3 mr-1" />
-                      Most Popular
-                    </Badge>
-                </div>
-                )}
-
-                <CardContent className="p-4 text-center">
-                  <div className={`w-10 h-10 ${plan.color} rounded-lg flex items-center justify-center mx-auto mb-3 shadow-md`}>
-                    <Settings className="w-5 h-5 text-white" />
-              </div>
-
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">
-                    {plan.name}
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400 mb-3 text-xs">
-                    {plan.description}
-                  </p>
-
-                  <div className="mb-3">
-                    <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                      ${isAnnual ? plan.annualPrice : plan.monthlyPrice}
-                      <span className="text-sm font-normal text-gray-600 dark:text-gray-400">/mo</span>
-                    </div>
-                    {isAnnual && (
-                      <div className="text-xs text-blue-600 dark:text-blue-400 font-medium">
-                        Billed annually (Save 20%)
-                </div>
-                    )}
-              </div>
-
-                  <Button
-                    className={`w-full ${plan.popular ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-800 hover:bg-gray-700'} text-white font-medium py-2 text-sm transition-all duration-200`}
-                    size="sm"
-                  >
-                    {plan.popular ? 'Get Started' : 'Choose Plan'}
-                    <ArrowRight className="w-3 h-3 ml-1" />
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-                </div>
-              </div>
-
-      {/* Compact Feature Comparison */}
-      <Card className="shadow-lg border-0 overflow-hidden bg-white dark:bg-gray-900">
-        <CardHeader className="text-center pb-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-          <CardTitle className="text-xl font-bold text-gray-900 dark:text-gray-100">
-            <Layers className="w-5 h-5 inline mr-2" />
-            Feature Comparison
-          </CardTitle>
-          <p className="text-gray-600 dark:text-gray-400 text-sm">
-            Compare plan features side-by-side
-          </p>
-          {hasMoreFeatures && (
-            <div className="flex items-center justify-center gap-2 mt-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAllFeatures(!showAllFeatures)}
-                className="flex items-center gap-2 border hover:bg-gray-50 dark:hover:bg-gray-800 text-sm px-4 py-2"
-              >
-                {showAllFeatures ? (
-                  <>
-                    <ChevronDown className="w-4 h-4 rotate-180" />
-                    Show Less
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="w-4 h-4" />
-                    Show All ({features.length} features)
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
-        </CardHeader>
-
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <div
-              className={`relative ${showAllFeatures ? 'h-auto' : 'h-[500px] overflow-y-auto'}`}
-              style={{
-                scrollbarWidth: 'thin',
-                scrollbarColor: 'rgb(16 185 129) rgb(243 244 246)'
-              }}
-            >
-              <style dangerouslySetInnerHTML={{
-                __html: `
-                  div::-webkit-scrollbar {
-                    width: 8px;
-                  }
-                  div::-webkit-scrollbar-track {
-                    background: rgb(243 244 246);
-                    border-radius: 8px;
-                  }
-                  div::-webkit-scrollbar-thumb {
-                    background: rgb(16 185 129);
-                    border-radius: 8px;
-                    transition: background-color 0.3s;
-                  }
-                  div::-webkit-scrollbar-thumb:hover {
-                    background: rgb(5 150 105);
-                  }
-                  @media (prefers-color-scheme: dark) {
-                    div::-webkit-scrollbar-track {
-                      background: rgb(31 41 55);
-                    }
-                    div::-webkit-scrollbar-thumb {
-                      background: rgb(16 185 129);
-                    }
-                    div::-webkit-scrollbar-thumb:hover {
-                      background: rgb(5 150 105);
-                    }
-                  }
-                `
-              }} />
-
-              {/* Feature Comparison Table */}
-              <table className="w-full min-w-[700px]">
-                <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10 border-b border-gray-200 dark:border-gray-700">
-                  <tr>
-                    <th className="text-left py-4 px-4 font-bold text-gray-900 dark:text-gray-100 text-sm">
-                      Features
-                    </th>
-                    <th className="text-center py-4 px-4 font-bold text-blue-600 text-sm">
-                      Essential
-                    </th>
-                    <th className="text-center py-4 px-4 font-bold text-emerald-600 text-sm">
-                      Perform
-                    </th>
-                    <th className="text-center py-4 px-4 font-bold text-purple-600 text-sm">
-                      Enterprise
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {visibleFeatures.map((feature, index) => (
-                    <tr
-                      key={index}
-                      className={`group hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors duration-200 ${
-                        feature.category === 'Core' ? 'bg-blue-50/30 dark:bg-blue-950/10' :
-                        feature.category === 'Advanced' ? 'bg-gray-50/30 dark:bg-gray-800/10' :
-                        'bg-purple-50/20 dark:bg-purple-950/5'
-                      }`}
-                    >
-                      <td className="py-4 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg ${
-                            feature.category === 'Core' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600' :
-                            feature.category === 'Advanced' ? 'bg-gray-100 dark:bg-gray-800 text-gray-600' :
-                            'bg-purple-100 dark:bg-purple-900/30 text-purple-600'
-                          }`}>
-                            <feature.icon className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
-                              {feature.name}
-                            </div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400">
-                              {feature.description}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-4 px-4 text-center">
-                        {getFeatureValue(feature, 'Essential') !== false ? (
-                          <div className="flex items-center justify-center">
-                            <Check className="w-4 h-4 text-emerald-600" />
-                            <span className="ml-2 text-sm font-medium">
-                              {getFeatureValue(feature, 'Essential')}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 text-sm">—</span>
-                        )}
-                      </td>
-                      <td className="py-4 px-4 text-center">
-                        {getFeatureValue(feature, 'Perform') !== false ? (
-                          <div className="flex items-center justify-center">
-                            <Check className="w-4 h-4 text-emerald-600" />
-                            <span className="ml-2 text-sm font-medium">
-                              {getFeatureValue(feature, 'Perform')}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 text-sm">—</span>
-                        )}
-                      </td>
-                      <td className="py-4 px-4 text-center">
-                        {getFeatureValue(feature, 'Enterprise') !== false ? (
-                          <div className="flex items-center justify-center">
-                            <Check className="w-4 h-4 text-emerald-600" />
-                            <span className="ml-2 text-sm font-medium">
-                              {getFeatureValue(feature, 'Enterprise')}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 text-sm">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-
-                  {/* Show More/Less indicator */}
-                  {hasMoreFeatures && !showAllFeatures && (
-                    <tr>
-                      <td colSpan={4} className="py-4 text-center bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
-                        <div className="flex flex-col items-center gap-3">
-                          <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-                            <ChevronDown className="w-4 h-4 text-blue-600 animate-bounce" />
-                          </div>
-                          <p className="text-gray-600 dark:text-gray-400 text-sm">
-                            {features.length - INITIAL_FEATURES_COUNT} more features
-                          </p>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowAllFeatures(true)}
-                            className="text-blue-600 hover:text-blue-700 border-blue-200 hover:border-blue-300"
-                          >
-                            Show All
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Professional CTA */}
-      <div className="text-center mt-12">
-        <div className="bg-white dark:bg-gray-900 rounded-xl p-6 shadow-lg border border-gray-200 dark:border-gray-700 max-w-2xl mx-auto">
-          <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-3">
-            Ready to Get Started?
-          </h3>
-          <p className="text-gray-600 dark:text-gray-400 mb-6 text-sm">
-            Join thousands of businesses using our platform.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 shadow-md">
-              Start Free Trial
-            </Button>
-            <Button size="lg" variant="outline" className="border-gray-300 hover:border-blue-500 hover:text-blue-600 px-6 py-2">
-              Contact Sales
-            </Button>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-            14-day free trial • No credit card required
-          </p>
-        </div>
-      </div>
+    <div className="flex items-center justify-center h-full text-center px-2">
+      <span className={`text-sm font-medium ${highlight ? 'text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100' : 'text-slate-700'}`}>
+        {value}
+      </span>
+      {tooltip && <Tooltip text={tooltip} />}
     </div>
   );
 };
 
-export default CostComparison;
+// --- Main Component ---
 
+const CostComparison = () => {
+  // State: Cost Calculator
+  const [isAnnual, setIsAnnual] = useState(true);
+  const [userCount, setUserCount] = useState(10);
+
+  // State: Filtering & Visibility
+  const [selectedApps, setSelectedApps] = useState<string[]>(['all']);
+  const [selectedPlans, setSelectedPlans] = useState<PlanTier[]>(['starter', 'professional', 'enterprise']);
+  const [expandedApps, setExpandedApps] = useState<string[]>(APPLICATIONS.map(a => a.id));
+
+  // State: Smart Views
+  const [showDiffOnly, setShowDiffOnly] = useState(false);
+  const [smartView, setSmartView] = useState(true); // Hides modules not relevant to selected plans
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // --- Logic: Cost Calculation ---
+  const calculateCost = (planId: PlanTier) => {
+    const plan = PLANS.find(p => p.id === planId);
+    if (!plan || plan.basePrice === null) return null;
+
+    let monthlyCost = 0;
+    if (plan.model === 'flat') {
+      monthlyCost = plan.basePrice;
+    } else if (plan.model === 'per_user') {
+      monthlyCost = plan.basePrice * userCount;
+    }
+
+    if (isAnnual) {
+      const discount = monthlyCost * (plan.annualDiscountPercent / 100);
+      monthlyCost = monthlyCost - discount;
+    }
+
+    return monthlyCost;
+  };
+
+  // --- Logic: Filtering ---
+
+  const toggleAppSelection = (appId: string) => {
+    if (appId === 'all') {
+      setSelectedApps(['all']);
+    } else {
+      let newSelection = selectedApps.filter(id => id !== 'all');
+      if (newSelection.includes(appId)) {
+        newSelection = newSelection.filter(id => id !== appId);
+      } else {
+        newSelection.push(appId);
+      }
+      if (newSelection.length === 0) newSelection = ['all'];
+      setSelectedApps(newSelection);
+    }
+  };
+
+  const togglePlanSelection = (planId: PlanTier) => {
+    if (selectedPlans.includes(planId)) {
+      if (selectedPlans.length > 1) { // Prevent deselecting all
+        setSelectedPlans(selectedPlans.filter(p => p !== planId));
+      }
+    } else {
+      // Sort to maintain order: Starter -> Pro -> Enterprise
+      const order: PlanTier[] = ['starter', 'professional', 'enterprise'];
+      const newPlans = [...selectedPlans, planId].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+      setSelectedPlans(newPlans);
+    }
+  };
+
+  const toggleAppExpansion = (appId: string) => {
+    setExpandedApps(prev =>
+      prev.includes(appId) ? prev.filter(id => id !== appId) : [...prev, appId]
+    );
+  };
+
+  // --- Process Data for Render ---
+
+  const processedApps = useMemo(() => {
+    return APPLICATIONS.map(app => {
+      // 1. App Level Filter
+      if (!selectedApps.includes('all') && !selectedApps.includes(app.id)) return null;
+
+      // 2. Filter Modules & Features
+      const visibleModules = app.modules.map(module => {
+        const visibleFeatures = module.features.filter(feature => {
+          // Search Filter
+          if (searchQuery && !feature.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+            return false;
+          }
+
+          // Smart View: Hide feature if all selected plans have it as 'false' (Not included)
+          if (smartView) {
+            const hasValueInSelectedPlans = selectedPlans.some(planId => {
+              const val = feature.tiers[planId];
+              return typeof val === 'object' ? val.value !== false : val !== false;
+            });
+            if (!hasValueInSelectedPlans) return false;
+          }
+
+          // Diff View: Hide if all selected plans have identical values
+          if (showDiffOnly) {
+            const values = selectedPlans.map(planId => {
+              const val = feature.tiers[planId];
+              return typeof val === 'object' ? val.value : val;
+            });
+            const allEqual = values.every(v => v === values[0]);
+            if (allEqual) return false;
+          }
+
+          return true;
+        });
+
+        if (visibleFeatures.length === 0) return null;
+        return { ...module, features: visibleFeatures };
+      }).filter(Boolean);
+
+      if (visibleModules.length === 0) return null;
+      return { ...app, modules: visibleModules };
+    }).filter(Boolean); // Remove null apps
+  }, [selectedApps, selectedPlans, searchQuery, smartView, showDiffOnly]);
+
+
+  // --- Render Helpers ---
+
+  // Dynamic grid template based on active plans
+  // 1st col is feature name (min 280px), rest are equal width
+  const gridStyle = {
+    display: 'grid',
+    gridTemplateColumns: `minmax(240px, 1.5fr) repeat(${selectedPlans.length}, minmax(160px, 1fr))`
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20">
+
+      {/* --- Top Control Bar (Mobile Sticky) --- */}
+      <div className="bg-slate-900 text-white py-3 px-4 sm:hidden sticky top-0 z-50 flex items-center justify-between shadow-md">
+        <span className="font-bold text-lg">UnifiedOps</span>
+        <button className="text-sm bg-blue-600 px-3 py-1 rounded-full font-medium">Get Started</button>
+      </div>
+
+      {/* --- Header Section --- */}
+      <div className="bg-white border-b border-slate-200 pt-12 pb-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+            <div className="max-w-2xl">
+              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900">
+                Transparent Pricing for Every Stage
+              </h1>
+              <p className="mt-4 text-lg text-slate-500">
+                Compare plans, calculate costs, and find the perfect fit for your organization.
+              </p>
+            </div>
+
+            {/* Cost Calculator Widget */}
+            <div className="w-full md:w-auto bg-slate-50 border border-slate-200 rounded-xl p-5 shadow-sm min-w-[320px]">
+              <div className="flex items-center space-x-2 mb-4 text-slate-700 font-semibold">
+                <Calculator className="w-5 h-5 text-blue-600" />
+                <span>Cost Estimator</span>
+              </div>
+
+              <div className="space-y-5">
+                {/* Users Slider */}
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-slate-600">Team Size</span>
+                    <span className="font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">{userCount} users</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="100"
+                    value={userCount}
+                    onChange={(e) => setUserCount(parseInt(e.target.value))}
+                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                    <span>1</span>
+                    <span>100+</span>
+                  </div>
+                </div>
+
+                {/* Billing Toggle */}
+                <div className="flex items-center justify-between p-1 bg-slate-200 rounded-lg relative">
+                  <div className={`absolute left-1 top-1 w-[calc(50%-4px)] h-[calc(100%-8px)] bg-white rounded shadow-sm transition-transform duration-200 ease-in-out ${isAnnual ? 'translate-x-full' : 'translate-x-0'}`}></div>
+                  <button
+                    onClick={() => setIsAnnual(false)}
+                    className={`relative z-10 w-1/2 text-center text-sm font-medium py-1.5 transition-colors ${!isAnnual ? 'text-slate-900' : 'text-slate-500'}`}
+                  >
+                    Monthly
+                  </button>
+                  <button
+                    onClick={() => setIsAnnual(true)}
+                    className={`relative z-10 w-1/2 text-center text-sm font-medium py-1.5 transition-colors flex items-center justify-center gap-1 ${isAnnual ? 'text-slate-900' : 'text-slate-500'}`}
+                  >
+                    Annual <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1 rounded font-bold">-20%</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+
+      {/* --- Main Content Area --- */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        {/* Advanced Filters Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
+          {/* App Tabs */}
+          <div className="flex flex-wrap gap-1">
+            <button
+              onClick={() => toggleAppSelection('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedApps.includes('all')
+                ? 'bg-slate-800 text-white shadow-sm'
+                : 'bg-transparent text-slate-600 hover:bg-slate-100'
+                }`}
+            >
+              All Apps
+            </button>
+            {APPLICATIONS.map(app => (
+              <button
+                key={app.id}
+                onClick={() => toggleAppSelection(app.id)}
+                className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${!selectedApps.includes('all') && selectedApps.includes(app.id)
+                  ? 'bg-blue-100 text-blue-700 shadow-sm ring-1 ring-blue-200'
+                  : 'bg-transparent text-slate-600 hover:bg-slate-100'
+                  }`}
+              >
+                <app.icon className="w-3 h-3 mr-1.5" />
+                {app.name}
+              </button>
+            ))}
+          </div>
+
+          {/* View Toggles */}
+          <div className="flex items-center gap-2 border-l border-slate-200 pl-4 ml-auto">
+            <button
+              onClick={() => setSmartView(!smartView)}
+              className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${smartView ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              title="Hide features not included in selected plans"
+            >
+              {smartView ? <Eye className="w-3.5 h-3.5 mr-1.5" /> : <EyeOff className="w-3.5 h-3.5 mr-1.5" />}
+              Smart View
+            </button>
+
+            <button
+              onClick={() => setShowDiffOnly(!showDiffOnly)}
+              className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${showDiffOnly ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+            >
+              <Sliders className="w-3.5 h-3.5 mr-1.5" />
+              Diff Only
+            </button>
+          </div>
+        </div>
+
+        {/* --- Dynamic Table --- */}
+        <div className="bg-white rounded-2xl shadow ring-1 ring-slate-200 overflow-hidden">
+          <div className="h-[600px] overflow-auto relative">
+            <div className="min-w-[800px]">
+              {/* --- Table Header --- */}
+              <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all">
+                <div style={gridStyle} className="items-end py-4 px-4 sm:px-6">
+
+                  {/* Control Column */}
+                  <div className="flex flex-col justify-end pr-4 pb-1 sticky left-0 z-20 bg-white/95 backdrop-blur-md">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search features..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 bg-slate-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                      />
+                    </div>
+                    <div className="mt-3 flex items-center gap-2 text-xs text-slate-500 overflow-x-auto whitespace-nowrap scrollbar-hide">
+                      <span className="font-semibold">Compare:</span>
+                      {PLANS.map(plan => (
+                        <label key={plan.id} className="flex items-center cursor-pointer hover:text-slate-800 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={selectedPlans.includes(plan.id)}
+                            onChange={() => togglePlanSelection(plan.id)}
+                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 mr-1.5"
+                          />
+                          {plan.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Plan Columns */}
+                  {PLANS.filter(p => selectedPlans.includes(p.id)).map(plan => {
+                    const estimatedCost = calculateCost(plan.id);
+                    return (
+                      <div key={plan.id} className={`flex flex-col p-3 rounded-t-xl transition-all border-t border-x ${plan.highlightColor} relative bg-white`}>
+                        {plan.popular && (
+                          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-0.5 rounded-full shadow-sm whitespace-nowrap">
+                            Most Popular
+                          </div>
+                        )}
+                        <h3 className="text-lg font-bold text-slate-900 text-center">{plan.name}</h3>
+
+                        <div className="mt-2 text-center h-14 flex flex-col justify-center">
+                          {estimatedCost !== null ? (
+                            <div>
+                              <span className="text-2xl font-bold tracking-tight text-slate-900">
+                                {formatCurrency(estimatedCost)}
+                              </span>
+                              <span className="text-xs font-semibold text-slate-400 block -mt-1">
+                                /mo {isAnnual && 'billed annually'}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xl font-bold tracking-tight text-slate-900">Contact Sales</span>
+                          )}
+                        </div>
+
+                        <button className={`mt-3 w-full rounded-md py-1.5 text-xs font-bold shadow-sm transition-all
+                          ${plan.id === 'professional'
+                            ? 'bg-blue-600 text-white hover:bg-blue-700'
+                            : 'bg-white text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50'}`}>
+                          {plan.buttonText}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {(processedApps as any[]).map((app, index) => {
+                // TS Hack: processedApps might have nulls filtered out, but TS doesn't know for sure
+                if (!app) return null;
+
+                const isExpanded = expandedApps.includes(app.id);
+                return (
+                  <div key={app.id} className={index !== 0 ? 'border-t border-slate-200' : ''}>
+                    {/* App Header Row */}
+                    <div
+                      onClick={() => toggleAppExpansion(app.id)}
+                      className="w-full flex items-center justify-between px-4 sm:px-6 py-4 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer group"
+                    >
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 p-2 bg-white rounded-lg border border-slate-200 text-blue-600 shadow-sm group-hover:scale-105 transition-transform">
+                          <app.icon className="w-5 h-5" />
+                        </div>
+                        <div className="ml-4">
+                          <h4 className="text-base font-bold text-slate-900 group-hover:text-blue-700 transition-colors">{app.name}</h4>
+                          <p className="text-xs text-slate-500 hidden sm:block">{app.description}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center text-slate-400">
+                        <span className="text-[10px] font-bold uppercase tracking-wider mr-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {isExpanded ? 'Collapse' : 'Expand'}
+                        </span>
+                        <div className={`transform transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
+                          <ChevronDown className="w-5 h-5" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Modules */}
+                    <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                      <div className="divide-y divide-slate-100">
+                        {app.modules.map((module: any) => (
+                          <div key={module.id} className="bg-white">
+                            {/* Module Name Row */}
+                            <div style={gridStyle} className="bg-white">
+                              <div className="col-span-1 px-6 py-2 sticky left-0 z-10 bg-white">
+                                <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">{module.name}</span>
+                              </div>
+                              {/* Empty cells for columns to maintain grid structure background if needed */}
+                              {selectedPlans.map(p => <div key={p} className="bg-slate-50/30" />)}
+                            </div>
+
+                            {/* Features */}
+                            {module.features.map((feature: any) => (
+                              <div
+                                key={feature.id}
+                                style={gridStyle}
+                                className="group hover:bg-blue-50/30 transition-colors border-b border-slate-50 last:border-0"
+                              >
+                                <div className="flex items-center px-6 py-3 border-r border-transparent group-hover:border-slate-100 sticky left-0 z-10 bg-white group-hover:bg-blue-50/30 transition-colors shadow-[4px_0_24px_-2px_rgba(0,0,0,0.02)]">
+                                  <span className="text-sm text-slate-700 font-medium group-hover:text-slate-900">{feature.name}</span>
+                                  {feature.description && <Tooltip text={feature.description} />}
+                                </div>
+
+                                {PLANS.filter(p => selectedPlans.includes(p.id)).map((plan) => (
+                                  <div key={`${feature.id}-${plan.id}`} className="flex items-center justify-center py-3 border-l border-slate-100 group-hover:border-slate-200">
+                                    <ValueRenderer valueObj={
+                                      typeof feature.tiers[plan.id] === 'object' && feature.tiers[plan.id] !== null
+                                        ? feature.tiers[plan.id] as FeatureValueObject
+                                        : { value: feature.tiers[plan.id] as FeatureValuePrimitive }
+                                    } />
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Empty State */}
+              {processedApps.length === 0 && (
+                <div className="p-16 text-center text-slate-500 bg-slate-50">
+                  <Filter className="w-12 h-12 mx-auto mb-4 text-slate-300" />
+                  <h3 className="text-lg font-medium text-slate-900">No matching features found</h3>
+                  <p className="mt-1 max-w-sm mx-auto">Try adjusting your search terms, selected apps, or toggle off "Smart View" to see hidden features.</p>
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSmartView(false);
+                      setSelectedApps(['all']);
+                      setShowDiffOnly(false);
+                    }}
+                    className="mt-6 text-sm font-semibold text-blue-600 bg-blue-50 px-4 py-2 rounded-lg hover:bg-blue-100 transition-colors"
+                  >
+                    Reset all filters
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default CostComparison;

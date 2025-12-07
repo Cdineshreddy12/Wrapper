@@ -40,7 +40,7 @@ export default defineConfig(({ mode }) => {
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'], // Include SVG files in precaching
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/api\./,

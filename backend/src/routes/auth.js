@@ -629,7 +629,8 @@ export default async function authRoutes(fastify, options) {
       // SSO token validation removed - rely on standard auth middleware
 
       // User not authenticated, redirect to Kinde auth with app context
-      const redirectUri = `${process.env.BACKEND_URL || 'http://localhost:3000'}/api/auth/callback`;
+      // Use frontend URL as redirect URI to match Kinde configuration
+      const redirectUri = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/auth/callback`;
       const stateData = {
         app_code,
         redirect_url: redirect_url || getDefaultRedirectUrl(app_code),
@@ -639,7 +640,7 @@ export default async function authRoutes(fastify, options) {
       console.log('🔍 Generating Kinde auth URL with:', {
         redirectUri,
         stateData,
-        backendUrl: process.env.BACKEND_URL
+        frontendUrl: process.env.FRONTEND_URL
       });
 
       const kindeAuthUrl = kindeService.generateSocialLoginUrl({
