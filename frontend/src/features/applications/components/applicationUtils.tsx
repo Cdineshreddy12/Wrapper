@@ -125,10 +125,12 @@ export const getStatusColors = (isEnabled: boolean, theme: 'light' | 'dark' | 'm
         bg: colors.statusActiveBg,
         text: colors.statusActiveText,
         border: colors.statusActiveBorder,
+        dot: colors.statusActiveText,
       }
     : {
         bg: colors.statusInactiveBg,
         text: colors.statusInactiveText,
         border: colors.statusInactiveBorder,
+        dot: colors.statusInactiveText,
       };
 };

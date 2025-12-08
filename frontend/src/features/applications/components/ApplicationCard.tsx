@@ -2,23 +2,28 @@ import { Badge } from "@/components/ui";
 import { GlareCard } from "@/components/ui/glare-card";
 import { getApplicationIcon, getThemeColors, getStatusColors } from "./applicationUtils";
 import { Application } from "@/types/application";
-import { Eye, ExternalLink, ChevronRight } from "lucide-react";
+import { ExternalLink, ChevronRight } from "lucide-react";
 import { memo } from "react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { cn } from "@/lib/utils";
 
 // Utility function to construct application URLs
 const getApplicationUrl = (application: Application): string => {
-  // First check if baseUrl is available in the application data
-  if (application.baseUrl) {
-    return application.baseUrl;
+  // Prefer the base URL sent by the backend (supports multiple key casings)
+  const apiBaseUrl =
+    application.baseUrl ||
+    (application as any).base_url ||
+    (application as any).baseurl;
+
+  if (apiBaseUrl) {
+    return apiBaseUrl;
   }
 
-  // Construct URL based on appCode - you can customize this logic
+  // Construct URL based on appCode - customize as needed
   const baseDomain = window.location.origin; // Use current domain as base
   const urlPatterns: Record<string, string> = {
     affiliateConnect: `${baseDomain}/affiliate`,
-    crm: `${baseDomain}/crm`,
+    crm: `https://crm.zopkit.com`,
     hr: `${baseDomain}/hr`,
     // Add more app codes and their corresponding URLs here
   };
