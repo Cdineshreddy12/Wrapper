@@ -335,3 +335,4 @@ export const VisualHub: React.FC<VisualHubProps> = ({ product }) => {
         </div>
     );
 };
+

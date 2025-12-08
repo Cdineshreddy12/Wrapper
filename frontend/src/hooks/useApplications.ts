@@ -32,7 +32,14 @@ export function useApplications() {
       setIsLoading(true);
       const response = await applicationAssignmentAPI.getTenantApplications(tenantId);
       const data = response.data?.data?.applications || response.data?.applications || [];
-      setApplications(data || []);
+
+      // Normalize API response so components can rely on `baseUrl`
+      const normalized = (data || []).map((app: any) => ({
+        ...app,
+        baseUrl: app.baseUrl || app.base_url || app.baseurl || "",
+      }));
+
+      setApplications(normalized);
     } catch (error: any) {
       toast.error(`Failed to load applications: ${error?.message || "Unknown error"}`);
       setApplications([]);

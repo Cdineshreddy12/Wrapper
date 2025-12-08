@@ -164,7 +164,7 @@ export const GlareCard = ({
           {/* Glare Effect */}
           <div
             className={cn(
-              "absolute inset-0 z-20 w-full h-full transition-opacity duration-[var(--duration)] ease-in-out",
+              "absolute inset-0 z-20 w-full h-full transition-opacity duration-[var(--duration)] ease-in-out pointer-events-none",
               themeStyles.mixBlend
             )}
             style={{

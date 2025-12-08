@@ -7,6 +7,25 @@ import { memo } from "react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { cn } from "@/lib/utils";
 
+// Utility function to construct application URLs
+const getApplicationUrl = (application: Application): string => {
+  // First check if baseUrl is available in the application data
+  if (application.baseUrl) {
+    return application.baseUrl;
+  }
+
+  // Construct URL based on appCode - you can customize this logic
+  const baseDomain = window.location.origin; // Use current domain as base
+  const urlPatterns: Record<string, string> = {
+    affiliateConnect: `${baseDomain}/affiliate`,
+    crm: `${baseDomain}/crm`,
+    hr: `${baseDomain}/hr`,
+    // Add more app codes and their corresponding URLs here
+  };
+
+  return urlPatterns[application.appCode] || `${baseDomain}/apps/${application.appCode}`;
+};
+
 interface ApplicationCardProps {
   application: Application;
   onView: (app: Application) => void;
@@ -19,31 +38,32 @@ export const ApplicationCard = memo(function ApplicationCard({ application, onVi
   const themeColors = getThemeColors(actualTheme);
   const statusColors = getStatusColors(isEnabled, actualTheme);
 
-  // Handle card click - redirect to application URL if available
-  const handleCardClick = () => {
-    if (application.baseUrl) {
-      window.open(application.baseUrl, '_blank', 'noopener,noreferrer');
+  // Handle navigation to application
+  const handleNavigateToApp = () => {
+    console.log('Launch App clicked for:', application.appName);
+    const url = getApplicationUrl(application);
+    console.log('Navigating to URL:', url);
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
     } else {
-      // If no baseUrl, show details modal as fallback
-      onView(application);
+      console.warn('No URL available for application', application);
     }
   };
 
   return (
     <GlareCard
-      className="h-[320px] rounded-[24px] cursor-pointer" // Fixed height for consistency
-      onClick={handleCardClick}
+      className="h-[320px] rounded-[24px] cursor-auto" // Fixed height for consistency
     >
-      <div className="flex flex-col h-full p-6 relative group">
+      <div className="flex flex-col h-full p-6 relative">
 
         {/* Decorative background glow */}
-        <div className="absolute -right-10 -top-10 w-40 h-40 bg-indigo-500/20 rounded-full blur-3xl group-hover:bg-indigo-500/30 transition-all duration-500"></div>
-        <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-purple-500/10 rounded-full blur-3xl group-hover:bg-purple-500/20 transition-all duration-500"></div>
+        <div className="absolute -right-10 -top-10 w-40 h-40 bg-indigo-500/20 rounded-full blur-3xl hover:bg-indigo-500/30 transition-all duration-500"></div>
+        <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-purple-500/10 rounded-full blur-3xl hover:bg-purple-500/20 transition-all duration-500"></div>
 
         {/* Header */}
         <div className="flex items-start justify-between relative z-10 mb-4">
           <div className={cn(
-            "h-14 w-14 rounded-2xl flex items-center justify-center backdrop-blur-md shadow-lg transition-transform duration-300 group-hover:scale-110",
+            "h-14 w-14 rounded-2xl flex items-center justify-center backdrop-blur-md shadow-lg transition-transform duration-300 hover:scale-110",
             themeColors.iconBg,
             themeColors.iconColor
           )}>
@@ -67,7 +87,7 @@ export const ApplicationCard = memo(function ApplicationCard({ application, onVi
 
         {/* Content */}
         <div className="relative z-10 flex-1 flex flex-col justify-center">
-          <h3 className={cn("text-2xl font-bold mb-1 tracking-tight group-hover:translate-x-1 transition-transform duration-300", themeColors.titleColor)}>
+          <h3 className={cn("text-2xl font-bold mb-1 tracking-tight hover:translate-x-1 transition-transform duration-300", themeColors.titleColor)}>
             {appName}
           </h3>
           <p className={cn("text-xs uppercase font-semibold tracking-widest mb-3 opacity-60", themeColors.subtitleColor)}>
@@ -89,17 +109,24 @@ export const ApplicationCard = memo(function ApplicationCard({ application, onVi
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center gap-2">
-              {application.baseUrl && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 text-xs font-medium">
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  Click to Launch
-                </div>
-              )}
+            <div className="flex items-center gap-2 relative z-20">
               <button
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white text-xs font-medium transition-all"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 hover:text-indigo-200 text-xs font-medium transition-all cursor-pointer"
                 onClick={(e) => {
+                  e.preventDefault();
                   e.stopPropagation();
+                  handleNavigateToApp();
+                }}
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Launch App
+              </button>
+              <button
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white text-xs font-medium transition-all cursor-pointer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('Details clicked for:', application.appName);
                   onView(application);
                 }}
               >
