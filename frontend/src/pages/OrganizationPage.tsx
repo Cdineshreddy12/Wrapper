@@ -1,11 +1,8 @@
 import { Container } from '@/components/common/Page';
 import { OrganizationManagement } from '@/components/OrganizationManagement';
-import { OrganizationHierarchyModal } from '@/components/OrganizationHierarchyModal';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useOrganizationAuth } from '@/hooks/useOrganizationAuth';
 import { useOrganizationHierarchy } from '@/hooks/useOrganizationHierarchy';
-import { Button } from '@/components/ui/button';
-import { Network } from 'lucide-react';
 import { useState } from 'react';
 import api from '@/lib/api';
 

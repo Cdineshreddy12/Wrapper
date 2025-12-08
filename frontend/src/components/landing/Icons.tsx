@@ -20,3 +20,4 @@ export const DynamicIcon: React.FC<IconProps> = ({ name, className }) => {
   const IconComponent = iconMap[name] || Building2;
   return <IconComponent className={className} />;
 };
+

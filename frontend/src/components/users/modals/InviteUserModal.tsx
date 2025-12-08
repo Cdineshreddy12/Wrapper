@@ -1,7 +1,5 @@
 import React from 'react';
 import { X, Building, Badge } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { PearlButton } from '@/components/ui/pearl-button';
 import { useTheme } from '@/components/theme/ThemeProvider';
 

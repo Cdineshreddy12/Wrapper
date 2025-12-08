@@ -1,4 +1,3 @@
-import { Grid } from "@/components/common/Page";
 import { ApplicationCard } from "./ApplicationCard";
 import { Application } from "@/types/application";
 import { memo } from "react";
@@ -10,14 +9,19 @@ interface ApplicationGridProps {
 
 export const ApplicationGrid = memo(function ApplicationGrid({ applications, onViewApplication }: ApplicationGridProps) {
   return (
-    <Grid columns={{ xs: 1, sm: 2, md: 3, lg: 3 }} gap={12}>
-      {applications.map((app) => (
-        <ApplicationCard
-          key={app.appId}
-          application={app}
-          onView={onViewApplication}
-        />
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 p-4">
+      {applications.map((app, index) => (
+        <div 
+            key={app.appId} 
+            className="animate-in fade-in slide-in-from-bottom-8 duration-700 fill-mode-backwards"
+            style={{ animationDelay: `${index * 100}ms` }}
+        >
+          <ApplicationCard
+            application={app}
+            onView={onViewApplication}
+          />
+        </div>
       ))}
-    </Grid>
+    </div>
   );
 });
