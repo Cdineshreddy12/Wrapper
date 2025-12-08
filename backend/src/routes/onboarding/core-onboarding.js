@@ -59,23 +59,46 @@ export default async function coreOnboardingRoutes(fastify, options) {
     } catch (error) {
       console.error('❌ Enhanced onboarding failed:', error);
 
+      // Handle already onboarded users - this is a success case, just redirect
+      if (error.name === 'AlreadyOnboardedError') {
+        return reply.code(200).send({
+          success: true,
+          message: 'You have already completed onboarding',
+          data: {
+            alreadyOnboarded: true,
+            redirectTo: error.redirectTo || '/dashboard',
+            tenantId: error.tenantId
+          }
+        });
+      }
+
       // Handle duplicate registration errors specifically
       if (error.name === 'DuplicateRegistrationError' && error.errors) {
         const duplicateError = error.errors[0];
         return reply.code(409).send({
           success: false,
-          error: duplicateError.type,
-          message: duplicateError.message,
-          data: {
-            existingOrganization: duplicateError.existingOrganization
-          }
+          error: duplicateError.type || 'duplicate_email',
+          message: duplicateError.message || 'This email is already associated with an organization',
+          code: 'EMAIL_ALREADY_ASSOCIATED',
+          redirectTo: '/dashboard'
+        });
+      }
+
+      // Handle validation errors with clear messages
+      if (error.message?.includes('already associated') || error.message?.includes('already registered')) {
+        return reply.code(409).send({
+          success: false,
+          error: 'duplicate_email',
+          message: error.message || 'This email is already associated with an organization',
+          code: 'EMAIL_ALREADY_ASSOCIATED',
+          redirectTo: '/dashboard'
         });
       }
 
       return reply.code(500).send({
         success: false,
         error: 'Onboarding failed',
-        message: error.message,
+        message: error.message || 'An unexpected error occurred during onboarding',
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
@@ -168,23 +191,46 @@ export default async function coreOnboardingRoutes(fastify, options) {
     } catch (error) {
       console.error('❌ Frontend onboarding failed:', error);
 
+      // Handle already onboarded users - this is a success case, just redirect
+      if (error.name === 'AlreadyOnboardedError') {
+        return reply.code(200).send({
+          success: true,
+          message: 'You have already completed onboarding',
+          data: {
+            alreadyOnboarded: true,
+            redirectTo: error.redirectTo || '/dashboard',
+            tenantId: error.tenantId
+          }
+        });
+      }
+
       // Handle duplicate registration errors specifically
       if (error.name === 'DuplicateRegistrationError' && error.errors) {
         const duplicateError = error.errors[0];
         return reply.code(409).send({
           success: false,
-          error: duplicateError.type,
-          message: duplicateError.message,
-          data: {
-            existingOrganization: duplicateError.existingOrganization
-          }
+          error: duplicateError.type || 'duplicate_email',
+          message: duplicateError.message || 'This email is already associated with an organization',
+          code: 'EMAIL_ALREADY_ASSOCIATED',
+          redirectTo: '/dashboard'
+        });
+      }
+
+      // Handle validation errors with clear messages
+      if (error.message?.includes('already associated') || error.message?.includes('already registered')) {
+        return reply.code(409).send({
+          success: false,
+          error: 'duplicate_email',
+          message: error.message || 'This email is already associated with an organization',
+          code: 'EMAIL_ALREADY_ASSOCIATED',
+          redirectTo: '/dashboard'
         });
       }
 
       return reply.code(500).send({
-            success: false,
+        success: false,
         error: 'Onboarding failed',
-        message: error.message,
+        message: error.message || 'An unexpected error occurred during onboarding',
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
@@ -248,23 +294,46 @@ export default async function coreOnboardingRoutes(fastify, options) {
     } catch (error) {
       console.error('❌ Legacy onboarding failed:', error);
 
+      // Handle already onboarded users - this is a success case, just redirect
+      if (error.name === 'AlreadyOnboardedError') {
+        return reply.code(200).send({
+          success: true,
+          message: 'You have already completed onboarding',
+          data: {
+            alreadyOnboarded: true,
+            redirectTo: error.redirectTo || '/dashboard',
+            tenantId: error.tenantId
+          }
+        });
+      }
+
       // Handle duplicate registration errors specifically
       if (error.name === 'DuplicateRegistrationError' && error.errors) {
         const duplicateError = error.errors[0];
         return reply.code(409).send({
           success: false,
-          error: duplicateError.type,
-          message: duplicateError.message,
-          data: {
-            existingOrganization: duplicateError.existingOrganization
-          }
+          error: duplicateError.type || 'duplicate_email',
+          message: duplicateError.message || 'This email is already associated with an organization',
+          code: 'EMAIL_ALREADY_ASSOCIATED',
+          redirectTo: '/dashboard'
+        });
+      }
+
+      // Handle validation errors with clear messages
+      if (error.message?.includes('already associated') || error.message?.includes('already registered')) {
+        return reply.code(409).send({
+          success: false,
+          error: 'duplicate_email',
+          message: error.message || 'This email is already associated with an organization',
+          code: 'EMAIL_ALREADY_ASSOCIATED',
+          redirectTo: '/dashboard'
         });
       }
 
       return reply.code(500).send({
         success: false,
         error: 'Onboarding failed',
-        message: error.message,
+        message: error.message || 'An unexpected error occurred during onboarding',
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }

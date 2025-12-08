@@ -227,6 +227,19 @@ const SimpleOnboarding: React.FC = () => {
       const response = await api.post('/onboarding/onboard', onboardingData);
 
       if (response.data.success) {
+        // Check if user is already onboarded
+        if (response.data.data?.alreadyOnboarded) {
+          toast.success('You have already completed onboarding. Redirecting to dashboard...', {
+            duration: 3000
+          });
+          setTimeout(() => {
+            const redirectUrl = response.data.data.redirectTo || '/dashboard';
+            console.log('🔗 Redirecting already onboarded user to:', redirectUrl);
+            window.location.href = redirectUrl;
+          }, 1500);
+          return;
+        }
+
         toast.success('🎉 Organization setup completed successfully!');
 
         // Handle redirect URL if provided
@@ -250,20 +263,39 @@ const SimpleOnboarding: React.FC = () => {
         message: error.message
       });
 
-      if (error.response?.status === 409) {
-        toast.error('This email is already associated with an organization. Please contact support.');
-      } else if (error.response?.status === 400) {
-        toast.error(error.response.data.message || 'Invalid data provided');
+      // Handle duplicate email error - redirect to dashboard
+      if (error.response?.status === 409 || error.response?.data?.code === 'EMAIL_ALREADY_ASSOCIATED') {
+        const errorMessage = error.response?.data?.message || 'This email is already associated with an organization';
+        toast.error(errorMessage, {
+          duration: 5000,
+          description: 'Redirecting you to the dashboard...'
+        });
+        
+        // Redirect to dashboard after showing toast
+        setTimeout(() => {
+          const redirectUrl = error.response?.data?.redirectTo || '/dashboard';
+          console.log('🔗 Redirecting to dashboard:', redirectUrl);
+          window.location.href = redirectUrl;
+        }, 2000);
+        setIsLoading(false);
+        return;
+      }
+
+      // Handle other errors with clear messages
+      if (error.response?.status === 400) {
+        const errorMessage = error.response?.data?.message || 'Invalid data provided. Please check your input and try again.';
+        toast.error(errorMessage, { duration: 5000 });
       } else if (error.response?.status === 401) {
-        toast.error('Authentication failed. Please log in again.');
-        // Optionally redirect to login
+        toast.error('Authentication failed. Please log in again.', { duration: 5000 });
         console.log('🔄 Authentication failed, consider redirecting to login');
       } else if (error.response?.status === 500) {
-        toast.error('Server error occurred. Please try again in a moment.');
+        const errorMessage = error.response?.data?.message || 'Server error occurred. Please try again in a moment.';
+        toast.error(errorMessage, { duration: 5000 });
       } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
-        toast.error('Network error. Please check your connection and try again.');
+        toast.error('Network error. Please check your connection and try again.', { duration: 5000 });
       } else {
-        toast.error(error.message || 'Failed to complete setup. Please try again.');
+        const errorMessage = error.response?.data?.message || error.message || 'An unexpected error occurred. Please try again.';
+        toast.error(errorMessage, { duration: 5000 });
       }
     } finally {
       setIsLoading(false);

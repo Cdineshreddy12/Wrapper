@@ -76,7 +76,29 @@ export class UnifiedOnboardingService {
 
       const validation = await OnboardingValidationService.validateCompleteOnboarding(validationData, type);
       if (!validation.success) {
-        throw new Error(validation.errors?.[0]?.message || 'Validation failed');
+        const firstError = validation.errors?.[0];
+        // Check if it's a duplicate email error
+        if (firstError?.message?.includes('already associated') || firstError?.message?.includes('already registered')) {
+          const duplicateError = new Error(firstError.message);
+          duplicateError.name = 'DuplicateRegistrationError';
+          duplicateError.errors = [{
+            type: 'duplicate_email',
+            message: firstError.message,
+            field: 'email'
+          }];
+          throw duplicateError;
+        }
+        throw new Error(firstError?.message || 'Validation failed');
+      }
+
+      // Check if user is already onboarded (validation passed but user exists)
+      if (validation.data?.alreadyOnboarded) {
+        console.log('✅ User is already onboarded, returning redirect response');
+        const alreadyOnboardedError = new Error('You have already completed onboarding. Redirecting to dashboard...');
+        alreadyOnboardedError.name = 'AlreadyOnboardedError';
+        alreadyOnboardedError.redirectTo = validation.data.redirectTo || '/dashboard';
+        alreadyOnboardedError.tenantId = validation.data.tenantId;
+        throw alreadyOnboardedError;
       }
 
       // 2. GENERATE/CONfirm SUBDOMAIN

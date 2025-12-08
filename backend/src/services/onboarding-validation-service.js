@@ -14,7 +14,8 @@ class OnboardingValidationService {
    * Check for duplicate emails during onboarding
    * @param {Object} data - Validation data
    * @param {string} data.adminEmail - Admin email to check
-   * @throws {Error} If duplicate email is found
+   * @returns {Object} Result with available status and onboarding status
+   * @throws {Error} If duplicate email is found (only for non-onboarded users)
    */
   static async checkForDuplicates(data) {
     const { adminEmail } = data;
@@ -27,26 +28,57 @@ class OnboardingValidationService {
 
     // Check if email already exists as adminEmail in tenants table
     const existingTenant = await systemDbConnection
-      .select({ tenantId: tenants.tenantId })
+      .select({ 
+        tenantId: tenants.tenantId,
+        onboardingCompleted: tenants.onboardingCompleted,
+        companyName: tenants.companyName
+      })
       .from(tenants)
       .where(eq(tenants.adminEmail, adminEmail))
       .limit(1);
 
     if (existingTenant.length > 0) {
-      console.log('❌ Duplicate email found in tenants table:', adminEmail);
+      const tenant = existingTenant[0];
+      // If onboarding is already completed, this is not an error - user should be redirected
+      if (tenant.onboardingCompleted === true) {
+        console.log('✅ Email found with completed onboarding - user should be redirected to dashboard');
+        return { 
+          available: false, 
+          alreadyOnboarded: true,
+          tenantId: tenant.tenantId,
+          companyName: tenant.companyName
+        };
+      }
+      // If onboarding is not completed, treat as duplicate
+      console.log('❌ Duplicate email found in tenants table with incomplete onboarding:', adminEmail);
       throw new Error('This email is already associated with an organization');
     }
 
     // Also check if email exists in tenantUsers table (as a user)
-    // This prevents using an email that's already a user in another tenant
     const existingUser = await systemDbConnection
-      .select({ userId: tenantUsers.userId, tenantId: tenantUsers.tenantId })
+      .select({ 
+        userId: tenantUsers.userId, 
+        tenantId: tenantUsers.tenantId,
+        onboardingCompleted: tenantUsers.onboardingCompleted
+      })
       .from(tenantUsers)
       .where(eq(tenantUsers.email, adminEmail))
       .limit(1);
 
     if (existingUser.length > 0) {
-      console.log('❌ Duplicate email found in tenantUsers table:', adminEmail);
+      const user = existingUser[0];
+      // If user is already onboarded, this is not an error - user should be redirected
+      if (user.onboardingCompleted === true) {
+        console.log('✅ Email found as user with completed onboarding - user should be redirected to dashboard');
+        return { 
+          available: false, 
+          alreadyOnboarded: true,
+          tenantId: user.tenantId,
+          userId: user.userId
+        };
+      }
+      // If onboarding is not completed, treat as duplicate
+      console.log('❌ Duplicate email found in tenantUsers table with incomplete onboarding:', adminEmail);
       throw new Error('This email is already registered as a user');
     }
 
@@ -130,7 +162,19 @@ class OnboardingValidationService {
     // Check for duplicate email
     if (email && errors.length === 0) {
       try {
-        await this.checkForDuplicates({ adminEmail: email });
+        const duplicateCheck = await this.checkForDuplicates({ adminEmail: email });
+        // If user is already onboarded, return success with redirect flag
+        if (duplicateCheck.alreadyOnboarded) {
+          return {
+            success: true,
+            data: {
+              generatedSubdomain: null,
+              alreadyOnboarded: true,
+              tenantId: duplicateCheck.tenantId,
+              redirectTo: '/dashboard'
+            }
+          };
+        }
       } catch (duplicateError) {
         errors.push({ field: 'email', message: duplicateError.message });
       }

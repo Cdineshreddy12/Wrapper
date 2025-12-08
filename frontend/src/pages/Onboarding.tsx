@@ -328,6 +328,19 @@ By checking the box below, you acknowledge that you have read, understood, and a
             if (response.data.success) {
                 console.log('✅ Onboarding completed successfully:', response.data);
 
+                // Check if user is already onboarded
+                if (response.data.data?.alreadyOnboarded) {
+                    toast.success('You have already completed onboarding. Redirecting to dashboard...', {
+                        duration: 3000
+                    });
+                    setTimeout(() => {
+                        const redirectUrl = response.data.data.redirectTo || '/dashboard';
+                        console.log('🔗 Redirecting already onboarded user to:', redirectUrl);
+                        window.location.href = redirectUrl;
+                    }, 1500);
+                    return;
+                }
+
                 // Handle redirect URL if provided
                 if (response.data.data.redirectUrl) {
                     console.log('🔗 Redirecting to:', response.data.data.redirectUrl);
@@ -345,16 +358,34 @@ By checking the box below, you acknowledge that you have read, understood, and a
         } catch (error: any) {
             console.error('❌ Onboarding submission failed:', error);
 
-            if (error.response?.status === 409) {
-                toast.error(error.response.data.message);
-            } else if (error.response?.status === 400) {
-                toast.error(error.response.data.message || 'Invalid data provided');
+            // Handle duplicate email error - redirect to dashboard
+            if (error.response?.status === 409 || error.response?.data?.code === 'EMAIL_ALREADY_ASSOCIATED') {
+                const errorMessage = error.response?.data?.message || 'This email is already associated with an organization';
+                toast.error(errorMessage, {
+                    duration: 5000,
+                    description: 'Redirecting you to the dashboard...'
+                });
+                
+                // Redirect to dashboard after showing toast
+                setTimeout(() => {
+                    const redirectUrl = error.response?.data?.redirectTo || '/dashboard';
+                    console.log('🔗 Redirecting to dashboard:', redirectUrl);
+                    window.location.href = redirectUrl;
+                }, 2000);
+                return;
+            }
+
+            // Handle other errors with clear messages
+            if (error.response?.status === 400) {
+                const errorMessage = error.response?.data?.message || 'Invalid data provided. Please check your input and try again.';
+                toast.error(errorMessage, { duration: 5000 });
             } else if (error.response?.status === 500) {
-                toast.error('Server error occurred. Please try again in a moment.');
+                toast.error('Server error occurred. Please try again in a moment.', { duration: 5000 });
             } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
-                toast.error('Network error. Please check your connection and try again.');
+                toast.error('Network error. Please check your connection and try again.', { duration: 5000 });
             } else {
-                toast.error(`Failed to complete setup: ${error.message || 'Unknown error'}`);
+                const errorMessage = error.response?.data?.message || error.message || 'An unexpected error occurred. Please try again.';
+                toast.error(errorMessage, { duration: 5000 });
             }
         }
     };
