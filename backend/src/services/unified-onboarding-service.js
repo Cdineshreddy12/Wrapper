@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import kindeService from './kinde-service.js';
 import creditAllocationService from './credit-allocation-service.js';
+import { CreditService } from './credit-service.js';
 import { OnboardingTrackingService } from './onboarding-tracking-service.js';
 import { TenantService } from './tenant-service.js';
 import { SubscriptionService } from './subscription-service.js';
@@ -448,22 +449,27 @@ export class UnifiedOnboardingService {
       const { sql } = await import('drizzle-orm');
       await tx.execute(sql`SELECT set_config('app.tenant_id', ${tenant.tenantId}, false)`);
 
-      // 2. Create parent organization
+      // 2. Create parent organization (root entity)
+      const organizationEntityId = uuidv4();
       const [organization] = await tx
         .insert(entities)
         .values({
-          entityId: uuidv4(),
+          entityId: organizationEntityId,
           tenantId: tenant.tenantId,
-          parentEntityId: null,
-          entityLevel: 1,
-          hierarchyPath: '/',
+          parentEntityId: null, // Root entity has no parent - this is critical for hierarchy
+          entityLevel: 1, // Root entities start at level 1
+          // Note: hierarchyPath and fullHierarchyPath will be set by database triggers
+          // For root entities, triggers will set hierarchyPath to the entity ID string
+          hierarchyPath: organizationEntityId.toString(), // Set initial value (triggers will validate/update)
+          fullHierarchyPath: companyName, // Full path is just the entity name for root
           entityName: companyName,
           entityCode: `org_${subdomain}_${Date.now()}`,
-          description: `Parent organization created during ${type} onboarding`,
+          description: `Root organization created during ${type} onboarding`,
           entityType: 'organization',
           organizationType: 'parent',
           isActive: true,
           isDefault: true,
+          isHeadquarters: true, // Root organization is the headquarters
           contactEmail: adminEmail,
           createdBy: null, // Will be updated after user creation
           updatedBy: null
@@ -473,6 +479,13 @@ export class UnifiedOnboardingService {
           organizationName: entities.entityName,
           organizationCode: entities.entityCode
         });
+      
+      // Verify root entity was created correctly
+      if (!organization || !organization.organizationId) {
+        throw new Error('Failed to create root organization entity');
+      }
+      
+      console.log(`✅ Root organization entity created: ${organization.organizationId} (parentEntityId: null)`);
 
       // 3. Create admin user
       // Prepare form data for storage in user preferences
@@ -613,16 +626,16 @@ export class UnifiedOnboardingService {
 
       console.log(`📊 Plan ${selectedPlan} provides ${actualCreditAmount} free credits`);
 
-      // Use the new operational credits system
-      const creditResult = await creditAllocationService.allocateOperationalCredits({
+      // Use CreditService to add credits directly to the organization entity
+      const creditResult = await CreditService.addCreditsToEntity({
         tenantId,
-        sourceEntityId: organizationId,
+        entityType: 'organization',
+        entityId: organizationId,
         creditAmount: actualCreditAmount,
-        creditType: 'free',
-        allocationType: 'bulk', // Use 'bulk' to skip balance check for initial allocation
-        planId: selectedPlan,
-        allocatedBy: null, // System operation during onboarding
-        purpose: `${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)} plan initial free credits`
+        source: 'onboarding',
+        sourceId: uuidv4(),
+        description: `${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)} plan initial free credits`,
+        initiatedBy: 'system'
       });
 
       console.log('✅ Initial free credits allocated:', actualCreditAmount);
@@ -630,7 +643,7 @@ export class UnifiedOnboardingService {
         amount: actualCreditAmount,
         creditType: 'free',
         planId: selectedPlan,
-        allocationId: creditResult?.allocationId
+        creditId: creditResult?.creditId
       };
     } catch (creditError) {
       console.error('❌ Credit allocation failed:', creditError.message);

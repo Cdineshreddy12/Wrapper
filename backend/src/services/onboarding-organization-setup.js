@@ -1,6 +1,8 @@
-import { db } from '../db/index.js';
+import { db, systemDbConnection } from '../db/index.js';
 import { eq, and } from 'drizzle-orm';
 import { tenants } from '../db/schema/index.js';
+import { applications, organizationApplications } from '../db/schema/suite-schema.js';
+import { v4 as uuidv4 } from 'uuid';
 
 class OnboardingOrganizationSetupService {
   // Update organization applications based on credit package
@@ -78,24 +80,74 @@ class OnboardingOrganizationSetupService {
     try {
       console.log('⚙️ Configuring applications for new organization:', { tenantId, creditPackage });
 
-      // Get applications for the credit package
+      // Map plan names to app codes (free plan gets all core apps)
       const applicationsByPackage = {
+        free: ['crm', 'hr', 'affiliateConnect'], // Free plan gets all core apps
         basic: ['crm'],
         standard: ['crm', 'hr'],
-        premium: ['crm', 'hr', 'affiliate'],
-        enterprise: ['crm', 'hr', 'affiliate', 'accounting', 'inventory']
+        premium: ['crm', 'hr', 'affiliateConnect'],
+        enterprise: ['crm', 'hr', 'affiliateConnect', 'accounting', 'inventory']
       };
 
-      const applicationsConfigured = applicationsByPackage[creditPackage] || ['crm'];
+      // Normalize app codes to match database (case-insensitive matching)
+      const normalizeAppCode = (code) => {
+        const codeMap = {
+          'affiliateconnect': 'affiliateConnect',
+          'affiliate': 'affiliateConnect'
+        };
+        return codeMap[code.toLowerCase()] || code;
+      };
 
-      // In a real implementation, you'd set up application access records here
-      console.log('✅ Applications configured for new organization:', applicationsConfigured);
+      const appCodes = applicationsByPackage[creditPackage] || ['crm'];
+      console.log(`📋 Assigning applications for ${creditPackage} plan:`, appCodes);
+
+      // Get application IDs from app codes
+      const appRecords = await systemDbConnection
+        .select({ appId: applications.appId, appCode: applications.appCode })
+        .from(applications)
+        .where(eq(applications.status, 'active'));
+
+      const appCodeToIdMap = {};
+      appRecords.forEach(app => {
+        appCodeToIdMap[app.appCode] = app.appId;
+      });
+
+      // Insert organization applications
+      const applicationsToInsert = [];
+      for (const appCode of appCodes) {
+        const normalizedCode = normalizeAppCode(appCode);
+        const appId = appCodeToIdMap[normalizedCode];
+        if (appId) {
+          applicationsToInsert.push({
+            id: uuidv4(),
+            tenantId,
+            appId,
+            subscriptionTier: creditPackage,
+            isEnabled: true,
+            enabledModules: [],
+            customPermissions: {}
+          });
+        } else {
+          console.warn(`⚠️ Application with code ${normalizedCode} (original: ${appCode}) not found in database. Available apps:`, Object.keys(appCodeToIdMap));
+        }
+      }
+
+      if (applicationsToInsert.length > 0) {
+        await systemDbConnection
+          .insert(organizationApplications)
+          .values(applicationsToInsert);
+        
+        console.log(`✅ Successfully assigned ${applicationsToInsert.length} applications to tenant ${tenantId}`);
+      } else {
+        console.warn(`⚠️ No applications were assigned to tenant ${tenantId}`);
+      }
 
       return {
         success: true,
         tenantId,
         creditPackage,
-        applicationsConfigured
+        applicationsConfigured: appCodes,
+        applicationsAssigned: applicationsToInsert.length
       };
 
     } catch (error) {
