@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { X, CheckCircle, TrendingUp, Award, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
 interface SeasonalCreditsCongratulatoryModalProps {
@@ -39,7 +39,7 @@ export const SeasonalCreditsCongratulatoryModal: React.FC<SeasonalCreditsCongrat
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="relative max-w-lg w-full">
+      <div className="relative max-w-md w-full">
         {/* Close button */}
         <button
           onClick={onClose}

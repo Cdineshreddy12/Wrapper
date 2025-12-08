@@ -27,6 +27,7 @@ import { ThemeProvider } from './components/theme/ThemeProvider'
 // Layout Components
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import { PermissionGuard } from '@/components/auth/PermissionGuard'
 import { OnboardingGuard } from '@/components/auth/OnboardingGuard'
 import { OnboardingPageGuard } from '@/components/auth/OnboardingPageGuard'
 
@@ -230,12 +231,14 @@ function AppContent() {
           <Route path="settings" element={<Settings />} />
         </Route>
 
-        {/* Standalone Admin Dashboard Route */}
+        {/* Company Admin Dashboard - Secure Route with Kinde Permissions */}
         <Route
-          path="/admin"
+          path="/company-admin"
           element={
             <ProtectedRoute>
-              <AdminDashboardPage />
+              <PermissionGuard requiredPermission="company:admin:access">
+                <AdminDashboardPage />
+              </PermissionGuard>
             </ProtectedRoute>
           }
         />

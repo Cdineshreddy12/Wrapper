@@ -592,18 +592,18 @@ export default async function creditConfigurationRoutes(fastify, options) {
       }
 
       console.log('📝 Creating tenant operation cost:', { tenantId, configData, userId });
-      
+
       const result = await CreditService.createTenantOperationCost(tenantId, configData, userId);
-      
+
       console.log('✅ Tenant operation cost created successfully:', result);
       reply.send(result);
     } catch (error) {
       console.error('❌ Error in tenant operation cost route:', error);
       request.log.error('Error creating tenant operation cost:', error);
-      
-      reply.code(500).send({ 
+
+      reply.code(500).send({
         error: error.message || 'Failed to create tenant operation cost',
-        details: error.details 
+        details: error.details
       });
     }
   });
@@ -646,6 +646,84 @@ export default async function creditConfigurationRoutes(fastify, options) {
       reply.code(500).send({
         error: 'Failed to initialize credits',
         details: error.message
+      });
+    }
+  });
+
+  /**
+   * GET /api/admin/credit-configurations/global/by-app
+   * Get global credit configurations filtered by application code or name
+   * Query params:
+   *   - app: Application code (e.g., 'crm') or name (e.g., 'B2B CRM'). Optional - if not provided, returns all apps.
+   */
+  fastify.get('/global/by-app', {
+    schema: {
+      description: 'Get global credit configurations filtered by application code or name',
+      tags: ['Admin', 'Credit Configuration', 'Global'],
+      querystring: {
+        type: 'object',
+        properties: {
+          app: {
+            type: 'string',
+            description: 'Application code (e.g., "crm") or name (e.g., "B2B CRM"). If not provided, returns all applications.'
+          }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' },
+            data: {
+              type: 'object',
+              properties: {
+                requestedApp: { type: ['string', 'null'] },
+                applicationsCount: { type: 'integer' },
+                applications: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      appId: { type: 'string' },
+                      appCode: { type: 'string' },
+                      appName: { type: 'string' },
+                      description: { type: 'string' },
+                      statistics: {
+                        type: 'object',
+                        properties: {
+                          totalModules: { type: 'integer' },
+                          totalOperations: { type: 'integer' },
+                          averageCreditCost: { type: 'number' }
+                        }
+                      },
+                      modules: { type: 'array' },
+                      allOperations: { type: 'array' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    preHandler: requirePermissions(['credit_config.view'])
+  }, async (request, reply) => {
+    try {
+      const { app } = request.query;
+
+      console.log('📊 Fetching global credit configurations for app:', app || 'ALL');
+
+      const result = await CreditService.getGlobalCreditConfigurationsByApp(app || null);
+
+      reply.send(result);
+    } catch (error) {
+      request.log.error('Error fetching global credit configurations by app:', error);
+      reply.code(500).send({
+        success: false,
+        message: 'Failed to fetch global credit configurations',
+        error: error.message
       });
     }
   });

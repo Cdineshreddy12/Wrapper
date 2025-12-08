@@ -3,7 +3,6 @@ import { useLocation } from 'react-router-dom';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import { useAuthStatus, useTenant } from '@/hooks/useSharedQueries';
 import toast from 'react-hot-toast';
-import api from '@/lib/api';
 
 export interface UserPermission {
   id: string;
@@ -47,13 +46,13 @@ interface UserContextType {
   roles: UserRole[];
   loading: boolean;
   isAuthenticated: boolean;
-  
+
   // Actions
   refreshUserContext: () => Promise<void>;
   checkPermission: (permissionName: string) => boolean;
   hasRole: (roleName: string) => boolean;
   logout: () => void;
-  
+
   // Permission refresh settings
   autoRefresh: boolean;
   setAutoRefresh: (enabled: boolean) => void;
@@ -83,7 +82,7 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
 
   // Fetch user context from API using shared hook
   const { data: authData, isLoading: authLoading, error: authError } = useAuthStatus();
-  
+
   // Fetch tenant data using shared hook with caching
   const tenantId = authData?.authStatus?.tenantId;
   const { data: tenantData, isLoading: tenantLoading } = useTenant(tenantId);
@@ -97,10 +96,10 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
         const authStatus = authData.authStatus;
 
         // Create user object from authStatus with Kinde user data
-        const userName = kindeUser?.givenName 
+        const userName = kindeUser?.givenName
           ? `${kindeUser.givenName}${kindeUser.familyName ? ' ' + kindeUser.familyName : ''}`
           : authStatus.email || 'Unknown';
-        
+
         const userData: UserContextData = {
           userId: authStatus.userId,
           kindeUserId: authStatus.userId,
@@ -141,7 +140,7 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
           userId: userData.userId,
           email: userData.email,
           tenantId: authStatus.tenantId,
-          tenantName: tenantData.companyName,
+          tenantName: tenantData?.companyName || 'Organization',
           permissions: (authStatus.userPermissions || authStatus.legacyPermissions || []).length,
           roles: (authStatus.userRoles || []).length
         });
@@ -174,7 +173,7 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
     } finally {
       setLoading(false);
     }
-  }, [authData, kindeUser, location.pathname]);
+  }, [authData, kindeUser, tenantData, location.pathname]);
 
   // Manual refresh function exposed to components
   const refreshUserContext = useCallback(async () => {
@@ -203,10 +202,10 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
     setRoles([]);
     setLastRefreshTime(null);
     setAutoRefresh(false);
-    
+
     // Clear any stored tokens or session data
     localStorage.removeItem('auth_token');
-    
+
     // Redirect to login or home
     window.location.href = '/login';
   }, []);
@@ -223,8 +222,8 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
     } else if (!isAuthenticated) {
       setLoading(false);
     }
-  }, [isAuthenticated, authData, authLoading, authError, tenantData, fetchUserContext]);
-  
+  }, [isAuthenticated, authData, authLoading, authError, fetchUserContext]);
+
   // Update tenant data when cached tenant data changes
   useEffect(() => {
     if (tenantData && user) {
@@ -317,7 +316,7 @@ export const usePermissionCheck = () => {
   }
 
   const { checkPermission, hasRole, user } = contextValue;
-  
+
   return {
     hasPermission: checkPermission,
     hasRole,
@@ -345,13 +344,13 @@ export const PermissionGuard: React.FC<PermissionGuardProps> = ({
   children
 }) => {
   const { checkPermission, hasRole, user } = useUserContext();
-  
+
   if (!user) return <>{fallback}</>;
-  
+
   if (user.isTenantAdmin) return <>{children}</>;
-  
+
   let hasAccess = false;
-  
+
   if (role) {
     hasAccess = hasRole(role);
   } else if (permission) {
@@ -363,6 +362,6 @@ export const PermissionGuard: React.FC<PermissionGuardProps> = ({
       hasAccess = permissions.some(p => checkPermission(p));
     }
   }
-  
+
   return hasAccess ? <>{children}</> : <>{fallback}</>;
-}; 
+};

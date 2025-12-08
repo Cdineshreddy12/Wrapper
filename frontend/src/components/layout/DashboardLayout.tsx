@@ -59,7 +59,6 @@ const getDashboardNavigation = (): NavItem[] => [
   { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { name: 'Usage', href: '/dashboard/usage', icon: Activity },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
-  { name: 'Admin', href: '/admin', icon: Crown },
 ]
 
 const getOrganizationNavigation = (orgCode: string): NavItem[] => [
@@ -78,7 +77,6 @@ const getOrganizationNavigation = (orgCode: string): NavItem[] => [
   { name: 'Billing', href: `/org/${orgCode}/billing`, icon: CreditCard },
   { name: 'Usage', href: `/org/${orgCode}/usage`, icon: Activity },
   { name: 'Settings', href: `/org/${orgCode}/settings`, icon: Settings },
-  { name: 'Admin', href: '/admin', icon: Crown },
 ]
 
 // Transform organization hierarchy into sidebar navigation items
@@ -114,8 +112,8 @@ const transformHierarchyToNavItems = (hierarchy: any[], baseUrl: string = '/dash
 };
 
 const getOrganizationSidebarData = (
-  orgCode: string, 
-  hierarchy?: any[], 
+  orgCode: string,
+  hierarchy?: any[],
   userData?: { name: string; email: string; avatar?: string },
   tenantData?: { tenantId: string; companyName: string; subdomain?: string; industry?: string }
 ) => {
@@ -195,11 +193,6 @@ const getOrganizationSidebarData = (
         url: `/org/${orgCode}/settings`,
         icon: Settings,
       },
-      {
-        name: "Admin",
-        url: "/admin",
-        icon: Crown,
-      },
     ],
   };
 }
@@ -240,7 +233,7 @@ const getFloatingDockNavigation = (isOrganizationRoute: boolean, orgCode?: strin
 
   return flattenedItems
 }
-export  function DashboardLayout() {
+export function DashboardLayout() {
   const { actualTheme } = useTheme()
   const [expandedItems, setExpandedItems] = useState<string[]>(['Dashboard'])
   const [trialInfo, setTrialInfo] = useState<TrialInfo | null>(null)
@@ -262,8 +255,7 @@ export  function DashboardLayout() {
   const {
     shouldShowCongratulatory,
     seasonalCreditsData,
-    dismissCongratulatory,
-    resetCongratulatory
+    dismissCongratulatory
   } = useSeasonalCreditsCongratulatory()
 
   // Handle organization switching for tenant admins
@@ -301,7 +293,7 @@ export  function DashboardLayout() {
   // Prepare user data for sidebar
   const userData = useMemo(() => {
     if (!user && !kindeUser) return undefined;
-    
+
     return {
       name: user?.name || kindeUser?.givenName || kindeUser?.email || 'User',
       email: user?.email || kindeUser?.email || 'user@example.com',
@@ -312,7 +304,7 @@ export  function DashboardLayout() {
   // Prepare tenant data for sidebar
   const tenantData = useMemo(() => {
     if (!tenant && !user) return undefined;
-    
+
     return {
       tenantId: tenant?.tenantId || user?.tenantId || '',
       companyName: tenant?.companyName || 'Organization',
@@ -331,7 +323,7 @@ export  function DashboardLayout() {
     if (isTrial || trialEndDate) {
       const endDate = trialEndDate ? new Date(trialEndDate) : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
       const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-      
+
       setTrialInfo({
         plan: plan || 'free', // Changed from 'professional' to 'free' for consistency
         endDate,
@@ -369,8 +361,8 @@ export  function DashboardLayout() {
 
 
   const toggleExpanded = (itemName: string) => {
-    setExpandedItems(prev => 
-      prev.includes(itemName) 
+    setExpandedItems(prev =>
+      prev.includes(itemName)
         ? prev.filter(name => name !== itemName)
         : [...prev, itemName]
     )
@@ -454,16 +446,16 @@ export  function DashboardLayout() {
         {/* Floating decorative elements for dock mode */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className={`absolute top-16 left-16 w-48 h-48 rounded-full blur-3xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-purple-200/20 to-violet-200/20 dark:from-purple-400/12 dark:to-violet-400/12 backdrop-blur-3xl border border-purple-300/30 dark:border-purple-600/30' : 'hidden'}`}></div>
-          <div className={`absolute top-32 right-32 w-44 h-44 rounded-full blur-3xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-violet-200/20 to-indigo-200/20 dark:from-violet-400/10 dark:to-indigo-400/10 backdrop-blur-3xl border border-violet-300/30 dark:border-violet-600/30' : 'hidden'}`} style={{animationDelay: '1.5s'}}></div>
-          <div className={`absolute bottom-48 left-20 w-36 h-36 rounded-full blur-3xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-indigo-200/20 to-purple-200/20 dark:from-indigo-400/8 dark:to-purple-400/8 backdrop-blur-3xl border border-indigo-300/30 dark:border-indigo-600/30' : 'hidden'}`} style={{animationDelay: '3s'}}></div>
-          <div className={`absolute top-1/2 right-16 w-28 h-28 rounded-full blur-2xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-pink-200/15 to-purple-200/15 dark:from-pink-400/6 dark:to-purple-400/6 backdrop-blur-3xl border border-pink-300/30 dark:border-pink-600/30' : 'hidden'}`} style={{animationDelay: '4.5s'}}></div>
+          <div className={`absolute top-32 right-32 w-44 h-44 rounded-full blur-3xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-violet-200/20 to-indigo-200/20 dark:from-violet-400/10 dark:to-indigo-400/10 backdrop-blur-3xl border border-violet-300/30 dark:border-violet-600/30' : 'hidden'}`} style={{ animationDelay: '1.5s' }}></div>
+          <div className={`absolute bottom-48 left-20 w-36 h-36 rounded-full blur-3xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-indigo-200/20 to-purple-200/20 dark:from-indigo-400/8 dark:to-purple-400/8 backdrop-blur-3xl border border-indigo-300/30 dark:border-indigo-600/30' : 'hidden'}`} style={{ animationDelay: '3s' }}></div>
+          <div className={`absolute top-1/2 right-16 w-28 h-28 rounded-full blur-2xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-pink-200/15 to-purple-200/15 dark:from-pink-400/6 dark:to-purple-400/6 backdrop-blur-3xl border border-pink-300/30 dark:border-pink-600/30' : 'hidden'}`} style={{ animationDelay: '4.5s' }}></div>
 
           {/* Purple gradient glassy floating elements */}
           {glassmorphismEnabled && (
             <>
-              <div className="absolute top-1/4 left-1/3 w-32 h-32 rounded-full blur-2xl animate-pulse bg-gradient-to-r from-purple-200/12 to-violet-200/8 dark:from-purple-400/6 dark:to-violet-400/4 backdrop-blur-3xl border border-purple-300/40 dark:border-purple-600/25" style={{animationDelay: '2s'}}></div>
-              <div className="absolute bottom-1/4 right-1/3 w-24 h-24 rounded-full blur-xl animate-pulse bg-gradient-to-r from-violet-200/10 to-indigo-200/6 dark:from-violet-400/5 dark:to-indigo-400/3 backdrop-blur-3xl border border-violet-300/35 dark:border-violet-600/20" style={{animationDelay: '5.5s'}}></div>
-              <div className="absolute top-3/4 left-1/2 w-20 h-20 rounded-full blur-lg animate-pulse bg-gradient-to-r from-indigo-200/8 to-purple-200/6 dark:from-indigo-400/4 dark:to-purple-400/3 backdrop-blur-3xl border border-indigo-300/30 dark:border-indigo-600/15" style={{animationDelay: '7s'}}></div>
+              <div className="absolute top-1/4 left-1/3 w-32 h-32 rounded-full blur-2xl animate-pulse bg-gradient-to-r from-purple-200/12 to-violet-200/8 dark:from-purple-400/6 dark:to-violet-400/4 backdrop-blur-3xl border border-purple-300/40 dark:border-purple-600/25" style={{ animationDelay: '2s' }}></div>
+              <div className="absolute bottom-1/4 right-1/3 w-24 h-24 rounded-full blur-xl animate-pulse bg-gradient-to-r from-violet-200/10 to-indigo-200/6 dark:from-violet-400/5 dark:to-indigo-400/3 backdrop-blur-3xl border border-violet-300/35 dark:border-violet-600/20" style={{ animationDelay: '5.5s' }}></div>
+              <div className="absolute top-3/4 left-1/2 w-20 h-20 rounded-full blur-lg animate-pulse bg-gradient-to-r from-indigo-200/8 to-purple-200/6 dark:from-indigo-400/4 dark:to-purple-400/3 backdrop-blur-3xl border border-indigo-300/30 dark:border-indigo-600/15" style={{ animationDelay: '7s' }}></div>
             </>
           )}
         </div>
@@ -583,18 +575,6 @@ export  function DashboardLayout() {
             <NotificationManager />
             <BillingStatusNavbar />
             <ThemeToggle />
-            {/* Reset congratulatory popup for testing */}
-            {process.env.NODE_ENV === 'development' && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={resetCongratulatory}
-                className="text-xs"
-                title="Reset congratulatory popup for testing"
-              >
-                Reset 🎉
-              </Button>
-            )}
           </div>
         </header>
         <main className={`flex-1 relative overflow-y-auto ${glassmorphismEnabled ? 'backdrop-blur-sm' : ''} bg-transparent`}>
@@ -614,16 +594,16 @@ export  function DashboardLayout() {
           {/* Floating decorative elements */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
             <div className={`absolute top-20 left-10 w-40 h-40 rounded-full blur-2xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-purple-200/25 to-violet-200/25 dark:from-purple-400/15 dark:to-violet-400/15 backdrop-blur-3xl border border-purple-300/35 dark:border-purple-600/35' : 'hidden'}`}></div>
-            <div className={`absolute top-40 right-20 w-32 h-32 rounded-full blur-2xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-violet-200/25 to-indigo-200/25 dark:from-violet-400/12 dark:to-indigo-400/12 backdrop-blur-3xl border border-violet-300/35 dark:border-violet-600/35' : 'hidden'}`} style={{animationDelay: '1s'}}></div>
-            <div className={`absolute bottom-32 left-1/3 w-28 h-28 rounded-full blur-2xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-indigo-200/25 to-purple-200/25 dark:from-indigo-400/10 dark:to-purple-400/10 backdrop-blur-3xl border border-indigo-300/35 dark:border-indigo-600/35' : 'hidden'}`} style={{animationDelay: '2s'}}></div>
-            <div className={`absolute top-1/4 right-1/4 w-24 h-24 rounded-full blur-xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-pink-200/20 to-purple-200/20 dark:from-pink-400/8 dark:to-purple-400/8 backdrop-blur-2xl border border-pink-300/35 dark:border-pink-600/35' : 'hidden'}`} style={{animationDelay: '3.5s'}}></div>
+            <div className={`absolute top-40 right-20 w-32 h-32 rounded-full blur-2xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-violet-200/25 to-indigo-200/25 dark:from-violet-400/12 dark:to-indigo-400/12 backdrop-blur-3xl border border-violet-300/35 dark:border-violet-600/35' : 'hidden'}`} style={{ animationDelay: '1s' }}></div>
+            <div className={`absolute bottom-32 left-1/3 w-28 h-28 rounded-full blur-2xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-indigo-200/25 to-purple-200/25 dark:from-indigo-400/10 dark:to-purple-400/10 backdrop-blur-3xl border border-indigo-300/35 dark:border-indigo-600/35' : 'hidden'}`} style={{ animationDelay: '2s' }}></div>
+            <div className={`absolute top-1/4 right-1/4 w-24 h-24 rounded-full blur-xl animate-pulse ${glassmorphismEnabled ? 'bg-gradient-to-r from-pink-200/20 to-purple-200/20 dark:from-pink-400/8 dark:to-purple-400/8 backdrop-blur-2xl border border-pink-300/35 dark:border-pink-600/35' : 'hidden'}`} style={{ animationDelay: '3.5s' }}></div>
 
             {/* Additional ultra-glassy floating elements */}
             {glassmorphismEnabled && (
               <>
-                <div className="absolute top-1/3 left-1/4 w-28 h-28 rounded-full blur-xl animate-pulse bg-gradient-to-r from-purple-200/15 to-violet-200/10 dark:from-purple-400/8 dark:to-violet-400/5 backdrop-blur-3xl border border-purple-300/45 dark:border-purple-600/30" style={{animationDelay: '4s'}}></div>
-                <div className="absolute bottom-1/4 right-1/4 w-20 h-20 rounded-full blur-lg animate-pulse bg-gradient-to-r from-violet-200/12 to-indigo-200/8 dark:from-violet-400/6 dark:to-indigo-400/4 backdrop-blur-3xl border border-violet-300/40 dark:border-violet-600/25" style={{animationDelay: '5.5s'}}></div>
-                <div className="absolute top-2/3 left-1/2 w-16 h-16 rounded-full blur-md animate-pulse bg-gradient-to-r from-indigo-200/10 to-purple-200/8 dark:from-indigo-400/5 dark:to-purple-400/4 backdrop-blur-3xl border border-indigo-300/35 dark:border-indigo-600/20" style={{animationDelay: '7s'}}></div>
+                <div className="absolute top-1/3 left-1/4 w-28 h-28 rounded-full blur-xl animate-pulse bg-gradient-to-r from-purple-200/15 to-violet-200/10 dark:from-purple-400/8 dark:to-violet-400/5 backdrop-blur-3xl border border-purple-300/45 dark:border-purple-600/30" style={{ animationDelay: '4s' }}></div>
+                <div className="absolute bottom-1/4 right-1/4 w-20 h-20 rounded-full blur-lg animate-pulse bg-gradient-to-r from-violet-200/12 to-indigo-200/8 dark:from-violet-400/6 dark:to-indigo-400/4 backdrop-blur-3xl border border-violet-300/40 dark:border-violet-600/25" style={{ animationDelay: '5.5s' }}></div>
+                <div className="absolute top-2/3 left-1/2 w-16 h-16 rounded-full blur-md animate-pulse bg-gradient-to-r from-indigo-200/10 to-purple-200/8 dark:from-indigo-400/5 dark:to-purple-400/4 backdrop-blur-3xl border border-indigo-300/35 dark:border-indigo-600/20" style={{ animationDelay: '7s' }}></div>
               </>
             )}
           </div>

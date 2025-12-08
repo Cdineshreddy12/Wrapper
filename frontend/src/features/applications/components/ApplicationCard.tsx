@@ -2,9 +2,10 @@ import { Badge } from "@/components/ui";
 import { GlareCard } from "@/components/ui/glare-card";
 import { getApplicationIcon, getThemeColors, getStatusColors } from "./applicationUtils";
 import { Application } from "@/types/application";
-import { Eye } from "lucide-react";
+import { Eye, ExternalLink, ChevronRight } from "lucide-react";
 import { memo } from "react";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import { cn } from "@/lib/utils";
 
 interface ApplicationCardProps {
   application: Application;
@@ -15,69 +16,96 @@ export const ApplicationCard = memo(function ApplicationCard({ application, onVi
   const { actualTheme } = useTheme();
   const { appName, appCode, description, isEnabled, subscriptionTier } = application;
 
-  // Get consistent theme colors
   const themeColors = getThemeColors(actualTheme);
   const statusColors = getStatusColors(isEnabled, actualTheme);
 
+  // Handle card click - redirect to application URL if available
+  const handleCardClick = () => {
+    if (application.baseUrl) {
+      window.open(application.baseUrl, '_blank', 'noopener,noreferrer');
+    } else {
+      // If no baseUrl, show details modal as fallback
+      onView(application);
+    }
+  };
+
   return (
     <GlareCard
-      className={`flex flex-col items-center justify-center cursor-pointer p-8 text-center h-full ${themeColors.cardBg} ${themeColors.cardBorder} ${themeColors.cardHover}`}
-      onClick={() => onView(application)}
+      className="h-[320px] rounded-[24px] cursor-pointer" // Fixed height for consistency
+      onClick={handleCardClick}
     >
-      {/* Header with icon and status */}
-      <div className="flex items-center justify-between w-full mb-6">
-        <div className="flex items-center gap-4">
-          <div className={`p-3 rounded-full backdrop-blur-sm ${themeColors.iconBg}`}>
-            <div className={`text-2xl ${themeColors.iconColor}`}>
+      <div className="flex flex-col h-full p-6 relative group">
+
+        {/* Decorative background glow */}
+        <div className="absolute -right-10 -top-10 w-40 h-40 bg-indigo-500/20 rounded-full blur-3xl group-hover:bg-indigo-500/30 transition-all duration-500"></div>
+        <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-purple-500/10 rounded-full blur-3xl group-hover:bg-purple-500/20 transition-all duration-500"></div>
+
+        {/* Header */}
+        <div className="flex items-start justify-between relative z-10 mb-4">
+          <div className={cn(
+            "h-14 w-14 rounded-2xl flex items-center justify-center backdrop-blur-md shadow-lg transition-transform duration-300 group-hover:scale-110",
+            themeColors.iconBg,
+            themeColors.iconColor
+          )}>
+            <div className="w-8 h-8">
               {getApplicationIcon(appCode)}
             </div>
           </div>
-          <div className="text-left">
-            <h3 className={`font-bold text-xl mb-1 ${themeColors.titleColor}`}>
-              {appName || "Unknown App"}
-            </h3>
-            <p className={`${themeColors.subtitleColor} text-sm`}>
-              {appCode || "N/A"}
-            </p>
-          </div>
+
+          <Badge
+            className={cn(
+              "border backdrop-blur-md px-3 py-1 transition-all duration-300",
+              statusColors.bg,
+              statusColors.text,
+              statusColors.border
+            )}
+          >
+            <span className={cn("w-2 h-2 rounded-full mr-2 animate-pulse", statusColors.dot)}></span>
+            {isEnabled ? "Active" : "Inactive"}
+          </Badge>
         </div>
-        <Badge
-          className={`border-0 ${statusColors.bg} ${statusColors.text} ${statusColors.border}`}
-        >
-          {isEnabled ? "Active" : "Inactive"}
-        </Badge>
-      </div>
 
-      {/* Description */}
-      <p className={`${themeColors.descriptionColor} text-sm mb-6 line-clamp-2`}>
-        {description || "No description available"}
-      </p>
+        {/* Content */}
+        <div className="relative z-10 flex-1 flex flex-col justify-center">
+          <h3 className={cn("text-2xl font-bold mb-1 tracking-tight group-hover:translate-x-1 transition-transform duration-300", themeColors.titleColor)}>
+            {appName}
+          </h3>
+          <p className={cn("text-xs uppercase font-semibold tracking-widest mb-3 opacity-60", themeColors.subtitleColor)}>
+            {appCode}
+          </p>
+          <p className={cn("text-sm leading-relaxed line-clamp-2 mb-4 opacity-80", themeColors.descriptionColor)}>
+            {description || "Access powerful tools and modules customized for your workflow."}
+          </p>
+        </div>
 
-      {/* Subscription Tier */}
-      <div className="w-full mb-6">
-        <div className={`rounded-lg p-3 backdrop-blur-sm ${themeColors.iconBg}`}>
+        {/* Footer / Actions */}
+        <div className="relative z-10 mt-auto pt-4 border-t border-white/5">
           <div className="flex items-center justify-between">
-            <span className={`text-sm ${themeColors.subtitleColor}`}>
-              Subscription Tier
-            </span>
-            <Badge
-              variant="outline"
-              className={`capitalize ${themeColors.badgeBg} ${themeColors.badgeText} ${themeColors.badgeBorder}`}
-            >
-              {typeof subscriptionTier === "object" ? "Basic" : subscriptionTier || "Basic"}
-            </Badge>
-          </div>
-        </div>
-      </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Plan</span>
+              <Badge variant="outline" className="bg-white/5 border-white/10 text-slate-300 backdrop-blur-sm">
+                {typeof subscriptionTier === "object" ? "Pro" : subscriptionTier || "Standard"}
+              </Badge>
+            </div>
 
-      {/* Action Button */}
-      <div className="w-full">
-        <div className={`rounded-lg p-3 backdrop-blur-sm transition-all duration-200 hover:scale-105 ${themeColors.buttonBg}`}>
-          <div className="flex items-center justify-center gap-2">
-            <Eye className={`h-4 w-4 hover:scale-110 transition-transform ${themeColors.buttonIcon}`} />
-            <span className={`font-medium ${themeColors.buttonText}`}>
-              View Details
-            </span>
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2">
+              {application.baseUrl && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 text-xs font-medium">
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Click to Launch
+                </div>
+              )}
+              <button
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white text-xs font-medium transition-all"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onView(application);
+                }}
+              >
+                Details <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       </div>

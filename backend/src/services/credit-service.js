@@ -144,7 +144,7 @@ export class CreditService {
       // Normalize entity parameters to match addCreditsToEntity method
       const normalizedEntityType = entityType || 'organization';
       const searchEntityId = entityId || tenantId;
-      
+
       console.log('🔍 Getting current balance with normalized parameters:', {
         tenantId,
         originalEntityType: entityType,
@@ -152,7 +152,7 @@ export class CreditService {
         originalEntityId: entityId,
         searchEntityId
       });
-      
+
       const [creditBalance] = await db
         .select()
         .from(credits)
@@ -422,7 +422,7 @@ export class CreditService {
 
         if (existingPurchase) {
           console.log('✅ Found existing purchase:', existingPurchase.purchaseId);
-          
+
           // Update purchase status to completed
           await db
             .update(creditPurchases)
@@ -433,7 +433,7 @@ export class CreditService {
               processedBy: userId || '00000000-0000-0000-0000-000000000001'
             })
             .where(eq(creditPurchases.purchaseId, existingPurchase.purchaseId));
-          
+
           // Create updated purchase object with correct status
           purchase = {
             ...existingPurchase,
@@ -1438,7 +1438,7 @@ export class CreditService {
       // Normalize entity parameters
       const normalizedEntityType = entityType || 'organization';
       const normalizedEntityId = entityId || tenantId;
-      
+
       console.log('💰 Adding credits to entity:', {
         tenantId,
         originalEntityType: entityType,
@@ -1499,11 +1499,11 @@ export class CreditService {
 
         // Create transaction record
         console.log('📝 Creating transaction record...');
-        
+
         // Generate a proper UUID for operation_id, use sourceId for stripe_payment_intent_id only
         const { randomUUID } = await import('crypto');
         const operationId = randomUUID();
-        
+
         await sqlConn`
           INSERT INTO credit_transactions (
             tenant_id, entity_id, transaction_type, amount,
@@ -2560,6 +2560,155 @@ export class CreditService {
   }
 
   /**
+   * Get global credit configurations filtered by application code or name
+   * @param {string|null} appIdentifier - Application code (e.g., 'crm') or name (e.g., 'B2B CRM'). If null, returns all apps.
+   * @returns {Promise<Object>} Global credit configurations for the specified application(s)
+   */
+  static async getGlobalCreditConfigurationsByApp(appIdentifier = null) {
+    try {
+      console.log('🔍 Getting global credit configurations for app:', appIdentifier || 'ALL');
+
+      // Build query for applications
+      let appQuery = db
+        .select({
+          appId: applicationsTable.appId,
+          appCode: applicationsTable.appCode,
+          appName: applicationsTable.appName,
+          description: applicationsTable.description
+        })
+        .from(applicationsTable)
+        .where(eq(applicationsTable.status, 'active'));
+
+      // Filter by app identifier if provided
+      if (appIdentifier) {
+        appQuery = appQuery.where(
+          or(
+            eq(applicationsTable.appCode, appIdentifier),
+            eq(applicationsTable.appName, appIdentifier)
+          )
+        );
+      }
+
+      const applications = await appQuery;
+
+      if (applications.length === 0) {
+        return {
+          success: false,
+          message: appIdentifier
+            ? `No application found with code or name: ${appIdentifier}`
+            : 'No active applications found',
+          data: null
+        };
+      }
+
+      // Get configurations for each application
+      const configurationsWithDetails = await Promise.all(
+        applications.map(async (app) => {
+          // Get all global credit configurations for this app
+          const globalConfigs = await systemDbConnection
+            .select({
+              configId: creditConfigurations.configId,
+              operationCode: creditConfigurations.operationCode,
+              creditCost: creditConfigurations.creditCost,
+              unit: creditConfigurations.unit,
+              unitMultiplier: creditConfigurations.unitMultiplier,
+              freeAllowance: creditConfigurations.freeAllowance,
+              freeAllowancePeriod: creditConfigurations.freeAllowancePeriod,
+              volumeTiers: creditConfigurations.volumeTiers,
+              allowOverage: creditConfigurations.allowOverage,
+              overageLimit: creditConfigurations.overageLimit,
+              overagePeriod: creditConfigurations.overagePeriod,
+              overageCost: creditConfigurations.overageCost,
+              isActive: creditConfigurations.isActive,
+              createdAt: creditConfigurations.createdAt,
+              updatedAt: creditConfigurations.updatedAt
+            })
+            .from(creditConfigurations)
+            .where(and(
+              eq(creditConfigurations.isGlobal, true),
+              eq(creditConfigurations.isActive, true),
+              sql`${creditConfigurations.operationCode} LIKE ${app.appCode + '.%'}`
+            ))
+            .orderBy(creditConfigurations.operationCode);
+
+          // Group configurations by module
+          const moduleGroups = {};
+          globalConfigs.forEach(config => {
+            const parts = config.operationCode.split('.');
+            const moduleCode = parts.length >= 2 ? `${parts[0]}.${parts[1]}` : 'unknown';
+
+            if (!moduleGroups[moduleCode]) {
+              moduleGroups[moduleCode] = {
+                moduleCode,
+                moduleName: parts[1] || 'unknown',
+                operations: []
+              };
+            }
+
+            moduleGroups[moduleCode].operations.push({
+              operationCode: config.operationCode,
+              operationName: parts.slice(2).join('.') || 'unknown',
+              creditCost: parseFloat(config.creditCost),
+              unit: config.unit,
+              unitMultiplier: parseFloat(config.unitMultiplier),
+              freeAllowance: config.freeAllowance,
+              freeAllowancePeriod: config.freeAllowancePeriod,
+              volumeTiers: config.volumeTiers || [],
+              allowOverage: config.allowOverage,
+              overageLimit: config.overageLimit,
+              overagePeriod: config.overagePeriod,
+              overageCost: config.overageCost ? parseFloat(config.overageCost) : null,
+              isActive: config.isActive
+            });
+          });
+
+          // Calculate statistics
+          const modules = Object.values(moduleGroups);
+          const totalOperations = globalConfigs.length;
+          const avgCreditCost = totalOperations > 0
+            ? globalConfigs.reduce((sum, config) => sum + parseFloat(config.creditCost), 0) / totalOperations
+            : 0;
+
+          return {
+            appId: app.appId,
+            appCode: app.appCode,
+            appName: app.appName,
+            description: app.description,
+            statistics: {
+              totalModules: modules.length,
+              totalOperations,
+              averageCreditCost: parseFloat(avgCreditCost.toFixed(2))
+            },
+            modules,
+            allOperations: globalConfigs.map(config => ({
+              operationCode: config.operationCode,
+              creditCost: parseFloat(config.creditCost),
+              unit: config.unit,
+              isActive: config.isActive
+            }))
+          };
+        })
+      );
+
+      return {
+        success: true,
+        message: appIdentifier
+          ? `Global configurations for ${appIdentifier}`
+          : `Global configurations for all applications`,
+        data: {
+          requestedApp: appIdentifier,
+          applicationsCount: configurationsWithDetails.length,
+          applications: configurationsWithDetails
+        }
+      };
+    } catch (error) {
+      console.error('Error getting global credit configurations by app:', error);
+      throw error;
+    }
+  }
+
+
+  /**
    * Create tenant-specific operation cost configuration
    */
   static async createTenantOperationCost(tenantId, configData, userId) {
@@ -2699,7 +2848,7 @@ export class CreditService {
       };
     } catch (error) {
       console.error('❌ Error creating tenant operation cost:', error);
-      
+
       // Provide more specific error messages
       if (error.code === '23505') {
         // This should no longer happen since we check for existing configs first

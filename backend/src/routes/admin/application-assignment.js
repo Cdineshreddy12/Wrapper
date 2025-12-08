@@ -1,7 +1,7 @@
 import { db } from '../../db/index.js';
-import { 
-  applications, 
-  organizationApplications, 
+import {
+  applications,
+  organizationApplications,
   applicationModules,
   tenants,
   entities
@@ -52,6 +52,10 @@ export default async function applicationAssignmentRoutes(fastify, options) {
           appId: applications.appId,
           appCode: applications.appCode,
           appName: applications.appName,
+          description: applications.description,
+          icon: applications.icon,
+          baseUrl: applications.baseUrl,
+          isCore: applications.isCore,
           isEnabled: organizationApplications.isEnabled,
           subscriptionTier: organizationApplications.subscriptionTier,
           enabledModules: organizationApplications.enabledModules,
@@ -448,9 +452,9 @@ export default async function applicationAssignmentRoutes(fastify, options) {
       };
     } catch (error) {
       request.log.error('Error fetching tenants with applications:', error);
-      return reply.code(500).send({ 
-        success: false, 
-        error: 'Failed to fetch tenants with applications' 
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch tenants with applications'
       });
     }
   });
@@ -484,9 +488,9 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         .limit(1);
 
       if (tenant.length === 0) {
-        return reply.code(404).send({ 
-          success: false, 
-          error: 'Tenant not found' 
+        return reply.code(404).send({
+          success: false,
+          error: 'Tenant not found'
         });
       }
 
@@ -513,7 +517,7 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         })
         .from(applications)
         .leftJoin(
-          organizationApplications, 
+          organizationApplications,
           and(
             eq(organizationApplications.appId, applications.appId),
             eq(organizationApplications.tenantId, tenantId)
@@ -592,9 +596,9 @@ export default async function applicationAssignmentRoutes(fastify, options) {
       };
     } catch (error) {
       request.log.error('Error fetching tenant application assignments:', error);
-      return reply.code(500).send({ 
-        success: false, 
-        error: 'Failed to fetch tenant application assignments' 
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch tenant application assignments'
       });
     }
   });
@@ -801,9 +805,9 @@ export default async function applicationAssignmentRoutes(fastify, options) {
       };
     } catch (error) {
       request.log.error('Error assigning application to tenant:', error);
-      return reply.code(500).send({ 
-        success: false, 
-        error: 'Failed to assign application to tenant' 
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to assign application to tenant'
       });
     }
   });
@@ -849,9 +853,9 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         .limit(1);
 
       if (existing.length === 0) {
-        return reply.code(404).send({ 
-          success: false, 
-          error: 'Assignment not found' 
+        return reply.code(404).send({
+          success: false,
+          error: 'Assignment not found'
         });
       }
 
@@ -880,9 +884,9 @@ export default async function applicationAssignmentRoutes(fastify, options) {
       };
     } catch (error) {
       request.log.error('Error updating application assignment:', error);
-      return reply.code(500).send({ 
-        success: false, 
-        error: 'Failed to update application assignment' 
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to update application assignment'
       });
     }
   });
@@ -916,9 +920,9 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         .limit(1);
 
       if (existing.length === 0) {
-        return reply.code(404).send({ 
-          success: false, 
-          error: 'Assignment not found' 
+        return reply.code(404).send({
+          success: false,
+          error: 'Assignment not found'
         });
       }
 
@@ -936,9 +940,9 @@ export default async function applicationAssignmentRoutes(fastify, options) {
       };
     } catch (error) {
       request.log.error('Error removing application assignment:', error);
-      return reply.code(500).send({ 
-        success: false, 
-        error: 'Failed to remove application assignment' 
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to remove application assignment'
       });
     }
   });
@@ -983,16 +987,16 @@ export default async function applicationAssignmentRoutes(fastify, options) {
       ]);
 
       if (tenants.length !== tenantIds.length) {
-        return reply.code(400).send({ 
-          success: false, 
-          error: 'Some tenants not found' 
+        return reply.code(400).send({
+          success: false,
+          error: 'Some tenants not found'
         });
       }
 
       if (apps.length !== appIds.length) {
-        return reply.code(400).send({ 
-          success: false, 
-          error: 'Some applications not found' 
+        return reply.code(400).send({
+          success: false,
+          error: 'Some applications not found'
         });
       }
 
@@ -1089,9 +1093,9 @@ export default async function applicationAssignmentRoutes(fastify, options) {
       };
     } catch (error) {
       request.log.error('Error bulk assigning applications:', error);
-      return reply.code(500).send({ 
-        success: false, 
-        error: 'Failed to bulk assign applications' 
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to bulk assign applications'
       });
     }
   });

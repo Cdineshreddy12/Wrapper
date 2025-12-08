@@ -196,7 +196,7 @@ export const GoogleGeminiEffect = ({
                 <div className="w-full h-full flex flex-col items-center justify-center text-center">
                   <div className="w-12 h-12 rounded-xl overflow-hidden shadow-lg mb-1">
                     <img
-                      src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg"
+                      src="/src/public/Zopkit Simple Logo.jpg"
                       alt="Zopkit"
                       className="w-full h-full object-cover"
                     />
