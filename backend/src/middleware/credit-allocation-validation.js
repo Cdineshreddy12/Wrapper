@@ -1,5 +1,4 @@
-import CreditAllocationService from '../services/credit-allocation-service.js';
-import { CreditService } from '../services/credit-service.js';
+import { CreditAllocationService, CreditService } from '../features/credits/index.js';
 
 /**
  * Middleware to validate credit allocations for application-specific operations

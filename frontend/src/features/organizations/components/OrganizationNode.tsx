@@ -181,19 +181,23 @@ export function OrganizationNode({ id, data, selected }: NodeProps<OrganizationN
           )}
         </div>
 
-        {(availableCredits !== undefined || reservedCredits !== undefined) && (
+        {(availableCredits !== undefined && availableCredits !== null) && (
           <div className="mt-2 pt-2 border-t border-gray-200">
             <div className="flex items-center justify-between text-xs">
               <span className="text-gray-600">Credits:</span>
               <div className="flex gap-2">
-                {availableCredits !== undefined && (
                   <span className="text-green-600 font-medium">
-                    {availableCredits} available
+                  {typeof availableCredits === 'number' 
+                    ? availableCredits.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                    : parseFloat(String(availableCredits || 0)).toLocaleString(undefined, { maximumFractionDigits: 2 })
+                  } available
                   </span>
-                )}
-                {reservedCredits !== undefined && reservedCredits > 0 && (
+                {reservedCredits !== undefined && reservedCredits !== null && reservedCredits > 0 && (
                   <span className="text-orange-600 font-medium">
-                    {reservedCredits} reserved
+                    {typeof reservedCredits === 'number'
+                      ? reservedCredits.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                      : parseFloat(String(reservedCredits || 0)).toLocaleString(undefined, { maximumFractionDigits: 2 })
+                    } reserved
                   </span>
                 )}
               </div>

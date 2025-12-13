@@ -5,7 +5,7 @@
  *
  * Consumes organization assignment events from Redis Streams
  * and synchronizes with external CRM systems.
- *
+ *trak
  * Usage: node src/services/organization-assignment-consumer.js
  */
 

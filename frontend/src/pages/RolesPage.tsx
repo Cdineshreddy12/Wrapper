@@ -1,5 +1,5 @@
 import { Container } from "@/components/common/Page";
-import { RoleManagementDashboard } from "@/components/roles/RoleManagementDashboard";
+import { RoleManagementDashboard } from "@/features/roles";
 import { useKindeAuth } from "@kinde-oss/kinde-auth-react";
 import { AccessDenied } from "@/components/common/AccessDenied";
 

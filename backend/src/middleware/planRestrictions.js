@@ -1,4 +1,4 @@
-import { SubscriptionService } from '../services/subscription-service.js';
+import { SubscriptionService } from '../features/subscriptions/index.js';
 import { db } from '../db/index.js';
 import { eq, count } from 'drizzle-orm';
 import { tenantUsers, customRoles } from '../db/schema/index.js';

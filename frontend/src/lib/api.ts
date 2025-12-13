@@ -652,48 +652,51 @@ export const tenantAPI = {
 
   // Export users
   exportUsers: () => api.get('/tenants/current/users/export'),
+
+  // Get organization assignments
+  getOrganizationAssignments: () => api.get<ApiResponse<any>>('/tenants/current/organization-assignments'),
 }
 
 // Subscription API
 export const subscriptionAPI = {
   // Debug endpoint for testing authentication
-  debugAuth: () => api.get('/api/subscriptions/debug-auth'),
+  debugAuth: () => api.get('/subscriptions/debug-auth'),
 
-  getCurrent: () => api.get('/api/subscriptions/current'),
-  getAvailablePlans: () => api.get('/api/subscriptions/plans'),
-  getBillingHistory: () => api.get('/api/subscriptions/billing-history'),
-  getConfigStatus: () => api.get('/api/subscriptions/config-status'),
+  getCurrent: () => api.get('/subscriptions/current'),
+  getAvailablePlans: () => api.get('/subscriptions/plans'),
+  getBillingHistory: () => api.get('/subscriptions/billing-history'),
+  getConfigStatus: () => api.get('/subscriptions/config-status'),
   createCheckout: (data: {
     planId: string;
     billingCycle: 'monthly' | 'yearly';
     successUrl: string;
     cancelUrl: string;
-  }) => api.post('/api/subscriptions/checkout', data),
-  checkProfileStatus: () => api.get('/api/payment-upgrade/profile-status'),
+  }) => api.post('/subscriptions/checkout', data),
+  checkProfileStatus: () => api.get('/payment-upgrade/profile-status'),
   changePlan: (data: {
     planId: string;
     billingCycle?: 'monthly' | 'yearly';
-  }) => api.post('/api/subscriptions/change-plan', data),
-  cancelSubscription: () => api.post('/api/subscriptions/cancel'),
-  updatePaymentMethod: () => api.post('/api/subscriptions/update-payment-method'),
-  getUsage: () => api.get('/api/subscriptions/usage'),
+  }) => api.post('/subscriptions/change-plan', data),
+  cancelSubscription: () => api.post('/subscriptions/cancel'),
+  updatePaymentMethod: () => api.post('/subscriptions/update-payment-method'),
+  getUsage: () => api.get('/subscriptions/usage'),
 
   // Enhanced payment management
   immediateDowngrade: (data: { newPlan: string; reason?: string; refundRequested?: boolean }) =>
-    api.post('/api/subscriptions/immediate-downgrade', data),
+    api.post('/subscriptions/immediate-downgrade', data),
   processRefund: (data: { paymentId: string; amount?: number; reason?: string }) =>
-    api.post('/api/subscriptions/refund', data),
+    api.post('/subscriptions/refund', data),
   getPaymentDetailsById: (paymentId: string) =>
-    api.get(`/api/subscriptions/payment/${paymentId}`),
+    api.get(`/subscriptions/payment/${paymentId}`),
   getSubscriptionActions: () =>
-    api.get('/api/subscriptions/actions'),
+    api.get('/subscriptions/actions'),
   getPlanLimits: () =>
-    api.get('/api/subscriptions/plan-limits'),
+    api.get('/subscriptions/plan-limits'),
   cleanupDuplicatePayments: () =>
-    api.post('/api/subscriptions/cleanup-duplicate-payments'),
-  getPaymentDetailsBySession: (sessionId: string) => api.get(`/api/subscriptions/payment/${sessionId}`),
+    api.post('/subscriptions/cleanup-duplicate-payments'),
+  getPaymentDetailsBySession: (sessionId: string) => api.get(`/subscriptions/payment/${sessionId}`),
   toggleTrialRestrictions: (disable: boolean) =>
-    api.post('/api/subscriptions/toggle-trial-restrictions', { disable }),
+    api.post('/subscriptions/toggle-trial-restrictions', { disable }),
 }
 
 // Analytics API
@@ -842,10 +845,6 @@ export const userAPI = {
 export const onboardingAPI = {
   checkSubdomain: async (subdomain: string) => {
     return await api.get(`/onboarding/check-subdomain?subdomain=${subdomain}`)
-  },
-
-  complete: async (data: any) => {
-    return await api.post('/onboarding/onboard', data)
   },
 
   checkStatus: async () => {
@@ -1412,8 +1411,24 @@ export const invitationAPI = {
     api.get('/invitations/details', { params: { org, email } }),
 
   // Accept invitation (public)
-  acceptInvitation: (data: { org: string; email: string; kindeUserId: string }) => 
-    api.post('/invitations/accept', data)
+  acceptInvitation: (data: { org: string; email: string; kindeUserId: string }) =>
+    api.post('/invitations/accept', data),
+
+  // Assign organization to user
+  assignOrganizationToUser: (userId: string, data: {
+    entityId: string;
+    roleId?: string;
+    membershipType?: string;
+    isPrimary?: boolean;
+  }) => api.post(`/admin/users/${userId}/organizations`, data),
+
+  // Remove organization from user
+  removeOrganizationFromUser: (userId: string, membershipId: string) =>
+    api.delete(`/admin/users/${userId}/organizations/${membershipId}`),
+
+  // Update user's organization role
+  updateUserOrganizationRole: (userId: string, membershipId: string, data: { roleId?: string | null }) =>
+    api.put(`/admin/users/${userId}/organizations/${membershipId}`, data)
 }
 
 export default api 

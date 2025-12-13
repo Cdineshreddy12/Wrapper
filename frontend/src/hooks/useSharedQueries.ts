@@ -407,18 +407,49 @@ export function useRoles(filters?: { search?: string; type?: 'all' | 'custom' | 
     queryKey: queryKeys.roles(filters),
     queryFn: async () => {
       console.log('🔍 useRoles: Fetching roles...')
+      
+      // Try the new all roles endpoint first, fallback to paginated endpoint
+      try {
+        const response = await api.get('/admin/roles/all')
+        
+        if (response.data.success) {
+          let rolesData = response.data.data || []
+          
+          // Apply filters client-side if needed
+          if (filters?.search) {
+            const searchLower = filters.search.toLowerCase()
+            rolesData = rolesData.filter((role: any) => 
+              role.roleName?.toLowerCase().includes(searchLower) ||
+              role.description?.toLowerCase().includes(searchLower)
+            )
+          }
+          
+          if (filters?.type === 'system') {
+            rolesData = rolesData.filter((role: any) => role.isSystemRole === true)
+          } else if (filters?.type === 'custom') {
+            rolesData = rolesData.filter((role: any) => role.isSystemRole === false)
+          }
+          
+          console.log('✅ useRoles: Roles received from /admin/roles/all', rolesData.length)
+          return rolesData
+        }
+      } catch (error: any) {
+        console.warn('⚠️ Failed to fetch from /admin/roles/all, trying fallback:', error.message)
+      }
+      
+      // Fallback to paginated endpoint
       const response = await api.get('/permissions/roles', {
         params: {
           search: filters?.search,
           type: filters?.type !== 'all' ? filters?.type : undefined,
           page: 1,
-          limit: 100
+          limit: 100 // Max allowed by API
         }
       })
       
       if (response.data.success) {
         const rolesData = response.data.data?.data || response.data.data || []
-        console.log('✅ useRoles: Roles received', rolesData.length)
+        console.log('✅ useRoles: Roles received from fallback endpoint', rolesData.length)
         return rolesData
       }
       

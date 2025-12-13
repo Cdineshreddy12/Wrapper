@@ -3,8 +3,7 @@
  * API endpoints for managing user application access and external sync
  */
 
-import { UserClassificationService } from '../services/user-classification-service.js';
-import { UserSyncService } from '../services/user-sync-service.js';
+import { UserClassificationService, UserSyncService } from '../features/users/index.js';
 
 export default async function userApplicationRoutes(fastify, options) {
   

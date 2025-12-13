@@ -28,31 +28,29 @@ import { ThemeProvider } from './components/theme/ThemeProvider'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { PermissionGuard } from '@/components/auth/PermissionGuard'
-import { OnboardingGuard } from '@/components/auth/OnboardingGuard'
-import { OnboardingPageGuard } from '@/components/auth/OnboardingPageGuard'
+// Onboarding feature
+import { OnboardingGuard, OnboardingPageGuard, OnboardingPage } from '@/features/onboarding'
 
 // Pages
-import Landing from '@/pages/Landing'
-import ProductPage from '@/pages/ProductPage'
+import { Landing, ProductPage } from '@/pages/landing'
 import { Login } from '@/pages/Login'
 import { AuthCallback } from '@/pages/AuthCallback'
 import { InviteAccept } from '@/pages/InviteAccept'
-import { UserManagementDashboard } from '@/components/users/UserManagementDashboard'
-import { Billing } from '@/pages/Billing'
-import { Permissions } from '@/pages/Permissions'
+import { UserManagementDashboard } from '@/features/users/components/UserManagementDashboard'
+import { Billing } from '@/features/billing'
+import { Permissions } from '@/features/permissions'
 import UserApplicationAccessPage from '@/pages/UserApplicationAccess'
 import SuiteDashboard from '@/pages/SuiteDashboard'
-import AdminDashboardPage from '@/pages/AdminDashboardPage'
+// Admin feature
+import { AdminDashboardPage } from '@/features/admin'
 import { OverviewPage } from './pages/OverviewPage'
 import { ApplicationPage } from './pages/ApplicationPage'
 import { RolesPage } from './pages/RolesPage'
-import { Settings } from './pages/Settings'
-import { OrganizationPage } from './pages/OrganizationPage'
-import OnboardingPage from './pages/Onboarding'
+import { Settings } from '@/features/settings'
+import { OrganizationPage } from '@/features/organizations'
 import PaymentSuccess from './pages/PaymentSuccess'
 import PaymentCancelled from './pages/PaymentCancelled'
-import { RoleManagementDashboard } from '@/components/roles/RoleManagementDashboard'
-import NotFound from '@/pages/NotFound'
+import NotFound from './pages/NotFound'
 
 // Professional Loading component using AnimatedLoader
 const LoadingScreen = () => (
@@ -225,7 +223,6 @@ function AppContent() {
           <Route path="organization" element={<OrganizationPage />} />
           <Route path="roles" element={<RolesPage />} />
           <Route path="user-apps" element={<UserApplicationAccessPage />} />
-          <Route path="roles" element={<RoleManagementDashboard />} />
           <Route path="billing" element={<Billing />} />
           <Route path="permissions" element={<Permissions />} />
           <Route path="settings" element={<Settings />} />

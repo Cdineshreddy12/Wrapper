@@ -1,7 +1,7 @@
 import { db, dbManager } from '../db/index.js';
 import { tenants, tenantUsers, customRoles, userRoleAssignments, tenantInvitations, organizationMemberships, entities } from '../db/schema/index.js';
 import { eq, and, desc } from 'drizzle-orm';
-import kindeService from '../services/kinde-service.js';
+import { kindeService } from '../features/auth/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { authenticateToken } from '../middleware/auth.js';
 
@@ -780,13 +780,80 @@ export default async function invitationRoutes(fastify, options) {
         // Regenerate invitation URL to ensure it uses the correct subdomain
         const invitationUrl = await generateInvitationUrl(invitation.invitation.invitationToken, request, tenant.tenantId);
         
+        // Extract organization and location names from invitation
+        const organizations = [];
+        const locations = [];
+        let roleName = invitation.role?.roleName || 'Member';
+
+        // Handle multi-entity invitations
+        if (invitation.invitation.invitationScope === 'multi-entity' && invitation.invitation.targetEntities && invitation.invitation.targetEntities.length > 0) {
+          const roleNames = [];
+          for (const targetEntity of invitation.invitation.targetEntities) {
+            // Get entity details
+            const [entityRecord] = await db
+              .select({
+                entityId: entities.entityId,
+                entityName: entities.entityName,
+                entityType: entities.entityType
+              })
+              .from(entities)
+              .where(eq(entities.entityId, targetEntity.entityId))
+              .limit(1);
+
+            // Get role details
+            const [roleRecord] = await db
+              .select({
+                roleName: customRoles.roleName
+              })
+              .from(customRoles)
+              .where(eq(customRoles.roleId, targetEntity.roleId))
+              .limit(1);
+
+            if (entityRecord) {
+              const entityRoleName = roleRecord?.roleName || 'Member';
+              roleNames.push(entityRoleName);
+
+              if (entityRecord.entityType === 'organization') {
+                organizations.push(entityRecord.entityName);
+              } else if (entityRecord.entityType === 'location') {
+                locations.push(entityRecord.entityName);
+              }
+            }
+          }
+          roleName = roleNames.length > 0 
+            ? (roleNames.length === 1 ? roleNames[0] : `${roleNames[0]} (${roleNames.length} roles)`)
+            : 'Team Member';
+        } else if (invitation.invitation.primaryEntityId) {
+          // Handle single-entity invitations
+          const [entityRecord] = await db
+            .select({
+              entityName: entities.entityName,
+              entityType: entities.entityType
+            })
+            .from(entities)
+            .where(eq(entities.entityId, invitation.invitation.primaryEntityId))
+            .limit(1);
+
+          if (entityRecord) {
+            if (entityRecord.entityType === 'organization') {
+              organizations.push(entityRecord.entityName);
+            } else if (entityRecord.entityType === 'location') {
+              locations.push(entityRecord.entityName);
+            }
+          }
+        }
+        
         await EmailService.sendUserInvitation({
           email: invitation.invitation.email,
           tenantName: tenant.companyName,
-          roleName: invitation.role?.roleName || 'Member',
+          roleName,
           invitationToken: invitationUrl, // Pass full URL instead of token
           invitedByName: invitation.inviter?.name || 'Team Administrator',
-          message: 'Your invitation has been resent by an administrator.'
+          message: 'Your invitation has been resent by an administrator.',
+          organizations: organizations.length > 0 ? organizations : undefined,
+          locations: locations.length > 0 ? locations : undefined,
+          invitedDate: invitation.invitation.createdAt,
+          expiryDate: invitation.invitation.expiresAt
         });
         
         console.log(`✅ Invitation email resent successfully to ${invitation.invitation.email}`);
@@ -1441,12 +1508,55 @@ export default async function invitationRoutes(fastify, options) {
         // Import EmailService dynamically to avoid circular dependencies
         const EmailService = (await import('../utils/email.js')).default;
 
-        const roleName = validatedEntities.length > 1 ? 'Multi-entity Member' : 'Team Member';
+        // Extract organization names, locations, and role names from validated entities
+        const organizations = [];
+        const locations = [];
+        const roleNames = [];
+
+        for (const entity of validatedEntities) {
+          // Get entity details
+          const [entityRecord] = await db
+            .select({
+              entityId: entities.entityId,
+              entityName: entities.entityName,
+              entityType: entities.entityType
+            })
+            .from(entities)
+            .where(eq(entities.entityId, entity.entityId))
+            .limit(1);
+
+          // Get role details
+          const [roleRecord] = await db
+            .select({
+              roleName: customRoles.roleName
+            })
+            .from(customRoles)
+            .where(eq(customRoles.roleId, entity.roleId))
+            .limit(1);
+
+          if (entityRecord) {
+            const roleName = roleRecord?.roleName || 'Member';
+            roleNames.push(roleName);
+
+            if (entityRecord.entityType === 'organization') {
+              organizations.push(entityRecord.entityName);
+            } else if (entityRecord.entityType === 'location') {
+              locations.push(entityRecord.entityName);
+            }
+          }
+        }
+
+        // Determine primary role name (use first role or most common)
+        const primaryRoleName = roleNames.length > 0 
+          ? (roleNames.length === 1 ? roleNames[0] : `${roleNames[0]} (${roleNames.length} roles)`)
+          : 'Team Member';
 
         console.log(`📧 Email details:`, {
           email: newInvitation.email,
           tenantName: tenant.companyName,
-          roleName,
+          roleName: primaryRoleName,
+          organizations: organizations.length,
+          locations: locations.length,
           invitationToken: newInvitation.invitation_token.substring(0, 8) + '...',
           invitationUrl: invitationUrl,
           invitedByName: request.userContext.name || 'Team Administrator',
@@ -1456,10 +1566,14 @@ export default async function invitationRoutes(fastify, options) {
         const emailResult = await EmailService.sendUserInvitation({
           email: newInvitation.email,
           tenantName: tenant.companyName,
-          roleName,
+          roleName: primaryRoleName,
           invitationToken: invitationUrl, // Pass full URL instead of token
           invitedByName: request.userContext.name || 'Team Administrator',
-          message: request.body.message || `You've been invited to join ${tenant.companyName} with access to ${validatedEntities.length} organization${validatedEntities.length > 1 ? 's' : ''}.`
+          message: request.body.message || `You've been invited to join ${tenant.companyName} with access to ${validatedEntities.length} organization${validatedEntities.length > 1 ? 's' : ''}.`,
+          organizations: organizations.length > 0 ? organizations : undefined,
+          locations: locations.length > 0 ? locations : undefined,
+          invitedDate: new Date(),
+          expiryDate: expiresAt
         });
 
         console.log(`✅ Multi-entity invitation email sent successfully to ${newInvitation.email}:`, emailResult);

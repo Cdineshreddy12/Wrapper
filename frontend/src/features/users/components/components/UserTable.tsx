@@ -5,12 +5,16 @@ import {
   Trash2,
   Eye,
   Crown,
-  UserCog,
   UserX,
-  UserCheck
+  UserCheck,
+  Building2,
+  Shield,
+  Copy,
+  UserCog
 } from 'lucide-react';
-import { ReusableTable, TableColumn, TableAction } from '@/components/common/ReusableTable';
+import { ReusableTable, TableColumn, TableAction } from '@/components/table/ReusableTable';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { User } from '@/types/user-management';
 import { useUserManagement } from '../context/UserManagementContext';
 import { useUserActions } from '../hooks/useUserActions';
@@ -24,14 +28,13 @@ interface UserTableProps {
 }
 
 /**
- * User Table Component
+ * Enhanced User Table Component
  * 
  * Features:
- * - Configurable table columns
- * - User actions (view, edit, delete, etc.)
- * - Selection handling
- * - Status badges and role display
- * - Invitation URL handling
+ * - User information display
+ * - Organizations and roles display
+ * - Invitation URL display
+ * - Quick actions for managing user access
  */
 export function UserTable({ 
   users, 
@@ -43,9 +46,9 @@ export function UserTable({
   const { userMutations } = useUserManagement();
   const { 
     getUserStatus, 
-    getStatusColor, 
-    generateInvitationUrl, 
-    copyInvitationUrl 
+    getStatusColor,
+    generateInvitationUrl,
+    copyInvitationUrl
   } = useUserActions();
   
   // Table columns configuration
@@ -53,11 +56,11 @@ export function UserTable({
     {
       key: 'user',
       label: 'User',
-      width: '300px',
+      width: '280px',
       render: (user) => (
         <div className="flex items-center gap-3">
           <div 
-            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-medium"
+            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-medium shadow-sm"
             style={{ 
               background: user.avatar ? `url(${user.avatar})` : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
             }}
@@ -65,8 +68,11 @@ export function UserTable({
             {!user.avatar && (user.name?.charAt(0) || user.email?.charAt(0) || '?').toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="font-medium text-gray-900 truncate">
+            <div className="font-medium text-gray-900 truncate flex items-center gap-2">
               {user.name || 'Unnamed User'}
+              {user.isTenantAdmin && (
+                <Crown className="w-4 h-4 text-purple-600" />
+              )}
             </div>
             <div className="text-sm text-gray-500 truncate">{user.email}</div>
             {user.department && (
@@ -77,88 +83,103 @@ export function UserTable({
       )
     },
     {
+      key: 'organizations',
+      label: 'Organizations',
+      width: '250px',
+      render: (user) => {
+        const orgs = user.organizations || [];
+        if (orgs.length === 0) {
+          return <div className="text-sm text-gray-400 italic">No organizations</div>;
+        }
+        const primaryOrg = orgs.find(org => org.isPrimary);
+        const otherOrgs = orgs.filter(org => !org.isPrimary);
+        
+        return (
+          <div className="flex flex-col gap-1">
+            {primaryOrg && (
+              <div className="flex items-center gap-1.5">
+                <Building2 className="w-3 h-3 text-blue-600" />
+                <span className="text-sm font-medium text-gray-900 truncate" title={primaryOrg.organizationName}>
+                  {primaryOrg.organizationName}
+                </span>
+                <Badge variant="outline" className="text-[10px] px-1 py-0 bg-purple-50 text-purple-700 border-purple-200">
+                  Primary
+                </Badge>
+              </div>
+            )}
+            {otherOrgs.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {otherOrgs.slice(0, 2).map(org => (
+                  <Badge key={org.membershipId} variant="outline" className="text-xs truncate max-w-[200px]" title={org.organizationName}>
+                    {org.organizationName}
+                  </Badge>
+                ))}
+                {otherOrgs.length > 2 && (
+                  <Badge variant="outline" className="text-xs">
+                    +{otherOrgs.length - 2} more
+                  </Badge>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      }
+    },
+    {
       key: 'roles',
       label: 'Roles',
       width: '200px',
       render: (user) => (
-          <div className="flex gap-2">
-            {user.isTenantAdmin && (
-              <Badge className="bg-purple-100 text-purple-800">
-                <Crown className="w-3 h-3 mr-1" />
-                Admin
-              </Badge>
-            )}
-            {user.roles?.map(role => (
-              <Badge key={role.roleId} variant="outline" className="text-xs">
-                {role.roleName}
-              </Badge>
-            ))}
-            {!user.isTenantAdmin && (!user.roles || user.roles.length === 0) && (
-              <Badge variant="outline" className="text-gray-500">No roles</Badge>
-            )}
-          </div>
-      )
-    },
-    { key: 'status', label: 'Status', width: '150px', render: (user) => (
-      <Badge className={getStatusColor(user)}>
-        {getUserStatus(user)}
-      </Badge>
-    )},
-    {
-      key: 'activity',
-      label: 'Last Activity',
-      width: '150px',
-      render: (user) => (
-        <div className="text-sm">
-          <div className="text-gray-900">
-            {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never'}
-          </div>
-          <div className="text-gray-500">
-            {user.lastLoginAt ? 'Last login' : 'No login'}
-          </div>
+        <div className="flex flex-wrap gap-1.5">
+          {user.roles?.map(role => (
+            <Badge key={role.roleId} variant="outline" className="text-xs flex items-center gap-1">
+              <Shield className="w-3 h-3 text-indigo-600" />
+              {role.roleName}
+            </Badge>
+          ))}
+          {(!user.roles || user.roles.length === 0) && (
+            <div className="text-sm text-gray-400 italic">No roles</div>
+          )}
         </div>
       )
     },
-    {
-      key: 'invited',
-      label: 'Invited',
-      width: '150px',
+    { 
+      key: 'status', 
+      label: 'Status', 
+      width: '120px', 
       render: (user) => (
-        <div className="text-sm">
-          <div className="text-gray-900">
-            {user.invitedAt ? new Date(user.invitedAt).toLocaleDateString() : 'N/A'}
-          </div>
-          <div className="text-gray-500">
-            {user.invitedBy ? `by ${user.invitedBy}` : ''}
-          </div>
-        </div>
+        <Badge className={getStatusColor(user)}>
+          {getUserStatus(user)}
+        </Badge>
       )
     },
     {
       key: 'invitationUrl',
       label: 'Invitation URL',
-      width: '250px',
+      width: '300px',
       render: (user) => {
         if (user.invitationStatus === 'pending') {
           const invitationUrl = generateInvitationUrl(user);
           return (
-            <div className="space-y-2">
-              <div className="text-xs text-gray-600">Pending Invitation</div>
+            <div className="space-y-1">
+              <div className="text-xs text-gray-600 font-medium">Pending Invitation</div>
               {invitationUrl ? (
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     value={invitationUrl}
                     readOnly
-                    className="text-xs px-2 py-1 border border-gray-300 rounded bg-gray-50 flex-1"
+                    className="text-xs px-2 py-1.5 border border-gray-300 rounded bg-gray-50 flex-1 font-mono"
                   />
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
                     onClick={() => copyInvitationUrl(user)}
-                    className="p-1 text-blue-600 hover:text-blue-800"
                     title="Copy invitation URL"
                   >
-                    <Mail className="w-3 h-3" />
-                  </button>
+                    <Copy className="w-4 h-4 text-blue-600" />
+                  </Button>
                 </div>
               ) : (
                 <div className="text-xs text-red-600">No URL available</div>
@@ -168,6 +189,21 @@ export function UserTable({
         }
         return <div className="text-xs text-gray-400">-</div>;
       }
+    },
+    {
+      key: 'activity',
+      label: 'Last Activity',
+      width: '140px',
+      render: (user) => (
+        <div className="text-sm">
+          <div className="text-gray-900 font-medium">
+            {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never'}
+          </div>
+          <div className="text-xs text-gray-500">
+            {user.lastLoginAt ? 'Last login' : 'No login'}
+          </div>
+        </div>
+      )
     }
   ], [getUserStatus, getStatusColor, generateInvitationUrl, copyInvitationUrl]);
   
@@ -180,16 +216,16 @@ export function UserTable({
       onClick: (user) => onUserAction('view', user)
     },
     {
+      key: 'manageAccess',
+      label: 'Manage Access',
+      icon: UserCog,
+      onClick: (user) => onUserAction('manageAccess', user)
+    },
+    {
       key: 'edit',
       label: 'Edit User',
       icon: Edit,
       onClick: (user) => onUserAction('edit', user)
-    },
-    {
-      key: 'assignRoles',
-      label: 'Assign Roles',
-      icon: UserCog,
-      onClick: (user) => onUserAction('assignRoles', user)
     },
     {
       key: 'promote',
@@ -207,7 +243,7 @@ export function UserTable({
       label: 'Reactivate User',
       icon: UserCheck,
       onClick: (user) => {
-        if (confirm(`Reactivate ${user.name || user.email}? They will regain access to applications.`)) {
+        if (confirm(`Reactivate ${user.name || user.email}?`)) {
           userMutations.reactivateUser.mutate(user.userId);
         }
       },
@@ -219,7 +255,7 @@ export function UserTable({
       label: 'Deactivate User',
       icon: UserX,
       onClick: (user) => {
-        if (confirm(`Deactivate ${user.name || user.email}? They will lose access to all applications but their data will remain.`)) {
+        if (confirm(`Deactivate ${user.name || user.email}?`)) {
           userMutations.deactivateUser.mutate(user.userId);
         }
       },
@@ -239,15 +275,8 @@ export function UserTable({
       icon: Mail,
       onClick: (user) => userMutations.resendInvite.mutate(user.userId),
       disabled: (user) => user.isActive && user.onboardingCompleted
-    },
-    {
-      key: 'copyInvitationUrl',
-      label: 'Copy Invitation URL',
-      icon: Mail,
-      onClick: (user) => copyInvitationUrl(user),
-      disabled: (user) => user.invitationStatus !== 'pending'
     }
-  ], [onUserAction, userMutations, copyInvitationUrl]);
+  ], [onUserAction, userMutations]);
   
   return (
     <ReusableTable<User>

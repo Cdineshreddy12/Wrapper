@@ -109,6 +109,8 @@ interface Organization {
   locationType?: string;
   address?: any;
   availableCredits?: number;
+  reservedCredits?: number;
+  totalCredits?: number;
   freeCredits?: number;
   paidCredits?: number;
 }
@@ -251,10 +253,17 @@ export function OrganizationTreeManagement({
   const { data: cachedApplications = [] } = useTenantApplications(tenantId);
 
   const effectiveApplications = useMemo(() => {
+    let apps;
     if (applications && Array.isArray(applications) && applications.length > 0) {
-      return applications;
+      apps = applications;
+    } else {
+      apps = cachedApplications;
     }
-    return cachedApplications;
+
+    // Deduplicate applications by appCode to prevent duplicate keys
+    return apps.filter((app: any, index: number, self: any[]) =>
+      app && app.appCode && index === self.findIndex(a => a.appCode === app.appCode)
+    );
   }, [applications, cachedApplications]);
 
   const [hierarchy, setHierarchy] = useState<OrganizationHierarchy | null>(null);
@@ -295,11 +304,11 @@ export function OrganizationTreeManagement({
   const loadData = async () => {
     try {
       setLoading(true);
-      let hierarchyResponse = await makeRequest(`/admin/entities/hierarchy/${tenantId}`, { headers: { 'X-Application': 'crm' } });
+      let hierarchyResponse = await makeRequest(`/entities/hierarchy/${tenantId}`, { headers: { 'X-Application': 'crm' } });
 
       if (!hierarchyResponse || !hierarchyResponse.success) {
         // Fallback
-        const fallbackResponse = await makeRequest(`/admin/entities/all?tenantId=${tenantId}&entityType=organization`, { headers: { 'X-Application': 'crm' } });
+        const fallbackResponse = await makeRequest(`/admin/organizations/all`, { headers: { 'X-Application': 'crm' } });
         if (fallbackResponse && fallbackResponse.success) {
            setHierarchy({
             success: true,
@@ -310,22 +319,280 @@ export function OrganizationTreeManagement({
           return;
         }
       } else {
+        const flatHierarchyData = hierarchyResponse.data?.hierarchy || hierarchyResponse.hierarchy || [];
+
+        // Build tree structure from flat array
+        const buildTree = (flatArray: any[]): any[] => {
+          // Create a map of all entities by entityId
+          const entityMap = new Map<string, any>();
+          const rootEntities: any[] = [];
+
+          // First pass: create all nodes with empty children arrays
+          flatArray.forEach((entity: any) => {
+            // Preserve all entity properties including credits
+            const node = {
+              ...entity,
+              children: []
+            };
+            
+            // Ensure credits are numbers (handle null, undefined, or string values)
+            // Always set credits to a number (default to 0) so they display
+            if (entity.entityType === 'organization' || entity.entityType === 'location') {
+              // Parse availableCredits - always set to a number
+              node.availableCredits = entity.availableCredits !== undefined && entity.availableCredits !== null
+                ? (typeof entity.availableCredits === 'string' 
+                    ? parseFloat(entity.availableCredits) || 0
+                    : typeof entity.availableCredits === 'number' 
+                      ? entity.availableCredits 
+                      : 0)
+                : 0;
+              
+              // Parse reservedCredits - always set to a number
+              node.reservedCredits = entity.reservedCredits !== undefined && entity.reservedCredits !== null
+                ? (typeof entity.reservedCredits === 'string'
+                    ? parseFloat(entity.reservedCredits) || 0
+                    : typeof entity.reservedCredits === 'number'
+                      ? entity.reservedCredits
+                      : 0)
+                : 0;
+              
+              node.totalCredits = typeof entity.totalCredits === 'number'
+                ? entity.totalCredits
+                : (node.availableCredits + node.reservedCredits);
+            }
+            
+            entityMap.set(entity.entityId, node);
+          });
+
+          // Second pass: build tree structure
+          flatArray.forEach((entity: any) => {
+            const node = entityMap.get(entity.entityId);
+            
+            if (entity.parentEntityId && entityMap.has(entity.parentEntityId)) {
+              // Add as child to parent
+              const parent = entityMap.get(entity.parentEntityId);
+              parent.children.push(node);
+            } else {
+              // Add as root entity
+              rootEntities.push(node);
+            }
+          });
+
+          // Sort children by entityType (organizations first, then locations) and then by name
+          const sortChildren = (entities: any[]): void => {
+            entities.forEach(entity => {
+              if (entity.children && entity.children.length > 0) {
+                entity.children.sort((a: any, b: any) => {
+                  // Organizations before locations
+                  if (a.entityType !== b.entityType) {
+                    if (a.entityType === 'organization') return -1;
+                    if (b.entityType === 'organization') return 1;
+                  }
+                  // Then by name
+                  return (a.entityName || '').localeCompare(b.entityName || '');
+                });
+                // Recursively sort children
+                sortChildren(entity.children);
+              }
+            });
+          };
+
+          sortChildren(rootEntities);
+
+          return rootEntities;
+        };
+
+        let hierarchyData = buildTree(flatHierarchyData);
+
+        // Log credits from response for debugging
+        const orgsWithCredits = flatHierarchyData
+          .filter((e: any) => e.entityType === 'organization')
+          .map((e: any) => ({
+            name: e.entityName,
+            entityId: e.entityId,
+            availableCredits: e.availableCredits,
+            reservedCredits: e.reservedCredits,
+            hasCreditsField: 'availableCredits' in e
+          }));
+        
+        console.log('💰 Credits in response:', orgsWithCredits);
+        console.log('💰 Sample entity keys:', Object.keys(flatHierarchyData[0] || {}));
+
+        // Ensure credits are set for all organizations and locations (parse strings to numbers)
+        const ensureCredits = (entities: any[]): void => {
+          entities.forEach((entity: any) => {
+            if (entity.entityType === 'organization' || entity.entityType === 'location') {
+              // Always set credits to numbers (default to 0) so they display
+              entity.availableCredits = entity.availableCredits !== undefined && entity.availableCredits !== null
+                ? (typeof entity.availableCredits === 'string' 
+                    ? parseFloat(entity.availableCredits) || 0
+                    : typeof entity.availableCredits === 'number' 
+                      ? entity.availableCredits 
+                      : 0)
+                : 0;
+              
+              entity.reservedCredits = entity.reservedCredits !== undefined && entity.reservedCredits !== null
+                ? (typeof entity.reservedCredits === 'string'
+                    ? parseFloat(entity.reservedCredits) || 0
+                    : typeof entity.reservedCredits === 'number'
+                      ? entity.reservedCredits
+                      : 0)
+                : 0;
+              
+              entity.totalCredits = typeof entity.totalCredits === 'number' 
+                ? entity.totalCredits 
+                : (entity.availableCredits + entity.reservedCredits);
+            }
+            if (entity.children && entity.children.length > 0) {
+              ensureCredits(entity.children);
+            }
+          });
+        };
+
+        ensureCredits(hierarchyData);
+
+        // Helper function to count total entities including children
+        const countEntities = (entities: any[]): number => {
+          let count = entities.length;
+          entities.forEach((entity: any) => {
+            if (entity.children && Array.isArray(entity.children) && entity.children.length > 0) {
+              count += countEntities(entity.children);
+            }
+          });
+          return count;
+        };
+
+        const totalCount = countEntities(hierarchyData);
+
+        console.log('📋 Organization hierarchy loaded:', {
+          flatArrayLength: flatHierarchyData.length,
+          treeRoots: hierarchyData.length,
+          totalEntities: hierarchyResponse.data?.totalEntities || hierarchyResponse.totalEntities || 0,
+          totalWithChildren: totalCount,
+          sampleEntities: hierarchyData.slice(0, 3).map((org: any) => ({
+            entityId: org.entityId,
+            entityName: org.entityName,
+            entityType: org.entityType,
+            entityLevel: org.entityLevel,
+            parentEntityId: org.parentEntityId,
+            childrenCount: org.children?.length || 0,
+            hasChildren: !!(org.children && org.children.length > 0),
+            availableCredits: org.availableCredits
+          }))
+        });
+
+        // Find the root/parent organization - prioritize by entityLevel, then by lack of parentEntityId
+        let parent = null;
+
+        // First try to find organizations with entityLevel 1 (tenant org created during onboarding)
+        parent = hierarchyData.find((org: any) => org.entityType === 'organization' && org.entityLevel === 1);
+
+        // If not found, try entityLevel 0 or organizations without parentEntityId
+        if (!parent) {
+          parent = hierarchyData.find((org: any) =>
+            org.entityType === 'organization' &&
+            (org.entityLevel === 0 || !org.parentEntityId)
+          );
+        }
+
+        // If still not found, just take the first organization as parent
+        if (!parent && hierarchyData.length > 0) {
+          parent = hierarchyData.find((org: any) => org.entityType === 'organization') || hierarchyData[0];
+          console.warn('⚠️ No clear root organization found, using first organization as parent:', parent);
+        }
+
+        console.log('📋 Setting parent organization:', parent);
+        setParentOrg(parent || null);
+        
+        // Load locations and organizations separately to merge credits (they have actual credit values)
+        const [locRes, orgRes] = await Promise.all([
+          makeRequest(`/entities/tenant/${tenantId}?entityType=location`),
+          makeRequest(`/entities/tenant/${tenantId}?entityType=organization`)
+        ]);
+        
+        // Merge credits from both locations and organizations
+        const mergeCredits = (entities: any[], sourceData: any[], entityType: string): void => {
+          entities.forEach((entity: any) => {
+            // Find matching entity in source data
+            const matchingEntity = sourceData.find((e: any) => e.entityId === entity.entityId);
+            if (matchingEntity) {
+              // Parse and update credits from source data (they have actual credit values)
+              if (matchingEntity.availableCredits !== undefined && matchingEntity.availableCredits !== null) {
+                entity.availableCredits = typeof matchingEntity.availableCredits === 'string'
+                  ? parseFloat(matchingEntity.availableCredits) || 0
+                  : typeof matchingEntity.availableCredits === 'number'
+                    ? matchingEntity.availableCredits
+                    : entity.availableCredits || 0;
+              }
+              
+              if (matchingEntity.reservedCredits !== undefined && matchingEntity.reservedCredits !== null) {
+                entity.reservedCredits = typeof matchingEntity.reservedCredits === 'string'
+                  ? parseFloat(matchingEntity.reservedCredits) || 0
+                  : typeof matchingEntity.reservedCredits === 'number'
+                    ? matchingEntity.reservedCredits
+                    : entity.reservedCredits || 0;
+              }
+              
+              entity.totalCredits = (entity.availableCredits || 0) + (entity.reservedCredits || 0);
+              
+              console.log(`💰 Merged credits for ${entityType}:`, {
+                entityId: entity.entityId,
+                entityName: entity.entityName,
+                availableCredits: entity.availableCredits,
+                reservedCredits: entity.reservedCredits
+              });
+            }
+            
+            // Recursively process children
+            if (entity.children && entity.children.length > 0) {
+              mergeCredits(entity.children, sourceData, entityType);
+            }
+          });
+        };
+        
+        if (locRes?.success) {
+          const locationsData = locRes.entities || [];
+          setLocations(locationsData);
+          mergeCredits(hierarchyData, locationsData, 'location');
+        }
+        
+        if (orgRes?.success) {
+          const organizationsData = orgRes.entities || [];
+          mergeCredits(hierarchyData, organizationsData, 'organization');
+        }
+        
+        console.log('💰 Finished merging credits into hierarchy');
+        
+        // Log final credits for debugging
+        const finalCredits = hierarchyData.map((org: any) => ({
+          entityId: org.entityId,
+          entityName: org.entityName,
+          entityType: org.entityType,
+          availableCredits: org.availableCredits,
+          reservedCredits: org.reservedCredits,
+          totalCredits: org.totalCredits
+        }));
+        console.log('💰 Final credits after merging:', finalCredits);
+        
+        // Set hierarchy after merging credits
         setHierarchy({
           success: true,
-          hierarchy: hierarchyResponse.data?.hierarchy || hierarchyResponse.hierarchy || [],
+          hierarchy: hierarchyData,
           totalOrganizations: hierarchyResponse.data?.totalEntities || hierarchyResponse.totalEntities || 0,
           message: hierarchyResponse.message || 'Loaded'
         });
-        const parent = (hierarchyResponse.data?.hierarchy || hierarchyResponse.hierarchy || []).find((org: any) => org.entityType === 'organization' && org.entityLevel === 1);
-        setParentOrg(parent || null);
       }
 
-      // Load side data
-      const locRes = await makeRequest(`/entities/tenant/${tenantId}?entityType=location`);
-      if (locRes?.success) setLocations(locRes.entities || []);
+      // Load side data (users)
 
       const userRes = await makeRequest('/tenants/current/users');
-      if (userRes?.success) setUsers(userRes.data || []);
+      if (userRes?.success) {
+        // Deduplicate users by userId to prevent duplicate keys
+        const uniqueUsers = (userRes.data || []).filter((user: any, index: number, self: any[]) =>
+          user && user.userId && index === self.findIndex(u => u.userId === user.userId)
+        );
+        setUsers(uniqueUsers);
+      }
 
     } catch (error: any) {
       toast.error(`Failed to load data: ${error.message}`);
@@ -350,7 +617,12 @@ export function OrganizationTreeManagement({
       });
       if (response.success) {
         toast.success('Organization created');
-        setShowCreateSub(false); loadData();
+        setShowCreateSub(false);
+        // Invalidate queries and reload data immediately
+        queryClient.invalidateQueries({ queryKey: ['organizations', 'hierarchy', tenantId] });
+        queryClient.invalidateQueries({ queryKey: ['organizations', 'available'] });
+        queryClient.invalidateQueries({ queryKey: ['entities', tenantId] });
+        await loadData();
       }
     } catch (error: any) { toast.error(error.message || 'Failed'); }
   };
@@ -365,7 +637,12 @@ export function OrganizationTreeManagement({
       });
       if (response.success) {
         toast.success('Updated successfully');
-        setShowEdit(false); loadData();
+        setShowEdit(false);
+        // Invalidate queries and reload data immediately
+        queryClient.invalidateQueries({ queryKey: ['organizations', 'hierarchy', tenantId] });
+        queryClient.invalidateQueries({ queryKey: ['organizations', 'available'] });
+        queryClient.invalidateQueries({ queryKey: ['entities', tenantId] });
+        await loadData();
       }
     } catch (error: any) { toast.error(error.message || 'Failed'); }
   };
@@ -374,7 +651,14 @@ export function OrganizationTreeManagement({
     if (!confirm(`Are you sure?`)) return;
     try {
       const response = await makeRequest(`/entities/${orgId}`, { method: 'DELETE', headers: { 'X-Application': 'crm' } });
-      if (response.success) { toast.success('Deleted'); loadData(); }
+      if (response.success) {
+        toast.success('Deleted');
+        // Invalidate queries and reload data immediately
+        queryClient.invalidateQueries({ queryKey: ['organizations', 'hierarchy', tenantId] });
+        queryClient.invalidateQueries({ queryKey: ['organizations', 'available'] });
+        queryClient.invalidateQueries({ queryKey: ['entities', tenantId] });
+        await loadData();
+      }
     } catch (error: any) { toast.error(error.message); }
   };
 
@@ -392,7 +676,11 @@ export function OrganizationTreeManagement({
       });
       if (response.success) {
         toast.success('Location created');
-        setShowCreateLocation(false); loadData();
+        setShowCreateLocation(false);
+        // Invalidate queries and reload data immediately
+        queryClient.invalidateQueries({ queryKey: ['organizations', 'hierarchy', tenantId] });
+        queryClient.invalidateQueries({ queryKey: ['entities', tenantId] });
+        await loadData();
       }
     } catch (error: any) { toast.error(error.message); }
   };
@@ -411,8 +699,11 @@ export function OrganizationTreeManagement({
       if (response.success) {
         toast.success('Credits allocated');
         setShowAllocationDialog(false);
+        // Invalidate queries and reload data immediately
         queryClient.invalidateQueries({ queryKey: ['credit'] });
-        setTimeout(loadData, 500);
+        queryClient.invalidateQueries({ queryKey: ['organizations', 'hierarchy', tenantId] });
+        queryClient.invalidateQueries({ queryKey: ['entities', tenantId] });
+        await loadData();
       }
     } catch (error: any) { toast.error(error.message); } finally { setAllocating(false); }
   };
@@ -421,30 +712,94 @@ export function OrganizationTreeManagement({
   
   const processedHierarchy = useMemo(() => {
     if (!hierarchy?.hierarchy) return [];
-    
-    const filterRecursive = (org: Organization): Organization | null => {
+
+    const filterRecursive = (org: Organization, currentLevel: number = 0): Organization | null => {
       if (!org || !org.entityName) return null;
-      
+
       const searchLower = searchTerm.toLowerCase().trim();
       const matchesSearch = !searchTerm || org.entityName.toLowerCase().includes(searchLower);
       const isOrgActive = org.isActive !== false;
       const matchesFilter = filterType === 'all' || (filterType === 'active' && isOrgActive) || (filterType === 'inactive' && !isOrgActive);
-      
+
       let filteredChildren: Organization[] = [];
-      if (org.children) {
-        filteredChildren = org.children.map(filterRecursive).filter((c): c is Organization => c !== null);
+      if (org.children && Array.isArray(org.children) && org.children.length > 0) {
+        filteredChildren = org.children
+          .map(child => filterRecursive(child, currentLevel + 1))
+          .filter((c): c is Organization => c !== null);
       }
 
       if ((matchesSearch && matchesFilter) || filteredChildren.length > 0) {
-        return { ...org, children: filteredChildren };
+        // Ensure credits are always numbers
+        const availableCredits = typeof (org as any).availableCredits === 'number' 
+          ? (org as any).availableCredits 
+          : (typeof (org as any).availableCredits === 'string' 
+              ? parseFloat((org as any).availableCredits) || 0 
+              : 0);
+        const reservedCredits = typeof (org as any).reservedCredits === 'number' 
+          ? (org as any).reservedCredits 
+          : (typeof (org as any).reservedCredits === 'string' 
+              ? parseFloat((org as any).reservedCredits) || 0 
+              : 0);
+        
+        return { 
+          ...org, 
+          children: filteredChildren,
+          // Ensure entityLevel is set for display
+          entityLevel: org.entityLevel ?? currentLevel,
+          // Explicitly preserve credits as numbers
+          availableCredits,
+          reservedCredits,
+          totalCredits: typeof (org as any).totalCredits === 'number' 
+            ? (org as any).totalCredits 
+            : (availableCredits + reservedCredits)
+        };
       }
       return null;
     };
 
-    return hierarchy.hierarchy.map(filterRecursive).filter(Boolean) as Organization[];
+    let result = hierarchy.hierarchy.map(org => filterRecursive(org, 0)).filter(Boolean) as Organization[];
+
+    // Deduplicate by entityId to prevent duplicate keys (only at root level)
+    const seenIds = new Set<string>();
+    result = result.filter(org => {
+      if (seenIds.has(org.entityId)) {
+        console.warn('⚠️ OrganizationTreeManagement: Filtering out duplicate root entityId:', org.entityId, org.entityName);
+        return false;
+      }
+      seenIds.add(org.entityId);
+      return true;
+    });
+
+    // Debug: Log hierarchy structure
+    const logHierarchy = (entities: Organization[], level: number = 0) => {
+      entities.forEach(entity => {
+        const indent = '  '.repeat(level);
+        console.log(`${indent}├─ ${entity.entityName} (Level ${entity.entityLevel ?? level}, Children: ${entity.children?.length || 0})`);
+        if (entity.children && entity.children.length > 0) {
+          logHierarchy(entity.children, level + 1);
+        }
+      });
+    };
+
+    if (result.length > 0) {
+      console.log('🌳 Processed Hierarchy Structure:');
+      logHierarchy(result);
+    }
+
+    return result;
   }, [hierarchy, searchTerm, filterType]);
 
-  const unassignedLocations = useMemo(() => locations.filter(l => !l.parentEntityId), [locations]);
+  const unassignedLocations = useMemo(() => {
+    // Deduplicate locations by entityId to prevent duplicate keys
+    const seenIds = new Set<string>();
+    return locations.filter(l => {
+      if (!l.parentEntityId && l.entityId && !seenIds.has(l.entityId)) {
+        seenIds.add(l.entityId);
+        return true;
+      }
+      return false;
+    });
+  }, [locations]);
 
   const canTransferCredits = (org: Organization) => org.children && org.children.length > 0;
 
@@ -461,8 +816,8 @@ export function OrganizationTreeManagement({
       <div className="relative">
         <div 
           className={`
-            group flex items-center p-3 mb-2 rounded-xl border transition-all duration-200
-            ${isSelected ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-sm'}
+            group flex items-center p-3 mb-2 rounded-xl border transition-all duration-200 relative
+            ${isSelected ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-900/20 shadow-md' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-sm'}
           `}
         >
           {/* Controls: Expand/Checkbox */}
@@ -472,6 +827,7 @@ export function OrganizationTreeManagement({
                 <button 
                   onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
                   className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors text-slate-500"
+                  aria-label={expanded ? 'Collapse' : 'Expand'}
                 >
                   {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                 </button>
@@ -494,7 +850,13 @@ export function OrganizationTreeManagement({
 
           {/* Info */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Level Badge - Show hierarchy level */}
+              {level > 0 && (
+                <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700">
+                  L{level + 1}
+                </Badge>
+              )}
               <span className="font-semibold text-slate-900 dark:text-slate-100 truncate text-sm sm:text-base">
                 {org.entityName}
               </span>
@@ -506,18 +868,28 @@ export function OrganizationTreeManagement({
                   {(org as Location).locationType || 'Location'}
                 </Badge>
               )}
+              {/* Entity Level from DB - Only show if not null */}
+              {(org as any).entityLevel !== null && (org as any).entityLevel !== undefined && (
+                <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800">
+                  Level {(org as any).entityLevel}
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
               <span className="flex items-center gap-1">
                 <Users className="w-3 h-3" />
                 {org.responsiblePersonId ? getResponsiblePersonName(org.responsiblePersonId) : 'Unassigned'}
               </span>
-              {!isLocation && (
-                <span className="flex items-center gap-1">
-                  <CreditCard className="w-3 h-3" />
-                  {Number((org as Organization).availableCredits || 0).toLocaleString()} Credits
+              {/* Always show credits - they're now always numbers (default to 0) */}
+              <span className="flex items-center gap-1" title={`Available: ${typeof (org as any).availableCredits === 'string' ? parseFloat((org as any).availableCredits) || 0 : (typeof (org as any).availableCredits === 'number' ? (org as any).availableCredits : 0)}, Reserved: ${typeof (org as any).reservedCredits === 'string' ? parseFloat((org as any).reservedCredits) || 0 : (typeof (org as any).reservedCredits === 'number' ? (org as any).reservedCredits : 0)}`}>
+                <CreditCard className="w-3 h-3" />
+                <span className="font-medium text-slate-700 dark:text-slate-300">
+                  {(typeof (org as any).availableCredits === 'string' 
+                    ? parseFloat((org as any).availableCredits) || 0 
+                    : (typeof (org as any).availableCredits === 'number' ? (org as any).availableCredits : 0)).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                 </span>
-              )}
+                <span className="text-slate-500 dark:text-slate-400">Credits</span>
+              </span>
             </div>
           </div>
 
@@ -556,6 +928,15 @@ export function OrganizationTreeManagement({
                 <DropdownMenuItem onClick={() => { setEditingEntity(org as Entity); setShowEditResponsiblePerson(true); }}>
                   <UserCog className="w-4 h-4 mr-2" /> Assign Manager
                 </DropdownMenuItem>
+                {!isLocation && (
+                  <DropdownMenuItem onClick={() => { 
+                    setSelectedEntity(org as Entity); 
+                    setAllocationForm({ targetApplication: '', creditAmount: 0, allocationPurpose: '', autoReplenish: false });
+                    setShowAllocationDialog(true);
+                  }}>
+                    <CreditCard className="w-4 h-4 mr-2" /> Allocate Credits to App
+                  </DropdownMenuItem>
+                )}
                 {isAdmin && (
                   <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => deleteOrganization(org.entityId)}>
                     <Trash2 className="w-4 h-4 mr-2" /> Delete Entity
@@ -566,9 +947,9 @@ export function OrganizationTreeManagement({
           </div>
         </div>
 
-        {/* Children (Recursive) with connecting line */}
+        {/* Children (Recursive) */}
         {expanded && hasChildren && (
-          <div className="ml-5 pl-5 border-l-2 border-dashed border-slate-200 dark:border-slate-800 space-y-1 relative pb-2">
+          <div className="space-y-1 relative pb-2 mt-1 ml-6 pl-4 border-l-2 border-slate-200 dark:border-slate-800">
             {orgChildren.map((child: any) => (
               <TreeNode key={child.entityId} org={child} level={level + 1} />
             ))}
@@ -658,9 +1039,11 @@ export function OrganizationTreeManagement({
                     <p>Loading structure...</p>
                 </div>
             ) : processedHierarchy.length > 0 ? (
-                <div className="bg-white/50 dark:bg-slate-900/50 p-1 rounded-2xl">
-                    {processedHierarchy.map(org => (
-                        <TreeNode key={org.entityId} org={org} />
+                <div className="bg-white/50 dark:bg-slate-900/50 p-4 rounded-2xl space-y-2">
+                    {processedHierarchy.map((org, index) => (
+                        <div key={org.entityId} className={index > 0 ? 'mt-2' : ''}>
+                            <TreeNode org={org} level={0} />
+                        </div>
                     ))}
                 </div>
             ) : (
@@ -841,22 +1224,79 @@ export function OrganizationTreeManagement({
 
        <Dialog open={showAllocationDialog} onOpenChange={setShowAllocationDialog}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Allocate to App</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Allocate Credits to Application</DialogTitle>
+            <DialogDescription>
+              {selectedEntity && (
+                <>Allocating from: <strong>{selectedEntity.entityName}</strong> (Available: {(selectedEntity.availableCredits || 0).toLocaleString()} credits)</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
           <div className="grid gap-4 py-2">
              <div className="space-y-2">
-                <Label>Application</Label>
-                <Select value={allocationForm.targetApplication} onValueChange={v => setAllocationForm({...allocationForm, targetApplication: v})}>
+                <Label>Application <span className="text-red-500">*</span></Label>
+                <Select 
+                  value={allocationForm.targetApplication} 
+                  onValueChange={v => setAllocationForm({...allocationForm, targetApplication: v})}
+                >
                     <SelectTrigger><SelectValue placeholder="Select App" /></SelectTrigger>
                     <SelectContent>
-                        {effectiveApplications.map(app => <SelectItem key={app.appCode} value={app.appCode}>{app.appName}</SelectItem>)}
+                        {effectiveApplications.length === 0 ? (
+                          <SelectItem value="no-apps" disabled>No applications available</SelectItem>
+                        ) : (
+                          effectiveApplications.map((app: Application) => (
+                            <SelectItem key={app.appCode} value={app.appCode}>{app.appName}</SelectItem>
+                          ))
+                        )}
                     </SelectContent>
                 </Select>
              </div>
-             <div className="space-y-2"><Label>Credits</Label><Input type="number" value={allocationForm.creditAmount} onChange={e => setAllocationForm({...allocationForm, creditAmount: parseFloat(e.target.value)})} /></div>
+             <div className="space-y-2">
+               <Label>Credit Amount <span className="text-red-500">*</span></Label>
+               <Input 
+                 type="number" 
+                 min="0"
+                 step="0.01"
+                 value={allocationForm.creditAmount || ''} 
+                 onChange={e => setAllocationForm({...allocationForm, creditAmount: parseFloat(e.target.value) || 0})} 
+                 placeholder="Enter credit amount"
+               />
+               {selectedEntity && (
+                 <p className="text-xs text-slate-500">
+                   Available: {(selectedEntity.availableCredits || 0).toLocaleString()} credits
+                 </p>
+               )}
+             </div>
+             <div className="space-y-2">
+               <Label>Purpose (Optional)</Label>
+               <Textarea 
+                 value={allocationForm.allocationPurpose} 
+                 onChange={e => setAllocationForm({...allocationForm, allocationPurpose: e.target.value})}
+                 placeholder="Describe the purpose of this allocation"
+                 rows={3}
+               />
+             </div>
+             <div className="flex items-center space-x-2">
+               <input
+                 type="checkbox"
+                 id="autoReplenish"
+                 checked={allocationForm.autoReplenish}
+                 onChange={e => setAllocationForm({...allocationForm, autoReplenish: e.target.checked})}
+                 className="w-4 h-4 rounded border-slate-300"
+               />
+               <Label htmlFor="autoReplenish" className="text-sm font-normal cursor-pointer">
+                 Auto-replenish when credits run low
+               </Label>
+             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAllocationDialog(false)}>Cancel</Button>
-            <Button onClick={handleAllocateCredits} disabled={allocating}>{allocating ? <Loader2 className="animate-spin" /> : 'Allocate'}</Button>
+            <Button 
+              onClick={handleAllocateCredits} 
+              disabled={allocating || !allocationForm.targetApplication || !allocationForm.creditAmount || allocationForm.creditAmount <= 0}
+            >
+              {allocating ? <><Loader2 className="animate-spin mr-2" /> Allocating...</> : 'Allocate Credits'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -875,7 +1315,7 @@ export function OrganizationTreeManagement({
                   onRefresh={loadData}
                   isAdmin={isAdmin}
                   tenantId={tenantId}
-                  tenantName={`Tenant ${tenantId}`}
+                  tenantName={parentOrg?.entityName || 'Organization'}
                   onNodeClick={() => {}} 
                   onEditOrganization={() => {}}
                   onDeleteOrganization={() => {}}
@@ -902,6 +1342,7 @@ export function OrganizationManagement({
   tenantId
 }: OrganizationManagementProps) {
   
+  const queryClient = useQueryClient();
   const [showEditResponsiblePerson, setShowEditResponsiblePerson] = useState(false);
   const [editingEntity, setEditingEntity] = useState<Entity | null>(null);
   const [responsiblePersonNames, setResponsiblePersonNames] = useState<Map<string, string>>(new Map());
@@ -966,7 +1407,14 @@ export function OrganizationManagement({
         isOpen={showEditResponsiblePerson}
         onClose={() => setShowEditResponsiblePerson(false)}
         entity={editingEntity}
-        onSuccess={() => window.location.reload()}
+        onSuccess={async () => {
+          // Invalidate queries and refresh data immediately
+          queryClient.invalidateQueries({ queryKey: ['organizations', 'hierarchy', tenantId] });
+          queryClient.invalidateQueries({ queryKey: ['organizations', 'available'] });
+          queryClient.invalidateQueries({ queryKey: ['entities', tenantId] });
+          // Trigger dashboard refresh
+          loadDashboardData();
+        }}
         makeRequest={makeRequest}
       />
     </div>

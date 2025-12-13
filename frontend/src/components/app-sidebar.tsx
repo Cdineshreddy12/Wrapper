@@ -30,7 +30,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { useTheme } from "@/components/theme/ThemeProvider"
-import { useAvailableOrganizations } from "@/hooks/admin/useTenantManagement"
+import { useAvailableOrganizations } from "@/features/admin"
 
 // Default navigation data for regular dashboard routes
 const defaultData = {
@@ -176,6 +176,7 @@ export function AppSidebar({
           <TeamSwitcher
             teams={!isTenantAdmin ? data.teams : undefined}
             organizations={isTenantAdmin ? availableOrganizations : undefined}
+            tenantName={tenantData?.companyName}
             onOrganizationSwitch={onOrganizationSwitch}
           />
         </SidebarHeader>

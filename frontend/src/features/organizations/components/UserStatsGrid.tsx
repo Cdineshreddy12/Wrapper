@@ -1,9 +1,8 @@
 import { useMemo } from 'react';
 import { Users, Crown, Activity, Clock, LucideIcon } from 'lucide-react';
 import { Employee } from '@/types/organization';
-import { Grid } from '../common/Page';
-import { GridItem } from '../common/Page/Grid';
-import { InfoCard } from '../cards';
+import { Grid } from '@/components/common/Page';
+import { InfoCard } from '@/components/cards';
 
 interface UserStat {
   title: string;

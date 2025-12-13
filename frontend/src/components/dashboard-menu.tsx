@@ -18,7 +18,7 @@ import api, { applicationAssignmentAPI } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 
 // Page components
-import AdminDashboard from '@/pages/AdminDashboard'
+import { AdminDashboardComponent as AdminDashboard } from '@/features/admin'
 
 // UI components
 import { Badge, Button, Card, CardHeader, CardTitle, CardDescription, CardContent, DialogHeader, DialogFooter, Dialog, DialogContent, DialogTitle, DialogDescription } from './ui'
@@ -32,9 +32,9 @@ import { ThemeBadge } from './common/ThemeBadge'
 // Feature components
 import { ActivityDashboard } from './activity/ActivityDashboard'
 import { CreditBalance } from './CreditBalance'
-import { RoleManagementDashboard } from './roles/RoleManagementDashboard'
+import { RoleManagementDashboard } from '@/features/roles'
 import { UserApplicationAccess } from './users/UserApplicationAccess'
-import { UserManagementDashboard } from './users/UserManagementDashboard'
+import { UserManagementDashboard } from '@/features/users/components/UserManagementDashboard'
 import { Grid } from './common/Page/Grid'
 
 // Mock data for charts

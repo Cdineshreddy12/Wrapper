@@ -9,6 +9,7 @@ import {
   Copy,
   ExternalLink,
   Building2,
+  MapPin,
   X
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -36,9 +37,13 @@ interface OrganizationAssignment {
   userId: string
   userName: string
   userEmail: string
-  organizationId: string
-  organizationName: string
-  organizationCode: string
+  organizationId: string // Keep for backward compatibility
+  entityId?: string
+  entityType?: 'organization' | 'location' | 'department' | 'team'
+  organizationName: string // Keep for backward compatibility
+  entityName?: string
+  organizationCode: string // Keep for backward compatibility
+  entityCode?: string
   assignmentType: 'primary' | 'secondary' | 'temporary' | 'guest'
   isActive: boolean
   assignedAt: string
@@ -184,12 +189,15 @@ export function Users() {
   // Fetch organization assignments
   const { data: assignmentsData, isLoading: assignmentsLoading, refetch: refetchAssignments, error: assignmentsError } = useQuery({
     queryKey: ['organization-assignments'],
-    queryFn: () => tenantAPI.getOrganizationAssignments().then(res => {
+    queryFn: async () => {
+      try {
+        const res = await tenantAPI.getOrganizationAssignments();
       console.log('🔍 Debug - getOrganizationAssignments response:', res);
-      return res.data.data;
-    }),
-    onError: (error) => {
+        return res.data.data || [];
+      } catch (error) {
       console.error('❌ Error fetching organization assignments:', error);
+        return [];
+      }
     }
   })
 
@@ -328,9 +336,7 @@ export function Users() {
     mutationFn: (data: InviteUserFormData) => tenantAPI.inviteUser({
       email: data.email,
       roleId: data.role,
-      organizationId: data.organizationId,
-      assignmentType: data.assignmentType,
-      priority: data.priority
+      message: data.organizationId ? `Assigned to organization: ${data.organizationId}` : undefined
     }),
     onSuccess: () => {
       toast.success('User invitation sent successfully!')
@@ -375,7 +381,11 @@ export function Users() {
   // Organization assignment mutations
   const assignOrgMutation = useMutation({
     mutationFn: ({ userId, data }: { userId: string; data: any }) =>
-      tenantAPI.assignUserToOrganization(userId, data),
+      invitationAPI.assignOrganizationToUser(userId, {
+        entityId: data.organizationId,
+        membershipType: data.assignmentType || 'direct',
+        isPrimary: data.assignmentType === 'primary'
+      }),
     onSuccess: () => {
       toast.success('User assigned to organization successfully!')
       refetchAssignments()
@@ -389,8 +399,8 @@ export function Users() {
   })
 
   const removeOrgMutation = useMutation({
-    mutationFn: ({ userId, data }: { userId: string; data: any }) =>
-      tenantAPI.removeUserFromOrganization(userId, data),
+    mutationFn: ({ userId, membershipId }: { userId: string; membershipId: string }) =>
+      invitationAPI.removeOrganizationFromUser(userId, membershipId),
     onSuccess: () => {
       toast.success('User removed from organization successfully!')
       refetchAssignments()
@@ -464,13 +474,10 @@ export function Users() {
   }
 
   const handleRemoveOrgAssignment = (userId: string, assignment: OrganizationAssignment) => {
-    if (confirm(`Remove ${assignment.userName} from ${assignment.organizationName}?`)) {
+    if (confirm(`Remove ${assignment.userName} from ${assignment.organizationName || assignment.entityName}?`)) {
       removeOrgMutation.mutate({
         userId,
-        data: {
-          organizationId: assignment.organizationId,
-          reason: 'manual_removal'
-        }
+        membershipId: assignment.assignmentId
       });
     }
   }
@@ -478,7 +485,10 @@ export function Users() {
   // Get organization assignment for a user
   const getUserOrgAssignment = (userId: string) => {
     console.log(`🔍 Debug - getUserOrgAssignment(${userId}) - assignmentsData:`, assignmentsData);
-    const assignment = assignmentsData?.find((assignment: OrganizationAssignment) => {
+    if (!Array.isArray(assignmentsData)) {
+      return null;
+    }
+    const assignment = assignmentsData.find((assignment: OrganizationAssignment) => {
       const match = assignment.userId === userId;
       if (match) {
         console.log(`🔍 Debug - Found assignment for ${userId}:`, assignment);
@@ -1287,18 +1297,36 @@ export function Users() {
               <div className="animate-pulse">
                 <div className="h-32 bg-gray-200 rounded"></div>
               </div>
-            ) : assignmentsData && assignmentsData.length > 0 ? (
+            ) : Array.isArray(assignmentsData) && assignmentsData.length > 0 ? (
               <div className="space-y-3">
-                {assignmentsData.slice(0, 10).map((assignment: OrganizationAssignment) => (
+                {assignmentsData.slice(0, 10).map((assignment: OrganizationAssignment) => {
+                  const isLocation = assignment.entityType === 'location';
+                  const entityName = assignment.entityName || assignment.organizationName || assignment.entityCode || assignment.organizationCode || 'Unknown';
+                  const entityCode = assignment.entityCode || assignment.organizationCode;
+                  
+                  return (
                   <div key={assignment.assignmentId} className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
+                          isLocation ? 'bg-green-100' : 'bg-blue-100'
+                        }`}>
+                          {isLocation ? (
+                            <MapPin className="h-4 w-4 text-green-600" />
+                          ) : (
                         <Building2 className="h-4 w-4 text-blue-600" />
+                          )}
                       </div>
                       <div>
+                          <div className="flex items-center gap-2">
                         <p className="font-medium">
-                          {assignment.organizationName || assignment.organizationCode || 'Unknown Organization'}
-                        </p>
+                              {entityName}
+                            </p>
+                            {isLocation && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700 border-green-200">
+                                Location
+                              </Badge>
+                            )}
+                          </div>
                         <p className="text-sm text-gray-600">
                           {assignment.userName} • {assignment.assignmentType} • Priority {assignment.priority}
                         </p>
@@ -1313,9 +1341,10 @@ export function Users() {
                       </Badge>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
 
-                {assignmentsData.length > 10 && (
+                {Array.isArray(assignmentsData) && assignmentsData.length > 10 && (
                   <div className="text-center pt-2">
                     <p className="text-sm text-gray-600">
                       Showing 10 of {assignmentsData.length} assignments

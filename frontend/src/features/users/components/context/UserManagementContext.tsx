@@ -13,12 +13,14 @@ export interface UserManagementState {
   showEditModal: boolean;
   showDeleteModal: boolean;
   showRoleAssignModal: boolean;
+  showAccessModal: boolean;
   
   // Modal Data
   viewingUser: User | null;
   editingUser: User | null;
   deletingUser: User | null;
   assigningUser: User | null;
+  managingAccessUser: User | null;
   
   // Form Data
   editForm: UserEditForm;
@@ -45,8 +47,15 @@ export interface UserEditForm {
 export interface InviteForm {
   email: string;
   name: string;
-  roleIds: string[];
+  entities: Array<{
+    entityId: string;
+    roleId: string;
+    entityType: string;
+    membershipType: string;
+  }>;
+  primaryEntityId: string;
   message: string;
+  invitationType: 'single-entity' | 'multi-entity';
 }
 
 // Action types
@@ -69,10 +78,12 @@ const initialState: UserManagementState = {
   showEditModal: false,
   showDeleteModal: false,
   showRoleAssignModal: false,
+  showAccessModal: false,
   viewingUser: null,
   editingUser: null,
   deletingUser: null,
   assigningUser: null,
+  managingAccessUser: null,
   editForm: {
     name: '',
     email: '',
@@ -84,8 +95,10 @@ const initialState: UserManagementState = {
   inviteForm: {
     email: '',
     name: '',
-    roleIds: [],
-    message: ''
+    entities: [],
+    primaryEntityId: '',
+    message: '',
+    invitationType: 'multi-entity' as const
   },
   selectedRoles: [],
   searchQuery: '',
@@ -123,6 +136,7 @@ function userManagementReducer(state: UserManagementState, action: UserManagemen
       modalState.showEditModal = false;
       modalState.showDeleteModal = false;
       modalState.showRoleAssignModal = false;
+      modalState.showAccessModal = false;
       
       // Set the specific modal
       if (isOpen) {
@@ -161,6 +175,10 @@ function userManagementReducer(state: UserManagementState, action: UserManagemen
                 ?.map((r: any) => r.roleId) || [];
               modalState.selectedRoles = validRoleIds;
             }
+            break;
+          case 'access':
+            modalState.showAccessModal = true;
+            modalState.managingAccessUser = data;
             break;
         }
       }

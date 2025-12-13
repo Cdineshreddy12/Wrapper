@@ -84,7 +84,7 @@ class EmailService {
 
   // Send welcome email to new organization admin
   async sendWelcomeEmail({ email, name, companyName, subdomain, kindeOrgCode, loginUrl }) {
-    const subject = `Welcome to ${companyName} - Your Wrapper Account is Ready!`;
+    const subject = `Welcome to ${companyName} - Your Zopkit Account is Ready!`;
     
     const html = `
       <!DOCTYPE html>
@@ -92,64 +92,319 @@ class EmailService {
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Welcome to Wrapper</title>
+        <title>Welcome to Zopkit</title>
         <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-          .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; }
-          .button { display: inline-block; padding: 15px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0; }
-          .info-box { background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; margin: 20px 0; border-radius: 5px; }
-          .credentials { background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0; font-family: monospace; }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6; 
+            color: #1a1a1a;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+            padding: 40px 20px;
+            min-height: 100vh;
+          }
+          .email-wrapper { 
+            max-width: 650px; 
+            margin: 0 auto; 
+            background: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.05);
+          }
+          .header { 
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fb 100%);
+            padding: 50px 40px 40px;
+            text-align: center;
+            position: relative;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          .header::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            right: 0;
+            height: 30px;
+            background: #ffffff;
+            border-radius: 30px 30px 0 0;
+          }
+          .logo-container {
+            margin-bottom: 32px;
+            background: rgba(0, 0, 0, 0.02);
+            backdrop-filter: blur(10px);
+            padding: 20px 30px;
+            border-radius: 12px;
+            display: inline-block;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+          }
+          .logo {
+            max-width: 200px;
+            height: auto;
+            display: block;
+          }
+          .header h1 {
+            font-size: 32px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 10px;
+            letter-spacing: -0.5px;
+          }
+          .header p {
+            font-size: 17px;
+            color: #64748b;
+            font-weight: 400;
+          }
+          .content { 
+            padding: 50px 45px;
+            background: #ffffff;
+          }
+          .greeting {
+            font-size: 22px;
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 20px;
+          }
+          .content p {
+            color: #475569;
+            font-size: 16px;
+            margin-bottom: 24px;
+            line-height: 1.8;
+          }
+          .details-card {
+            background: linear-gradient(135deg, #fafbfc 0%, #f4f6f8 100%);
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 28px;
+            margin: 32px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+          }
+          .details-card h3 {
+            font-size: 18px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 20px;
+            letter-spacing: -0.3px;
+          }
+          .details-card ul {
+            list-style: none;
+            padding: 0;
+          }
+          .details-card li {
+            padding: 14px 0;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 15px;
+            color: #334155;
+          }
+          .details-card li:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+          }
+          .details-card strong {
+            color: #0f172a;
+            font-weight: 700;
+            display: inline-block;
+            min-width: 150px;
+          }
+          .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 40px 0 20px;
+            letter-spacing: -0.3px;
+            padding-bottom: 12px;
+            border-bottom: 3px solid #1a1a1a;
+            display: inline-block;
+          }
+          .sso-box {
+            background: linear-gradient(135deg, #fafbfc 0%, #f1f3f5 100%);
+            border: 2px solid #d1d5db;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 24px 0 32px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+          }
+          .sso-box p {
+            margin: 0 0 14px;
+            font-size: 15px;
+            color: #374151;
+            font-weight: 600;
+          }
+          .sso-box p:last-child {
+            margin: 0;
+          }
+          .login-link {
+            display: block;
+            color: #1a1a1a;
+            text-decoration: none;
+            font-weight: 600;
+            word-break: break-all;
+            font-size: 14px;
+            background: #ffffff;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            transition: all 0.3s ease;
+          }
+          .login-link:hover {
+            background: #f9fafb;
+            border-color: #9ca3af;
+            transform: translateY(-1px);
+          }
+          .cta-container {
+            text-align: center;
+            margin: 40px 0;
+          }
+          .button { 
+            display: inline-block; 
+            padding: 16px 40px;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d3748 100%);
+            color: #ffffff !important;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 16px;
+            letter-spacing: 0.3px;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+          }
+          .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+            background: linear-gradient(135deg, #2d3748 0%, #1a1a1a 100%);
+          }
+          .steps-list {
+            counter-reset: step-counter;
+            list-style: none;
+            padding-left: 0;
+            margin-top: 24px;
+          }
+          .steps-list li {
+            counter-increment: step-counter;
+            position: relative;
+            padding-left: 50px;
+            margin-bottom: 20px;
+            color: #334155;
+            font-size: 16px;
+            line-height: 1.7;
+          }
+          .steps-list li:before {
+            content: counter(step-counter);
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 34px;
+            height: 34px;
+            background: linear-gradient(135deg, #1a1a1a 0%, #374151 100%);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          }
+          .help-box {
+            background: linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%);
+            border: 2px solid #fde047;
+            border-left: 5px solid #eab308;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 32px 0;
+            box-shadow: 0 2px 8px rgba(234, 179, 8, 0.08);
+          }
+          .help-box h4 {
+            font-size: 17px;
+            font-weight: 700;
+            color: #92400e;
+            margin-bottom: 10px;
+          }
+          .help-box p {
+            color: #78350f;
+            font-size: 15px;
+            margin: 0;
+            line-height: 1.7;
+          }
+          .footer {
+            background: linear-gradient(135deg, #fafbfc 0%, #f4f6f8 100%);
+            padding: 40px 45px;
+            border-top: 3px solid #1a1a1a;
+          }
+          .footer p {
+            color: #64748b;
+            font-size: 15px;
+            margin: 6px 0;
+            line-height: 1.6;
+          }
+          .signature {
+            font-weight: 700;
+            color: #0f172a;
+            margin-top: 24px;
+            font-size: 16px;
+          }
+          @media only screen and (max-width: 600px) {
+            body { padding: 20px 10px; }
+            .content, .header, .footer { padding: 30px 24px; }
+            .header h1 { font-size: 26px; }
+            .details-card { padding: 20px; }
+            .button { padding: 14px 32px; font-size: 15px; }
+          }
         </style>
       </head>
       <body>
-        <div class="container">
+        <div class="email-wrapper">
           <div class="header">
-            <h1>🎉 Welcome to Wrapper!</h1>
-            <p>Your organization workspace is ready</p>
+            <div class="logo-container">
+              <img src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Full_Logo_kezq1b.jpg" alt="Zopkit Logo" class="logo">
+            </div>
+            <h1>Welcome to Zopkit</h1>
+            <p>Your AI-first business operating system is ready</p>
           </div>
+          
           <div class="content">
-            <h2>Hi ${name}!</h2>
+            <p class="greeting">Hi ${name},</p>
             
-            <p>Congratulations! Your organization <strong>${companyName}</strong> has been successfully set up on Wrapper.</p>
+            <p>We're excited to have you on board! Your organization <strong>${companyName}</strong> has been successfully provisioned on the Zopkit platform.</p>
             
-            <div class="info-box">
-              <h3>🎉 Your Workspace Details</h3>
+            <div class="details-card">
+              <h3>Organization Details</h3>
               <ul>
                 <li><strong>Organization:</strong> ${companyName}</li>
-                <li><strong>Workspace URL:</strong> ${subdomain}.wrapper.app</li>
+                <li><strong>Workspace URL:</strong> ${subdomain}.zopkit.com</li>
                 <li><strong>Admin Email:</strong> ${email}</li>
               </ul>
             </div>
             
-            <h3>🔐 Single Sign-On (SSO) Login</h3>
-            <p>We've configured Single Sign-On for your organization. No passwords needed - just use your email address to log in securely!</p>
+            <h3 class="section-title">Secure Access via SSO</h3>
+            <p>We've enabled Single Sign-On (SSO) for your organization. Access your workspace securely using your email address—no password required.</p>
             
-            <div class="credentials">
+            <div class="sso-box">
               <p><strong>Your SSO Login URL:</strong></p>
-              <p><a href="${loginUrl}">${loginUrl}</a></p>
+              <a href="${loginUrl}" class="login-link">${loginUrl}</a>
             </div>
             
-            <div style="text-align: center;">
-              <a href="${loginUrl}" class="button">Access Your Workspace</a>
+            <div class="cta-container">
+              <a href="${loginUrl}" class="button">Access Workspace</a>
             </div>
             
-            <h3>🚀 What's Next?</h3>
-            <ol>
+            <h3 class="section-title">Getting Started</h3>
+            <ol class="steps-list">
               <li>Click the button above to access your workspace</li>
-              <li>Complete your profile setup</li>
-              <li>Invite your team members</li>
-              <li>Start using your business tools</li>
+              <li>Complete your organization profile</li>
+              <li>Invite team members to collaborate</li>
+              <li>Begin leveraging your business tools</li>
             </ol>
             
-            <div class="info-box">
-              <h4>💡 Need Help?</h4>
-              <p>Our support team is here to help you get started. Reply to this email or visit our help center.</p>
+            <div class="help-box">
+              <h4>Need Assistance?</h4>
+              <p>Our support team is available to help you get started. Reply to this email or visit our help center for documentation and resources.</p>
+            </div>
           </div>
-            
-            <p>Welcome aboard!</p>
-            <p><strong>The Wrapper Team</strong></p>
+          
+          <div class="footer">
+            <p>We're here to support your success.</p>
+            <p class="signature">The Zopkit Team</p>
+            <p style="margin-top: 24px; font-size: 13px; color: #9ca3af;">This email was sent to ${email}. If you have any questions, please contact our support team.</p>
           </div>
         </div>
       </body>
@@ -165,7 +420,7 @@ class EmailService {
 
   // Send user invitation email
   async sendUserInvitation({ email, tenantName, roleName, invitationToken, invitedByName, message, invitedDate, expiryDate, organizations, locations }) {
-    const subject = `You're invited to join ${tenantName} on Wrapper`;
+    const subject = `You're invited to join ${tenantName} on Zopkit`;
 
     // Handle both token-based and direct URL invitations
     const acceptUrl = invitationToken.startsWith('http')
@@ -195,52 +450,309 @@ class EmailService {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Team Invitation</title>
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background-color: #f8fafc; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .card { background: white; border-radius: 16px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); overflow: hidden; }
-          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 30px; text-align: center; position: relative; }
-          .header::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
-          .header-content { position: relative; z-index: 1; }
-          .content { padding: 40px 30px; background: white; }
-          .invitation-badge { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; display: inline-block; margin-bottom: 20px; }
-          .inviter-section { background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 1px solid #0ea5e9; border-radius: 12px; padding: 20px; margin: 24px 0; }
-          .details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 24px 0; }
-          .detail-item { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
-          .detail-label { font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-          .detail-value { font-size: 14px; font-weight: 500; color: #1f2937; }
-          .role-badge { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; padding: 6px 12px; border-radius: 16px; font-size: 12px; font-weight: 600; display: inline-block; }
-          .organization-list { background: #fefefe; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin: 16px 0; }
-          .org-item { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
-          .org-item:last-child { border-bottom: none; }
-          .org-icon { width: 8px; height: 8px; background: #10b981; border-radius: 50%; margin-right: 12px; }
-          .message-section { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 12px; padding: 20px; margin: 24px 0; }
-          .cta-section { text-align: center; margin: 32px 0; }
-          .cta-button { display: inline-block; padding: 16px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 14px rgba(102, 126, 234, 0.4); transition: all 0.2s; }
-          .cta-button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6); }
-          .features-section { background: #f8fafc; border-radius: 12px; padding: 24px; margin: 24px 0; }
-          .feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
-          .feature-item { display: flex; align-items: center; font-size: 14px; color: #4b5563; }
-          .feature-icon { width: 20px; height: 20px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px; color: white; font-size: 12px; font-weight: bold; }
-          .footer { text-align: center; padding: 24px; color: #6b7280; font-size: 12px; border-top: 1px solid #e5e7eb; }
-          .expiry-notice { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; margin: 16px 0; color: #dc2626; font-size: 13px; }
-          @media (max-width: 640px) { .details-grid { grid-template-columns: 1fr; } .feature-grid { grid-template-columns: 1fr; } }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #1f2937;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+            padding: 20px;
+            min-height: 100vh;
+          }
+          .container { 
+            max-width: 650px;
+            margin: 0 auto;
+          }
+          .card { 
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+          }
+          .header { 
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fb 100%);
+            padding: 50px 40px;
+            text-align: center;
+            position: relative;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          .logo-container {
+            margin-bottom: 32px;
+            background: rgba(0, 0, 0, 0.02);
+            backdrop-filter: blur(10px);
+            padding: 20px 30px;
+            border-radius: 12px;
+            display: inline-block;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+          }
+          .logo {
+            max-width: 200px;
+            height: auto;
+            display: block;
+          }
+          .invitation-badge { 
+            background: linear-gradient(135deg, #1a1a1a 0%, #374151 100%);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 24px;
+            font-size: 14px;
+            font-weight: 700;
+            display: inline-block;
+            margin-bottom: 20px;
+            letter-spacing: 0.3px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          }
+          .header h1 {
+            margin: 16px 0;
+            font-size: 32px;
+            font-weight: 700;
+            color: #0f172a;
+            letter-spacing: -0.5px;
+          }
+          .header p {
+            margin: 0;
+            font-size: 17px;
+            color: #64748b;
+          }
+          .content { 
+            padding: 45px 40px;
+            background: white;
+          }
+          .inviter-section { 
+            background: linear-gradient(135deg, #fafbfc 0%, #f1f3f5 100%);
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 0 0 32px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+          }
+          .inviter-section h2 {
+            margin: 0 0 10px 0;
+            color: #0f172a;
+            font-size: 18px;
+            font-weight: 700;
+          }
+          .inviter-section p {
+            margin: 0;
+            color: #475569;
+            font-size: 15px;
+            line-height: 1.7;
+          }
+          .details-grid { 
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin: 32px 0;
+          }
+          .detail-item { 
+            background: linear-gradient(135deg, #fafbfc 0%, #f4f6f8 100%);
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 18px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+          }
+          .detail-label { 
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+          }
+          .detail-value { 
+            font-size: 15px;
+            font-weight: 600;
+            color: #0f172a;
+          }
+          .role-badge { 
+            background: linear-gradient(135deg, #1a1a1a 0%, #374151 100%);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 700;
+            display: inline-block;
+            letter-spacing: 0.3px;
+          }
+          .organization-list { 
+            background: linear-gradient(135deg, #fafbfc 0%, #f4f6f8 100%);
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+          }
+          .organization-list h3 {
+            margin: 0 0 16px 0;
+            font-size: 16px;
+            font-weight: 700;
+            color: #0f172a;
+          }
+          .org-item { 
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          .org-item:last-child { 
+            border-bottom: none;
+            padding-bottom: 0;
+          }
+          .org-icon { 
+            width: 10px;
+            height: 10px;
+            background: linear-gradient(135deg, #1a1a1a 0%, #374151 100%);
+            border-radius: 50%;
+            margin-right: 14px;
+          }
+          .org-item span {
+            font-weight: 600;
+            color: #334155;
+            font-size: 15px;
+          }
+          .message-section { 
+            background: linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%);
+            border: 2px solid #fde047;
+            border-left: 5px solid #eab308;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 24px 0;
+            box-shadow: 0 2px 8px rgba(234, 179, 8, 0.08);
+          }
+          .message-section h3 {
+            margin: 0 0 10px 0;
+            color: #92400e;
+            font-size: 17px;
+            font-weight: 700;
+          }
+          .message-section p {
+            margin: 0;
+            font-style: italic;
+            color: #78350f;
+            font-size: 15px;
+            line-height: 1.7;
+          }
+          .expiry-notice { 
+            background: #fef2f2;
+            border: 2px solid #fecaca;
+            border-left: 5px solid #dc2626;
+            border-radius: 12px;
+            padding: 18px;
+            margin: 24px 0;
+            color: #991b1b;
+            font-size: 14px;
+            font-weight: 600;
+          }
+          .cta-section { 
+            text-align: center;
+            margin: 36px 0;
+          }
+          .cta-button { 
+            display: inline-block;
+            padding: 16px 40px;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d3748 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 16px;
+            letter-spacing: 0.3px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+          }
+          .cta-button:hover { 
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+            background: linear-gradient(135deg, #2d3748 0%, #1a1a1a 100%);
+          }
+          .cta-section p {
+            margin: 16px 0 0 0;
+            font-size: 14px;
+            color: #64748b;
+          }
+          .features-section { 
+            background: linear-gradient(135deg, #fafbfc 0%, #f4f6f8 100%);
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 28px;
+            margin: 28px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+          }
+          .features-section h3 {
+            margin: 0 0 20px 0;
+            font-size: 18px;
+            font-weight: 700;
+            color: #0f172a;
+          }
+          .feature-grid { 
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+          }
+          .feature-item { 
+            display: flex;
+            align-items: center;
+            font-size: 15px;
+            color: #334155;
+            font-weight: 500;
+          }
+          .feature-icon { 
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #1a1a1a 0%, #374151 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          }
+          .footer { 
+            text-align: center;
+            padding: 32px 40px;
+            color: #64748b;
+            font-size: 14px;
+            background: linear-gradient(135deg, #fafbfc 0%, #f4f6f8 100%);
+            border-top: 3px solid #1a1a1a;
+          }
+          .footer p {
+            margin: 0;
+            line-height: 1.8;
+          }
+          .footer strong {
+            color: #0f172a;
+            font-weight: 700;
+          }
+          @media (max-width: 640px) { 
+            body { padding: 10px; }
+            .content { padding: 30px 24px; }
+            .header { padding: 40px 24px; }
+            .details-grid { grid-template-columns: 1fr; }
+            .feature-grid { grid-template-columns: 1fr; }
+            .header h1 { font-size: 26px; }
+          }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="card">
             <div class="header">
-              <div class="header-content">
-                <div class="invitation-badge">🎉 Team Invitation</div>
-                <h1 style="margin: 16px 0; font-size: 28px; font-weight: 700;">You're Invited!</h1>
-                <p style="margin: 0; opacity: 0.9; font-size: 16px;">Join ${tenantName} on Wrapper</p>
+              <div class="logo-container">
+                <img src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Full_Logo_kezq1b.jpg" alt="Zopkit Logo" class="logo">
               </div>
+              <div class="invitation-badge">Team Invitation</div>
+              <h1>You're Invited!</h1>
+              <p>Join ${tenantName} on Zopkit</p>
             </div>
 
             <div class="content">
               <div class="inviter-section">
-                <h2 style="margin: 0 0 8px 0; color: #0c4a6e; font-size: 18px;">👋 Invitation from ${invitedByName}</h2>
-                <p style="margin: 0; color: #374151;">You've been personally invited to join our team. We're excited to have you!</p>
+                <h2>Invitation from ${invitedByName}</h2>
+                <p>You've been personally invited to join our team. We're excited to have you collaborate with us!</p>
               </div>
 
               <div class="details-grid">
@@ -266,11 +778,11 @@ class EmailService {
 
               ${organizations && organizations.length > 0 ? `
               <div class="organization-list">
-                <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">🏢 Access to Organizations</h3>
+                <h3>Access to Organizations</h3>
                 ${organizations.map(org => `
                   <div class="org-item">
                     <div class="org-icon"></div>
-                    <span style="font-weight: 500;">${org}</span>
+                    <span>${org}</span>
                   </div>
                 `).join('')}
               </div>
@@ -278,11 +790,11 @@ class EmailService {
 
               ${locations && locations.length > 0 ? `
               <div class="organization-list">
-                <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #374151;">📍 Access to Locations</h3>
+                <h3>Access to Locations</h3>
                 ${locations.map(loc => `
                   <div class="org-item">
                     <div class="org-icon"></div>
-                    <span style="font-weight: 500;">${loc}</span>
+                    <span>${loc}</span>
                   </div>
                 `).join('')}
               </div>
@@ -290,50 +802,48 @@ class EmailService {
 
               ${message ? `
               <div class="message-section">
-                <h3 style="margin: 0 0 8px 0; color: #92400e; font-size: 16px;">💌 Personal Message</h3>
-                <p style="margin: 0; font-style: italic; color: #374151;">"${message}"</p>
+                <h3>Personal Message</h3>
+                <p>"${message}"</p>
               </div>
               ` : ''}
 
               <div class="expiry-notice">
-                <strong>⏰ Important:</strong> This invitation expires on ${expiryDateFormatted}. Please accept it before then.
+                <strong>Important:</strong> This invitation expires on ${expiryDateFormatted}. Please accept it before then.
               </div>
 
               <div class="cta-section">
-                <a href="${acceptUrl}" class="cta-button">🚀 Accept Invitation & Join Team</a>
-                <p style="margin: 16px 0 0 0; font-size: 14px; color: #6b7280;">
-                  Secure sign-in with Google • No passwords required
-                </p>
+                <a href="${acceptUrl}" class="cta-button">Accept Invitation & Join Team</a>
+                <p>Secure sign-in • No passwords required</p>
               </div>
 
               <div class="features-section">
-                <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #1f2937;">✨ What You'll Get Access To</h3>
+                <h3>What You'll Get Access To</h3>
                 <div class="feature-grid">
                   <div class="feature-item">
-                    <div class="feature-icon">📊</div>
+                    <div class="feature-icon">1</div>
                     <span>CRM & Business Tools</span>
                   </div>
                   <div class="feature-item">
-                    <div class="feature-icon">👥</div>
+                    <div class="feature-icon">2</div>
                     <span>Team Collaboration</span>
                   </div>
                   <div class="feature-item">
-                    <div class="feature-icon">📈</div>
+                    <div class="feature-icon">3</div>
                     <span>Analytics & Reporting</span>
                   </div>
                   <div class="feature-item">
-                    <div class="feature-icon">🔒</div>
+                    <div class="feature-icon">4</div>
                     <span>Secure Workspace</span>
+                  </div>
                   </div>
                 </div>
               </div>
 
               <div class="footer">
-                <p style="margin: 0;">
+              <p>
                   Questions? Contact <strong>${invitedByName}</strong> or reply to this email.<br>
-                  Powered by <strong>Wrapper</strong> • Secure & Collaborative
+                Powered by <strong>Zopkit</strong> • Your AI-first business operating system
                 </p>
-              </div>
             </div>
           </div>
         </div>

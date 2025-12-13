@@ -4,7 +4,7 @@ import analyticsService from '../services/analyticsService.js';
 import { db } from '../db/index.js';
 import { subscriptions, payments } from '../db/schema/index.js';
 import { eq, and, desc, gte, lte, count, sum, sql } from 'drizzle-orm';
-import { SubscriptionService } from '../services/subscription-service.js';
+import { SubscriptionService } from '../features/subscriptions/index.js';
 
 // Fastify plugin for analytics routes
 export default async function analyticsRoutes(fastify, options) {

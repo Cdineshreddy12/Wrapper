@@ -3,6 +3,7 @@ import UserDetailsModal from '../UserDetailsModal';
 import { EditUserModal } from '../EditUserModal';
 import { DeleteUserModal } from '../DeleteUserModal';
 import { RoleAssignmentModal } from '../RoleAssignmentModal';
+import { UserAccessModal } from '../modals/UserAccessModal';
 import { useUserManagement } from '../context/UserManagementContext';
 import { useUserActions } from '../hooks/useUserActions';
 
@@ -28,17 +29,26 @@ export function UserManagementModals() {
     copyInvitationUrl 
   } = useUserActions();
   
+  // Modal fetches its own hierarchy data, so we don't need to fetch it here
+  
   // Modal handlers
   const handleInviteUser = () => {
-    if (!state.inviteForm.email || !state.inviteForm.name) {
+    if (!state.inviteForm.email || !state.inviteForm.name || state.inviteForm.entities.length === 0) {
       return;
     }
+    
+    // Extract roleIds from entities
+    const roleIds = state.inviteForm.entities
+      .map((e: any) => e.roleId)
+      .filter((id: string) => id && id.trim() !== '');
     
     userMutations.inviteUser.mutate({
       email: state.inviteForm.email,
       name: state.inviteForm.name,
-      roleIds: state.inviteForm.roleIds,
-      message: state.inviteForm.message
+      roleIds: roleIds.length > 0 ? roleIds : undefined,
+      message: state.inviteForm.message,
+      entities: state.inviteForm.entities,
+      primaryEntityId: state.inviteForm.primaryEntityId
     }, {
       onSuccess: () => {
         actions.closeModal('invite');
@@ -115,7 +125,10 @@ export function UserManagementModals() {
         isOpen={state.showInviteModal}
         onClose={() => actions.closeModal('invite')}
         roles={roles}
+        inviteForm={state.inviteForm}
+        setInviteForm={(form) => dispatch({ type: 'SET_INVITE_FORM', payload: form })}
         onInvite={handleInviteUser}
+        // Modal fetches its own hierarchy data via hook, so we don't need to pass it
       />
       
       {/* User Details Modal */}
@@ -155,6 +168,13 @@ export function UserManagementModals() {
         onClose={() => actions.closeModal('delete')}
         user={state.deletingUser}
         onDelete={handleDeleteUser}
+      />
+      
+      {/* User Access Management Modal */}
+      <UserAccessModal
+        isOpen={state.showAccessModal}
+        onClose={() => actions.closeModal('access')}
+        user={state.managingAccessUser}
       />
     </>
   );

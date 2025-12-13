@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { api } from '@/lib/api';
+import { api, applicationAssignmentAPI } from '@/lib/api';
 import { useOptimizedQuery, useBatchedQueries } from './useOptimizedQuery';
 import { cacheHelpers, CACHE_KEYS } from '@/lib/cache';
 import toast from 'react-hot-toast';
@@ -131,7 +131,7 @@ export function useDashboardData() {
         console.log('📡 Making API call to getTenantApplications for tenant:', tenantId);
 
         try {
-          const response = await api.getTenantApplications(tenantId);
+          const response = await applicationAssignmentAPI.getTenantApplications(tenantId);
           console.log('📥 API Response:', response);
 
           const data = response.data?.data?.applications || response.data?.applications || [];

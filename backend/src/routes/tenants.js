@@ -7,7 +7,7 @@ import { and, eq, sql, inArray } from 'drizzle-orm';
 import ErrorResponses from '../utils/error-responses.js';
 import { randomUUID } from 'crypto';
 import ActivityLogger, { ACTIVITY_TYPES, RESOURCE_TYPES } from '../services/activityLogger.js';
-import { OrganizationAssignmentService } from '../services/organization-assignment-service.js';
+import { OrganizationAssignmentService } from '../features/organizations/index.js';
 
 export default async function tenantRoutes(fastify, options) {
   // List all tenants (Authenticated users only)
@@ -1257,14 +1257,15 @@ export default async function tenantRoutes(fastify, options) {
           userId: organizationMemberships.userId,
           userName: tenantUsers.name,
           userEmail: tenantUsers.email,
-          organizationId: organizationMemberships.entityId,
+          entityId: organizationMemberships.entityId,
+          entityType: entities.entityType,
           membershipType: organizationMemberships.membershipType,
           membershipStatus: organizationMemberships.membershipStatus,
           accessLevel: organizationMemberships.accessLevel,
           isPrimary: organizationMemberships.isPrimary,
           assignedAt: organizationMemberships.createdAt,
-          organizationName: entities.entityName,
-          organizationCode: entities.entityCode
+          entityName: entities.entityName,
+          entityCode: entities.entityCode
         })
         .from(organizationMemberships)
         .innerJoin(tenantUsers, eq(organizationMemberships.userId, tenantUsers.userId))
@@ -1282,9 +1283,13 @@ export default async function tenantRoutes(fastify, options) {
         userId: membership.userId,
         userName: membership.userName,
         userEmail: membership.userEmail,
-        organizationId: membership.organizationId,
-        organizationName: membership.organizationName,
-        organizationCode: membership.organizationCode,
+        organizationId: membership.entityId, // Keep for backward compatibility
+        entityId: membership.entityId,
+        entityType: membership.entityType, // Include entity type (organization or location)
+        organizationName: membership.entityName, // Keep for backward compatibility
+        entityName: membership.entityName,
+        organizationCode: membership.entityCode, // Keep for backward compatibility
+        entityCode: membership.entityCode,
         assignmentType: membership.membershipType,
         accessLevel: membership.accessLevel,
         isPrimary: membership.isPrimary,

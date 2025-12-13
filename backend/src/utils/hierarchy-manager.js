@@ -250,7 +250,10 @@ export class HierarchyManager {
       allEntities.forEach(entity => {
         const node = {
           ...entity,
-          children: []
+          children: [],
+          // Ensure credits are numbers, default to 0 if null/undefined
+          availableCredits: entity.availableCredits ?? 0,
+          reservedCredits: entity.reservedCredits ?? 0
         };
         entityMap.set(entity.entityId, node);
       });

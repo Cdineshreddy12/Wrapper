@@ -4,6 +4,7 @@ import { ApplicationGrid } from '@/features/applications/components/ApplicationG
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useOrganizationAuth } from '@/hooks/useOrganizationAuth';
 import { useCreditStatus } from '@/hooks/useCreditStatus';
+import { useUserContext } from '@/contexts/UserContextProvider';
 import { Users, Building, Coins, Calendar, CreditCard, Crown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
@@ -56,6 +57,7 @@ function useRecentlyUsedApps() {
 export function OverviewPage() {
     const { metrics, applications, isLoading } = useDashboardData()
     const { tenantId } = useOrganizationAuth()
+    const { tenant } = useUserContext()
     const { creditStatus, isLoading: creditLoading } = useCreditStatus()
     const navigate = useNavigate()
     const { recentlyUsedApps, trackAppUsage } = useRecentlyUsedApps()
@@ -91,7 +93,7 @@ export function OverviewPage() {
                 <StatsCard
                     title="Organization"
                     value="Active"
-                    description={`Tenant ID: ${tenantId ? tenantId.substring(0, 8) + '...' : 'Loading...'}`}
+                    description={tenant?.companyName || 'Organization'}
                     icon={Building}
                 />
 

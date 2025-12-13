@@ -9,7 +9,7 @@ import {
 import { eq, and, or, isNull, ne } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import Logger from '../utils/logger.js';
-import kindeService from './kinde-service.js';
+import { kindeService } from '../features/auth/index.js';
 
 export class AdminPromotionService {
   

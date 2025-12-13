@@ -132,6 +132,34 @@ class ErrorResponses {
   }
 
   /**
+   * Send a standardized 409 Conflict response
+   * @param {Object} reply - Fastify reply object
+   * @param {string} message - Error message
+   * @param {Object} context - Additional context for logging (optional)
+   * @returns {Object} Standardized error response
+   */
+  static conflict(reply, message, context = {}) {
+    const requestId = Logger.generateRequestId('error');
+    
+    console.log(`❌ [${requestId}] 409 Error: ${message}`, {
+      context,
+      url: reply.request?.url,
+      method: reply.request?.method,
+      body: reply.request?.body
+    });
+
+    return reply.code(409).send({
+      success: false,
+      error: 'Conflict',
+      message,
+      statusCode: 409,
+      requestId,
+      timestamp: new Date().toISOString(),
+      ...context
+    });
+  }
+
+  /**
    * Send a standardized 500 Internal Server Error response
    * @param {Object} reply - Fastify reply object
    * @param {string} message - Error message

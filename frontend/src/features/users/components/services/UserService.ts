@@ -1,5 +1,5 @@
 import api from '@/lib/api';
-import { User, Role } from '@/types/user-management';
+import { User, Role, UserOrganization } from '@/types/user-management';
 
 /**
  * User Service Layer
@@ -8,6 +8,22 @@ import { User, Role } from '@/types/user-management';
  * data transformation, and type safety.
  */
 export class UserService {
+  /**
+   * Fetch organizations for a specific user
+   */
+  static async fetchUserOrganizations(userId: string): Promise<UserOrganization[]> {
+    try {
+      const response = await api.get(`/admin/users/${userId}/organizations`);
+      if (response.data.success && response.data.data) {
+        return response.data.data;
+      }
+      return [];
+    } catch (error) {
+      console.error(`Error fetching organizations for user ${userId}:`, error);
+      return [];
+    }
+  }
+
   /**
    * Fetch all users for the current tenant
    */
@@ -23,7 +39,7 @@ export class UserService {
       console.log('📊 Raw user data from API:', userData);
       
       // Transform the data structure to include invitation information
-      const transformedUsers = userData.map((item: any) => {
+      const transformedUsers = await Promise.all(userData.map(async (item: any) => {
         const user = item.user || item;
         const roleString = item.role;
         
@@ -42,8 +58,13 @@ export class UserService {
           userType = 'setup_required';
         }
         
+        const userId = user.id || user.userId;
+        
+        // Fetch organizations for this user
+        const organizations = await this.fetchUserOrganizations(userId);
+        
         return {
-          userId: user.id || user.userId,
+          userId,
           email: user.email,
           name: user.firstName && user.lastName ? `${user.firstName} ${user.lastName}`.trim() : user.firstName || user.lastName || 'Unnamed User',
           isActive: user.isActive !== false,
@@ -64,12 +85,13 @@ export class UserService {
             icon: '👤',
             permissions: {}
           }] : [],
+          organizations,
           invitationStatus,
           userType,
           originalData: item,
           invitationId: item.invitationToken || item.invitationId || null
         };
-      });
+      }));
       
       // Validate transformed user data
       const validUsers = transformedUsers.filter((user: any) => 
@@ -115,8 +137,15 @@ export class UserService {
   static async inviteUser(userData: {
     email: string;
     name: string;
-    roleIds: string[];
-    message: string;
+    roleIds?: string[];
+    message?: string;
+    entities?: Array<{
+      entityId: string;
+      roleId: string;
+      entityType: string;
+      membershipType: string;
+    }>;
+    primaryEntityId?: string;
   }): Promise<any> {
     console.log('Inviting user:', userData);
     try {

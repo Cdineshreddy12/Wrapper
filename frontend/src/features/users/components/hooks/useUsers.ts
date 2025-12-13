@@ -45,8 +45,15 @@ export const useUserMutations = () => {
     mutationFn: async (userData: {
       email: string;
       name: string;
-      roleIds: string[];
-      message: string;
+      roleIds?: string[];
+      message?: string;
+      entities?: Array<{
+        entityId: string;
+        roleId: string;
+        entityType: string;
+        membershipType: string;
+      }>;
+      primaryEntityId?: string;
     }) => {
       LoggingService.logUserAction('inviteUser', userData.email, { roleIds: userData.roleIds });
       return await UserService.inviteUser(userData);

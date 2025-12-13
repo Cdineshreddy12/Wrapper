@@ -305,8 +305,12 @@ function convertHierarchyToFlow(
         locationType: org.locationType,
         isActive: org.isActive !== false,
         description: org.description,
-        availableCredits: org.availableCredits || 0,
-        reservedCredits: org.reservedCredits || 0,
+        availableCredits: org.availableCredits !== undefined && org.availableCredits !== null
+          ? (typeof org.availableCredits === 'string' ? parseFloat(org.availableCredits) || 0 : org.availableCredits)
+          : undefined,
+        reservedCredits: org.reservedCredits !== undefined && org.reservedCredits !== null
+          ? (typeof org.reservedCredits === 'string' ? parseFloat(org.reservedCredits) || 0 : org.reservedCredits)
+          : undefined,
         entityLevel: org.entityLevel || org.organizationLevel || 0,
         onNodeClick,
         onEditOrganization,

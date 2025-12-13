@@ -13,7 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Section } from "@/components/common/Page/Section";
 import { User } from "@/types/user-management";
-import UserAvatar, { UserAvatarPresets } from "../common/UserAvatar";
+import UserAvatar, { UserAvatarPresets } from "@/components/common/UserAvatar";
 
 
 

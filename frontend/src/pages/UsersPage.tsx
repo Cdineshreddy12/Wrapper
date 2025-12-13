@@ -1,6 +1,6 @@
 import { AccessDenied } from "@/components/common/AccessDenied";
 import { Container } from "@/components/common/Page";
-import { UserManagementDashboard } from "@/components/users/UserManagementDashboard";
+import { UserManagementDashboard } from "@/features/users/components/UserManagementDashboard";
 import { useKindeAuth } from "@kinde-oss/kinde-auth-react";
 
 export function UsersPage({

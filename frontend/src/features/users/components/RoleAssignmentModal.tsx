@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Check, Shield, Trash2, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { RoleAssignmentConfirmationModal } from '@/components/common/ConfirmationModal';
 
 interface User {
   userId: string;
@@ -39,13 +40,44 @@ export function RoleAssignmentModal({
   onSave,
   onDeassignRole
 }: RoleAssignmentModalProps) {
-  
+  const [confirmationModal, setConfirmationModal] = useState<{
+    isOpen: boolean;
+    action: 'assign' | 'deassign';
+    roleId: string;
+    roleName: string;
+  } | null>(null);
+
   const handleRoleToggle = (roleId: string) => {
-    if (selectedRoles.includes(roleId)) {
-      setSelectedRoles(selectedRoles.filter(id => id !== roleId));
-    } else {
+    const role = roles.find(r => r.roleId === roleId);
+    if (!role) return;
+
+    const isCurrentlyAssigned = selectedRoles.includes(roleId);
+    const action = isCurrentlyAssigned ? 'deassign' : 'assign';
+
+    setConfirmationModal({
+      isOpen: true,
+      action,
+      roleId,
+      roleName: role.roleName
+    });
+  };
+
+  const handleConfirmAction = () => {
+    if (!confirmationModal || !user) return;
+
+    const { action, roleId } = confirmationModal;
+
+    if (action === 'assign') {
       setSelectedRoles([...selectedRoles, roleId]);
+    } else {
+      setSelectedRoles(selectedRoles.filter(id => id !== roleId));
     }
+
+    setConfirmationModal(null);
+  };
+
+  const handleCancelConfirmation = () => {
+    setConfirmationModal(null);
   };
 
   const handleDeassign = async (e: React.MouseEvent, roleId: string) => {
@@ -137,6 +169,19 @@ export function RoleAssignmentModal({
             </div>
         </div>
       </DialogContent>
+
+      {/* Confirmation Modal */}
+      {confirmationModal && (
+        <RoleAssignmentConfirmationModal
+          isOpen={confirmationModal.isOpen}
+          onClose={handleCancelConfirmation}
+          onConfirm={handleConfirmAction}
+          roleName={confirmationModal.roleName}
+          userName={user?.name || user?.email || 'User'}
+          action={confirmationModal.action}
+          loading={false}
+        />
+      )}
     </Dialog>
   );
 }

@@ -1,4 +1,4 @@
-import kindeService from '../services/kinde-service.js';
+import { kindeService } from '../features/auth/index.js';
 import { db, dbManager } from '../db/index.js';
 import { tenants, tenantUsers, customRoles, userRoleAssignments } from '../db/schema/index.js';
 import { eq, and } from 'drizzle-orm';

@@ -23,12 +23,12 @@ if (DISABLE_ALL_LOGGING && process.env.SUPPRESS_CONSOLE === 'true') {
 }
 
 // Import routes
-import authRoutes from './routes/auth.js';
+import { authRoutes, simplifiedAuthRoutes } from './features/auth/index.js';
 import tenantRoutes from './routes/tenants.js';
-import userRoutes from './routes/users.js';
-import subscriptionRoutes from './routes/subscriptions.js';
+import { usersRoutes, userRoutes, userSyncRoutes, userVerificationRoutes } from './features/users/index.js';
+import { subscriptionsRoutes, paymentsRoutes, paymentUpgradeRoutes, paymentProfileCompletionRoutes } from './features/subscriptions/index.js';
 import permissionRoutes from './routes/permissions.js';
-import roleRoutes from './routes/roles.js';
+import { rolesRoutes, customRolesRoutes } from './features/roles/index.js';
 import analyticsRoutes from './routes/analytics.js';
 import usageRoutes from './routes/usage.js';
 import internalRoutes from './routes/internal.js';
@@ -37,36 +37,36 @@ import webhookRoutes from './routes/webhooks.js';
 import proxyRoutes from './routes/proxy.js';
 import onboardingRoutes from './routes/onboarding-router.js';
 import dnsManagementRoutes from './routes/dns-management.js';
-import adminRoutes from './routes/admin.js';
-import adminCreditConfigurationRoutes from './routes/admin/credit-configuration.js';
-import adminApplicationAssignmentRoutes from './routes/admin/application-assignment.js';
-import adminOperationCostRoutes from './routes/admin/operation-costs.js';
-// New independent admin dashboard routes
-import adminDashboardRoutes from './routes/admin/dashboard.js';
-import adminTenantManagementRoutes from './routes/admin/tenant-management.js';
-import adminEntityManagementRoutes from './routes/admin/entity-management.js';
-import adminCreditOverviewRoutes from './routes/admin/credit-overview.js';
-import seasonalCreditsRoutes from './routes/admin/seasonal-credits.js';
+// Admin feature routes
+import {
+  adminRoutes,
+  adminDashboardRoutes,
+  adminTenantManagementRoutes,
+  adminEntityManagementRoutes,
+  adminCreditOverviewRoutes,
+  adminCreditConfigurationRoutes,
+  adminApplicationAssignmentRoutes,
+  adminOperationCostRoutes,
+  seasonalCreditsRoutes
+} from './features/admin/index.js';
 import invitationRoutes from './routes/invitations.js';
 import suiteRoutes from './routes/suite.js';
-import paymentRoutes from './routes/payments.js';
+// paymentRoutes moved to subscriptions feature
 import activityRoutes from './routes/activity.js';
 import trialRoutes from './routes/trial.js';
-import customRolesRoutes from './routes/custom-roles.js';
+// customRolesRoutes moved to roles feature
 import adminPromotionRoutes from './routes/admin-promotion.js';
 import permissionMatrixRoutes from './routes/permission-matrix.js';
 import enhancedCrmIntegrationRoutes from './routes/enhanced-crm-integration.js';
 import wrapperCrmSyncRoutes from './routes/wrapper-crm-sync.js';
-import userVerificationRoutes from './routes/user-verification-routes.js';
+// userVerificationRoutes moved to users feature
 import healthRoutes from './routes/health.js';
 import permissionSyncRoutes from './routes/permission-sync.js';
-import userSyncRoutes from './routes/user-sync.js';
+// userSyncRoutes moved to users feature
 import userApplicationRoutes from './routes/user-applications.js';
-import organizationRoutes from './routes/organizations.js';
-import locationRoutes from './routes/locations.js';
-import entityRoutes from './routes/entities.js';
-import paymentUpgradeRoutes from './routes/payment-upgrade.js';
-import creditRoutes from './routes/credits.js';
+import { organizationsRoutes, locationsRoutes, entitiesRoutes } from './features/organizations/index.js';
+// paymentUpgradeRoutes moved to subscriptions feature
+import { creditsRoutes } from './features/credits/index.js';
 import demoRoutes from './routes/demo.js';
 import notificationRoutes from './routes/notifications.js';
 import entityScopeRoutes from './routes/entity-scope.js';
@@ -510,14 +510,14 @@ async function registerRoutes() {
   // API routes
   await fastify.register(authRoutes, { prefix: '/api/auth' });
   await fastify.register(tenantRoutes, { prefix: '/api/tenants' });
-  await fastify.register(userRoutes, { prefix: '/api/users' });
-  await fastify.register(subscriptionRoutes, { prefix: '/api/subscriptions' });
+  await fastify.register(usersRoutes, { prefix: '/api/users' });
+  await fastify.register(subscriptionsRoutes, { prefix: '/api/subscriptions' });
 
   // Handle double /api/api/ prefix issue (register routes with both prefixes)
   // This happens when frontend API base URL already includes /api
 
   await fastify.register(permissionRoutes, { prefix: '/api/permissions' });
-  await fastify.register(roleRoutes, { prefix: '/api/roles' });
+  await fastify.register(rolesRoutes, { prefix: '/api/roles' });
   // Register custom-roles routes with both prefixes for compatibility
   await fastify.register(customRolesRoutes, { prefix: '/api/custom-roles' });
   await fastify.register(customRolesRoutes, { prefix: '/api/api/custom-roles' });
@@ -541,7 +541,7 @@ async function registerRoutes() {
   await fastify.register(adminCreditOverviewRoutes, { prefix: '/api/admin/credits' });
   await fastify.register(seasonalCreditsRoutes, { prefix: '/api/admin/seasonal-credits' });
   await fastify.register(suiteRoutes, { prefix: '/api/suite' });
-  await fastify.register(paymentRoutes, { prefix: '/api/payments' });
+  await fastify.register(paymentsRoutes, { prefix: '/api/payments' });
   await fastify.register(activityRoutes, { prefix: '/api/activity' });
   await fastify.register(trialRoutes, { prefix: '/api/trial' });
   await fastify.register(adminPromotionRoutes, { prefix: '/api/admin-promotion' });
@@ -549,13 +549,13 @@ async function registerRoutes() {
   await fastify.register(permissionSyncRoutes, { prefix: '/api/permission-sync' });
   await fastify.register(userSyncRoutes, { prefix: '/api/user-sync' });
   await fastify.register(userApplicationRoutes, { prefix: '/api/user-applications' });
-  await fastify.register(organizationRoutes, { prefix: '/api/organizations' });
-  await fastify.register(locationRoutes, { prefix: '/api/locations' });
+  await fastify.register(organizationsRoutes, { prefix: '/api/organizations' });
+  await fastify.register(locationsRoutes, { prefix: '/api/locations' });
   console.log('📋 Registering entities routes...');
-  await fastify.register(entityRoutes, { prefix: '/api/entities' });
+  await fastify.register(entitiesRoutes, { prefix: '/api/entities' });
   console.log('✅ Entities routes registered successfully');
   await fastify.register(paymentUpgradeRoutes, { prefix: '/api/payment-upgrade' });
-  await fastify.register(creditRoutes, { prefix: '/api/credits' });
+  await fastify.register(creditsRoutes, { prefix: '/api/credits' });
   await fastify.register(notificationRoutes, { prefix: '/api/notifications' });
   await fastify.register(demoRoutes, { prefix: '/api/demo' });
   await fastify.register(enhancedCrmIntegrationRoutes, { prefix: '/api/enhanced-crm-integration' });

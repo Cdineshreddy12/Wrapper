@@ -11,9 +11,9 @@ import {
   entities
 } from '../db/schema/index.js';
 import { v4 as uuidv4 } from 'uuid';
-import { KindeService } from './kinde-service.js';
+import { kindeService as KindeService } from '../features/auth/index.js';
 import EmailService from '../utils/email.js';
-import { SubscriptionService } from './subscription-service.js';
+import { SubscriptionService } from '../features/subscriptions/index.js';
 import { sql } from 'drizzle-orm';
 import { inArray } from 'drizzle-orm';
 import { crmSyncStreams } from '../utils/redis.js';

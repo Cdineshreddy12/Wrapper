@@ -4,7 +4,7 @@
  */
 
 import AutoPermissionSyncService from '../services/permission-sync-service.js';
-import CustomRoleService from '../services/custom-role-service.js';
+import { customRoleService as CustomRoleService } from '../features/roles/index.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 
 export default async function permissionSyncRoutes(fastify, options) {

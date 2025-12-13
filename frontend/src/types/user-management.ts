@@ -7,6 +7,24 @@ export interface Role {
     permissions: Record<string, any>;
   }
 
+  export interface UserOrganization {
+    membershipId: string;
+    assignmentId: string;
+    organizationId: string;
+    entityId: string;
+    organizationName: string;
+    entityName: string;
+    entityType: string;
+    membershipType: string;
+    membershipStatus: string;
+    accessLevel: string;
+    isPrimary: boolean;
+    roleName?: string;
+    roleId?: string;
+    joinedAt?: string;
+    invitedAt?: string;
+  }
+
   export interface User {
     userId: string;
     email: string;
@@ -21,6 +39,7 @@ export interface Role {
     invitationAcceptedAt?: string;
     lastLoginAt?: string;
     roles?: Role[];
+    organizations?: UserOrganization[];
     avatar?: string;
     invitationStatus?: string;
     userType?: string;

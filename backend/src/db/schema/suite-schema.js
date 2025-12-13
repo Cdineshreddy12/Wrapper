@@ -66,4 +66,3 @@ export const userApplicationPermissions = pgTable('user_application_permissions'
   expiresAt: timestamp('expires_at')
 });
 
-

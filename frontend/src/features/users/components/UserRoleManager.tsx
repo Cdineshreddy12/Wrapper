@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Users, Plus, X, Save, AlertCircle, UserCheck, Shield, Edit2, Trash2, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { useQueryClient } from '@tanstack/react-query';
+import { useUsers, useRoles } from '@/hooks/useSharedQueries';
 
 interface User {
   userId: string;
@@ -22,7 +24,7 @@ interface Role {
 }
 
 interface RoleAssignment {
-  id?: string; // Changed from assignmentId to match backend schema
+  id?: string;
   userId: string;
   roleId: string;
   isActive: boolean;
@@ -40,110 +42,110 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
   userId, 
   onRoleChange 
 }) => {
-  const [users, setUsers] = useState<User[]>([]);
-  const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
+  const queryClient = useQueryClient();
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [userRoles, setUserRoles] = useState<Role[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [rolesLoading, setRolesLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showRoleModal, setShowRoleModal] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
 
-  // Load users and roles
-  useEffect(() => {
-    loadUsers();
-    loadRoles();
-  }, []);
+  // Use shared hooks for data
+  const { data: availableRoles = [], isLoading: loadingRoles } = useRoles();
+  const { data: users = [], isLoading: loadingUsers } = useUsers(null);
 
   // Auto-select user if userId prop is provided
   useEffect(() => {
-    if (userId && users.length > 0) {
-      const user = users.find(u => u.userId === userId);
-      if (user) {
-        setSelectedUser(user);
-        loadUserRoles(userId);
+    if (userId) {
+      // Try to find user in users list first
+      if (users.length > 0) {
+        const user = users.find((u: any) => {
+          const uId = u.user?.userId || u.userId || u.user?.id || u.id;
+          return uId === userId;
+        });
+        if (user) {
+          // Normalize user object if needed
+          const normalizedUser = user.user ? { ...user.user, roles: user.roles } : user;
+          setSelectedUser(normalizedUser);
+        } else {
+          // User not found in list, create a minimal user object
+          setSelectedUser({
+            userId: userId,
+            email: '',
+            name: 'Loading...',
+            isActive: true,
+            isTenantAdmin: false,
+            onboardingCompleted: true
+          });
+        }
+      } else {
+        // Users list not loaded yet, create a minimal user object
+        setSelectedUser({
+          userId: userId,
+          email: '',
+          name: 'Loading...',
+          isActive: true,
+          isTenantAdmin: false,
+          onboardingCompleted: true
+        });
       }
+      // Always load roles when userId is provided, regardless of users list
+      loadUserRoles(userId);
     }
   }, [userId, users]);
 
-  const loadUsers = async () => {
-    try {
-      setLoading(true);
-      console.log('📥 Loading users from /admin/users...');
-      const response = await api.get('/admin/users');
-      console.log('👥 Users API Response:', response.data);
-      
-      if (response.data.success) {
-        const userData = response.data.data;
-        const usersList = userData.users || userData || [];
-        console.log('✅ Users loaded:', usersList.length, 'users');
-        setUsers(usersList);
-      } else {
-        console.error('❌ Users API returned success: false', response.data);
-        toast.error(response.data.message || 'Failed to load users');
-      }
-    } catch (error: any) {
-      console.error('❌ Failed to load users:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to load users';
-      toast.error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadRoles = async () => {
-    try {
-      console.log('📥 Loading roles from /permissions/roles...');
-      const response = await api.get('/permissions/roles');
-      console.log('🎭 Roles API Response:', response.data);
-      
-      if (response.data.success) {
-        const rolesData = response.data.data;
-        const rolesList = rolesData.roles || rolesData || [];
-        console.log('✅ Roles loaded:', rolesList.length, 'roles');
-        setAvailableRoles(rolesList);
-      } else {
-        console.error('❌ Roles API returned success: false', response.data);
-        toast.error(response.data.message || 'Failed to load roles');
-      }
-    } catch (error: any) {
-      console.error('❌ Failed to load roles:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to load roles';
-      toast.error(errorMessage);
-    }
-  };
-
   const loadUserRoles = async (selectedUserId: string) => {
     try {
-      setLoading(true);
+      setRolesLoading(true);
       console.log(`📥 Loading roles for user ${selectedUserId}...`);
       const response = await api.get(`/admin/users/${selectedUserId}/roles`);
-      console.log('🔐 User roles API Response:', response.data);
+      console.log(`📥 Roles API response:`, response.data);
       
       if (response.data.success) {
-        const rolesData = response.data.data;
-        const rolesList = rolesData.roles || rolesData || [];
-        console.log('✅ User roles loaded:', rolesList.length, 'roles');
+        const rolesData = response.data.data || response.data.roles || [];
+        // Ensure roles have all required fields
+        const rolesList = Array.isArray(rolesData) ? rolesData.map((role: any) => ({
+          roleId: role.roleId,
+          roleName: role.roleName,
+          description: role.description || '',
+          color: role.color || '#6b7280',
+          icon: role.icon || '👤',
+          permissions: role.permissions || {},
+          isSystemRole: role.isSystemRole || false
+        })) : [];
+        console.log(`✅ Loaded ${rolesList.length} roles for user`);
         setUserRoles(rolesList);
       } else {
-        console.error('❌ User roles API returned success: false', response.data);
+        console.warn('⚠️ Roles API returned success: false', response.data.message);
         toast.error(response.data.message || 'Failed to load user roles');
         setUserRoles([]);
       }
     } catch (error: any) {
       console.error('❌ Failed to load user roles:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to load user roles';
-      toast.error(errorMessage);
+      console.error('❌ Error details:', error.response?.data || error.message);
+      toast.error(error.response?.data?.message || 'Failed to load user roles');
       setUserRoles([]);
     } finally {
-      setLoading(false);
+      setRolesLoading(false);
     }
   };
 
-  const handleUserSelect = (user: User) => {
-    setSelectedUser(user);
-    loadUserRoles(user.userId);
+  const handleUserSelect = (user: any) => {
+    // Handle both raw user objects and the format from useUsers
+    const userObj = user.user || user;
+    setSelectedUser(userObj);
+    loadUserRoles(userObj.userId || userObj.id);
     setShowRoleModal(true);
+  };
+
+  const invalidateQueries = () => {
+    // Invalidate multiple related queries
+    queryClient.invalidateQueries({ queryKey: ['users'] });
+    queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+    queryClient.invalidateQueries({ queryKey: ['user-roles', selectedUser?.userId] });
+    
+    if (selectedUser) {
+       queryClient.invalidateQueries({ queryKey: ['auth-status'] }); // Refresh auth status if it's the current user
+    }
   };
 
   const handleAssignRole = async (roleId: string) => {
@@ -151,54 +153,29 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
 
     try {
       setSaving(true);
-      console.log(`🔄 Assigning role ${roleId} to user ${selectedUser.userId}...`);
       
       const requestData = {
         userId: selectedUser.userId,
         roleId: roleId
       };
-      console.log('📤 Role assignment request:', requestData);
       
       const response = await api.post('/admin/users/assign-role', requestData);
-      console.log('✅ Role assignment response:', response.data);
 
       if (response.data.success) {
-        const assignedRole = availableRoles.find(r => r.roleId === roleId);
-        toast.success(`Role "${assignedRole?.roleName || roleId}" assigned successfully to ${selectedUser.name}`);
+        const assignedRole = availableRoles.find((r: any) => r.roleId === roleId);
+        toast.success(`Role "${assignedRole?.roleName || roleId}" assigned successfully`);
         
-        // Reload user roles to get fresh data
         await loadUserRoles(selectedUser.userId);
-        
-        // Trigger permission refresh notification
-        localStorage.setItem('user_permissions_changed', Date.now().toString());
-        console.log('🔔 Permission refresh notification triggered');
-        
-        // Notify parent component
+        invalidateQueries();
         onRoleChange?.(selectedUser.userId, userRoles);
       } else {
-        console.error('❌ Role assignment failed:', response.data);
         toast.error(response.data.message || 'Failed to assign role');
       }
     } catch (error: any) {
-      console.error('❌ Role assignment error:', error);
-      
       if (error.response?.status === 409) {
-        // Handle duplicate assignment with detailed message
-        const errorData = error.response.data;
-        if (errorData.details?.existingAssignment) {
-          const existingAssignment = errorData.details.existingAssignment;
-          const assignedDate = new Date(existingAssignment.assignedAt).toLocaleDateString();
-          toast.error(`Role already assigned since ${assignedDate}`, {
-            duration: 4000,
-            icon: '⚠️'
-          });
-          console.log('ℹ️ Existing assignment details:', existingAssignment);
-        } else {
-          toast.error(errorData.message || 'Role is already assigned to this user');
-        }
+        toast.error('Role is already assigned to this user');
       } else {
-        const errorMessage = error.response?.data?.message || error.message || 'Failed to assign role';
-        toast.error(errorMessage);
+        toast.error(error.response?.data?.message || 'Failed to assign role');
       }
     } finally {
       setSaving(false);
@@ -210,52 +187,23 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
 
     try {
       setSaving(true);
-      console.log(`🔄 Removing role ${roleId} from user ${selectedUser.userId}...`);
       
       const response = await api.delete(`/admin/users/${selectedUser.userId}/roles/${roleId}`);
-      console.log('✅ Role removal response:', response.data);
 
       if (response.data.success) {
         const removedRole = userRoles.find(r => r.roleId === roleId);
-        toast.success(`Role "${removedRole?.roleName || roleId}" removed successfully from ${selectedUser.name}`);
+        toast.success(`Role "${removedRole?.roleName || roleId}" removed successfully`);
         
-        // Reload user roles to get fresh data
         await loadUserRoles(selectedUser.userId);
-        
-        // Trigger permission refresh notification
-        localStorage.setItem('user_permissions_changed', Date.now().toString());
-        console.log('🔔 Permission refresh notification triggered');
-        
-        // Notify parent component
+        invalidateQueries();
         onRoleChange?.(selectedUser.userId, userRoles);
       } else {
-        console.error('❌ Role removal failed:', response.data);
         toast.error(response.data.message || 'Failed to remove role');
       }
     } catch (error: any) {
-      console.error('❌ Role removal error:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to remove role';
-      toast.error(errorMessage);
+      toast.error(error.response?.data?.message || 'Failed to remove role');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    try {
-      setRefreshing(true);
-      console.log('🔄 Refreshing all data...');
-      await Promise.all([
-        loadUsers(),
-        loadRoles(),
-        selectedUser ? loadUserRoles(selectedUser.userId) : Promise.resolve()
-      ]);
-      toast.success('Data refreshed successfully');
-    } catch (error) {
-      console.error('❌ Failed to refresh data:', error);
-      toast.error('Failed to refresh data');
-    } finally {
-      setRefreshing(false);
     }
   };
 
@@ -264,7 +212,7 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
   };
 
   const availableRolesToAssign = availableRoles.filter(
-    role => !userRoles.some(userRole => userRole.roleId === role.roleId)
+    (role: any) => !userRoles.some(userRole => userRole.roleId === role.roleId)
   );
 
   return (
@@ -281,11 +229,13 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
           </div>
         </div>
         <button
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={() => {
+            queryClient.invalidateQueries({ queryKey: ['users'] });
+            queryClient.invalidateQueries({ queryKey: ['roles'] });
+          }}
+          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
         >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          <RefreshCw className="w-4 h-4" />
           Refresh
         </button>
       </div>
@@ -299,7 +249,7 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
           </div>
           
           <div className="p-4">
-            {loading ? (
+            {loadingUsers ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
                 <p className="text-gray-600 mt-2">Loading users...</p>
@@ -308,47 +258,44 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
               <div className="text-center py-8">
                 <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                 <p className="text-gray-600">No users found</p>
-                <button
-                  onClick={loadUsers}
-                  className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
-                >
-                  Try again
-                </button>
               </div>
             ) : (
-              <div className="grid gap-3">
-                {users.map(user => (
-                  <div
-                    key={user.userId}
-                    onClick={() => handleUserSelect(user)}
-                    className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                        <Users className="w-4 h-4 text-gray-600" />
+              <div className="grid gap-3 max-h-[400px] overflow-y-auto">
+                {users.map((item: any) => {
+                  const user = item.user || item;
+                  return (
+                    <div
+                      key={user.userId || user.id}
+                      onClick={() => handleUserSelect(item)}
+                      className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                          <Users className="w-4 h-4 text-gray-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{user.firstName} {user.lastName}</p>
+                          <p className="text-sm text-gray-600">{user.email}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{user.name}</p>
-                        <p className="text-sm text-gray-600">{user.email}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {user.isTenantAdmin && (
-                        <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded">
-                          Admin
+                      <div className="flex items-center gap-2">
+                        {user.isTenantAdmin && (
+                          <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded">
+                            Admin
+                          </span>
+                        )}
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${
+                          user.isActive !== false
+                            ? 'bg-green-100 text-green-700' 
+                            : 'bg-gray-100 text-gray-700'
+                        }`}>
+                          {user.isActive !== false ? 'Active' : 'Inactive'}
                         </span>
-                      )}
-                      <span className={`px-2 py-1 text-xs font-medium rounded ${
-                        user.isActive 
-                          ? 'bg-green-100 text-green-700' 
-                          : 'bg-gray-100 text-gray-700'
-                      }`}>
-                        {user.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                      <Edit2 className="w-4 h-4 text-gray-400" />
+                        <Edit2 className="w-4 h-4 text-gray-400" />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -358,73 +305,60 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
       {/* Role Management Modal */}
       {(showRoleModal || userId) && selectedUser && (
         <div className={userId ? '' : 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'}>
-          <div className={`bg-white rounded-lg ${userId ? 'border border-gray-200' : 'max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto'}`}>
+          <div className={`bg-white rounded-lg ${userId ? 'border border-gray-200' : 'max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto shadow-xl'}`}>
             {/* Modal Header */}
-            <div className="p-6 border-b border-gray-200">
+            <div className="p-6 border-b border-gray-200 bg-gray-50 rounded-t-lg">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">
-                    Manage Roles: {selectedUser.name}
+                    Manage Roles: {selectedUser.name || `${selectedUser.firstName || ''} ${selectedUser.lastName || ''}`.trim() || selectedUser.email}
                   </h3>
                   <p className="text-sm text-gray-600">{selectedUser.email}</p>
                 </div>
-                <div className="flex items-center gap-2">
+                {!userId && (
                   <button
-                    onClick={() => selectedUser && loadUserRoles(selectedUser.userId)}
-                    disabled={loading}
-                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                    onClick={() => setShowRoleModal(false)}
+                    className="p-2 hover:bg-gray-200 rounded-full transition-colors"
                   >
-                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                    <X className="w-5 h-5 text-gray-600" />
                   </button>
-                  {!userId && (
-                    <button
-                      onClick={() => setShowRoleModal(false)}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                      <X className="w-5 h-5 text-gray-600" />
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
             </div>
 
             {/* Current Roles */}
             <div className="p-6 border-b border-gray-200">
-              <h4 className="text-md font-medium text-gray-900 mb-3">Current Roles</h4>
-              {loading ? (
+              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-4">Current Roles</h4>
+              {rolesLoading ? (
                 <div className="text-center py-4">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-                  <p className="text-gray-600 mt-2 text-sm">Loading roles...</p>
                 </div>
               ) : userRoles.length === 0 ? (
-                <div className="text-center py-6">
-                  <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-600">No roles assigned</p>
-                  <p className="text-sm text-gray-500 mt-1">Assign roles below to grant permissions</p>
+                <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                  <Shield className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-gray-600 font-medium">No roles assigned</p>
+                  <p className="text-sm text-gray-500">Assign roles below to grant permissions</p>
                 </div>
               ) : (
-                <div className="grid gap-2">
+                <div className="space-y-3">
                   {userRoles.map(role => (
                     <div
                       key={role.roleId}
-                      className="flex items-center justify-between p-3 border border-gray-200 rounded-lg"
+                      className="flex items-center justify-between p-3 border border-gray-200 rounded-lg bg-white shadow-sm"
                     >
                       <div className="flex items-center gap-3">
                         <div 
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: getRoleColor(role.color) }}
-                        />
+                          className="w-10 h-10 rounded-lg flex items-center justify-center"
+                          style={{ backgroundColor: `${getRoleColor(role.color)}20` }}
+                        >
+                          <Shield className="w-5 h-5" style={{ color: getRoleColor(role.color) }} />
+                        </div>
                         <div>
                           <p className="font-medium text-gray-900">{role.roleName}</p>
                           {role.description && (
                             <p className="text-sm text-gray-600">{role.description}</p>
                           )}
                         </div>
-                        {role.isSystemRole && (
-                          <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
-                            System
-                          </span>
-                        )}
                       </div>
                       <button
                         onClick={() => handleRemoveRole(role.roleId)}
@@ -440,50 +374,51 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
               )}
             </div>
 
-            {/* Available Roles to Assign */}
+            {/* Available Roles */}
             <div className="p-6">
-              <h4 className="text-md font-medium text-gray-900 mb-3">Assign New Role</h4>
-              {availableRolesToAssign.length === 0 ? (
+              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-4">Assign New Role</h4>
+              {loadingRoles ? (
                 <div className="text-center py-6">
-                  <UserCheck className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-600">All available roles are already assigned</p>
-                  <p className="text-sm text-gray-500 mt-1">Remove existing roles to assign different ones</p>
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-sm text-gray-500 mt-2">Loading available roles...</p>
+                </div>
+              ) : availableRolesToAssign.length === 0 ? (
+                <div className="text-center py-6 text-gray-500">
+                  {availableRoles.length === 0 ? 'No roles available' : 'All available roles are already assigned.'}
                 </div>
               ) : (
-                <div className="grid gap-2">
-                  {availableRolesToAssign.map(role => (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {availableRolesToAssign.map((role: any) => (
                     <div
                       key={role.roleId}
-                      className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                      className="p-3 border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all bg-white"
                     >
-                      <div className="flex items-center gap-3">
-                        <div 
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: getRoleColor(role.color) }}
-                        />
-                        <div>
-                          <p className="font-medium text-gray-900">{role.roleName}</p>
-                          {role.description && (
-                            <p className="text-sm text-gray-600">{role.description}</p>
-                          )}
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                           <div 
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: getRoleColor(role.color) }}
+                          />
+                          <span className="font-medium text-gray-900 truncate" title={role.roleName}>
+                            {role.roleName}
+                          </span>
                         </div>
                         {role.isSystemRole && (
-                          <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                          <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-[10px] uppercase font-bold rounded">
                             System
                           </span>
                         )}
                       </div>
+                      <p className="text-xs text-gray-500 mb-3 line-clamp-2 h-8">
+                        {role.description || 'No description provided'}
+                      </p>
                       <button
                         onClick={() => handleAssignRole(role.roleId)}
                         disabled={saving}
-                        className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
                       >
-                        {saving ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        ) : (
-                          <Plus className="w-4 h-4" />
-                        )}
-                        Assign
+                         {saving ? <div className="animate-spin w-3 h-3 border-b-2 border-blue-700 rounded-full" /> : <Plus className="w-3 h-3" />}
+                         Assign Role
                       </button>
                     </div>
                   ))}

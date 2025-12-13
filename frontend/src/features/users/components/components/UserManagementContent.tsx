@@ -132,6 +132,9 @@ export function UserManagementContent() {
                 case 'assignRoles':
                   actions.openModal('roleAssign', user);
                   break;
+                case 'manageAccess':
+                  actions.openModal('access', user);
+                  break;
                 default:
                   console.warn('Unknown user action:', action);
               }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 
 // Types based on the hierarchy chart component
@@ -34,28 +34,18 @@ interface Entity {
 
 
 export function useOrganizationHierarchy(tenantId?: string) {
-  const [hierarchy, setHierarchy] = useState<Entity[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchHierarchy = async (forceTenantId?: string) => {
-    const targetTenantId = forceTenantId || tenantId;
-    if (!targetTenantId) {
-      setError('No tenant ID provided');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['organizations', 'hierarchy', tenantId],
+    queryFn: async () => {
+      if (!tenantId) {
+        throw new Error('No tenant ID provided');
+      }
 
       // REAL API CALL - Now working with the correct response format
-      const response = await api(`/admin/entities/hierarchy/${targetTenantId}`, {
+      const response = await api(`/admin/entities/hierarchy/${tenantId}`, {
         method: 'GET',
         headers: { 'X-Application': 'crm' }
       });
-
 
       // Extract hierarchy data from the API response
       // The response structure is: axios_response.data = api_response
@@ -67,31 +57,47 @@ export function useOrganizationHierarchy(tenantId?: string) {
       } else if (response && response.data && response.data.hierarchy && Array.isArray(response.data.hierarchy)) {
         hierarchyData = response.data.hierarchy;
       } else {
-        setError('Failed to load hierarchy - unexpected response format');
-        setHierarchy([]);
-        return;
+        throw new Error('Failed to load hierarchy - unexpected response format');
       }
 
-      setHierarchy(hierarchyData);
+      // Parse credits from strings to numbers recursively
+      const parseCredits = (entities: any[]): Entity[] => {
+        return entities.map(entity => {
+          const parsedEntity: Entity = {
+            ...entity,
+            availableCredits: entity.availableCredits !== undefined && entity.availableCredits !== null
+              ? (typeof entity.availableCredits === 'string' 
+                  ? parseFloat(entity.availableCredits) || 0 
+                  : typeof entity.availableCredits === 'number' 
+                    ? entity.availableCredits 
+                    : 0)
+              : undefined,
+            reservedCredits: entity.reservedCredits !== undefined && entity.reservedCredits !== null
+              ? (typeof entity.reservedCredits === 'string' 
+                  ? parseFloat(entity.reservedCredits) || 0 
+                  : typeof entity.reservedCredits === 'number' 
+                    ? entity.reservedCredits 
+                    : 0)
+              : undefined,
+            children: entity.children && Array.isArray(entity.children) 
+              ? parseCredits(entity.children) 
+              : []
+          };
+          return parsedEntity;
+        });
+      };
 
-    } catch (err: any) {
-      setError(`Failed to fetch organization hierarchy: ${err?.message || 'Unknown error'}`);
-      setHierarchy([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (tenantId) {
-      fetchHierarchy();
-    }
-  }, [tenantId]);
+      return parseCredits(hierarchyData) as Entity[];
+    },
+    enabled: !!tenantId,
+    staleTime: 30 * 1000, // 30 seconds - data is considered fresh for 30 seconds
+    refetchOnWindowFocus: true, // Refetch when window regains focus
+  });
 
   return {
-    hierarchy,
-    loading,
-    error,
-    refetch: fetchHierarchy
+    hierarchy: data || null,
+    loading: isLoading,
+    error: error ? (error as Error).message : null,
+    refetch
   };
 }

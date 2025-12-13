@@ -3,7 +3,7 @@
 
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { trackUsage } from '../middleware/usage.js';
-import PermissionMatrixService from '../services/permission-matrix-service.js';
+import { permissionMatrixService as PermissionMatrixService } from '../features/roles/index.js';
 import { 
   BUSINESS_SUITE_MATRIX, 
   PLAN_ACCESS_MATRIX, 

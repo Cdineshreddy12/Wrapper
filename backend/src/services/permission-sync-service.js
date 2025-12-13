@@ -8,7 +8,7 @@ import { db } from '../db/index.js';
 import { eq } from 'drizzle-orm';
 import { applications, organizationApplications } from '../db/schema/suite-schema.js';
 import { tenants } from '../db/schema/index.js';
-import CustomRoleService from './custom-role-service.js';
+import { customRoleService as CustomRoleService } from '../features/roles/index.js';
 import { PERMISSION_TIERS } from '../config/permission-tiers.js';
 
 export class AutoPermissionSyncService {

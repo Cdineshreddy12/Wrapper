@@ -1,6 +1,6 @@
 // import trialManager from '../utils/trial-manager.js'; // Temporarily disabled - file missing
 import Logger from '../utils/logger.js';
-import { CreditService } from '../services/credit-service.js';
+import { CreditService } from '../features/credits/index.js';
 
 // Middleware to check if trial is expired and restrict operations
 export async function trialRestrictionMiddleware(request, reply) {
