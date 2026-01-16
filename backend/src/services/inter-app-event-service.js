@@ -1,7 +1,7 @@
 import { db } from '../db/index.js';
 import { eventTracking } from '../db/schema/index.js';
 import { eq, and, sql } from 'drizzle-orm';
-import { crmSyncStreams } from '../utils/redis.js';
+import { amazonMQPublisher } from '../utils/amazon-mq-publisher.js';
 
 /**
  * Inter-Application Event Service
@@ -22,8 +22,8 @@ export class InterAppEventService {
     publishedBy = 'system'
   }) {
     try {
-      // Publish to Redis stream
-      const publishResult = await crmSyncStreams.publishInterAppEvent(
+      // Publish to Amazon MQ (replaces Redis Streams)
+      const publishResult = await amazonMQPublisher.publishInterAppEvent({
         eventType,
         sourceApplication,
         targetApplication,
@@ -31,16 +31,16 @@ export class InterAppEventService {
         entityId,
         eventData,
         publishedBy
-      );
+      });
 
-      if (publishResult) {
+      if (publishResult && publishResult.success) {
         // Track the event in our event tracking table
         await this.trackPublishedEvent({
           eventId: publishResult.eventId,
           eventType,
           tenantId,
           entityId,
-          streamKey: 'inter-app-events',
+          streamKey: 'inter-app-events', // Keep for backward compatibility with tracking
           sourceApplication,
           targetApplication,
           eventData,

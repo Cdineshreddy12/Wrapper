@@ -8,7 +8,7 @@ import { applications as applicationsSchema, organizationApplications } from '..
 import { eq, and } from 'drizzle-orm';
 import Logger from '../../../utils/logger.js';
 import ActivityLogger, { ACTIVITY_TYPES, RESOURCE_TYPES } from '../../../services/activityLogger.js';
-import { crmSyncStreams } from '../../../utils/redis.js';
+// crmSyncStreams removed - migrated to RabbitMQ (AmazonMQPublisher)
 import { PermissionMatrixUtils } from '../../../data/permission-matrix.js';
 
 /**
@@ -18,11 +18,6 @@ import { PermissionMatrixUtils } from '../../../data/permission-matrix.js';
  */
 export async function publishRoleEventToApplications(eventType, tenantId, roleId, roleData) {
   try {
-    // Ensure Redis is connected before publishing
-    if (!crmSyncStreams.redis.isConnected) {
-      console.log('🔗 Connecting to Redis for event publishing...');
-      await crmSyncStreams.redis.connect();
-    }
 
     // Parse permissions if they're stored as JSON string
     let permissions = roleData.permissions;
@@ -131,28 +126,22 @@ export async function publishRoleEventToApplications(eventType, tenantId, roleId
         })
       };
 
-      // Convert eventType to stream format (role.created → role_created)
-      const streamEventType = eventType.replace('.', '_');
-      const streamKey = `${appCode}:sync:role:${streamEventType}`;
-
       try {
-        // Use the existing publishToStream method with the specific stream key
-        const streamMessage = {
-          eventId: `${appCode}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          timestamp: new Date().toISOString(),
-          eventType: eventType,
-          tenantId: tenantId,
-          entityType: 'role',
-          entityId: roleId,
-          data: eventData,
-          publishedBy: roleData.createdBy || roleData.updatedBy || roleData.deletedBy || 'system'
-        };
+        // Use AmazonMQPublisher to publish role event
+        const { amazonMQPublisher } = await import('../../../utils/amazon-mq-publisher.js');
+        
+        await amazonMQPublisher.publishRoleEvent(
+          appCode, // Target application (crm, hr, etc.)
+          eventType, // Already in format: role.created, role.updated, role.deleted
+          tenantId,
+          roleId,
+          eventData,
+          roleData.createdBy || roleData.updatedBy || roleData.deletedBy || 'system'
+        );
 
-        await crmSyncStreams.publishToStream(streamKey, streamMessage);
-
-        console.log(`✅ Published ${eventType} event to ${streamKey} for role ${roleId}`);
+        console.log(`✅ Published ${eventType} event to ${appCode} for role ${roleId}`);
       } catch (error) {
-        console.error(`❌ Failed to publish ${eventType} event to ${streamKey}:`, error.message);
+        console.error(`❌ Failed to publish ${eventType} event to ${appCode}:`, error.message);
         // Don't throw - continue with other applications
       }
     });

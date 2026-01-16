@@ -152,37 +152,42 @@ export class OrganizationAssignmentService {
 
   /**
    * Core publishing logic with retry mechanism
+   * Migrated to RabbitMQ (Amazon MQ)
    */
   static async publishWithRetry(event, tenantId) {
     let lastError;
 
     for (let attempt = 1; attempt <= this.MAX_RETRY_ATTEMPTS; attempt++) {
       try {
-      // Publish to Redis Stream
-      const streamResult = await crmSyncStreams.publishToStream(this.STREAM_KEY, event);
-      console.log(`✅ [ORG-ASSIGNMENT] Published to Redis stream: ${this.STREAM_KEY}`, {
-        streamId: streamResult,
-        eventType: event.eventType,
-        assignmentId: event.data?.assignmentId,
-        attempt
-      });
+        // Import AmazonMQPublisher
+        const { amazonMQPublisher } = await import('../../../utils/amazon-mq-publisher.js');
+        
+        // Extract event type and data
+        const eventType = event.eventType || event.data?.eventType;
+        const assignmentData = event.data || event;
+        
+        // Publish to RabbitMQ
+        const result = await amazonMQPublisher.publishOrgAssignmentEvent(
+          'crm', // Target application
+          eventType,
+          tenantId,
+          assignmentData,
+          assignmentData.assignedBy || assignmentData.updatedBy || 'system'
+        );
+        
+        console.log(`✅ [ORG-ASSIGNMENT] Published to RabbitMQ: ${eventType}`, {
+          eventId: result.eventId,
+          routingKey: result.routingKey,
+          assignmentId: assignmentData.assignmentId,
+          attempt
+        });
 
-      // Publish to Pub/Sub channel
-      const redis = getRedis();
-      let pubsubResult = null;
-      if (redis && redis.isConnected) {
-        const channel = `crm:${tenantId}:organization-assignments`;
-        pubsubResult = await redis.publish(channel, JSON.stringify(event));
-        console.log(`✅ [ORG-ASSIGNMENT] Published to pub/sub channel: ${channel} (${pubsubResult} subscribers)`);
-      } else {
-        console.warn(`⚠️ [ORG-ASSIGNMENT] Redis not connected, skipping pub/sub publish`);
-      }
-
-      return {
-        stream: streamResult,
-        pubsub: pubsubResult,
-        attempts: attempt
-      };
+        return {
+          success: true,
+          eventId: result.eventId,
+          routingKey: result.routingKey,
+          attempts: attempt
+        };
 
       } catch (error) {
         lastError = error;
@@ -296,20 +301,10 @@ export class OrganizationAssignmentService {
     };
 
     try {
-      // Publish to dedicated organization assignments Redis Stream
-      const streamKey = `crm:organization-assignments`;
-      const streamResult = await crmSyncStreams.publishToStream(streamKey, event);
-
-      // Also publish to pub/sub channel for CRM consumer
-      const redis = getRedis();
-      if (redis && redis.isConnected) {
-        const channel = `crm:${assignmentData.tenantId}:organization-assignments`;
-        await redis.publish(channel, JSON.stringify(event));
-        console.log(`📡 Published to pub/sub channel: ${channel}`);
-      }
-
+      // Use publishWithRetry which now uses RabbitMQ
+      const result = await this.publishWithRetry(event, assignmentData.tenantId);
       console.log(`📡 Published organization assignment deactivated event: ${event.data.assignmentId}`);
-      return streamResult;
+      return result;
     } catch (error) {
       console.error('❌ Failed to publish organization assignment deactivated event:', error);
       throw error;
@@ -338,20 +333,10 @@ export class OrganizationAssignmentService {
     };
 
     try {
-      // Publish to dedicated organization assignments Redis Stream
-      const streamKey = `crm:organization-assignments`;
-      const streamResult = await crmSyncStreams.publishToStream(streamKey, event);
-
-      // Also publish to pub/sub channel for CRM consumer
-      const redis = getRedis();
-      if (redis && redis.isConnected) {
-        const channel = `crm:${assignmentData.tenantId}:organization-assignments`;
-        await redis.publish(channel, JSON.stringify(event));
-        console.log(`📡 Published to pub/sub channel: ${channel}`);
-      }
-
+      // Use publishWithRetry which now uses RabbitMQ
+      const result = await this.publishWithRetry(event, assignmentData.tenantId);
       console.log(`📡 Published organization assignment activated event: ${event.data.assignmentId}`);
-      return streamResult;
+      return result;
     } catch (error) {
       console.error('❌ Failed to publish organization assignment activated event:', error);
       throw error;
@@ -392,27 +377,11 @@ export class OrganizationAssignmentService {
     };
 
     try {
-      // Publish to dedicated organization assignments Redis Stream
-      const streamKey = `crm:organization-assignments`;
-      const streamResult = await crmSyncStreams.publishToStream(streamKey, event);
-      console.log(`✅ [ORG-ASSIGNMENT-DELETE] Published to Redis stream: ${streamKey}`, {
-        streamId: streamResult,
-        assignmentId: assignmentData.assignmentId
-      });
-
-      // Also publish to pub/sub channel for CRM consumer
-      const redis = getRedis();
-      if (redis && redis.isConnected) {
-        const channel = `crm:${assignmentData.tenantId}:organization-assignments`;
-        const pubsubResult = await redis.publish(channel, JSON.stringify(event));
-        console.log(`✅ [ORG-ASSIGNMENT-DELETE] Published to pub/sub channel: ${channel} (${pubsubResult} subscribers)`);
-      } else {
-        console.warn(`⚠️ [ORG-ASSIGNMENT-DELETE] Redis not connected, skipping pub/sub publish`);
-      }
-
+      // Use publishWithRetry which now uses RabbitMQ
+      const result = await this.publishWithRetry(event, assignmentData.tenantId);
       const duration = Date.now() - startTime;
       console.log(`✅ [ORG-ASSIGNMENT-DELETE] Successfully published deletion event: ${event.data.assignmentId} (${duration}ms)`);
-      return streamResult;
+      return result;
     } catch (error) {
       const duration = Date.now() - startTime;
       console.error(`❌ [ORG-ASSIGNMENT-DELETE] Failed to publish deletion event (${duration}ms):`, {

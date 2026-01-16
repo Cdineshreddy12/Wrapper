@@ -475,192 +475,121 @@ class CrmSyncStreams {
 
   /**
    * Publish user lifecycle event
-   * According to CRM requirements, the data field must be a JSON string
+   * Migrated to RabbitMQ (Amazon MQ)
    */
   async publishUserEvent(tenantId, eventType, userData, metadata = {}) {
-    const streamKey = `${this.streamPrefix}:user:${eventType}`;
-
-    // Prepare data according to CRM requirements
-    // The data field should be a JSON string, not an object
-    const eventData = {
-      userId: userData.userId,
-      email: userData.email,
-      ...(userData.firstName && { firstName: userData.firstName }),
-      ...(userData.lastName && { lastName: userData.lastName }),
-      ...(userData.name && { name: userData.name }),
-      ...(userData.isActive !== undefined && { isActive: userData.isActive }),
-      ...(userData.createdAt && { createdAt: typeof userData.createdAt === 'string' ? userData.createdAt : userData.createdAt.toISOString() }),
-      // For deactivation events
-      ...(userData.deactivatedAt && { deactivatedAt: typeof userData.deactivatedAt === 'string' ? userData.deactivatedAt : userData.deactivatedAt.toISOString() }),
-      ...(userData.deactivatedBy && { deactivatedBy: userData.deactivatedBy }),
-      // For deletion events
-      ...(userData.deletedAt && { deletedAt: typeof userData.deletedAt === 'string' ? userData.deletedAt : userData.deletedAt.toISOString() }),
-      ...(userData.deletedBy && { deletedBy: userData.deletedBy }),
-      ...(userData.reason && { reason: userData.reason })
-    };
-
-    const message = {
-      streamId: streamKey,
-      messageId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      sourceApp: 'wrapper-api',
-      eventType,
-      entityType: 'user',
-      entityId: userData.userId,
+    const { amazonMQPublisher } = await import('./amazon-mq-publisher.js');
+    
+    // Normalize eventType: user_created -> user.created
+    const normalizedEventType = eventType.replace(/_/g, '.');
+    
+    return await amazonMQPublisher.publishUserEvent(
+      'crm', // Target application
+      normalizedEventType,
       tenantId,
-      action: eventType.replace('user_', ''),
-      data: JSON.stringify(eventData), // Data must be a JSON string per CRM requirements
-      metadata: JSON.stringify({
-        correlationId: `user_${userData.userId}_${Date.now()}`,
-        version: '1.0',
-        retryCount: 0,
-        sourceTimestamp: new Date().toISOString(),
-        ...metadata
-      })
-    };
-
-    return await this.publishToStream(streamKey, message);
+      userData.userId,
+      userData,
+      userData.createdBy || userData.updatedBy || userData.deletedBy || 'system'
+    );
   }
 
   /**
    * Publish role/permission event
-   * According to CRM requirements, the data field must be a JSON string
+   * Migrated to RabbitMQ (Amazon MQ)
    */
   async publishRoleEvent(tenantId, eventType, roleData, metadata = {}) {
-    const streamKey = `${this.streamPrefix}:permissions:${eventType}`;
-
-    const message = {
-      streamId: streamKey,
-      messageId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      sourceApp: 'wrapper-api',
-      eventType,
-      entityType: 'role_assignment',
-      entityId: roleData.assignmentId || roleData.roleId,
+    const { amazonMQPublisher } = await import('./amazon-mq-publisher.js');
+    
+    // Normalize eventType: role_assigned -> role.assigned
+    const normalizedEventType = eventType.replace(/_/g, '.');
+    
+    return await amazonMQPublisher.publishRoleEvent(
+      'crm', // Target application
+      normalizedEventType,
       tenantId,
-      action: eventType.replace('role_', ''),
-      data: JSON.stringify(roleData), // Data must be a JSON string per CRM requirements
-      metadata: JSON.stringify({
-        correlationId: `role_${roleData.userId || roleData.roleId}_${Date.now()}`,
-        version: '1.0',
-        retryCount: 0,
-        sourceTimestamp: new Date().toISOString(),
-        ...metadata
-      })
-    };
-
-    return await this.publishToStream(streamKey, message);
+      roleData.roleId || roleData.assignmentId,
+      roleData,
+      roleData.createdBy || roleData.updatedBy || roleData.deletedBy || 'system'
+    );
   }
 
   /**
    * Publish organization event
+   * Migrated to RabbitMQ (Amazon MQ)
    */
   async publishOrgEvent(tenantId, eventType, orgData, metadata = {}) {
-    const streamKey = `${this.streamPrefix}:organization:${eventType}`;
-
-    const message = {
-      streamId: streamKey,
-      messageId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      sourceApp: 'wrapper',
-      eventType,
-      entityType: 'organization',
-      entityId: orgData.orgCode || orgData.organizationId,
+    const { amazonMQPublisher } = await import('./amazon-mq-publisher.js');
+    
+    // Normalize eventType: org_created -> organization.created
+    const normalizedEventType = eventType.replace(/^org_/, 'organization.').replace(/_/g, '.');
+    
+    return await amazonMQPublisher.publishOrgEvent(
+      'crm', // Target application
+      normalizedEventType,
       tenantId,
-      action: eventType.replace('org_', '').replace('employee_', ''),
-      data: orgData,
-      metadata: {
-        correlationId: `org_${orgData.orgCode || orgData.organizationId}_${Date.now()}`,
-        version: '1.0',
-        retryCount: 0,
-        sourceTimestamp: new Date().toISOString(),
-        ...metadata
-      }
-    };
-
-    return await this.publishToStream(streamKey, message);
+      orgData.orgCode || orgData.organizationId,
+      { ...orgData, ...metadata },
+      orgData.createdBy || orgData.updatedBy || 'system'
+    );
   }
 
   /**
    * Publish credit/billing event
+   * Migrated to RabbitMQ (Amazon MQ)
    */
   async publishCreditEvent(tenantId, eventType, creditData, metadata = {}) {
-    const streamKey = `${this.streamPrefix}:credits:${eventType}`;
-
-    const message = {
-      streamId: streamKey,
-      messageId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      sourceApp: 'wrapper',
-      eventType,
-      entityType: 'credit',
-      entityId: creditData.allocationId || creditData.configId || `credit_${Date.now()}`,
+    const { amazonMQPublisher } = await import('./amazon-mq-publisher.js');
+    
+    // Normalize eventType: credit_allocated -> credit.allocated
+    const normalizedEventType = eventType.replace(/_/g, '.');
+    
+    return await amazonMQPublisher.publishCreditEvent(
+      'crm', // Target application
+      normalizedEventType,
       tenantId,
-      action: eventType.replace('credit_', ''),
-      data: creditData,
-      metadata: {
-        correlationId: `credit_${creditData.entityId || 'system'}_${Date.now()}`,
-        version: '1.0',
-        retryCount: 0,
-        sourceTimestamp: new Date().toISOString(),
-        ...metadata
-      }
-    };
-
-    return await this.publishToStream(streamKey, message);
+      { ...creditData, ...metadata },
+      'system'
+    );
   }
 
   /**
    * Publish credit allocation event (for CRM sync)
+   * Migrated to RabbitMQ (Amazon MQ)
    */
   async publishCreditAllocation(tenantId, entityId, amount, metadata = {}) {
-    const streamKey = 'credit-events';
-
-    const message = {
-      eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      eventType: 'credit.allocated',
+    const { amazonMQPublisher } = await import('./amazon-mq-publisher.js');
+    
+    console.log(`📡 Publishing credit allocation: ${amount} credits to ${entityId}`);
+    return await amazonMQPublisher.publishCreditAllocation(
+      'crm', // Target application
       tenantId,
       entityId,
       amount,
-      timestamp: new Date().toISOString(),
-      source: 'wrapper',
-      metadata: JSON.stringify({
-        allocationId: metadata.allocationId,
-        reason: metadata.reason || 'credit_allocation',
-        ...metadata
-      })
-    };
-
-    console.log(`📡 Publishing credit allocation: ${amount} credits to ${entityId}`);
-    return await this.publishToStream(streamKey, message);
+      metadata,
+      'system'
+    );
   }
 
   /**
    * Publish credit consumption event (from CRM)
+   * Migrated to RabbitMQ (Amazon MQ)
+   * Note: This is typically called by CRM, but kept here for backward compatibility
    */
   async publishCreditConsumption(tenantId, entityId, userId, amount, operationType, operationId, metadata = {}) {
-    const streamKey = 'credit-events';
-
-    const message = {
-      eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      eventType: 'credit.consumed',
+    const { amazonMQPublisher } = await import('./amazon-mq-publisher.js');
+    
+    console.log(`📡 Publishing credit consumption: ${amount} credits by ${userId} for ${operationType}`);
+    return await amazonMQPublisher.publishCreditConsumption(
+      'wrapper', // Target application (wrapper consumes CRM credit consumption events)
       tenantId,
       entityId,
       userId,
       amount,
       operationType,
       operationId,
-      timestamp: new Date().toISOString(),
-      source: 'crm',
-      metadata: JSON.stringify({
-        resourceType: metadata.resourceType,
-        resourceId: metadata.resourceId,
-        ...metadata
-      })
-    };
-
-    console.log(`📡 Publishing credit consumption: ${amount} credits by ${userId} for ${operationType}`);
-    return await this.publishToStream(streamKey, message);
+      metadata,
+      'system'
+    );
   }
 
   /**
@@ -684,65 +613,72 @@ class CrmSyncStreams {
 
   /**
    * Publish inter-application event (any app to any app)
+   * 
+   * @deprecated This method has been replaced by Amazon MQ publisher.
+   * Use amazonMQPublisher.publishInterAppEvent() instead.
+   * This method is kept for backward compatibility but will be removed in a future version.
    */
   async publishInterAppEvent(eventType, sourceApp, targetApp, tenantId, entityId, eventData = {}, publishedBy = 'system') {
-    const streamKey = 'inter-app-events';
-
-    const message = {
-      eventId: `inter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    console.warn('⚠️ publishInterAppEvent() is deprecated. Use amazonMQPublisher.publishInterAppEvent() instead.');
+    
+    // Delegate to Amazon MQ publisher
+    const { amazonMQPublisher } = await import('../utils/amazon-mq-publisher.js');
+    return await amazonMQPublisher.publishInterAppEvent({
       eventType,
       sourceApplication: sourceApp,
       targetApplication: targetApp,
       tenantId,
       entityId,
-      timestamp: new Date().toISOString(),
-      eventData: JSON.stringify(eventData),
+      eventData,
       publishedBy
-    };
-
-    console.log(`📡 Publishing inter-app event: ${sourceApp} → ${targetApp} (${eventType})`);
-    return await this.publishToStream(streamKey, message);
+    });
   }
 
   /**
    * Generic publish method to Redis Stream
+   * @deprecated Migrated to RabbitMQ. This method now delegates to AmazonMQPublisher.
+   * Use specific publish methods (publishUserEvent, publishRoleEvent, etc.) instead.
    */
   async publishToStream(streamKey, message) {
-    if (!this.redis.isConnected) {
-      console.warn('⚠️ Redis not connected, skipping stream publish');
-      return null;
+    console.warn('⚠️ publishToStream() is deprecated. Migrated to RabbitMQ. Use specific publish methods instead.');
+    
+    const { amazonMQPublisher } = await import('./amazon-mq-publisher.js');
+    
+    // Try to infer target application and event type from streamKey
+    let targetApplication = 'crm'; // Default
+    let eventType = message.eventType;
+    
+    // Parse streamKey patterns like: crm:sync:user:created, crm:sync:role:updated, etc.
+    if (streamKey.includes(':sync:')) {
+      const parts = streamKey.split(':');
+      if (parts.length >= 4) {
+        const entityType = parts[2]; // user, role, organization, etc.
+        const action = parts[3]; // created, updated, deleted, etc.
+        eventType = `${entityType}.${action}`;
+      }
+    } else if (streamKey.includes(':')) {
+      // Handle patterns like: crm:sync:role:created
+      const parts = streamKey.split(':');
+      if (parts.length >= 3) {
+        targetApplication = parts[0];
+        const entityType = parts[parts.length - 2];
+        const action = parts[parts.length - 1];
+        eventType = `${entityType}.${action}`;
+      }
     }
-
-    try {
-      // Convert message to Redis stream format
-      // If data/metadata are already JSON strings (per CRM requirements), don't double-stringify
-      const streamData = {};
-      Object.entries(message).forEach(([key, value]) => {
-        // If value is already a string (like data and metadata fields), use it as-is
-        // Otherwise, stringify it
-        if (typeof value === 'string') {
-          streamData[key] = value;
-        } else {
-          streamData[key] = JSON.stringify(value);
-        }
-      });
-
-      // Use XADD to add to stream
-      const result = await this.redis.client.xAdd(streamKey, '*', streamData);
-
-      console.log(`📡 Published to Redis Stream: ${streamKey} (ID: ${result})`);
-      console.log(`   Event: ${message.eventType}, Entity: ${message.entityId}`);
-
-      return {
-        streamKey,
-        messageId: result,
-        success: true
-      };
-
-    } catch (error) {
-      console.error(`❌ Failed to publish to Redis Stream ${streamKey}:`, error);
-      throw error;
-    }
+    
+    // Normalize eventType
+    const normalizedEventType = eventType.replace(/_/g, '.');
+    
+    return await amazonMQPublisher.publishInterAppEvent({
+      eventType: normalizedEventType,
+      sourceApplication: 'wrapper',
+      targetApplication,
+      tenantId: message.tenantId,
+      entityId: message.entityId || message.entityId,
+      eventData: typeof message.data === 'string' ? JSON.parse(message.data) : message.data,
+      publishedBy: message.publishedBy || 'system'
+    });
   }
 
   /**

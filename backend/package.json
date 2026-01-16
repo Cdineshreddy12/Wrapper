@@ -31,7 +31,8 @@
     "sync-permissions:dry-run": "node src/scripts/sync-permissions.js dry-run",
     "sync-permissions:app": "node src/scripts/sync-permissions.js app",
     "temporal:worker": "node temporal/worker.js",
-    "temporal:start": "node temporal/start-workflow.js"
+    "temporal:start": "node temporal/start-workflow.js",
+    "amazon-mq:setup-topology": "node ../../scripts/setup-amazon-mq-topology.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
@@ -74,7 +75,8 @@
     "winston": "^3.11.0",
     "winston-elasticsearch": "^0.15.9",
     "ws": "^8.18.3",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "amqplib": "^0.10.3"
   },
   "devDependencies": {
     "eslint": "^8.54.0",
