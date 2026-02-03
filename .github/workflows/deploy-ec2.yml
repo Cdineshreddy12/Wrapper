@@ -21,9 +21,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build frontend
+        working-directory: frontend
         run: |
-          cd frontend
           npm ci
+          cp .env.production .env
           npm run build
         env:
           CI: true
