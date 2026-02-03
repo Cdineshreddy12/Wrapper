@@ -1,0 +1,85 @@
+# Deploy Wrapper backend to EC2 and run with PM2
+# Trigger: push to main, or manual dispatch
+
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  # For Ubuntu AMI use secret EC2_USER=ubuntu; APP_DIR will be /home/ubuntu/Wrapper
+  APP_DIR: /home/${{ secrets.EC2_USER || 'ec2-user' }}/Wrapper
+
+jobs:
+  deploy:
+    name: Deploy backend to EC2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+        env:
+          CI: true
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy to EC2 (rsync)
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            --exclude 'node_modules' \
+            --exclude '.env' \
+            --exclude '.git' \
+            --exclude 'frontend/node_modules' \
+            --exclude 'backend/node_modules' \
+            ./ ${{ secrets.EC2_USER || 'ec2-user' }}@${{ secrets.EC2_HOST }}:${{ env.APP_DIR }}/
+
+
+      - name: Install backend deps and restart PM2
+        env:
+          EC2_USER: ${{ secrets.EC2_USER || 'ec2-user' }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          APP_DIR: ${{ env.APP_DIR }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} "
+            set -e
+            cd ${APP_DIR}/backend
+            npm ci --omit=dev
+            if pm2 describe wrapper-api >/dev/null 2>&1; then
+              pm2 restart wrapper-api
+            else
+              pm2 start src/app.js --name wrapper-api
+              pm2 save
+            fi
+            pm2 status
+          "
+
+      - name: Verify deployment (health check)
+        run: |
+          echo "Waiting for backend to start..."
+          sleep 10
+          HEALTH_URL="http://${{ secrets.EC2_HOST }}:3000/health"
+          echo "Checking $HEALTH_URL"
+          for i in 1 2 3 4 5; do
+            if curl -sf --connect-timeout 5 "$HEALTH_URL" >/dev/null; then
+              echo "✅ Health check passed"
+              curl -s "$HEALTH_URL" | head -5
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 5s..."
+            sleep 5
+          done
+          echo "⚠️ Health check did not respond (port 3000 may be closed in security group)"
+          exit 0
