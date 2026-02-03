@@ -241,7 +241,8 @@ fastify.addContentTypeParser(['application/json'], { parseAs: 'buffer' }, functi
 async function registerPlugins() {
   // Security
   await fastify.register(helmet, {
-    contentSecurityPolicy: false // Disable CSP for development
+    contentSecurityPolicy: false, // Disable CSP for development
+    hsts: false // Disable HSTS until HTTPS is configured
   });
 
   // CORS
