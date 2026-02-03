@@ -1,0 +1,44 @@
+# Elasticsearch data
+elasticsearch_data/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Playwright (OAuth/test profiles, reports, and local data - do not commit)
+frontend/playwright-oauth-profile/
+frontend/playwright-zopkit-profile/
+frontend/playwright-debug-screenshots/
+frontend/playwright-report/
+frontend/test-results/
+
+# Production
+build/
+dist/
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+.vscode/
+.idea/
+
+# Elasticsearch
+docker-compose.override.yml
