@@ -12,6 +12,7 @@ const PUBLIC_ROUTES = [
   '/logout',
   '/test-auth',
   '/api/auth',
+  '/api/version',
   '/api/webhooks',
   '/api/subscriptions/webhook',
   '/api/subscriptions/test-webhook',

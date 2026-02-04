@@ -148,3 +148,51 @@ export function getInitials(name: string): string {
     .toUpperCase()
     .slice(0, 2)
 }
+
+/**
+ * Compare two semantic version strings
+ * Returns true if serverVersion > clientVersion
+ * Handles non-semver strings by falling back to string comparison or returning false
+ */
+export function isVersionNewer(serverVersion: string, clientVersion: string): boolean {
+  if (!serverVersion || !clientVersion) {
+    return false;
+  }
+
+  // Parse semver strings (x.y.z format)
+  const parseVersion = (version: string): number[] => {
+    // Remove any leading 'v' and split by '.'
+    const cleaned = version.replace(/^v/i, '').trim();
+    const parts = cleaned.split('.');
+    
+    // Extract numeric parts, defaulting to 0 for missing parts
+    return [
+      parseInt(parts[0] || '0', 10) || 0,
+      parseInt(parts[1] || '0', 10) || 0,
+      parseInt(parts[2] || '0', 10) || 0
+    ];
+  };
+
+  try {
+    const serverParts = parseVersion(serverVersion);
+    const clientParts = parseVersion(clientVersion);
+
+    // Compare major, minor, patch
+    for (let i = 0; i < 3; i++) {
+      if (serverParts[i] > clientParts[i]) {
+        return true;
+      }
+      if (serverParts[i] < clientParts[i]) {
+        return false;
+      }
+    }
+
+    // Versions are equal
+    return false;
+  } catch (error) {
+    // If parsing fails, fall back to string comparison
+    // Only return true if strings are different and server > client lexicographically
+    // This is conservative - we don't want to show banner incorrectly
+    return serverVersion !== clientVersion && serverVersion > clientVersion;
+  }
+}

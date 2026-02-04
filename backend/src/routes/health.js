@@ -3,6 +3,24 @@
  * Provides endpoints for monitoring application health and deployment verification
  */
 
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// Read version from package.json at module load
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+let APP_VERSION = '1.0.0';
+
+try {
+  const packageJsonPath = join(__dirname, '../../package.json');
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+  APP_VERSION = packageJson.version || '1.0.0';
+} catch (error) {
+  // Fallback to default version if package.json cannot be read
+  console.warn('⚠️ Could not read package.json version, using default:', error.message);
+}
+
 export default async function healthRoutes(fastify, options) {
   // Health check endpoint
   fastify.get('/health', async (request, reply) => {
@@ -13,7 +31,7 @@ export default async function healthRoutes(fastify, options) {
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         environment: process.env.NODE_ENV || 'development',
-        version: process.env.npm_package_version || '1.0.0',
+        version: APP_VERSION,
         memory: process.memoryUsage(),
         platform: process.platform,
         nodeVersion: process.version
@@ -64,7 +82,7 @@ export default async function healthRoutes(fastify, options) {
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         environment: process.env.NODE_ENV || 'development',
-        version: process.env.npm_package_version || '1.0.0',
+        version: APP_VERSION,
         memory: process.memoryUsage(),
         platform: process.platform,
         nodeVersion: process.version,
@@ -197,7 +215,7 @@ export default async function healthRoutes(fastify, options) {
       const deployment = {
         timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV || 'development',
-        version: process.env.npm_package_version || '1.0.0',
+        version: APP_VERSION,
         commit: process.env.GIT_COMMIT || 'unknown',
         branch: process.env.GIT_BRANCH || 'unknown',
         buildTime: process.env.BUILD_TIME || 'unknown',
@@ -368,6 +386,20 @@ export default async function healthRoutes(fastify, options) {
         timestamp: new Date().toISOString(),
         error: error.message,
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+  });
+
+  // Version endpoint - minimal endpoint for version checking
+  fastify.get('/version', async (request, reply) => {
+    try {
+      reply.code(200).send({
+        version: APP_VERSION
+      });
+    } catch (error) {
+      reply.code(500).send({
+        timestamp: new Date().toISOString(),
+        error: error.message
       });
     }
   });

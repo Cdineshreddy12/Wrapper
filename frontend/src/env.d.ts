@@ -8,4 +8,7 @@ interface ImportMetaEnv {
 
 interface ImportMeta {
   readonly env: ImportMetaEnv
-} 
+}
+
+// Vite-injected build-time version constant
+declare const __APP_VERSION__: string; 

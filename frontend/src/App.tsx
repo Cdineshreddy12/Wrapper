@@ -8,10 +8,10 @@ const router = {
     v7_relativeSplatPath: true,
   },
 }
-// Toast notifications are handled in main.tsx via Sonner Toaster
-
+import { Toaster } from '@/components/ui/sonner'
 import { useAuthStatus } from '@/hooks/useSharedQueries'
-import AnimatedLoader from '@/components/common/AnimatedLoader'
+import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader'
+import { NewVersionBanner } from '@/components/NewVersionBanner'
 
 // Kinde Authentication
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
@@ -37,6 +37,7 @@ import { Login } from '@/pages/Login'
 import { AuthCallback } from '@/pages/AuthCallback'
 import { InviteAccept } from '@/pages/InviteAccept'
 import { UserManagementDashboard } from '@/features/users/components/UserManagementDashboard'
+import { UserManagementProvider } from '@/features/users/components/context/UserManagementContext'
 import { Billing } from '@/features/billing'
 import { Permissions } from '@/features/permissions'
 import UserApplicationAccessPage from '@/pages/UserApplicationAccess'
@@ -61,11 +62,15 @@ import { UserDetailsPage } from './pages/UserDetailsPage'
 import { TenantDetailsPage } from './pages/TenantDetailsPage'
 import { CampaignDetailsPage } from './pages/CampaignDetailsPage'
 
-// Professional Loading component using AnimatedLoader
+// TEST PAGES - Remove after testing is complete
+import TestWelcomeScreen from './pages/test/TestWelcomeScreen'
+import TestLoadingScreen from './pages/test/TestLoadingScreen'
+
+// Professional Loading component using Zopkit round loader
 const LoadingScreen = () => (
   <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
-    <div className="text-center">
-      <AnimatedLoader size="md" className="mb-6" />
+    <div className="text-center flex flex-col items-center">
+      <ZopkitRoundLoader size="page" className="mb-6" />
       <p className="text-gray-600 dark:text-gray-300 text-base font-medium">Your data is loading...</p>
     </div>
   </div>
@@ -76,6 +81,7 @@ function App() {
   return (
     <>
       <ThemeProvider defaultTheme="system" storageKey="zopkit-theme">
+        <Toaster position="top-right" richColors offset="80px" gap={12} />
         <KindeProvider>
           <Router future={router.future}>
             <SilentAuthGuard>
@@ -116,6 +122,8 @@ function AppContent() {
       {/* <TrialExpiryBanner />
       <TrialBannerSpacer /> */}
 
+      {/* New Version Available Banner */}
+      <NewVersionBanner />
 
       <Routes>
         {/* Public Routes */}
@@ -144,6 +152,10 @@ function AppContent() {
         <Route path="/cookies" element={<CookiePolicy />} />
         <Route path="/security" element={<Security />} />
         <Route path="/pricing" element={<Pricing />} />
+
+        {/* TEST ROUTES - Remove after testing is complete */}
+        <Route path="/test/welcome" element={<TestWelcomeScreen />} />
+        <Route path="/test/loading" element={<TestLoadingScreen />} />
 
         {/* Root redirect based on auth status */}
         <Route
@@ -207,26 +219,6 @@ function AppContent() {
           }
         />
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         {/* Protected dashboard routes with onboarding guard */}
         <Route
           path="/dashboard"
@@ -241,7 +233,7 @@ function AppContent() {
           <Route index element={<ApplicationPage />} />
           <Route path="applications/:appId" element={<ApplicationDetailsPage />} />
           <Route path="applications" element={<ApplicationPage />} />
-          <Route path="users/invite" element={<InviteUserPage />} />
+          <Route path="users/invite" element={<UserManagementProvider><InviteUserPage /></UserManagementProvider>} />
           <Route path="users/:userId" element={<UserDetailsPage />} />
           <Route path="users" element={<UserManagementDashboard />} />
           <Route path="organization" element={<OrganizationPage />} />
@@ -405,7 +397,7 @@ function RootRedirect() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <AnimatedLoader size="sm" className="mb-4" />
+          <ZopkitRoundLoader size="lg" className="mb-4" />
           <p className="text-sm text-muted-foreground">Loading...</p>
         </div>
       </div>

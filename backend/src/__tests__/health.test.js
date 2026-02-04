@@ -189,5 +189,22 @@ describe('Health Check Endpoints', () => {
       expect(body).toHaveProperty('pid');
     });
   });
+
+  describe('GET /version', () => {
+    it('should return version information', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/version'
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      
+      expect(body).toHaveProperty('version');
+      expect(typeof body.version).toBe('string');
+      // Version should match semver pattern (x.y.z)
+      expect(body.version).toMatch(/^\d+\.\d+\.\d+/);
+    });
+  });
 });
 
