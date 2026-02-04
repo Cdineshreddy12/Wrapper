@@ -18,6 +18,7 @@ export const ApplicationGrid = memo(function ApplicationGrid({ applications, onV
               key={app.appId}
               className="animate-in fade-in slide-in-from-bottom-16 duration-1000 fill-mode-backwards"
               style={{ animationDelay: `${index * 80}ms` }}
+              {...(index === 0 ? { 'data-tour-feature': 'launch-app' } : {})}
             >
               <ApplicationCard
                 application={app}

@@ -25,6 +25,7 @@
     "migrate:add-ui-customization": "node src/scripts/add-ui-customization-fields.js",
     "migrate:all": "bash src/scripts/run-all-migrations.sh",
     "delete-tenant": "node src/scripts/delete-tenant-data.js",
+    "delete-all-tenants": "node scripts/delete-all-tenant-data.js",
     "sync-permissions": "node src/scripts/sync-permissions.js sync",
     "sync-permissions:validate": "node src/scripts/sync-permissions.js validate",
     "sync-permissions:summary": "node src/scripts/sync-permissions.js summary",

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { UseFormReturn, useWatch } from 'react-hook-form';
 import { motion, Variants } from 'framer-motion';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -19,9 +18,6 @@ import {
   Phone,
   CreditCard,
   ShieldCheck,
-  Rocket,
-  Zap,
-  Coins
 } from 'lucide-react';
 import { newBusinessData, existingBusinessData, COUNTRIES, ORGANIZATION_SIZES, COMPANY_TYPES } from '../../schemas';
 import { UserClassification } from '../FlowSelector';
@@ -174,133 +170,15 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ form, onEditStep, userCl
     }
   }, [values.termsAccepted, hasBlastedConfetti]);
 
-  const triggerKeyAnimation = () => {
-    if (confetti && typeof confetti === 'function') {
-      try {
-        confetti({
-          particleCount: 30,
-          spread: 50,
-          origin: { y: 0.4 },
-          colors: ['#FFD700', '#FFA500', '#ec4899', '#d946ef']
-        });
-      } catch (error) {
-        console.warn('Confetti animation failed:', error);
-      }
-    }
-  };
-
   // Helper functions
   const getCountryName = (code?: string) => COUNTRIES.find(c => c.id === code)?.name || code || 'N/A';
   const getSizeName = (id?: string) => ORGANIZATION_SIZES.find(s => s.id === id)?.name || id || 'N/A';
   const getCompanyTypeName = (id?: string) => COMPANY_TYPES.find(t => t.id === id)?.name || id || 'N/A';
 
-  const getPersonalizedContent = () => {
-    switch (userClassification) {
-      case 'aspiringFounder':
-        return {
-          title: 'Startup Profile',
-          subtitle: 'Founder Edition',
-          description: 'Your startup journey begins here.',
-          icon: Rocket
-        };
-      case 'corporateEmployee':
-        return {
-          title: 'Corporate Account',
-          subtitle: 'Professional',
-          description: 'Enterprise setup verified.',
-          icon: Building2
-        };
-      case 'withGST':
-        return {
-          title: 'GST Business',
-          subtitle: 'Tax Compliant',
-          description: 'Ready for invoicing & tax.',
-          icon: ShieldCheck
-        };
-      default:
-        return {
-          title: 'Standard Account',
-          subtitle: 'Ready to Launch',
-          description: 'Setup complete.',
-          icon: Zap
-        };
-    }
-  };
-
-  const content = getPersonalizedContent();
-
   return (
     <div className="min-h-screen pb-20 relative">
-      
-      {/* Immersive Header - Clean & Focused */}
-      <div className="relative pb-24 pt-8 overflow-hidden mx-auto max-w-lg mb-8">
-         {/* Celebration Card - 3D Pop Style */}
-         <div className="relative perspective-1000">
-            <motion.div 
-               initial={{ scale: 0.5, opacity: 0, rotateX: 20 }}
-               animate={{ scale: 1, opacity: 1, rotateX: 0 }}
-               transition={{ type: "spring", stiffness: 260, damping: 20 }}
-               className="bg-[#fffcf5] rounded-[2.5rem] pt-12 pb-10 px-8 text-center shadow-[0_30px_60px_-12px_rgba(0,0,0,0.15),0_10px_20px_-5px_rgba(0,0,0,0.1)] border-b-8 border-r-4 border-pink-100 relative z-10"
-            >
-               {/* Ribbon Header */}
-               <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-[120%] flex justify-center items-center z-20 filter drop-shadow-xl">
-                  {/* Left Fold */}
-                  <div className="h-10 w-8 bg-[#be185d] transform skew-y-12 translate-y-6 translate-x-2 rounded-l-sm" />
-                  
-                  {/* Main Ribbon */}
-                  <div className="bg-[#db2777] text-white text-2xl font-black py-4 px-12 rounded-lg relative flex items-center justify-center transform hover:scale-105 transition-transform duration-300 cursor-default shadow-lg">
-                     <span className="drop-shadow-md">Welcome to Zopkit!</span>
-                     {/* Stitching effect */}
-                     <div className="absolute top-1 left-2 right-2 bottom-1 border-2 border-dashed border-white/30 rounded-md"></div>
-                  </div>
-                  
-                  {/* Right Fold */}
-                  <div className="h-10 w-8 bg-[#be185d] transform -skew-y-12 translate-y-6 -translate-x-2 rounded-r-sm" />
-               </div>
-
-               {/* Content */}
-               <div className="mt-6 mb-2">
-                  <p className="text-orange-400 font-bold text-lg uppercase tracking-wider mb-4 animate-pulse">You've Unlocked 1000 Free Credits</p>
-                  
-                  {/* Icon Container */}
-                  <div className="relative w-32 h-32 mx-auto mb-6 cursor-pointer group" onClick={triggerKeyAnimation}>
-                     {/* Glow effect */}
-                     <div className="absolute inset-0 bg-yellow-100 rounded-full blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
-                     <div className="absolute inset-2 bg-gradient-to-tr from-white to-yellow-50 rounded-full shadow-inner border-4 border-white flex items-center justify-center relative overflow-hidden">
-                        {/* Shimmer on icon background */}
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/80 to-transparent -translate-x-full animate-shimmer"></div>
-                        <Coins className="w-14 h-14 text-yellow-400 fill-yellow-400 drop-shadow-sm transform group-hover:rotate-12 transition-transform duration-300" />
-                     </div>
-                     
-                     {/* Notification Badge */}
-                     <motion.div 
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        transition={{ delay: 0.5, type: "spring" }}
-                        className="absolute bottom-0 right-0 bg-yellow-400 text-white font-black text-lg w-10 h-10 rounded-full flex items-center justify-center border-4 border-white shadow-lg"
-                     >
-                        $
-                     </motion.div>
-                  </div>
-
-                  <h2 className="text-xl font-bold text-slate-800 mb-2 leading-tight">The All-in-One Platform</h2>
-                  <p className="text-slate-500 text-sm leading-relaxed max-w-xs mx-auto mb-4">
-                     Manage your team, finances, and growth in one unified workspace designed for modern businesses.
-                  </p>
-                  
-                  <Badge variant="secondary" className="bg-pink-50 text-pink-600 hover:bg-pink-100 border-pink-100 px-3 py-1 text-xs">
-                     {content.subtitle}
-                  </Badge>
-               </div>
-            </motion.div>
-            
-            {/* Card Reflection/Shadow on background */}
-            <div className="absolute -bottom-4 left-4 right-4 h-8 bg-black/10 blur-xl rounded-full"></div>
-         </div>
-      </div>
-
-      {/* Main Grid Content */}
-      <div className="relative z-20 -mt-10">
+      {/* Main Grid Content - Review summary only; welcome/credits screen shows after submit */}
+      <div className="relative z-20 pt-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
           {/* Step 1: Business Details */}
@@ -442,8 +320,8 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ form, onEditStep, userCl
                 <FormItem className="flex flex-row items-start space-x-4 space-y-0">
                   <FormControl>
                     <Checkbox
-                      checked={field.value || false}
-                      onCheckedChange={field.onChange}
+                      checked={Boolean(field.value)}
+                      onCheckedChange={(checked) => field.onChange(Boolean(checked))}
                       className="mt-1 w-6 h-6 border-2 border-pink-200 data-[state=checked]:bg-pink-600 data-[state=checked]:border-pink-600 rounded-lg transition-all duration-200"
                     />
                   </FormControl>

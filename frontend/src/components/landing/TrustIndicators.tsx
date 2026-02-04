@@ -41,7 +41,7 @@ const TrustIndicators: React.FC = () => {
             transition={{ duration: 0.8, delay: 0.6 }}
           >
             <motion.div
-              className="flex flex-wrap items-center justify-center gap-12"
+              className="flex flex-wrap items-center justify-center gap-6 md:gap-12"
               variants={{
                 hidden: { opacity: 0 },
                 visible: {

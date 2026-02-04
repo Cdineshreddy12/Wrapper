@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { StackedCardsSection, DemoSection, TrustIndicators } from '@/components/landing'
 import EcosystemDemo from './EcosystemDemo'
 import { VisualHub } from '@/components/landing/VisualHub'
 import { DynamicIcon } from '@/components/landing/Icons'
-import { ArrowRight, Play, ChevronRight, FileText, GraduationCap, Users, Zap, Mail, Phone, MapPin } from 'lucide-react'
+import { ArrowRight, Play, ChevronRight, FileText, GraduationCap, Users, Zap, Mail, Phone, MapPin, Menu, X } from 'lucide-react'
 import api from '@/lib/api'
 import { Product } from '@/types'
 import toast from 'react-hot-toast'
@@ -35,6 +35,7 @@ import { LandingFooter } from "@/components/layout/LandingFooter"
 
 const Landing: React.FC = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login, isAuthenticated } = useKindeAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [showDemo, setShowDemo] = useState(false)
@@ -66,6 +67,11 @@ const Landing: React.FC = () => {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
+
+  // Close mobile menu when route changes
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
 
   // Check authentication status quietly in background
   useEffect(() => {
@@ -212,10 +218,15 @@ const Landing: React.FC = () => {
     }
   };
 
+  // Scroll to contact form section (used by "Schedule the Demo" button)
+  const scrollToContactForm = () => {
+    handleAnchorClick({ preventDefault: () => {} } as React.MouseEvent<HTMLAnchorElement>, '#contact');
+  };
+
   const navItems = [
     { name: "Pricing", link: "/pricing" },
     { name: "Workflows", link: "#workflows" },
-    { name: "Contact Us", link: "#pricing" },
+    { name: "Contact Us", link: "#contact" },
   ];
 
   return (
@@ -314,17 +325,17 @@ const Landing: React.FC = () => {
               onClick={handleLogin}
               disabled={isLoading}
               as="button"
-              className="rounded-xl px-6 py-2.5"
+              className="rounded-xl px-6 py-2.5 cursor-pointer"
             >
               {isLoading ? 'Loading...' : 'Sign In'}
             </NavbarButton>
             <NavbarButton
               variant="gradient"
-              onClick={() => setShowDemo(true)}
+              onClick={scrollToContactForm}
               as="button"
-              className="rounded-xl px-6 py-2.5"
+              className="rounded-xl px-6 py-2.5 cursor-pointer"
             >
-              Start Free Trial
+              Schedule the Demo
             </NavbarButton>
           </div>
         </NavBody>
@@ -333,11 +344,22 @@ const Landing: React.FC = () => {
         <MobileNav>
           <MobileNavHeader>
             <NavbarLogo />
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+              aria-label="Toggle menu"
+            >
+              {isMobileMenuOpen ? (
+                <X className="w-6 h-6 text-slate-700" />
+              ) : (
+                <Menu className="w-6 h-6 text-slate-700" />
+              )}
+            </button>
           </MobileNavHeader>
 
           <MobileNavMenu
-            isOpen={true}
-            onClose={() => {}}
+            isOpen={isMobileMenuOpen}
+            onClose={() => setIsMobileMenuOpen(false)}
           >
             <div className="mb-4">
               <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-4">Products</div>
@@ -385,7 +407,7 @@ const Landing: React.FC = () => {
                   handleLogin();
                 }}
                 variant="outline"
-                className="w-full rounded-xl"
+                className="w-full rounded-xl cursor-pointer"
                 as="button"
                 disabled={isLoading}
               >
@@ -394,13 +416,13 @@ const Landing: React.FC = () => {
               <NavbarButton
                 onClick={() => {
                   setIsMobileMenuOpen(false);
-                  setShowDemo(true);
+                  scrollToContactForm();
                 }}
                 variant="gradient"
-                className="w-full rounded-xl"
+                className="w-full rounded-xl cursor-pointer"
                 as="button"
               >
-                Start Free Trial
+                Schedule the Demo
               </NavbarButton>
             </div>
           </MobileNavMenu>
@@ -408,7 +430,7 @@ const Landing: React.FC = () => {
       </Navbar>
 
       {/* Main Content */}
-      <main className="relative pt-24 lg:pt-36 pb-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 z-10 overflow-visible">
+      <main className="relative pt-20 sm:pt-24 lg:pt-36 pb-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 z-10 overflow-visible">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-0 items-center">
 
           {/* Left Column: Content (Compressed to 5 cols) */}
@@ -422,7 +444,7 @@ const Landing: React.FC = () => {
                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 w-fit shadow-sm"
               >
                 <span className={`w-2 h-2 rounded-full bg-gradient-to-r ${activeProduct.gradient} animate-pulse`}></span>
-                <span className="text-xs font-bold text-slate-600 tracking-wide uppercase">Complete Business Operations Suite</span>
+                <span className="text-[10px] sm:text-xs font-bold text-slate-600 tracking-wide uppercase">Complete Business Operations Suite</span>
               </motion.div>
 
               <div className="relative h-[160px] lg:h-[200px] w-full z-20">
@@ -452,17 +474,16 @@ const Landing: React.FC = () => {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={handleLogin}
-                disabled={isLoading}
+                onClick={scrollToContactForm}
                 className={`
-                    w-full sm:w-auto relative px-8 py-4 rounded-xl font-bold text-white transition-all duration-300
+                    w-full sm:w-auto relative px-8 py-4 rounded-xl font-bold text-white transition-all duration-300 cursor-pointer
                     bg-gradient-to-r ${activeProduct.gradient} shadow-lg shadow-blue-500/20
                     overflow-hidden group
                   `}
               >
                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
                 <span className="relative flex items-center justify-center gap-2">
-                  {isLoading ? 'Loading...' : 'Start Free Trial →'} <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  Schedule the Demo → <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </span>
               </motion.button>
 
@@ -550,7 +571,7 @@ const Landing: React.FC = () => {
           </div>
 
           {/* Right Column: Visual Hub (Expanded to 7 cols and shifted left) */}
-          <div className="lg:col-span-7 relative z-10 flex justify-center lg:justify-start items-center h-full min-h-[500px]">
+          <div className="lg:col-span-7 relative z-10 flex justify-center lg:justify-start items-center h-full min-h-[350px] sm:min-h-[500px]">
             {/* The w-[90%] constrains the width, and lg:-ml-6 pulls the center point to the left */}
             <div className="w-full lg:w-[100%] flex justify-center lg:-ml-6">
               <VisualHub product={activeProduct} />
@@ -638,14 +659,11 @@ const Landing: React.FC = () => {
       </section>
 
       <EcosystemDemo />
-      <DemoSection
-        showDemo={showDemo}
-        setShowDemo={setShowDemo}
-      />
-      <TrustIndicators />
+  
+      {/* <TrustIndicators /> */}
 
       {/* Contact Us Section */}
-      <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+      <section id="contact" className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">
@@ -1089,7 +1107,7 @@ const Landing: React.FC = () => {
                     />
                   </div>
 
-                  <div className="flex space-x-4 pt-4">
+                  <div className="flex flex-col sm:flex-row gap-3 sm:space-x-4 pt-4">
                     <button
                       type="button"
                       onClick={() => setShowDemo(false)}

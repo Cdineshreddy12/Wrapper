@@ -3,7 +3,7 @@ import { PearlButton } from '@/components/ui/pearl-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { User } from '@/types/user-management';
-import { Loader2 } from 'lucide-react';
+import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader';
 
 interface EditForm {
   name: string;
@@ -93,7 +93,7 @@ export function EditUserModal({
           <PearlButton onClick={onSave} disabled={isLoading}>
             {isLoading ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <ZopkitRoundLoader size="xs" className="mr-2" />
                 Saving...
               </>
             ) : (

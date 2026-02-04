@@ -219,7 +219,7 @@ export const onboardingFormSchema = z
       .max(50, 'Last name must be less than 50 characters')
       .refine((val) => val.trim().length > 0, 'Last name cannot be only whitespace'),
     adminEmail: emailSchema,
-    supportEmail: emailSchema,
+    supportEmail: z.optional(z.union([z.literal(''), z.string().email()])),
     adminMobile: phoneSchema(false), // Will be refined based on userClassification
     billingEmail: z
       .string()

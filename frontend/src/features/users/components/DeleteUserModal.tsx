@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { PearlButton } from '@/components/ui/pearl-button';
 import { User } from '@/types/user-management';
-import { Loader2 } from 'lucide-react';
+import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader';
 
 interface DeleteUserModalProps {
   isOpen: boolean;
@@ -41,7 +41,7 @@ export function DeleteUserModal({
           <PearlButton onClick={onDelete} disabled={isLoading}>
             {isLoading ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <ZopkitRoundLoader size="xs" className="mr-2" />
                 Deleting...
               </>
             ) : (

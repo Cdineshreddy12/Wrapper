@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import { ProductData } from '../../types/products';
-import { Check, ArrowRight, PlayCircle, ChevronRight, Star, X, Zap, XCircle, CheckCircle, Minus, AlertCircle, Sparkles, LayoutGrid } from 'lucide-react';
+import { Check, ArrowRight, PlayCircle, ChevronRight, Star, X, Zap, XCircle, CheckCircle, Minus, AlertCircle, Sparkles, LayoutGrid, Menu } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, Tooltip as RechartsTooltip } from 'recharts';
 
 import { productPagesData } from '../../data/productPages';
@@ -106,6 +106,7 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ feature, i }) => {
 const ProductPage: React.FC = () => {
     const { productId } = useParams<{ productId: string }>();
     const navigate = useNavigate();
+    const location = useLocation();
     const { login } = useKindeAuth();
 
     // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
@@ -123,6 +124,11 @@ const ProductPage: React.FC = () => {
     React.useEffect(() => {
         window.scrollTo({ top: 0, behavior: 'instant' });
     }, [productId]);
+
+    // Close mobile menu when route changes
+    React.useEffect(() => {
+        setIsMobileMenuOpen(false);
+    }, [location.pathname]);
 
     const handleProductsMouseEnter = () => {
         if (productsDropdownTimeoutRef.current) {
@@ -381,11 +387,22 @@ const ProductPage: React.FC = () => {
                 <MobileNav>
                     <MobileNavHeader>
                         <NavbarLogo />
+                        <button
+                            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                            className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+                            aria-label="Toggle menu"
+                        >
+                            {isMobileMenuOpen ? (
+                                <X className="w-6 h-6 text-slate-700" />
+                            ) : (
+                                <Menu className="w-6 h-6 text-slate-700" />
+                            )}
+                        </button>
                     </MobileNavHeader>
 
                     <MobileNavMenu
-                        isOpen={true}
-                        onClose={() => {}}
+                        isOpen={isMobileMenuOpen}
+                        onClose={() => setIsMobileMenuOpen(false)}
                     >
                         <div className="mb-4">
                             <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-4">Products</div>

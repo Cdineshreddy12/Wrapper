@@ -57,6 +57,7 @@ function UserManagementDashboardContent() {
           <PearlButton
             onClick={() => navigate('/dashboard/users/invite')}
             className="gap-2"
+            data-tour-feature="invite-user"
           >
             <UserPlus className="h-4 w-4" />
             Invite User

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { Loader2 } from 'lucide-react'
+import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader'
 import { useNavigate } from 'react-router-dom'
 
 export function AuthCallback() {
@@ -530,7 +530,7 @@ export function AuthCallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
-        <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+        <ZopkitRoundLoader size="xl" className="mx-auto mb-4" />
         <h2 className="text-xl font-semibold text-gray-900 mb-2">
           {processing ? 'Processing CRM authentication...' : 'Completing authentication...'}
         </h2>

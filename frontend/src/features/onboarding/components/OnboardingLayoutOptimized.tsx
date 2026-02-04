@@ -32,6 +32,7 @@ interface OnboardingLayoutProps {
   onEditStep?: (stepNumber: number) => void;
   onStepClick?: (stepNumber: number) => void;
   userClassification?: UserClassification;
+  isSubmitting?: boolean;
 }
 
 export const OnboardingLayoutOptimized = React.memo(({
@@ -46,7 +47,8 @@ export const OnboardingLayoutOptimized = React.memo(({
   onSubmit,
   onEditStep,
   onStepClick,
-  userClassification
+  userClassification,
+  isSubmitting = false
 }: OnboardingLayoutProps) => {
   const [showSupport, setShowSupport] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -326,6 +328,7 @@ export const OnboardingLayoutOptimized = React.memo(({
               onPrev={onPrev}
               onNext={onNext}
               onSubmit={onSubmit}
+              isSubmitting={isSubmitting}
             />
           </div>
         </div>

@@ -1,16 +1,126 @@
 import React, { useState, useEffect } from 'react'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Loader2, Shield, Zap, BarChart3, Users, CheckCircle2, Globe } from 'lucide-react'
+import { ArrowLeft, Shield, Zap, BarChart3, Users, CheckCircle2, Globe, ChevronRight } from 'lucide-react'
+import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader'
 import toast from 'react-hot-toast'
+import { motion, AnimatePresence } from 'framer-motion'
 import api from '@/lib/api'
 import { crmAuthService } from '../services/crmAuthService'
+
+// --- Animated Components ---
+
+const RotatingText = ({ words }: { words: string[] }) => {
+  const [index, setIndex] = useState(0)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % words.length)
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [words.length])
+
+  return (
+    <div className="h-[1.2em] relative inline-block overflow-hidden align-bottom min-w-[9rem] w-full max-w-[15rem] sm:max-w-[17rem] md:max-w-[19rem] xl:max-w-[22rem] 2xl:max-w-[26rem] pl-0 pr-2">
+      <AnimatePresence mode="popLayout">
+        <motion.span
+          key={index}
+          initial={{ y: 50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -50, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 100, damping: 20 }}
+          className="absolute left-0 top-0 whitespace-nowrap bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent font-extrabold pr-[0.08em]"
+        >
+          {words[index]}
+        </motion.span>
+      </AnimatePresence>
+    </div>
+  )
+}
+
+const FeatureCard = ({ icon: Icon, title, desc, delay }: { icon: any, title: string, desc: string, delay: number }) => (
+  <motion.div
+    initial={{ opacity: 0, x: -20 }}
+    animate={{ opacity: 1, x: 0 }}
+    transition={{ delay, duration: 0.5 }}
+    whileHover={{ 
+      scale: 1.02, 
+      backgroundColor: "rgba(255, 255, 255, 1)", 
+      boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.05), 0 8px 10px -6px rgb(0 0 0 / 0.01)" 
+    }}
+      className="p-4 rounded-xl bg-white/60 border border-slate-200/60 backdrop-blur-sm cursor-default transition-all group shadow-sm"
+  >
+    <div className="flex items-start space-x-4">
+      <div className="p-2 rounded-lg bg-indigo-50 group-hover:bg-indigo-100 transition-colors">
+        <Icon className="w-6 h-6 text-indigo-600 transition-colors" />
+      </div>
+      <div>
+        <h3 className="text-slate-800 font-bold mb-1 group-hover:text-indigo-700 transition-colors">{title}</h3>
+        <p className="text-sm text-slate-500 leading-tight font-medium">{desc}</p>
+      </div>
+    </div>
+  </motion.div>
+)
+
+const BackgroundGrid = () => (
+  <div className="absolute inset-0 overflow-hidden pointer-events-none">
+    {/* Strong gradient base - more visible */}
+    <div 
+      className="absolute inset-0"
+      style={{
+        background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 25%, #faf5ff 50%, #f3e8ff 75%, #ede9fe 100%)'
+      }}
+    />
+    
+    {/* Grid Pattern */}
+    <div 
+      className="absolute inset-0 opacity-[0.5]"
+      style={{
+        backgroundImage: `linear-gradient(to right, #c7d2fe 1px, transparent 1px), linear-gradient(to bottom, #c7d2fe 1px, transparent 1px)`,
+        backgroundSize: '40px 40px',
+        maskImage: 'linear-gradient(to bottom, transparent, black 8%, black 92%, transparent)'
+      }}
+    />
+    
+    {/* Moving Orbs - stronger, more visible */}
+    <motion.div 
+      animate={{ 
+        x: [0, 50, 0], 
+        y: [0, -30, 0],
+        scale: [1, 1.1, 1] 
+      }}
+      transition={{ duration: 15, repeat: Infinity, repeatType: "reverse" }}
+      className="absolute top-0 right-0 w-[600px] h-[600px] bg-indigo-300/50 rounded-full blur-[80px] mix-blend-multiply"
+    />
+    <motion.div 
+      animate={{ 
+        x: [0, -50, 0], 
+        y: [0, 40, 0],
+        scale: [1, 1.2, 1] 
+      }}
+      transition={{ duration: 20, repeat: Infinity, repeatType: "reverse" }}
+      className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-purple-300/50 rounded-full blur-[80px] mix-blend-multiply"
+    />
+    <motion.div 
+      animate={{ 
+        x: [0, 30, 0], 
+        y: [0, 50, 0],
+        opacity: [0.4, 0.65, 0.4]
+      }}
+      transition={{ duration: 18, repeat: Infinity, repeatType: "reverse" }}
+      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-violet-200/50 rounded-full blur-[100px] mix-blend-multiply"
+    />
+  </div>
+)
+
+// --- Main Component ---
 
 export function Login() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const location = useLocation()
   const { 
     isAuthenticated, 
@@ -26,6 +136,7 @@ export function Login() {
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [userOrgs, setUserOrgs] = useState<any>(null)
   const [currentOrg, setCurrentOrg] = useState<any>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [attemptCount, setAttemptCount] = useState(0)
 
   // CRM-specific parameters
@@ -103,10 +214,8 @@ export function Login() {
         }
         
         // Get access token from Kinde
-        let token = null
-        
         try {
-          token = await getToken()
+          await getToken()
         } catch (tokenError) {
           console.warn('⚠️ Could not get token via getToken():', tokenError)
         }
@@ -187,90 +296,6 @@ export function Login() {
     handlePostLoginRedirect()
   }, [isAuthenticated, user, isLoading, returnTo, navigate, isRedirecting])
 
-  // Show loading while handling post-login redirect
-  if (!isLoading && isAuthenticated && user && !returnTo && !isRedirecting) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="relative w-16 h-16 mx-auto">
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full opacity-20 animate-pulse"></div>
-            <div className="absolute inset-2 border-2 border-transparent border-t-blue-500 border-r-cyan-500 rounded-full animate-spin"></div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Zap className="w-8 h-8 text-blue-400" />
-            </div>
-          </div>
-          <div>
-            <p className="text-slate-200 font-semibold text-lg">Setting up your workspace</p>
-            <p className="text-slate-400 text-sm mt-2">Initializing your environment...</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Show loading while auth is being determined
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="relative w-16 h-16 mx-auto">
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full opacity-20 animate-pulse"></div>
-            <div className="absolute inset-2 border-2 border-transparent border-t-blue-500 border-r-cyan-500 rounded-full animate-spin"></div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Shield className="w-8 h-8 text-blue-400" />
-            </div>
-          </div>
-          <div>
-            <p className="text-slate-200 font-semibold text-lg">Verifying credentials</p>
-            <p className="text-slate-400 text-sm mt-2">Connecting to Zopkit...</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Show loading while redirecting to CRM
-  if (!isLoading && isAuthenticated && user && returnTo && isCrmRequest && isRedirecting) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="relative w-16 h-16 mx-auto">
-            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full opacity-20 animate-pulse"></div>
-            <div className="absolute inset-2 border-2 border-transparent border-t-emerald-500 border-r-cyan-500 rounded-full animate-spin"></div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Globe className="w-8 h-8 text-emerald-400" />
-            </div>
-          </div>
-          <div>
-            <p className="text-slate-200 font-semibold text-lg">Redirecting to CRM</p>
-            <p className="text-slate-400 text-sm mt-2">Establishing secure connection...</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Show loading while redirecting to dashboard
-  if (isRedirecting && !returnTo && isCrmRequest === false) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="relative w-16 h-16 mx-auto">
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full opacity-20 animate-pulse"></div>
-            <div className="absolute inset-2 border-2 border-transparent border-t-blue-500 border-r-cyan-500 rounded-full animate-spin"></div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Zap className="w-8 h-8 text-blue-400" />
-            </div>
-          </div>
-          <div>
-            <p className="text-slate-200 font-semibold text-lg">Redirecting to dashboard</p>
-            <p className="text-slate-400 text-sm mt-2">Loading your workspace...</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   const handleBackToCRM = () => {
     if (returnTo && crmAuthService.validateReturnToUrl(returnTo)) {
       window.location.href = returnTo
@@ -284,22 +309,14 @@ export function Login() {
       setIsLoggingIn(true)
       setAttemptCount(prev => prev + 1)
       
-      // Get Google connection ID from environment variable
-      const googleConnectionId = import.meta.env.VITE_KINDE_GOOGLE_CONNECTION_ID
+      const googleConnectionId = (import.meta as any).env.VITE_KINDE_GOOGLE_CONNECTION_ID
       
       if (!googleConnectionId) {
         console.error('❌ VITE_KINDE_GOOGLE_CONNECTION_ID is not configured')
-        console.error('⚠️ Falling back to default Kinde login (will show Kinde default form)')
-        // Fallback to default login if connection ID not configured
         await login()
         return
       }
       
-      console.log('🔄 Starting Google login flow with custom auth')
-      console.log('📋 Connection ID:', googleConnectionId)
-      
-      // Use Kinde custom auth with connection ID
-      // Note: redirectUri is configured in KindeProvider and will be used automatically
       await login({ 
         connectionId: googleConnectionId
       })
@@ -310,311 +327,282 @@ export function Login() {
     }
   }
 
+  // --- Loading States ---
+  
+  const LoadingScreen = ({ message, subMessage, icon: Icon, colorClass }: { message: string, subMessage: string, icon: any, colorClass: string }) => (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center relative overflow-hidden">
+      <BackgroundGrid />
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="relative z-10 text-center space-y-6 p-8 rounded-2xl bg-white/50 backdrop-blur-xl border border-slate-200 shadow-xl"
+      >
+        <div className="relative w-20 h-20 mx-auto">
+          <div className={`absolute inset-0 bg-gradient-to-r ${colorClass} rounded-full opacity-10 animate-ping`} />
+          <motion.div 
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+            className={`absolute inset-2 border-2 border-transparent border-t-current rounded-full ${colorClass.replace('from-', 'text-').replace('to-', '')}`} 
+          />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Icon className={`w-8 h-8 ${colorClass.replace('from-', 'text-').split(' ')[0]}`} />
+          </div>
+        </div>
+        <div>
+          <h3 className="text-slate-900 font-semibold text-xl tracking-tight">{message}</h3>
+          <p className="text-slate-500 text-sm mt-2 font-medium">{subMessage}</p>
+        </div>
+      </motion.div>
+    </div>
+  )
+
+  if (!isLoading && isAuthenticated && user && !returnTo && !isRedirecting) {
+    return <LoadingScreen message="Setting up your workspace" subMessage="Initializing your environment..." icon={Zap} colorClass="from-blue-600 to-indigo-600" />
+  }
+
+  if (isLoading) {
+    return <LoadingScreen message="Verifying credentials" subMessage="Connecting to Zopkit..." icon={Shield} colorClass="from-blue-600 to-indigo-600" />
+  }
+
+  if (!isLoading && isAuthenticated && user && returnTo && isCrmRequest && isRedirecting) {
+    return <LoadingScreen message="Redirecting to CRM" subMessage="Establishing secure connection..." icon={Globe} colorClass="from-violet-600 to-indigo-600" />
+  }
+
+  if (isRedirecting && !returnTo && isCrmRequest === false) {
+    return <LoadingScreen message="Redirecting to dashboard" subMessage="Loading your workspace..." icon={Zap} colorClass="from-blue-600 to-indigo-600" />
+  }
+
+  // --- Main Render ---
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-black flex flex-col">
-      {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 right-1/4 w-96 h-96 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob"></div>
-        <div className="absolute -bottom-8 left-20 w-96 h-96 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob animation-delay-2000"></div>
-        <div className="absolute top-1/2 left-1/3 w-96 h-96 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob animation-delay-4000"></div>
-      </div>
+    <div className="min-h-screen flex flex-col relative overflow-hidden font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900 bg-slate-50">
+      <BackgroundGrid />
 
-      <style>{`
-        @keyframes blob {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          33% { transform: translate(30px, -50px) scale(1.1); }
-          66% { transform: translate(-20px, 20px) scale(0.9); }
-        }
-        .animate-blob {
-          animation: blob 7s infinite;
-        }
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-        .animation-delay-4000 {
-          animation-delay: 4s;
-        }
-      `}</style>
-
-      {/* Main Content */}
-      <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative z-10">
-        <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
+      {/* Content Container */}
+      <div className="flex-1 flex items-center justify-center min-h-[calc(100vh-5rem)] py-12 px-4 sm:px-6 lg:px-12 relative z-10 w-full">
+        <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-24 items-center">
+          
           {/* Left Column - Hero Section */}
-          <div className="hidden lg:flex flex-col justify-center space-y-8">
-            {/* Logo */}
-            <div className="space-y-4">
-              <div className="inline-flex items-center space-x-3 group cursor-pointer">
-                <div className="relative w-14 h-14">
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-2xl opacity-80 group-hover:opacity-100 transition-opacity"></div>
-                  <div className="absolute inset-0.5 bg-slate-900 rounded-xl flex items-center justify-center">
-                    <span className="text-white font-black text-xl bg-gradient-to-br from-blue-400 to-cyan-400 bg-clip-text text-transparent">Z</span>
-                  </div>
-                </div>
-                <div>
-                  <h2 className="text-3xl font-black text-white">Zopkit</h2>
-                  <p className="text-xs text-slate-400 font-medium">Enterprise Platform</p>
+          <div className="hidden lg:flex flex-col justify-center space-y-12 w-full">
+            {/* Logo Group */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+              className="flex items-center space-x-6 group"
+            >
+              <div className="relative">
+                <div className="absolute inset-0 bg-indigo-500/10 blur-xl rounded-full group-hover:bg-indigo-500/20 transition-all duration-500" />
+                <img
+                  src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg"
+                  alt="Zopkit"
+                  className="relative w-24 h-24 rounded-2xl object-contain shadow-2xl ring-4 ring-white z-10"
+                />
+              </div>
+              <div>
+                <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Zopkit</h2>
+                <div className="flex items-center space-x-2 text-slate-500">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-sm font-bold uppercase tracking-wider">Business OS</span>
                 </div>
               </div>
-            </div>
+            </motion.div>
 
-            {/* Tagline */}
-            <div className="space-y-3">
-              <h1 className="text-5xl font-black text-white leading-tight">
-                Unified Enterprise <br />
-                <span className="bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-600 bg-clip-text text-transparent">Management Platform</span>
+            {/* Dynamic Headline */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="space-y-6"
+            >
+              <h1 className="text-5xl xl:text-7xl font-bold text-slate-900 leading-[1.1]">
+                One place to <br />
+                <RotatingText words={["Grow", "Scale", "Thrive"]} />
               </h1>
-              <p className="text-lg text-slate-400 leading-relaxed max-w-xl">
-                Streamline your business operations with our comprehensive suite of tools designed for modern enterprises.
+              <p className="text-xl text-slate-600 leading-relaxed max-w-lg font-medium">
+                Unified CRM, project management, and team collaboration tools built for the modern enterprise.
               </p>
-            </div>
+            </motion.div>
 
-            {/* Features Grid */}
-            <div className="grid grid-cols-2 gap-4 pt-4">
-              <div className="group p-4 rounded-xl bg-white/5 border border-white/10 hover:border-blue-500/50 hover:bg-white/10 transition-all">
-                <div className="flex items-start space-x-3">
-                  <div className="p-2 rounded-lg bg-blue-600/20 group-hover:bg-blue-600/40 transition-colors">
-                    <Zap className="w-5 h-5 text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-white">Lightning Fast</p>
-                    <p className="text-xs text-slate-400">Optimized for speed</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="group p-4 rounded-xl bg-white/5 border border-white/10 hover:border-cyan-500/50 hover:bg-white/10 transition-all">
-                <div className="flex items-start space-x-3">
-                  <div className="p-2 rounded-lg bg-cyan-600/20 group-hover:bg-cyan-600/40 transition-colors">
-                    <Shield className="w-5 h-5 text-cyan-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-white">Bank-Grade Security</p>
-                    <p className="text-xs text-slate-400">256-bit encryption</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="group p-4 rounded-xl bg-white/5 border border-white/10 hover:border-blue-500/50 hover:bg-white/10 transition-all">
-                <div className="flex items-start space-x-3">
-                  <div className="p-2 rounded-lg bg-blue-600/20 group-hover:bg-blue-600/40 transition-colors">
-                    <Users className="w-5 h-5 text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-white">Team Collaboration</p>
-                    <p className="text-xs text-slate-400">Real-time sync</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="group p-4 rounded-xl bg-white/5 border border-white/10 hover:border-cyan-500/50 hover:bg-white/10 transition-all">
-                <div className="flex items-start space-x-3">
-                  <div className="p-2 rounded-lg bg-cyan-600/20 group-hover:bg-cyan-600/40 transition-colors">
-                    <BarChart3 className="w-5 h-5 text-cyan-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-white">Advanced Analytics</p>
-                    <p className="text-xs text-slate-400">Actionable insights</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-white/10">
-              <div>
-                <p className="text-2xl font-black text-transparent bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text">50K+</p>
-                <p className="text-xs text-slate-400 mt-1">Active Users</p>
-              </div>
-              <div>
-                <p className="text-2xl font-black text-transparent bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text">99.9%</p>
-                <p className="text-xs text-slate-400 mt-1">Uptime</p>
-              </div>
-              <div>
-                <p className="text-2xl font-black text-transparent bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text">180+</p>
-                <p className="text-xs text-slate-400 mt-1">Countries</p>
-              </div>
+            {/* Interactive Feature Grid */}
+            <div className="grid grid-cols-2 gap-5">
+              <FeatureCard 
+                delay={0.4} 
+                icon={Zap} 
+                title="Grow Faster" 
+                desc="Automated workflows that save time." 
+              />
+              <FeatureCard 
+                delay={0.5} 
+                icon={Shield} 
+                title="Enterprise Security" 
+                desc="Bank-grade encryption for your data." 
+              />
+              <FeatureCard 
+                delay={0.6} 
+                icon={Users} 
+                title="Team Sync" 
+                desc="Real-time collaboration across devices." 
+              />
+              <FeatureCard 
+                delay={0.7} 
+                icon={BarChart3} 
+                title="Deep Insights" 
+                desc="Analytics that drive decision making." 
+              />
             </div>
           </div>
 
           {/* Right Column - Login Card */}
-          <div className="flex items-center justify-center lg:justify-end">
-            <Card className="w-full max-w-sm shadow-2xl border-0 bg-slate-900/95 backdrop-blur-md">
-              <CardHeader className="pb-6 space-y-4">
-                {/* Mobile Logo - Only show on mobile */}
-                <div className="lg:hidden flex justify-center mb-2">
-                  <div className="relative w-12 h-12">
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-xl opacity-80"></div>
-                    <div className="absolute inset-0.5 bg-slate-900 rounded-lg flex items-center justify-center">
-                      <span className="text-white font-black text-lg bg-gradient-to-br from-blue-400 to-cyan-400 bg-clip-text text-transparent">Z</span>
-                    </div>
+          <div className="flex items-center justify-center lg:justify-end w-full">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, x: 20 }}
+              animate={{ opacity: 1, scale: 1, x: 0 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+              className="w-full max-w-md"
+            >
+              <Card className="relative overflow-hidden border border-slate-200 bg-white/70 backdrop-blur-2xl shadow-[0_8px_40px_rgb(0,0,0,0.08)]">
+                {/* Top decorative gradient line */}
+                <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 rounded-t-xl" />
+                
+                <CardHeader className="pb-8 space-y-4 text-center pt-10">
+                   {/* Mobile Logo */}
+                   <div className="lg:hidden flex justify-center mb-6">
+                    <img
+                      src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg"
+                      alt="Zopkit"
+                      className="w-20 h-20 rounded-xl shadow-lg ring-4 ring-white"
+                    />
                   </div>
-                </div>
 
-                {isCrmRequest ? (
-                  <>
-                    <div className="text-center space-y-2">
-                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-emerald-600/20 border border-emerald-500/30 mx-auto">
-                        <Globe className="w-6 h-6 text-emerald-400" />
+                  {isCrmRequest ? (
+                    <div className="space-y-2">
+                       <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-emerald-50 border border-emerald-100 mb-2">
+                        <Globe className="w-6 h-6 text-emerald-600" />
                       </div>
-                      <CardTitle className="text-2xl text-white">CRM Access</CardTitle>
-                      <CardDescription className="text-slate-400">
-                        Authenticate to access your CRM workspace
-                      </CardDescription>
+                      <CardTitle className="text-3xl font-bold text-slate-900 tracking-tight">CRM Access</CardTitle>
+                      <CardDescription className="text-slate-500 font-medium">Authenticate securely to access your workspace</CardDescription>
                     </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="text-center space-y-2">
-                      <CardTitle className="text-2xl text-white">Welcome Back</CardTitle>
-                      <CardDescription className="text-slate-400">
-                        Sign in to your Zopkit account
-                      </CardDescription>
+                  ) : (
+                    <div className="space-y-2">
+                      <CardTitle className="text-3xl font-bold text-slate-900 tracking-tight">Welcome Back</CardTitle>
+                      <CardDescription className="text-slate-500 font-medium">Sign in to your Zopkit dashboard</CardDescription>
                     </div>
-                  </>
-                )}
-              </CardHeader>
+                  )}
+                </CardHeader>
 
-              <CardContent className="space-y-5">
-                {/* Google Sign In Button */}
-                <Button 
-                  onClick={handleLogin}
-                  disabled={isLoggingIn}
-                  className={`w-full h-11 font-semibold text-base rounded-lg transition-all relative group overflow-hidden ${
-                    isCrmRequest 
-                      ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-700 hover:to-cyan-700' 
-                      : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700'
-                  } ${isLoggingIn ? 'opacity-80 cursor-not-allowed' : 'shadow-lg shadow-blue-600/30'}`}
-                >
-                  <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <div className="relative flex items-center justify-center">
-                    {isLoggingIn ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        <span>Signing in...</span>
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                        </svg>
-                        <span>Login</span>
-                      </>
-                    )}
+                <CardContent className="space-y-6 pb-8 px-8">
+                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                    <Button 
+                      onClick={handleLogin}
+                      disabled={isLoggingIn}
+                      className={`w-full h-14 font-semibold text-lg rounded-xl transition-all relative overflow-hidden group shadow-sm ${
+                        isCrmRequest 
+                          ? 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white border-0' 
+                          : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      {/* Shine Effect */}
+                      <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/40 to-transparent z-10" />
+                      
+                      <div className="relative flex items-center justify-center z-20">
+                        {isLoggingIn ? (
+                          <>
+                            <ZopkitRoundLoader size="sm" className={`mr-3 ${isCrmRequest ? 'text-white' : ''}`} />
+                            <span className={isCrmRequest ? 'text-white' : 'text-slate-700'}>Signing in...</span>
+                          </>
+                        ) : (
+                          <>
+                            {/* Google Icon SVG */}
+                             <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+                                <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
+                                  <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z" />
+                                  <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z" />
+                                  <path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.734 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z" />
+                                  <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
+                                </g>
+                              </svg>
+                            <span className={isCrmRequest ? 'text-white' : 'text-slate-700'}>Continue with Google</span>
+                          </>
+                        )}
+                      </div>
+                    </Button>
+                  </motion.div>
+
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-200"></span></div>
+                    <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-4 text-slate-400 font-bold tracking-wider">Secure Access</span></div>
                   </div>
-                </Button>
 
-                {/* Divider */}
-                <div className="flex items-center space-x-3">
-                  <div className="flex-1 h-px bg-gradient-to-r from-white/0 to-white/20"></div>
-                  <span className="text-xs text-slate-500 font-medium">OR</span>
-                  <div className="flex-1 h-px bg-gradient-to-l from-white/0 to-white/20"></div>
-                </div>
-
-                {/* Trust Badges */}
-                <div className="space-y-3 p-4 rounded-lg bg-white/5 border border-white/10">
-                  <div className="flex items-center space-x-3">
-                    <div className="flex-shrink-0">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  {/* Trust Indicators */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-slate-50 border border-slate-100 text-center hover:bg-white hover:shadow-sm transition-all">
+                       <CheckCircle2 className="w-5 h-5 text-emerald-500 mb-2" />
+                       <span className="text-xs text-slate-600 font-medium">SSO Enabled</span>
                     </div>
-                    <div>
-                      <p className="text-sm text-white font-medium">Secure Login</p>
-                      <p className="text-xs text-slate-400">Protected by industry-standard authentication</p>
+                     <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-slate-50 border border-slate-100 text-center hover:bg-white hover:shadow-sm transition-all">
+                       <Shield className="w-5 h-5 text-indigo-500 mb-2" />
+                       <span className="text-xs text-slate-600 font-medium">Encrypted</span>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-3">
-                    <div className="flex-shrink-0">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-white font-medium">SOC 2 Type II</p>
-                      <p className="text-xs text-slate-400">Compliance certified enterprise platform</p>
-                    </div>
-                  </div>
-                </div>
 
-                {/* Organization Info - Only show if authenticated */}
-                {isAuthenticated && currentOrg && (
-                  <div className="p-4 rounded-lg bg-gradient-to-br from-blue-600/20 to-cyan-600/20 border border-blue-500/30 space-y-3">
-                    <div className="flex items-center space-x-2">
-                      <CheckCircle2 className="w-5 h-5 text-blue-400" />
-                      <span className="text-sm font-semibold text-white">Authentication Verified</span>
-                    </div>
-                    <div className="space-y-2 text-sm">
-                      <p className="text-slate-300">
-                        <span className="text-slate-500">Email:</span> {user?.email}
-                      </p>
-                      <p className="text-slate-300">
-                        <span className="text-slate-500">Organization:</span> {currentOrg.orgName}
-                      </p>
-                      {userOrgs?.orgCodes?.length > 1 && (
-                        <p className="text-slate-300">
-                          <span className="text-slate-500">Teams:</span> Access to {userOrgs.orgCodes.length} organizations
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
+                  {/* Authenticated State Info */}
+                  {isAuthenticated && currentOrg && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      className="p-4 rounded-xl bg-indigo-50 border border-indigo-100"
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+                          {user?.givenName?.[0] || 'U'}
+                        </div>
+                        <div className="overflow-hidden">
+                          <p className="text-sm font-bold text-slate-800 truncate">{user?.email}</p>
+                          <p className="text-xs text-indigo-600 truncate font-medium">{currentOrg.orgName}</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
 
-                {/* CRM Return Info */}
-                {isCrmRequest && returnTo && (
-                  <div className="p-3 rounded-lg bg-emerald-600/10 border border-emerald-500/30 text-xs">
-                    <p className="text-emerald-300 font-medium">
-                      ✓ You will be securely redirected to your CRM after authentication
-                    </p>
-                  </div>
-                )}
+                  {/* Error Message */}
+                  {error && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="p-4 rounded-xl bg-red-50 border border-red-100 flex items-start gap-3"
+                    >
+                      <div className="w-2 h-2 rounded-full bg-red-500 mt-2 flex-shrink-0" />
+                      <p className="text-sm text-red-600 font-medium">{decodeURIComponent(error)}</p>
+                    </motion.div>
+                  )}
 
-                {/* Error Display */}
-                {error && (
-                  <div className="p-3 rounded-lg bg-red-600/10 border border-red-500/30 text-xs">
-                    <p className="text-red-300 font-medium">
-                      Authentication Error: {decodeURIComponent(error)}
-                    </p>
-                  </div>
-                )}
+                  {/* Back to CRM */}
+                  {isCrmRequest && (
+                    <Button
+                      onClick={handleBackToCRM}
+                      variant="ghost"
+                      className="w-full text-slate-500 hover:text-slate-800 hover:bg-slate-100 group"
+                    >
+                      <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
+                      Return to CRM
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
 
-                {/* Back to CRM Button */}
-                {isCrmRequest && (
-                  <Button
-                    onClick={handleBackToCRM}
-                    variant="outline"
-                    className="w-full bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white hover:border-white/20"
-                  >
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back to CRM
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
+              {/* Legal Links below card */}
+              <div className="mt-8 flex items-center justify-center space-x-6 text-sm text-slate-400 font-medium">
+                <a href="#" className="hover:text-slate-600 transition-colors">Privacy</a>
+                <span className="w-1 h-1 rounded-full bg-slate-300" />
+                <a href="#" className="hover:text-slate-600 transition-colors">Terms</a>
+                <span className="w-1 h-1 rounded-full bg-slate-300" />
+                <a href="#" className="hover:text-slate-600 transition-colors">Help</a>
+              </div>
+            </motion.div>
           </div>
         </div>
       </div>
-
-      {/* Footer */}
-      <footer className="relative z-10 border-t border-white/10 bg-black/40 backdrop-blur-sm py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
-            <div className="flex items-center space-x-2 text-sm text-slate-400">
-              <Shield className="w-4 h-4 text-emerald-400" />
-              <span>256-bit SSL Encrypted</span>
-              <span className="text-slate-600">•</span>
-              <span>SOC 2 Type II Compliant</span>
-              <span className="text-slate-600">•</span>
-              <span>GDPR Ready</span>
-            </div>
-            <div className="flex items-center space-x-4 text-sm">
-              <a href="#" className="text-slate-400 hover:text-white transition-colors">Privacy Policy</a>
-              <span className="text-slate-600">•</span>
-              <a href="#" className="text-slate-400 hover:text-white transition-colors">Terms of Service</a>
-              <span className="text-slate-600">•</span>
-              <a href="#" className="text-slate-400 hover:text-white transition-colors">Support</a>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>
   )
 }

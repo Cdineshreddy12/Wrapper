@@ -58,33 +58,33 @@ export function RoleBuilderPage() {
   }
 
   return (
-    <Container>
-      <div className="space-y-6">
-        {/* Header with Back Button */}
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleCancel}
-            className="gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Roles
-          </Button>
-          <div className="flex-1">
-            <h1 className="text-2xl font-semibold">
-              {isEditMode ? 'Edit Role' : 'Create New Role'}
-            </h1>
-          </div>
+    <div className="flex flex-col h-[calc(100vh-8rem)] min-h-[500px] w-full">
+      {/* Header with Back Button */}
+      <div className="flex-none flex items-center gap-4 px-4 pb-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleCancel}
+          className="gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Roles
+        </Button>
+        <div className="flex-1">
+          <h1 className="text-2xl font-semibold">
+            {isEditMode ? 'Edit Role' : 'Create New Role'}
+          </h1>
         </div>
+      </div>
 
-        {/* Role Builder */}
+      {/* Role Builder - fills remaining space */}
+      <div className="flex-1 min-h-0">
         <ApplicationModuleRoleBuilder
           onSave={handleSave}
           onCancel={handleCancel}
           initialRole={initialRole || undefined}
         />
       </div>
-    </Container>
+    </div>
   );
 }

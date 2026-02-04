@@ -37,7 +37,6 @@ import {
   Info,
   Search,
   RefreshCw,
-  Loader2,
   ArrowRightLeft,
   CreditCard,
   UserCog,
@@ -46,6 +45,7 @@ import {
   LayoutGrid,
   List
 } from 'lucide-react'
+import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader'
 import toast from 'react-hot-toast'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
@@ -231,6 +231,7 @@ export function OrganizationTreeManagement({
   isAdmin,
   makeRequest,
   applications,
+  employees = [],
   showEditResponsiblePerson,
   setShowEditResponsiblePerson,
   editingEntity,
@@ -242,6 +243,7 @@ export function OrganizationTreeManagement({
   isAdmin: boolean;
   makeRequest: (endpoint: string, options?: RequestInit) => Promise<any>;
   applications: Application[];
+  employees?: any[];
   showEditResponsiblePerson: boolean;
   setShowEditResponsiblePerson: (show: boolean) => void;
   editingEntity: Entity | null;
@@ -285,6 +287,12 @@ export function OrganizationTreeManagement({
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
   const [allocating, setAllocating] = useState(false);
+  
+  // Loading states for CRUD operations
+  const [isCreating, setIsCreating] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isCreatingLocation, setIsCreatingLocation] = useState(false);
 
   // Forms
   const [subForm, setSubForm] = useState({ name: '', description: '', responsiblePersonId: '', organizationType: 'department' });
@@ -300,6 +308,22 @@ export function OrganizationTreeManagement({
   });
 
   const queryClient = useQueryClient();
+
+  // Manager dropdown: prefer users from tenant API, fallback to employees from dashboard
+  const managerUserList = useMemo(() => {
+    const fromApi = (users || []).map((u: any) => ({
+      userId: u.userId || u.id,
+      name: u.name ?? u.email ?? '',
+      email: u.email ?? ''
+    }));
+    if (fromApi.length > 0) return fromApi;
+    const fromEmployees = (employees || []).map((e: any) => ({
+      userId: e.userId || e.id,
+      name: e.name ?? e.email ?? '',
+      email: e.email ?? ''
+    }));
+    return fromEmployees;
+  }, [users, employees]);
 
   const loadData = async () => {
     try {
@@ -319,93 +343,100 @@ export function OrganizationTreeManagement({
           return;
         }
       } else {
-        const flatHierarchyData = hierarchyResponse.data?.hierarchy || hierarchyResponse.hierarchy || [];
+        const rawHierarchy = hierarchyResponse.data?.hierarchy || hierarchyResponse.hierarchy || [];
 
-        // Build tree structure from flat array
-        const buildTree = (flatArray: any[]): any[] => {
-          // Create a map of all entities by entityId
-          const entityMap = new Map<string, any>();
-          const rootEntities: any[] = [];
-
-          // First pass: create all nodes with empty children arrays
-          flatArray.forEach((entity: any) => {
-            // Preserve all entity properties including credits
-            const node = {
-              ...entity,
-              children: []
-            };
-
-            // Ensure credits are numbers (handle null, undefined, or string values)
-            // Always set credits to a number (default to 0) so they display
-            if (entity.entityType === 'organization' || entity.entityType === 'location') {
-              // Parse availableCredits - always set to a number
-              node.availableCredits = entity.availableCredits !== undefined && entity.availableCredits !== null
-                ? (typeof entity.availableCredits === 'string'
-                  ? parseFloat(entity.availableCredits) || 0
-                  : typeof entity.availableCredits === 'number'
-                    ? entity.availableCredits
-                    : 0)
-                : 0;
-
-              // Parse reservedCredits - always set to a number
-              node.reservedCredits = entity.reservedCredits !== undefined && entity.reservedCredits !== null
-                ? (typeof entity.reservedCredits === 'string'
-                  ? parseFloat(entity.reservedCredits) || 0
-                  : typeof entity.reservedCredits === 'number'
-                    ? entity.reservedCredits
-                    : 0)
-                : 0;
-
-              node.totalCredits = typeof entity.totalCredits === 'number'
-                ? entity.totalCredits
-                : (node.availableCredits + node.reservedCredits);
-            }
-
-            entityMap.set(entity.entityId, node);
-          });
-
-          // Second pass: build tree structure
-          flatArray.forEach((entity: any) => {
-            const node = entityMap.get(entity.entityId);
-
-            if (entity.parentEntityId && entityMap.has(entity.parentEntityId)) {
-              // Add as child to parent
-              const parent = entityMap.get(entity.parentEntityId);
-              parent.children.push(node);
-            } else {
-              // Add as root entity
-              rootEntities.push(node);
-            }
-          });
-
-          // Sort children by entityType (organizations first, then locations) and then by name
-          const sortChildren = (entities: any[]): void => {
-            entities.forEach(entity => {
-              if (entity.children && entity.children.length > 0) {
-                entity.children.sort((a: any, b: any) => {
-                  // Organizations before locations
-                  if (a.entityType !== b.entityType) {
-                    if (a.entityType === 'organization') return -1;
-                    if (b.entityType === 'organization') return 1;
-                  }
-                  // Then by name
-                  return (a.entityName || '').localeCompare(b.entityName || '');
-                });
-                // Recursively sort children
-                sortChildren(entity.children);
-              }
-            });
-          };
-
-          sortChildren(rootEntities);
-
-          return rootEntities;
+        // Normalize credits on a single entity (for both tree and flat)
+        const normalizeCredits = (entity: any): void => {
+          if (entity.entityType === 'organization' || entity.entityType === 'location') {
+            entity.availableCredits = entity.availableCredits !== undefined && entity.availableCredits !== null
+              ? (typeof entity.availableCredits === 'string'
+                ? parseFloat(entity.availableCredits) || 0
+                : typeof entity.availableCredits === 'number'
+                  ? entity.availableCredits
+                  : 0)
+              : 0;
+            entity.reservedCredits = entity.reservedCredits !== undefined && entity.reservedCredits !== null
+              ? (typeof entity.reservedCredits === 'string'
+                ? parseFloat(entity.reservedCredits) || 0
+                : typeof entity.reservedCredits === 'number'
+                  ? entity.reservedCredits
+                  : 0)
+              : 0;
+            entity.totalCredits = typeof entity.totalCredits === 'number'
+              ? entity.totalCredits
+              : (entity.availableCredits + entity.reservedCredits);
+          }
+          if (entity.children && entity.children.length > 0) {
+            entity.children.forEach((child: any) => normalizeCredits(child));
+          }
         };
 
-        let hierarchyData = buildTree(flatHierarchyData);
+        // Sort children by entityType and name (used for both tree and flat)
+        const sortChildren = (entities: any[]): void => {
+          entities.forEach(entity => {
+            if (entity.children && entity.children.length > 0) {
+              entity.children.sort((a: any, b: any) => {
+                if (a.entityType !== b.entityType) {
+                  if (a.entityType === 'organization') return -1;
+                  if (b.entityType === 'organization') return 1;
+                }
+                return (a.entityName || '').localeCompare(b.entityName || '');
+              });
+              sortChildren(entity.children);
+            }
+          });
+        };
 
-        // Log credits from response for debugging
-        const orgsWithCredits = flatHierarchyData
+        // API may return already-nested tree (root nodes with .children). If so, use as-is.
+        const isAlreadyTree = rawHierarchy.length > 0 && rawHierarchy.some(
+          (e: any) => e.children && Array.isArray(e.children) && e.children.length > 0
+        );
+
+        let hierarchyData: any[];
+
+        if (isAlreadyTree) {
+          // Use tree as-is; normalize credits and sort
+          hierarchyData = rawHierarchy.map((node: any) => ({ ...node, children: node.children || [] }));
+          hierarchyData.forEach((node: any) => normalizeCredits(node));
+          sortChildren(hierarchyData);
+        } else {
+          // Build tree from flat array
+          const buildTree = (flatArray: any[]): any[] => {
+            const entityMap = new Map<string, any>();
+            const rootEntities: any[] = [];
+
+            flatArray.forEach((entity: any) => {
+              const node = { ...entity, children: [] };
+              normalizeCredits(node);
+              entityMap.set(entity.entityId, node);
+            });
+
+            flatArray.forEach((entity: any) => {
+              const node = entityMap.get(entity.entityId);
+              if (entity.parentEntityId && entityMap.has(entity.parentEntityId)) {
+                entityMap.get(entity.parentEntityId).children.push(node);
+              } else {
+                rootEntities.push(node);
+              }
+            });
+
+            sortChildren(rootEntities);
+            return rootEntities;
+          };
+          hierarchyData = buildTree(rawHierarchy);
+        }
+
+        // Flatten tree for logging (collect all nodes recursively)
+        const flattenForLog = (entities: any[]): any[] => {
+          const out: any[] = [];
+          entities.forEach((e: any) => {
+            out.push(e);
+            if (e.children?.length) out.push(...flattenForLog(e.children));
+          });
+          return out;
+        };
+        const flatForLog = flattenForLog(hierarchyData);
+        const orgsWithCredits = flatForLog
           .filter((e: any) => e.entityType === 'organization')
           .map((e: any) => ({
             name: e.entityName,
@@ -416,7 +447,7 @@ export function OrganizationTreeManagement({
           }));
 
         console.log('💰 Credits in response:', orgsWithCredits);
-        console.log('💰 Sample entity keys:', Object.keys(flatHierarchyData[0] || {}));
+        console.log('💰 Sample entity keys:', Object.keys(hierarchyData[0] || {}));
 
         // Ensure credits are set for all organizations and locations (parse strings to numbers)
         const ensureCredits = (entities: any[]): void => {
@@ -465,7 +496,7 @@ export function OrganizationTreeManagement({
         const totalCount = countEntities(hierarchyData);
 
         console.log('📋 Organization hierarchy loaded:', {
-          flatArrayLength: flatHierarchyData.length,
+          flatArrayLength: flatForLog.length,
           treeRoots: hierarchyData.length,
           totalEntities: hierarchyResponse.data?.totalEntities || hierarchyResponse.totalEntities || 0,
           totalWithChildren: totalCount,
@@ -583,14 +614,21 @@ export function OrganizationTreeManagement({
         });
       }
 
-      // Load side data (users)
-
+      // Load side data (users) from tenant user API
       const userRes = await makeRequest('/tenants/current/users');
       if (userRes?.success) {
-        // Deduplicate users by userId to prevent duplicate keys
-        const uniqueUsers = (userRes.data || []).filter((user: any, index: number, self: any[]) =>
-          user && user.userId && index === self.findIndex(u => u.userId === user.userId)
-        );
+        const raw = userRes.data ?? userRes.users ?? [];
+        const list = Array.isArray(raw) ? raw : [];
+        const uniqueUsers = list
+          .filter((user: any) => user && (user.userId || user.id))
+          .map((user: any) => ({
+            userId: user.userId || user.id,
+            name: user.name ?? user.email ?? '',
+            email: user.email ?? ''
+          }))
+          .filter((user: any, index: number, self: any[]) =>
+            index === self.findIndex(u => u.userId === user.userId)
+          );
         setUsers(uniqueUsers);
       }
 
@@ -603,10 +641,39 @@ export function OrganizationTreeManagement({
 
   useEffect(() => { loadData(); }, [tenantId]);
 
+  // When Add Sub-Organization modal opens, ensure users are fetched from API if list is empty
+  useEffect(() => {
+    if (!showCreateSub || users.length > 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const userRes = await makeRequest('/tenants/current/users');
+        if (cancelled || !userRes?.success) return;
+        const raw = userRes.data ?? userRes.users ?? [];
+        const list = Array.isArray(raw) ? raw : raw?.data ?? [];
+        const normalized = list
+          .filter((user: any) => user && (user.userId || user.id))
+          .map((user: any) => ({
+            userId: user.userId || user.id,
+            name: user.name ?? user.email ?? '',
+            email: user.email ?? ''
+          }))
+          .filter((user: any, index: number, self: any[]) =>
+            index === self.findIndex(u => u.userId === user.userId)
+          );
+        if (!cancelled && normalized.length > 0) setUsers(normalized);
+      } catch (_) { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [showCreateSub]);
+
   // --- Actions ---
 
   const createSubOrganization = async () => {
+    if (isCreating) return; // Prevent double submission
     if (!subForm.name || subForm.name.trim().length < 2) return toast.error('Name too short');
+    
+    setIsCreating(true);
     try {
       const response = await makeRequest('/entities/organization', {
         method: 'POST',
@@ -625,10 +692,14 @@ export function OrganizationTreeManagement({
         await loadData();
       }
     } catch (error: any) { toast.error(error.message || 'Failed'); }
+    finally { setIsCreating(false); }
   };
 
   const updateOrganization = async () => {
+    if (isUpdating) return; // Prevent double submission
     if (!selectedOrg) return;
+    
+    setIsUpdating(true);
     try {
       const response = await makeRequest(`/entities/${selectedOrg.entityId}`, {
         method: 'PUT',
@@ -645,10 +716,23 @@ export function OrganizationTreeManagement({
         await loadData();
       }
     } catch (error: any) { toast.error(error.message || 'Failed'); }
+    finally { setIsUpdating(false); }
   };
 
-  const deleteOrganization = async (orgId: string) => {
-    if (!confirm(`Are you sure?`)) return;
+  const deleteOrganization = async (orgId: string, orgName?: string) => {
+    if (isDeleting) return; // Prevent double submission
+
+    const org = processedHierarchy.find(o => o.entityId === orgId);
+    if (org && (org.parentEntityId == null || org.parentEntityId === '')) {
+      toast.error('Cannot delete the primary organization created during onboarding.');
+      return;
+    }
+    
+    // Find organization name if not provided
+    const orgToDelete = orgName || org?.entityName || processedHierarchy.find(o => o.entityId === orgId)?.entityName || 'this organization';
+    if (!confirm(`Are you sure you want to delete "${orgToDelete}"? This action cannot be undone.`)) return;
+    
+    setIsDeleting(true);
     try {
       const response = await makeRequest(`/entities/${orgId}`, { method: 'DELETE', headers: { 'X-Application': 'crm' } });
       if (response.success) {
@@ -660,10 +744,14 @@ export function OrganizationTreeManagement({
         await loadData();
       }
     } catch (error: any) { toast.error(error.message); }
+    finally { setIsDeleting(false); }
   };
 
   const createLocation = async () => {
+    if (isCreatingLocation) return; // Prevent double submission
     if (!selectedOrg) return;
+    
+    setIsCreatingLocation(true);
     try {
       const response = await makeRequest('/entities/location', {
         method: 'POST',
@@ -683,6 +771,7 @@ export function OrganizationTreeManagement({
         await loadData();
       }
     } catch (error: any) { toast.error(error.message); }
+    finally { setIsCreatingLocation(false); }
   };
 
   const handleAllocateCredits = async () => {
@@ -802,6 +891,20 @@ export function OrganizationTreeManagement({
   }, [locations]);
 
   const canTransferCredits = (org: Organization) => org.children && org.children.length > 0;
+
+  // Helper function to find organization by ID in hierarchy
+  const findOrganizationById = (id: string, orgs: Organization[]): Organization | null => {
+    for (const org of orgs) {
+      if (org.entityId === id) {
+        return org;
+      }
+      if (org.children && org.children.length > 0) {
+        const found = findOrganizationById(id, org.children);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
 
   // --- Tree Node Component ---
 
@@ -937,9 +1040,21 @@ export function OrganizationTreeManagement({
                     <CreditCard className="w-4 h-4 mr-2" /> Allocate Credits to App
                   </DropdownMenuItem>
                 )}
-                {isAdmin && (
-                  <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => deleteOrganization(org.entityId)}>
-                    <Trash2 className="w-4 h-4 mr-2" /> Delete Entity
+                {isAdmin && !isLocation && (org.parentEntityId != null && org.parentEntityId !== '') && (
+                  <DropdownMenuItem 
+                    className="text-red-600 focus:text-red-600" 
+                    onClick={() => deleteOrganization(org.entityId, org.entityName)}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? (
+                      <>
+                        <ZopkitRoundLoader size="xs" className="mr-2" /> Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4 mr-2" /> Delete Entity
+                      </>
+                    )}
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
@@ -1013,6 +1128,7 @@ export function OrganizationTreeManagement({
               size="sm"
               className="h-9"
               onClick={() => setShowHierarchyChart(true)}
+              data-tour-feature="visual-map"
             >
               <List className="w-3.5 h-3.5 mr-2" />
               Visual Map
@@ -1035,7 +1151,7 @@ export function OrganizationTreeManagement({
 
           {loading && !hierarchy ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-              <Loader2 className="w-10 h-10 animate-spin mb-4 text-blue-500" />
+              <ZopkitRoundLoader size="xl" className="mb-4" />
               <p>Loading structure...</p>
             </div>
           ) : processedHierarchy.length > 0 ? (
@@ -1064,9 +1180,9 @@ export function OrganizationTreeManagement({
               </CardHeader>
               <CardContent className="space-y-2">
                 <Button className="w-full justify-start bg-blue-600 hover:bg-blue-700" onClick={() => { setSelectedOrg(parentOrg); setSubForm({ name: '', description: '', responsiblePersonId: '', organizationType: 'department' }); setShowCreateSub(true); }}>
-                  <Plus className="w-4 h-4 mr-2" /> Add Department
+                  <Plus className="w-4 h-4 mr-2" /> Add Sub Organization
                 </Button>
-                <Button variant="outline" className="w-full justify-start border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-900/50" onClick={() => { setSelectedOrg(parentOrg); setLocationForm(prev => ({ ...prev, name: '' })); setShowCreateLocation(true); }}>
+                <Button className="w-full justify-start bg-blue-600 hover:bg-blue-700" onClick={() => { setSelectedOrg(parentOrg); setLocationForm(prev => ({ ...prev, name: '' })); setShowCreateLocation(true); }}>
                   <MapPin className="w-4 h-4 mr-2" /> Add Location
                 </Button>
               </CardContent>
@@ -1113,12 +1229,19 @@ export function OrganizationTreeManagement({
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
               <Label>Name</Label>
-              <Input value={subForm.name} onChange={e => setSubForm({ ...subForm, name: e.target.value })} placeholder="e.g. Engineering" />
+              <Input
+                value={subForm.name}
+                onChange={e => setSubForm({ ...subForm, name: e.target.value })}
+                placeholder="e.g. Engineering"
+                className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              />
             </div>
             <div className="grid gap-2">
               <Label>Type</Label>
               <Select value={subForm.organizationType} onValueChange={v => setSubForm({ ...subForm, organizationType: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {['department', 'team', 'division', 'branch'].map(t => (
                     <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>
@@ -1129,21 +1252,41 @@ export function OrganizationTreeManagement({
             <div className="grid gap-2">
               <Label>Manager (Optional)</Label>
               <Select value={subForm.responsiblePersonId} onValueChange={v => setSubForm({ ...subForm, responsiblePersonId: v })}>
-                <SelectTrigger><SelectValue placeholder="Select User" /></SelectTrigger>
+                <SelectTrigger className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                  <SelectValue placeholder="Select User" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
-                  {users.map(u => <SelectItem key={u.userId} value={u.userId}>{u.name || u.email}</SelectItem>)}
+                  {managerUserList.map(u => (
+                    <SelectItem key={u.userId} value={u.userId}>{u.name || u.email}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="grid gap-2">
               <Label>Description</Label>
-              <Textarea value={subForm.description} onChange={e => setSubForm({ ...subForm, description: e.target.value })} rows={3} />
+              <Textarea
+                value={subForm.description}
+                onChange={e => setSubForm({ ...subForm, description: e.target.value })}
+                rows={3}
+                className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateSub(false)}>Cancel</Button>
-            <Button onClick={createSubOrganization}>Create</Button>
+            <PearlButton variant="outline" onClick={() => setShowCreateSub(false)} disabled={isCreating}>
+              Cancel
+            </PearlButton>
+            <PearlButton onClick={createSubOrganization} disabled={!subForm.name.trim() || isCreating}>
+              {isCreating ? (
+                <>
+                  <ZopkitRoundLoader size="xs" className="mr-2" />
+                  Creating...
+                </>
+              ) : (
+                'Create'
+              )}
+            </PearlButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1155,20 +1298,39 @@ export function OrganizationTreeManagement({
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
               <Label>Name</Label>
-              <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
+              <Input
+                value={editForm.name}
+                onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              />
             </div>
             <div className="grid gap-2">
               <Label>Description</Label>
-              <Textarea value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} />
+              <Textarea
+                value={editForm.description}
+                onChange={e => setEditForm({ ...editForm, description: e.target.value })}
+                className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              />
             </div>
             <div className="flex items-center space-x-2">
-              <input type="checkbox" checked={editForm.isActive} onChange={e => setEditForm({ ...editForm, isActive: e.target.checked })} className="rounded border-gray-300" />
+              <input type="checkbox" checked={editForm.isActive} onChange={e => setEditForm({ ...editForm, isActive: e.target.checked })} className="rounded border-gray-300 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0" />
               <Label>Active</Label>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEdit(false)}>Cancel</Button>
-            <Button onClick={updateOrganization}>Save Changes</Button>
+            <PearlButton variant="outline" onClick={() => setShowEdit(false)} disabled={isUpdating}>
+              Cancel
+            </PearlButton>
+            <PearlButton onClick={updateOrganization} disabled={!editForm.name.trim() || isUpdating}>
+              {isUpdating ? (
+                <>
+                  <ZopkitRoundLoader size="xs" className="mr-2" />
+                  Updating...
+                </>
+              ) : (
+                'Save Changes'
+              )}
+            </PearlButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1182,27 +1344,36 @@ export function OrganizationTreeManagement({
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Name</Label><Input value={locationForm.name} onChange={e => setLocationForm({ ...locationForm, name: e.target.value })} /></div>
+              <div className="space-y-2"><Label>Name</Label><Input value={locationForm.name} onChange={e => setLocationForm({ ...locationForm, name: e.target.value })} className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" /></div>
               <div className="space-y-2"><Label>Type</Label>
                 <Select value={locationForm.locationType} onValueChange={v => setLocationForm({ ...locationForm, locationType: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"><SelectValue /></SelectTrigger>
                   <SelectContent>{['office', 'warehouse', 'retail', 'remote', 'branch'].map(t => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
-            <div className="space-y-2"><Label>Address</Label><Input value={locationForm.address} onChange={e => setLocationForm({ ...locationForm, address: e.target.value })} placeholder="Street Address" /></div>
+            <div className="space-y-2"><Label>Address</Label><Input value={locationForm.address} onChange={e => setLocationForm({ ...locationForm, address: e.target.value })} placeholder="Street Address" className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" /></div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>City</Label><Input value={locationForm.city} onChange={e => setLocationForm({ ...locationForm, city: e.target.value })} /></div>
-              <div className="space-y-2"><Label>State</Label><Input value={locationForm.state} onChange={e => setLocationForm({ ...locationForm, state: e.target.value })} /></div>
+              <div className="space-y-2"><Label>City</Label><Input value={locationForm.city} onChange={e => setLocationForm({ ...locationForm, city: e.target.value })} className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" /></div>
+              <div className="space-y-2"><Label>State</Label><Input value={locationForm.state} onChange={e => setLocationForm({ ...locationForm, state: e.target.value })} className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Zip</Label><Input value={locationForm.zipCode} onChange={e => setLocationForm({ ...locationForm, zipCode: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Country</Label><Input value={locationForm.country} onChange={e => setLocationForm({ ...locationForm, country: e.target.value })} /></div>
+              <div className="space-y-2"><Label>Zip</Label><Input value={locationForm.zipCode} onChange={e => setLocationForm({ ...locationForm, zipCode: e.target.value })} className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" /></div>
+              <div className="space-y-2"><Label>Country</Label><Input value={locationForm.country} onChange={e => setLocationForm({ ...locationForm, country: e.target.value })} className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" /></div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateLocation(false)}>Cancel</Button>
-            <Button onClick={createLocation}>Add Location</Button>
+            <PearlButton variant="outline" onClick={() => setShowCreateLocation(false)} disabled={isCreatingLocation}>Cancel</PearlButton>
+            <PearlButton onClick={createLocation} disabled={!locationForm.name.trim() || isCreatingLocation}>
+              {isCreatingLocation ? (
+                <>
+                  <ZopkitRoundLoader size="xs" className="mr-2" />
+                  Creating...
+                </>
+              ) : (
+                'Add Location'
+              )}
+            </PearlButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1213,12 +1384,11 @@ export function OrganizationTreeManagement({
           <DialogHeader><DialogTitle>Transfer Credits</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-2">
             <Label>Amount</Label>
-            <Input type="number" value={creditTransferForm.amount} onChange={e => setCreditTransferForm({ ...creditTransferForm, amount: e.target.value })} />
+            <Input type="number" value={creditTransferForm.amount} onChange={e => setCreditTransferForm({ ...creditTransferForm, amount: e.target.value })} className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" />
             <Label>Destination (ID)</Label>
-            {/* Simplified select for brevity in this output, logic remains in state */}
-            <Input placeholder="Select ID via Logic" value={creditTransferForm.destinationEntityId} onChange={e => setCreditTransferForm({ ...creditTransferForm, destinationEntityId: e.target.value })} />
+            <Input placeholder="Select ID via Logic" value={creditTransferForm.destinationEntityId} onChange={e => setCreditTransferForm({ ...creditTransferForm, destinationEntityId: e.target.value })} className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" />
           </div>
-          <DialogFooter><Button onClick={() => setShowCreditTransfer(false)}>Close (Demo)</Button></DialogFooter>
+          <DialogFooter><PearlButton variant="outline" onClick={() => setShowCreditTransfer(false)}>Close (Demo)</PearlButton></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1239,7 +1409,7 @@ export function OrganizationTreeManagement({
                 value={allocationForm.targetApplication}
                 onValueChange={v => setAllocationForm({ ...allocationForm, targetApplication: v })}
               >
-                <SelectTrigger><SelectValue placeholder="Select App" /></SelectTrigger>
+                <SelectTrigger className="min-w-0 overflow-hidden [&>span]:min-w-0 [&>span]:block [&>span]:overflow-hidden [&>span]:text-ellipsis [&>span]:whitespace-nowrap focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"><SelectValue placeholder="Select App" /></SelectTrigger>
                 <SelectContent>
                   {effectiveApplications.length === 0 ? (
                     <SelectItem value="no-apps" disabled>No applications available</SelectItem>
@@ -1260,6 +1430,7 @@ export function OrganizationTreeManagement({
                 value={allocationForm.creditAmount || ''}
                 onChange={e => setAllocationForm({ ...allocationForm, creditAmount: parseFloat(e.target.value) || 0 })}
                 placeholder="Enter credit amount"
+                className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
               />
               {selectedEntity && (
                 <p className="text-xs text-slate-500">
@@ -1274,6 +1445,7 @@ export function OrganizationTreeManagement({
                 onChange={e => setAllocationForm({ ...allocationForm, allocationPurpose: e.target.value })}
                 placeholder="Describe the purpose of this allocation"
                 rows={3}
+                className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
               />
             </div>
             <div className="flex items-center space-x-2">
@@ -1282,7 +1454,7 @@ export function OrganizationTreeManagement({
                 id="autoReplenish"
                 checked={allocationForm.autoReplenish}
                 onChange={e => setAllocationForm({ ...allocationForm, autoReplenish: e.target.checked })}
-                className="w-4 h-4 rounded border-slate-300"
+                className="w-4 h-4 rounded border-slate-300 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
               />
               <Label htmlFor="autoReplenish" className="text-sm font-normal cursor-pointer">
                 Auto-replenish when credits run low
@@ -1290,13 +1462,13 @@ export function OrganizationTreeManagement({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAllocationDialog(false)}>Cancel</Button>
-            <Button
+            <PearlButton variant="outline" onClick={() => setShowAllocationDialog(false)}>Cancel</PearlButton>
+            <PearlButton
               onClick={handleAllocateCredits}
               disabled={allocating || !allocationForm.targetApplication || !allocationForm.creditAmount || allocationForm.creditAmount <= 0}
             >
-              {allocating ? <><Loader2 className="animate-spin mr-2" /> Allocating...</> : 'Allocate Credits'}
-            </Button>
+              {allocating ? <><ZopkitRoundLoader size="xs" className="mr-2" /> Allocating...</> : 'Allocate Credits'}
+            </PearlButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1304,24 +1476,57 @@ export function OrganizationTreeManagement({
       {/* Chart Modal */}
       {showHierarchyChart && (
         <div className="fixed inset-0 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm flex flex-col">
-          <div className="p-4 border-b flex justify-between items-center bg-white dark:bg-slate-900">
+          <div className="p-4 border-b flex justify-between items-center bg-white dark:bg-slate-900 shrink-0">
             <h2 className="text-xl font-bold">Visual Hierarchy</h2>
             <Button variant="ghost" onClick={() => setShowHierarchyChart(false)}>Close</Button>
           </div>
-          <div className="flex-1 overflow-hidden relative">
-            <OrganizationHierarchyFlow
+          <div className="flex-1 min-h-0 overflow-hidden relative" style={{ minHeight: '400px' }}>
+            <div className="absolute inset-0 w-full h-full">
+              <OrganizationHierarchyFlow
               hierarchy={hierarchy ? { ...hierarchy, hierarchy: processedHierarchy } : null}
               loading={loading}
               onRefresh={loadData}
               isAdmin={isAdmin}
               tenantId={tenantId}
               tenantName={parentOrg?.entityName || 'Organization'}
-              onNodeClick={() => { }}
-              onEditOrganization={() => { }}
-              onDeleteOrganization={() => { }}
-              onAddSubOrganization={() => { }}
-              onAddLocation={() => { }}
+              onNodeClick={(nodeId) => {
+                const org = findOrganizationById(nodeId, processedHierarchy);
+                if (org) {
+                  setSelectedOrg(org);
+                }
+              }}
+              onEditOrganization={(orgId) => {
+                const org = findOrganizationById(orgId, processedHierarchy);
+                if (org) {
+                  setSelectedOrg(org);
+                  setEditForm({ name: org.entityName, description: org.description || '', isActive: org.isActive !== false });
+                  setShowEdit(true);
+                }
+              }}
+              onDeleteOrganization={(orgId) => {
+                const org = findOrganizationById(orgId, processedHierarchy);
+                if (org) {
+                  deleteOrganization(org.entityId, org.entityName);
+                }
+              }}
+              onAddSubOrganization={(parentId) => {
+                const org = findOrganizationById(parentId, processedHierarchy);
+                if (org) {
+                  setSelectedOrg(org);
+                  setSubForm(prev => ({ ...prev, name: '' }));
+                  setShowCreateSub(true);
+                }
+              }}
+              onAddLocation={(parentId) => {
+                const org = findOrganizationById(parentId, processedHierarchy);
+                if (org) {
+                  setSelectedOrg(org);
+                  setLocationForm(prev => ({ ...prev, name: '' }));
+                  setShowCreateLocation(true);
+                }
+              }}
             />
+            </div>
           </div>
         </div>
       )}
@@ -1393,6 +1598,7 @@ export function OrganizationManagement({
             isAdmin={isAdmin}
             makeRequest={makeRequest}
             applications={applications}
+            employees={employees}
             showEditResponsiblePerson={showEditResponsiblePerson}
             setShowEditResponsiblePerson={setShowEditResponsiblePerson}
             editingEntity={editingEntity}

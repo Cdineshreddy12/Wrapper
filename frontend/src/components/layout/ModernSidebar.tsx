@@ -19,11 +19,24 @@ import {
     AvatarImage,
 } from "@/components/ui/avatar"
 
+// Map sidebar URLs to tour step IDs so DashboardFeatureTour can highlight nav items
+const getTourStepId = (url: string): string | undefined => {
+    if (url.includes('/dashboard/applications') || url === '/dashboard') return 'applications'
+    if (url.includes('/dashboard/users')) return 'users'
+    if (url.includes('/dashboard/organization')) return 'organization'
+    if (url.includes('/dashboard/roles')) return 'roles'
+    if (url.includes('/dashboard/billing')) return 'credits'
+    if (url.includes('/dashboard/settings')) return 'settings'
+    return undefined
+}
+
 // Extract NavItem component OUTSIDE of ModernSidebar to prevent re-mounting
 const NavItem = ({ item, isActive, isCollapsed }: { item: any; isActive: boolean; isCollapsed: boolean }) => {
+    const tourStepId = getTourStepId(item.url)
     return (
         <Link
             to={item.url}
+            {...(tourStepId ? { 'data-tour-step': tourStepId } : {})}
             className={cn(
                 "relative flex items-center gap-4 px-8 py-4 transition-all duration-500 overflow-visible group"
             )}

@@ -40,6 +40,14 @@ export const VisualHub: React.FC<VisualHubProps> = ({ product }) => {
     const [loadingInsight, setLoadingInsight] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const [chartData, setChartData] = useState(generateData(product.id));
+    const [isMobile, setIsMobile] = useState(false);
+
+    useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth < 768);
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
 
     // Mouse tilt effect logic
     const x = useMotionValue(0);
@@ -257,7 +265,6 @@ export const VisualHub: React.FC<VisualHubProps> = ({ product }) => {
                     {product.features.map((feature, index) => {
                         const featureName = typeof feature === 'string' ? feature : feature.title;
                         // Responsive radius
-                        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
                         const radius = isMobile ? 180 : 340;
                         const pos = getFeaturePosition(index, product.features.length, radius);
                         const delay = index * 0.1;
@@ -313,7 +320,7 @@ export const VisualHub: React.FC<VisualHubProps> = ({ product }) => {
                   `}
                                 >
                                     <div className={`w-1.5 h-1.5 rounded-full bg-${product.color}-500`} />
-                                    <span className="text-[12px] font-semibold text-slate-600 whitespace-nowrap">
+                                    <span className="text-[10px] sm:text-[12px] font-semibold text-slate-600 whitespace-nowrap">
                                         {featureName}
                                     </span>
                                 </motion.div>

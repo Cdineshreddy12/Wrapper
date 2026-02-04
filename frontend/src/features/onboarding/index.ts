@@ -23,6 +23,9 @@ export { ReviewStep } from './components/steps/ReviewStep';
 export { StateStep } from './components/steps/StateStep';
 export { TaxDetailsStep } from './components/steps/TaxDetailsStep';
 export { TeamStep } from './components/steps/TeamStep';
+export { OrganizationHierarchyStep } from './components/steps/OrganizationHierarchyStep';
+export { CreditPackagesStep } from './components/steps/CreditPackagesStep';
+export { SettingsOverviewStep } from './components/steps/SettingsOverviewStep';
 
 // Guards
 export { OnboardingPageGuard } from './components/OnboardingPageGuard';

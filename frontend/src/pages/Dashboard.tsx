@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useState, useEffect } from 'react'
 import { useDashboardData } from '../hooks/useDashboardData'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
@@ -18,6 +18,7 @@ import { NotificationManager } from '@/components/notifications'
 import { useQueryState } from 'nuqs'
 import { DashboardMenu } from '@/components/dashboard-menu'
 import AnimatedLoader from '@/components/common/AnimatedLoader'
+import { DashboardFeatureTour } from '@/components/dashboard/DashboardFeatureTour'
 
 export function Dashboard() {
     const {
@@ -47,6 +48,39 @@ export function Dashboard() {
   const isAdmin = user?.email && (
     user.email.includes('admin') 
   )
+
+  // Tour state management
+  const [showTour, setShowTour] = useState(false)
+
+  // Check if tour should be shown
+  useEffect(() => {
+    const tourCompleted = localStorage.getItem('dashboard-tour-completed')
+    const urlParams = new URLSearchParams(location.search)
+    const onboardingComplete = urlParams.get('onboarding') === 'complete'
+    
+    // Show tour if onboarding is complete and tour hasn't been completed
+    if (!tourCompleted && onboardingComplete) {
+      setShowTour(true)
+    }
+  }, [location.search])
+
+  const handleTourComplete = useCallback(() => {
+    setShowTour(false)
+    // Remove onboarding parameter from URL
+    const urlParams = new URLSearchParams(location.search)
+    urlParams.delete('onboarding')
+    const newSearch = urlParams.toString()
+    navigate(`${location.pathname}${newSearch ? `?${newSearch}` : ''}`, { replace: true })
+  }, [location, navigate])
+
+  const handleTourSkip = useCallback(() => {
+    setShowTour(false)
+    // Remove onboarding parameter from URL
+    const urlParams = new URLSearchParams(location.search)
+    urlParams.delete('onboarding')
+    const newSearch = urlParams.toString()
+    navigate(`${location.pathname}${newSearch ? `?${newSearch}` : ''}`, { replace: true })
+  }, [location, navigate])
 
   // Handle tab navigation
   const handleTabChange = useCallback((tab: string) => {
@@ -167,6 +201,14 @@ export function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Dashboard Feature Tour */}
+      {showTour && (
+        <DashboardFeatureTour
+          onComplete={handleTourComplete}
+          onSkip={handleTourSkip}
+        />
+      )}
+
       <div className="py-6">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {/* Header with Refresh Controls */}

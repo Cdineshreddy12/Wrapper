@@ -74,6 +74,14 @@ export const WorkflowVisualizer = () => {
     const [logs, setLogs] = useState<string[]>([]);
     const [executionId, setExecutionId] = useState('SYS-001');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const [isMobile, setIsMobile] = useState(false);
+
+    useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth < 640);
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
 
     const activeWorkflow = workflows[activeWorkflowIndex];
 
@@ -140,7 +148,7 @@ export const WorkflowVisualizer = () => {
     return (
         <div className="w-full max-w-7xl mx-auto px-4">
             <div className="text-center mb-8">
-                <h2 className="text-5xl md:text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-600 to-slate-900 mb-4 tracking-tight">
+                <h2 className="text-3xl sm:text-5xl md:text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-600 to-slate-900 mb-4 tracking-tight">
                     Intelligent Workflow Orchestration
                 </h2>
                 <p className="text-slate-500 text-lg md:text-xl max-w-2xl mx-auto font-light leading-relaxed">
@@ -155,7 +163,7 @@ export const WorkflowVisualizer = () => {
                 <div className="w-full lg:w-72 bg-slate-50 border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col shrink-0">
                     <div className="p-6 border-b border-slate-200 bg-white">
                         <div className="flex items-center gap-3 text-slate-900 mb-1">
-                            <img src="/src/public/Zopkit Simple Logo.jpg" alt="Zopkit" className="w-12 h-12 rounded-xl overflow-hidden shadow-lg" />
+                            <img src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg" alt="Zopkit" className="w-12 h-12 rounded-xl overflow-hidden shadow-lg" />
                             <h3 className="font-bold text-base tracking-tight">Automation Hub</h3>
                         </div>
                         <div className="flex items-center gap-2 mt-4">
@@ -221,7 +229,7 @@ export const WorkflowVisualizer = () => {
                     <div className="absolute inset-0 bg-[linear-gradient(to_right,#f1f5f9_1px,transparent_1px),linear-gradient(to_bottom,#f1f5f9_1px,transparent_1px)] bg-[size:40px_40px]"></div>
 
                     {/* Header */}
-                    <div className="relative z-10 h-16 border-b border-slate-100 bg-white/80 backdrop-blur-md flex items-center justify-between px-8 shrink-0">
+                    <div className="relative z-10 h-16 border-b border-slate-100 bg-white/80 backdrop-blur-md flex items-center justify-between px-4 sm:px-8 shrink-0">
                         <div className="flex items-center gap-4">
                             <h2 className="text-xl font-bold text-slate-900 flex items-center gap-3">
                                 {activeWorkflow.title}
@@ -242,15 +250,16 @@ export const WorkflowVisualizer = () => {
                         {/* Stepper Container */}
                         <div className="relative w-full">
                             {/* 1. Track Background */}
-                            <div className="absolute top-10 left-8 right-8 h-2 bg-slate-100 rounded-full z-0 overflow-hidden">
+                            <div className="absolute top-10 left-4 right-4 sm:left-8 sm:right-8 h-2 bg-slate-100 rounded-full z-0 overflow-hidden">
                                 {/* Dashed pattern overlay */}
                                 <div className="w-full h-full opacity-30" style={{ backgroundImage: 'linear-gradient(90deg, transparent 50%, #cbd5e1 50%)', backgroundSize: '10px 100%' }}></div>
                             </div>
 
                             {/* 2. Active Progress Line */}
-                            <div className="absolute top-10 left-8 h-2 rounded-full z-0 transition-all duration-1000 ease-in-out shadow-lg shadow-blue-200"
+                            <div 
+                                className="absolute top-10 left-4 sm:left-8 h-2 rounded-full z-0 transition-all duration-1000 ease-in-out shadow-lg shadow-blue-200"
                                 style={{
-                                    width: `calc(${(activeStepIndex / (activeWorkflow.steps.length - 1)) * 100}% - 4rem)`,
+                                    width: `calc(${(activeStepIndex / (activeWorkflow.steps.length - 1)) * 100}% - ${isMobile ? '2rem' : '4rem'})`,
                                     background: `linear-gradient(to right, ${activeWorkflowIndex === 0 ? '#2563eb' : activeWorkflowIndex === 1 ? '#9333ea' : '#ea580c'}, ${activeWorkflowIndex === 0 ? '#06b6d4' : activeWorkflowIndex === 1 ? '#db2777' : '#f59e0b'})`
                                 }}
                             ></div>

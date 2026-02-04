@@ -101,22 +101,26 @@ export const useFormPersistence = ({
         return 1;
       }
 
-      // Restore form data if found
+      // Restore form data if found (only when form is still pristine to avoid overwriting user input)
       if (restoredData) {
+        // Skip applying restored data if user has already modified the form (prevents state issues when typing/backspace)
+        if (form.formState.isDirty) {
+          return 1;
+        }
+
         // Reset form first to clear any default values
         form.reset();
-        
+
         // Batch all setValue calls to prevent multiple re-renders
-        // Collect all updates first
         const updates: Array<{ key: string; value: any }> = [];
-        
+
         Object.keys(restoredData).forEach((key) => {
           const value = restoredData[key];
           if (value !== null && value !== undefined && value !== '') {
             updates.push({ key, value });
           }
         });
-        
+
         // Apply all updates in a single batch using setTimeout to batch React updates
         await new Promise<void>((resolve) => {
           setTimeout(() => {

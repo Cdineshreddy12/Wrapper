@@ -13,10 +13,9 @@ import { BillingStatusNavbar } from "@/components/common/BillingStatusNavbar"
 import { NotificationManager } from "@/components/notifications"
 import { SeasonalCreditsCongratulatoryModal } from "@/components/notifications/SeasonalCreditsCongratulatoryModal"
 import { useSeasonalCreditsCongratulatory } from "@/hooks/useSeasonalCreditsCongratulatory"
-import { Home, Building2, Users, Crown, Shield, Activity, CreditCard, Clock, X, Zap, ChevronRight, Settings } from "lucide-react"
-import { useState, useEffect, useRef } from "react"
+import { Home, Building2, Users, Crown, Shield, Activity, CreditCard, Clock, X, Zap, ChevronRight, Settings, BookOpen } from "lucide-react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useNavigate, useLocation, useSearchParams, useParams, Outlet, Link } from "react-router-dom"
-import { useMemo } from "react"
 import { useOrganizationHierarchy } from "@/hooks/useOrganizationHierarchy"
 import { Button } from "../ui"
 import { PearlButton } from "@/components/ui/pearl-button"
@@ -25,6 +24,7 @@ import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/theme/ThemeProvider"
 import { useUserContext } from "@/contexts/UserContextProvider"
 import { useKindeAuth } from "@kinde-oss/kinde-auth-react"
+import { DashboardFeatureTour } from "@/components/dashboard/DashboardFeatureTour"
 
 interface TrialInfo {
   plan: string
@@ -262,6 +262,11 @@ const defaultSidebarData = {
       icon: CreditCard,
     },
     {
+      name: "Tour",
+      url: "", // Will be set dynamically
+      icon: BookOpen,
+    },
+    {
       name: "Settings",
       url: "/dashboard/settings",
       icon: Settings,
@@ -274,6 +279,8 @@ export function DashboardLayout() {
   const [expandedItems, setExpandedItems] = useState<string[]>(['Dashboard'])
   const [trialInfo, setTrialInfo] = useState<TrialInfo | null>(null)
   const [showTrialBanner, setShowTrialBanner] = useState(false)
+  const [showTour, setShowTour] = useState(false)
+  const [showResumePrompt, setShowResumePrompt] = useState(false)
   const [navigationMode] = useState<'traditional' | 'dock'>(
     (localStorage.getItem('navigation-mode') as 'traditional' | 'dock') || 'traditional'
   )
@@ -282,6 +289,89 @@ export function DashboardLayout() {
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const params = useParams()
+
+  // Compute initial step from pathname for contextual start
+  const getInitialStep = useCallback(() => {
+    const path = location.pathname;
+    if (path.includes('/dashboard/billing')) return 3; // Billing & Credits
+    if (path.includes('/dashboard/users')) return 1; // Team
+    if (path.includes('/dashboard/roles')) return 2; // Roles & Permissions
+    return 0; // Applications (default)
+  }, [location.pathname]);
+
+  // Show dashboard feature tour after onboarding (user guide) or replay
+  useEffect(() => {
+    const tourCompleted = localStorage.getItem('dashboard-tour-completed');
+    const onboardingComplete = searchParams.get('onboarding') === 'complete';
+    const tourReplay = searchParams.get('tour') === 'replay';
+    
+    if (tourReplay) {
+      // Clear completion flag and show tour
+      localStorage.removeItem('dashboard-tour-completed');
+      localStorage.removeItem('dashboard-tour-dismissed');
+      localStorage.removeItem('dashboard-tour-step');
+      setShowTour(true);
+      // Remove tour param from URL
+      const next = new URLSearchParams(location.search);
+      next.delete('tour');
+      const search = next.toString();
+      navigate(`${location.pathname}${search ? `?${search}` : ''}`, { replace: true });
+    } else if (!tourCompleted && onboardingComplete) {
+      setShowTour(true);
+    }
+  }, [searchParams, location, navigate]);
+
+  // Check for resume prompt
+  useEffect(() => {
+    const tourCompleted = localStorage.getItem('dashboard-tour-completed');
+    const tourDismissed = localStorage.getItem('dashboard-tour-dismissed');
+    const onboardingComplete = searchParams.get('onboarding') === 'complete';
+    const tourReplay = searchParams.get('tour') === 'replay';
+    
+    if (!tourCompleted && tourDismissed && !onboardingComplete && !tourReplay && !showTour) {
+      setShowResumePrompt(true);
+    }
+  }, [searchParams, showTour]);
+
+  const handleTourComplete = useCallback(() => {
+    setShowTour(false);
+    const next = new URLSearchParams(location.search);
+    next.delete('onboarding');
+    const search = next.toString();
+    navigate(`${location.pathname}${search ? `?${search}` : ''}`, { replace: true });
+  }, [location, navigate]);
+
+  const handleTourSkip = useCallback(() => {
+    setShowTour(false);
+    const next = new URLSearchParams(location.search);
+    next.delete('onboarding');
+    const search = next.toString();
+    navigate(`${location.pathname}${search ? `?${search}` : ''}`, { replace: true });
+  }, [location, navigate]);
+
+  const handleTourDismiss = useCallback((stepIndex: number) => {
+    // Already handled in DashboardFeatureTour (saves to localStorage)
+    setShowTour(false);
+    handleTourSkip();
+  }, [handleTourSkip]);
+
+  const handleResumeChoice = useCallback((action: 'resume' | 'restart' | 'dismiss') => {
+    setShowResumePrompt(false);
+    
+    if (action === 'resume') {
+      // Keep saved step, tour will read it
+      localStorage.removeItem('dashboard-tour-dismissed');
+      setShowTour(true);
+    } else if (action === 'restart') {
+      localStorage.removeItem('dashboard-tour-step');
+      localStorage.removeItem('dashboard-tour-dismissed');
+      setShowTour(true);
+    } else if (action === 'dismiss') {
+      localStorage.setItem('dashboard-tour-completed', 'true');
+      localStorage.removeItem('dashboard-tour-step');
+      localStorage.removeItem('dashboard-tour-dismissed');
+    }
+  }, []);
 
   // Fetch user and tenant data from context
   const { user, tenant } = useUserContext()
@@ -466,6 +556,14 @@ export function DashboardLayout() {
   if (navigationMode !== 'traditional') {
     return (
       <div className="min-h-screen relative overflow-hidden">
+        {showTour && (
+          <DashboardFeatureTour
+            onComplete={handleTourComplete}
+            onSkip={handleTourSkip}
+            onDismiss={handleTourDismiss}
+            initialStep={getInitialStep()}
+          />
+        )}
         {/* Beautiful gradient background for dock mode */}
         <div className={`absolute inset-0 ${glassmorphismEnabled ? 'bg-gradient-to-br from-violet-100/30 via-purple-100/15 to-indigo-100/10 dark:from-slate-950/40 dark:via-slate-900/25 dark:to-slate-950/40 backdrop-blur-3xl' : 'bg-white dark:bg-black'}`}></div>
 
@@ -582,13 +680,87 @@ export function DashboardLayout() {
     )
   }
 
-  // Determine sidebar navigation data based on current route
-  const sidebarNavData = isOrganizationRoute && orgCode
-    ? getOrganizationSidebarData(orgCode, orgHierarchy || [], userData, tenantData)
-    : defaultSidebarData;
+  // Determine sidebar navigation data based on current route with Tour entry
+  const sidebarNavData = useMemo(() => {
+    const baseData = isOrganizationRoute && orgCode
+      ? getOrganizationSidebarData(orgCode, orgHierarchy || [], userData, tenantData)
+      : defaultSidebarData;
+    
+    // Add Tour entry to bottomNav with dynamic URL
+    const tourUrl = `${location.pathname}?tour=replay`;
+    const bottomNavWithTour = [
+      ...(baseData.bottomNav || []).slice(0, -1), // All except last (Settings)
+      { name: "Tour", url: tourUrl, icon: BookOpen },
+      ...(baseData.bottomNav || []).slice(-1) // Settings as last
+    ];
+    
+    return {
+      ...baseData,
+      bottomNav: bottomNavWithTour
+    };
+  }, [isOrganizationRoute, orgCode, orgHierarchy, userData, tenantData, location.pathname]);
 
   return (
     <SidebarProvider className="bg-[#2563EB]">
+      {showTour && (
+        <DashboardFeatureTour
+          onComplete={handleTourComplete}
+          onSkip={handleTourSkip}
+          onDismiss={handleTourDismiss}
+          initialStep={getInitialStep()}
+        />
+      )}
+
+      {/* Resume prompt */}
+      {showResumePrompt && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[120] bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 p-4 max-w-md">
+          <div className="flex items-start gap-3">
+            <BookOpen className="w-5 h-5 text-indigo-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-1">
+                Resume your guide?
+              </h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
+                You were on step {parseInt(localStorage.getItem('dashboard-tour-step') || '0', 10) + 1}. Would you like to continue?
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => handleResumeChoice('resume')}
+                  className="text-xs bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 text-white"
+                >
+                  Resume
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleResumeChoice('restart')}
+                  className="text-xs"
+                >
+                  Start from beginning
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleResumeChoice('dismiss')}
+                  className="text-xs text-slate-500"
+                >
+                  Don't show again
+                </Button>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleResumeChoice('dismiss')}
+              className="h-6 w-6 p-0"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       <ModernSidebar
         navData={sidebarNavData}
         userData={userData}

@@ -6,7 +6,7 @@ import React, { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { StepConfig } from '../config/flowConfigs';
 
-import { Rocket } from 'lucide-react';
+import { Rocket, Loader2 } from 'lucide-react';
 
 interface NavigationButtonsProps {
   currentStep: number;
@@ -16,6 +16,7 @@ interface NavigationButtonsProps {
   onPrev: () => void;
   onNext: () => void;
   onSubmit?: () => void;
+  isSubmitting?: boolean;
   className?: string;
 }
 
@@ -27,6 +28,7 @@ export const NavigationButtons: React.FC<NavigationButtonsProps> = ({
   onPrev,
   onNext,
   onSubmit,
+  isSubmitting = false,
   className = '',
 }) => {
   const isFirstStep = currentStep === 1;
@@ -35,7 +37,7 @@ export const NavigationButtons: React.FC<NavigationButtonsProps> = ({
   // FIXED: Call functions directly - they will be reactive due to useWatch in canProceed
   // The parent component will re-render when form values change, causing this to re-evaluate
   const canProceedNow = canProceed();
-  const canSubmitNow = canSubmit();
+  const canSubmitNow = canSubmit() && !isSubmitting;
 
   return (
     <div className={`flex justify-between items-center gap-4 ${className}`}>
@@ -68,8 +70,17 @@ export const NavigationButtons: React.FC<NavigationButtonsProps> = ({
           className="px-8 py-3 min-w-[180px] bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white font-bold text-lg shadow-lg shadow-pink-500/30 rounded-2xl disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-1 transition-all duration-300"
         >
           <span className="flex items-center gap-2">
-            <span>Launch Workspace</span>
-            <Rocket className="w-5 h-5" />
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Submitting...</span>
+              </>
+            ) : (
+              <>
+                <span>Launch Workspace</span>
+                <Rocket className="w-5 h-5" />
+              </>
+            )}
           </span>
         </Button>
       ) : (

@@ -223,7 +223,7 @@ export const TaxDetailsStep = memo(({ form, userClassification }: TaxDetailsStep
                 </div>
                 <FormControl>
                   <Switch
-                    checked={field.value}
+                    checked={Boolean(field.value)}
                     onCheckedChange={(checked) => {
                       field.onChange(checked);
                       // Trigger validation when toggle changes to enforce GST requirements
@@ -535,8 +535,8 @@ export const TaxDetailsStep = memo(({ form, userClassification }: TaxDetailsStep
                 </div>
                 <FormControl>
                   <Switch
-                    checked={field.value !== false} // Default to true if undefined
-                    onCheckedChange={field.onChange}
+                    checked={field.value !== false}
+                    onCheckedChange={(checked) => field.onChange(Boolean(checked))}
                   />
                 </FormControl>
               </FormItem>

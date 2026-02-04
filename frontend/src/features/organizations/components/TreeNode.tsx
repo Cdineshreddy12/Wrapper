@@ -43,6 +43,7 @@ export function TreeNode({
   const canTransfer = hasChildren;
   const isLocation = (org as any).entityType === 'location';
   const isSelected = selectedItems.includes((org as any).entityId);
+  const isRootOrg = !isLocation && !(org as any).parentEntityId && !(org as any).parentOrganizationId;
 
   // Safety check for required properties
   if (!org || !(org as any).entityId || !(org as any).entityName) {
@@ -194,7 +195,7 @@ export function TreeNode({
             <Edit className="w-4 h-4" />
           </Button>
 
-          {isAdmin && !isLocation && (
+          {isAdmin && !isLocation && !isRootOrg && (
             <Button
               variant="ghost"
               size="sm"

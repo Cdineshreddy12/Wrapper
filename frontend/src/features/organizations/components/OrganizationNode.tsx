@@ -26,6 +26,7 @@ interface OrganizationNodeData {
   availableCredits?: number;
   reservedCredits?: number;
   entityLevel: number;
+  isPrimaryOrganization?: boolean;
   onNodeClick?: (nodeId: string) => void;
   onEditOrganization?: (orgId: string) => void;
   onDeleteOrganization?: (orgId: string) => void;
@@ -45,6 +46,7 @@ export function OrganizationNode({ id, data, selected }: NodeProps<OrganizationN
     availableCredits,
     reservedCredits,
     entityLevel,
+    isPrimaryOrganization,
     onNodeClick,
     onEditOrganization,
     onDeleteOrganization,
@@ -172,7 +174,7 @@ export function OrganizationNode({ id, data, selected }: NodeProps<OrganizationN
                   Edit
                 </DropdownMenuItem>
               )}
-              {onDeleteOrganization && (
+              {onDeleteOrganization && !isPrimaryOrganization && (
                 <DropdownMenuItem onClick={handleDelete} className="text-red-600">
                   <Trash2 className="w-4 h-4 mr-2" />
                   Delete

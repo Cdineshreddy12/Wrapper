@@ -13,7 +13,7 @@ const EcosystemDemo = () => {
       {/* Google Gemini Effect Section */}
       <GoogleGeminiEffectDemo />
 
-      <CostComparison />
+   
 
 
       {/* Call to Action */}

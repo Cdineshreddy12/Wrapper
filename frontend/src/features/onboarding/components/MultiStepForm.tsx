@@ -20,6 +20,7 @@ interface MultiStepFormProps {
   onStepChange?: (step: number) => void;
   className?: string;
   userClassification?: UserClassification;
+  isSubmitting?: boolean;
 }
 
 export const MultiStepForm: React.FC<MultiStepFormProps> = ({
@@ -31,7 +32,8 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
   currentStep: externalCurrentStep,
   onStepChange,
   className,
-  userClassification
+  userClassification,
+  isSubmitting = false
 }) => {
   const {
     currentStep: internalCurrentStep,
@@ -164,6 +166,7 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
             onEditStep={handleEditStep}
             onStepClick={handleStepClick}
             userClassification={userClassification}
+            isSubmitting={isSubmitting}
           />
         </form>
       </Form>

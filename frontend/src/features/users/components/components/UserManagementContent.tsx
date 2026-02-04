@@ -88,7 +88,7 @@ export function UserManagementContent() {
         )}
 
         {/* Users Table */}
-        <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+        <div className="rounded-lg border bg-card shadow-sm overflow-hidden" data-tour-feature="users-table">
           <div className="min-w-0 w-full overflow-x-auto">
             <UserTable
               users={filteredUsers}

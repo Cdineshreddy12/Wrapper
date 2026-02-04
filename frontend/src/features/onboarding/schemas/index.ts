@@ -252,6 +252,11 @@ export interface newBusinessData {
   
   // Terms
   termsAccepted?: boolean; // New
+  
+  // New onboarding steps (optional)
+  selectedCreditPackage?: string; // Package ID
+  organizationHierarchyViewed?: boolean; // Track if user viewed hierarchy guide
+  settingsOverviewViewed?: boolean; // Track if user viewed settings
 }
 
 export interface existingBusinessData {
@@ -321,4 +326,9 @@ export interface existingBusinessData {
   
   // Terms
   termsAccepted?: boolean; // New
+  
+  // New onboarding steps (optional)
+  selectedCreditPackage?: string; // Package ID
+  organizationHierarchyViewed?: boolean; // Track if user viewed hierarchy guide
+  settingsOverviewViewed?: boolean; // Track if user viewed settings
 }

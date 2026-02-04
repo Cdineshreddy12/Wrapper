@@ -18,7 +18,7 @@ export default function GoogleGeminiEffectDemo() {
 
   return (
     <div
-      className="h-[125vh] bg-white w-full border border-gray-200 rounded-md relative pt-40 overflow-clip"
+      className="h-[125vh] bg-white w-full border border-gray-200 rounded-md relative pt-20 md:pt-40 overflow-clip"
       ref={ref}
     >
       <GoogleGeminiEffect

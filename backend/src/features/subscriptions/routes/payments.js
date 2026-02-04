@@ -1026,54 +1026,48 @@ async function handleCheckoutSessionCompleted(session) {
       console.log(`✅ Updated tenant ${tenantId} with Stripe customer ID: ${session.customer}`);
     }
 
-    // Create or update subscription record
+    // Create or update subscription record and allocate plan credits
     if (session.mode === 'subscription') {
-      // For subscription mode, create/update subscription record
-      await SubscriptionService.processApplicationPlanSubscription(
-        tenantId,
-        planConfig,
-        session.subscription,
-        session.customer
-      );
+      // Use handleCheckoutCompleted so subscription is created/updated AND plan credits are allocated
+      await SubscriptionService.handleCheckoutCompleted(session);
 
-      console.log(`✅ Subscription record created/updated for tenant ${tenantId}, plan ${planId}`);
+      console.log(`✅ Subscription record created/updated and credits allocated for tenant ${tenantId}, plan ${planId}`);
     } else if (session.mode === 'payment') {
       // For payment mode (credit purchases), the credit processing happens via invoice payment webhook
       console.log(`💳 Credit purchase session completed for tenant ${tenantId}, plan ${planId}`);
     }
 
-    // Send payment confirmation email
-    try {
-      const userInfo = await getTenantAdminEmail(tenantId);
-      if (userInfo?.email) {
-        const { EmailService } = await import('../../../utils/email.js');
-        const emailService = new EmailService();
-        
-        const paymentType = session.mode === 'subscription' ? 'subscription' : 'credit_purchase';
-        const amount = session.amount_total ? session.amount_total / 100 : planConfig.amount / 100;
-        const currency = session.currency?.toUpperCase() || 'USD';
-        const dollarAmount = session.metadata?.dollarAmount ? parseFloat(session.metadata.dollarAmount) : null;
-        const creditsAdded = dollarAmount ? Math.floor(dollarAmount * 1000) : null; // $1 = 1000 credits at $0.001 per credit
+    // Send payment confirmation email (subscription emails are sent by handleCheckoutCompleted)
+    if (session.mode !== 'subscription') {
+      try {
+        const userInfo = await getTenantAdminEmail(tenantId);
+        if (userInfo?.email) {
+          const { EmailService } = await import('../../../utils/email.js');
+          const emailService = new EmailService();
+          const amount = session.amount_total ? session.amount_total / 100 : planConfig.amount / 100;
+          const currency = session.currency?.toUpperCase() || 'USD';
+          const dollarAmount = session.metadata?.dollarAmount ? parseFloat(session.metadata.dollarAmount) : null;
+          const creditsAdded = dollarAmount ? Math.floor(dollarAmount * 1000) : null;
 
-        await emailService.sendPaymentConfirmation({
-          tenantId,
-          userEmail: userInfo.email,
-          userName: userInfo.name,
-          paymentType,
-          amount: paymentType === 'credit_purchase' && dollarAmount ? dollarAmount : amount,
-          currency,
-          transactionId: session.id,
-          planName: paymentType === 'subscription' ? planDetails.name : 'Credit Purchase',
-          billingCycle: paymentType === 'subscription' ? billingCycle : null,
-          creditsAdded,
-          sessionId: session.id
-        });
-      } else {
-        console.warn('⚠️ Could not find user email for tenant:', tenantId);
+          await emailService.sendPaymentConfirmation({
+            tenantId,
+            userEmail: userInfo.email,
+            userName: userInfo.name,
+            paymentType: 'credit_purchase',
+            amount: dollarAmount ?? amount,
+            currency,
+            transactionId: session.id,
+            planName: 'Credit Purchase',
+            billingCycle: null,
+            creditsAdded,
+            sessionId: session.id
+          });
+        } else {
+          console.warn('⚠️ Could not find user email for tenant:', tenantId);
+        }
+      } catch (emailError) {
+        console.error('❌ Failed to send payment confirmation email:', emailError);
       }
-    } catch (emailError) {
-      console.error('❌ Failed to send payment confirmation email:', emailError);
-      // Don't fail the webhook if email fails
     }
 
   } catch (error) {

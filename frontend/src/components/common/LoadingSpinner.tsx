@@ -1,4 +1,5 @@
 import React from 'react';
+import { ZopkitRoundLoader } from './ZopkitRoundLoader';
 
 interface LoadingSpinnerProps {
   message?: string;
@@ -7,29 +8,20 @@ interface LoadingSpinnerProps {
 }
 
 /**
- * Loading Spinner Component
- * 
- * Features:
- * - Configurable size
- * - Optional message
- * - Customizable styling
+ * Loading Spinner – uses Zopkit round loader everywhere.
  */
-export function LoadingSpinner({ 
-  message = 'Loading...', 
+export function LoadingSpinner({
+  message = 'Loading...',
   size = 'md',
   className = ''
 }: LoadingSpinnerProps) {
-  const sizeClasses = {
-    sm: 'w-4 h-4',
-    md: 'w-8 h-8',
-    lg: 'w-12 h-12'
-  };
-  
+  const loaderSize = size === 'sm' ? 'sm' : size === 'lg' ? 'xl' : 'md';
+
   return (
     <div className={`flex flex-col items-center justify-center p-6 ${className}`}>
-      <div className={`animate-spin rounded-full border-2 border-gray-300 border-t-blue-600 ${sizeClasses[size]}`} />
+      <ZopkitRoundLoader size={loaderSize} />
       {message && (
-        <p className="mt-3 text-sm text-gray-600">{message}</p>
+        <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">{message}</p>
       )}
     </div>
   );

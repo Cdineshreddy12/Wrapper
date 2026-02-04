@@ -18,13 +18,17 @@ import {
   Coins,
   Filter,
   Info,
-  Hash
+  Hash,
+  ChevronRight,
+  ArrowLeft
 } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import api from '@/lib/api';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { PearlButton } from '@/components/ui/pearl-button';
+import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader';
 import { cn } from '@/lib/utils';
 
 interface Application {
@@ -91,6 +95,9 @@ export function ApplicationModuleRoleBuilder({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [builderSearchQuery, setBuilderSearchQuery] = useState('');
+  const [currentStep, setCurrentStep] = useState<1 | 2>(() =>
+    initialRole?.roleName || initialRole?.name ? 2 : 1
+  );
 
   // Role builder state
   const [roleData, setRoleData] = useState<RoleBuilderData>(() => {
@@ -504,10 +511,7 @@ export function ApplicationModuleRoleBuilder({
     return (
       <div className="flex h-screen w-full items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="flex flex-col items-center gap-4">
-          <div className="relative h-12 w-12">
-            <div className="absolute h-full w-full rounded-full border-4 border-slate-200 dark:border-slate-800 opacity-30"></div>
-            <div className="absolute h-full w-full rounded-full border-4 border-t-blue-600 animate-spin"></div>
-          </div>
+          <ZopkitRoundLoader size="xl" />
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400 animate-pulse">Initializing Builder...</p>
         </div>
       </div>
@@ -533,7 +537,7 @@ export function ApplicationModuleRoleBuilder({
 
   return (
     <div className={cn(
-      "h-screen flex flex-col font-sans selection:bg-blue-500/30 overflow-hidden",
+      "h-full min-h-0 flex flex-col font-sans selection:bg-blue-500/30 overflow-hidden",
       isDark ? 'bg-slate-950 text-white' : isMono ? 'bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-900'
     )}>
       <style>{`
@@ -583,33 +587,33 @@ export function ApplicationModuleRoleBuilder({
         </div>
       </div>
 
-      {/* Main Content Area - Flex Split Layout */}
+      {/* Main Content Area - Step 1 only or Step 2 (Matrix) */}
       <div className="flex-1 flex overflow-hidden">
 
-        {/* Left Panel: Compact Configuration (High-Density Column) */}
-        <div className={cn(
-          "w-[220px] flex-none overflow-y-auto no-scrollbar border-r z-10 transition-all",
-          isDark ? "bg-slate-950 border-slate-800" : "bg-white border-slate-200"
-        )}>
-          <div className="p-4 space-y-6">
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-slate-900 dark:text-white pb-2 border-b border-slate-100 dark:border-slate-800/50">
-                <Settings className="w-3.5 h-3.5 opacity-70" />
-                <h3 className="font-black text-[10px] uppercase tracking-widest">Config</h3>
+        {currentStep === 1 ? (
+          /* Step 1: Role Name & Purpose - Full width centered form */
+          <div className="flex-1 flex items-center justify-center p-8 overflow-y-auto">
+            <div className={cn(
+              "w-full max-w-lg rounded-2xl border p-8 shadow-sm",
+              isDark ? "bg-slate-900/50 border-slate-800" : "bg-white border-slate-200"
+            )}>
+              <div className="flex items-center gap-2 text-slate-900 dark:text-white pb-6 border-b border-slate-100 dark:border-slate-800/50 mb-6">
+                <Settings className="w-5 h-5 opacity-70" />
+                <h3 className="font-black text-xs uppercase tracking-widest">Step 1 — Role Name & Purpose</h3>
               </div>
 
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 ml-0.5">
-                    Role Name
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                    Role Name *
                   </label>
                   <input
                     type="text"
                     value={roleData.roleName}
                     onChange={(e) => setRoleData(prev => ({ ...prev, roleName: e.target.value }))}
-                    placeholder="Role ID..."
+                    placeholder="e.g. HR_MANAGER, PROJECT_LEAD"
                     className={cn(
-                      "w-full px-3 py-2 rounded-lg text-[11px] font-black transition-all outline-none border focus:ring-1",
+                      "w-full px-4 py-3 rounded-lg text-sm font-medium transition-all outline-none border focus:ring-2",
                       isDark
                         ? "bg-slate-900 border-slate-800 text-white placeholder-slate-600 focus:border-blue-500"
                         : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-500"
@@ -617,70 +621,76 @@ export function ApplicationModuleRoleBuilder({
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 ml-0.5">
-                    Purpose
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                    Purpose (optional)
                   </label>
                   <textarea
-                    rows={3}
+                    rows={4}
                     value={roleData.description}
                     onChange={(e) => setRoleData(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="Short desc..."
+                    placeholder="Brief description of this role's purpose and responsibilities..."
                     className={cn(
-                      "w-full px-3 py-2 rounded-lg text-[11px] font-medium transition-all outline-none border focus:ring-1 resize-none",
+                      "w-full px-4 py-3 rounded-lg text-sm font-medium transition-all outline-none border focus:ring-2 resize-none",
                       isDark
                         ? "bg-slate-900 border-slate-800 text-white placeholder-slate-600 focus:border-blue-500"
                         : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-500"
                     )}
                   />
                 </div>
-              </div>
-            </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-slate-900 dark:text-white pb-2 border-b border-slate-100 dark:border-slate-800/50">
-                <Activity className="w-3.5 h-3.5 opacity-70" />
-                <h3 className="font-black text-[10px] uppercase tracking-widest">Metrics</h3>
-              </div>
-
-              <div className="grid grid-cols-1 gap-2">
-                {[
-                  { val: summary.totalModules, label: 'Modules', color: 'text-slate-500', icon: Package },
-                  { val: summary.totalPermissions, label: 'Claims', color: 'text-blue-500', icon: Shield }
-                ].map((stat, i) => (
-                  <div key={i} className={cn(
-                    "p-3 rounded-xl border flex items-center gap-3",
-                    isDark ? "bg-slate-900 border-slate-800" : "bg-slate-50 border-slate-200"
-                  )}>
-                    <div className="p-1.5 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                      <stat.icon className={cn("w-3.5 h-3.5", stat.color)} />
-                    </div>
-                    <div>
-                      <div className="text-lg font-black leading-none">{stat.val}</div>
-                      <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{stat.label}</div>
-                    </div>
-                  </div>
-                ))}
+                <div className="pt-4 flex justify-end gap-3">
+                  <PearlButton
+                    variant="outline"
+                    onClick={onCancel}
+                    className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  >
+                    Cancel
+                  </PearlButton>
+                  <PearlButton
+                    variant="primary"
+                    onClick={() => {
+                      if (!roleData.roleName.trim() || roleData.roleName.trim().length < 2) {
+                        toast.error('Please enter a role name (at least 2 characters)');
+                        return;
+                      }
+                      setCurrentStep(2);
+                    }}
+                    disabled={!roleData.roleName.trim() || roleData.roleName.trim().length < 2}
+                    className="gap-2 min-w-[180px]"
+                  >
+                    Continue to Step 2
+                    <ChevronRight className="w-4 h-4" />
+                  </PearlButton>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Right Panel: Matrix (Scrollable Area) */}
+        ) : (
+          /* Step 2: Permission Matrix - Full width (name & purpose already filled in Step 1) */
         <div className={cn(
           "flex-1 flex flex-col min-w-0 bg-slate-50/50 dark:bg-slate-950",
           glass ? "backdrop-blur-sm" : ""
         )}>
-          {/* Matrix Toolbar */}
+          {/* Matrix Toolbar - Step 2 */}
           <div className={cn(
             "flex-none p-4 border-b flex items-center justify-between gap-4 z-20",
             isDark ? "bg-slate-950 border-slate-800" : "bg-white border-slate-200"
           )}>
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => setCurrentStep(1)}
+                className="flex items-center gap-2 text-slate-500 hover:text-blue-600 dark:hover:text-slate-400 dark:hover:text-blue-400 text-xs font-medium"
+                title="Edit role name and purpose"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Edit Step 1</span>
+              </button>
+              <div className="w-px h-5 bg-slate-200 dark:bg-slate-700" />
               <div className="bg-blue-600 text-white p-1.5 rounded-md shadow-sm shadow-blue-500/30">
                 <Grid className="w-4 h-4" />
               </div>
-              <span className="font-semibold text-sm text-slate-900 dark:text-slate-100">Permission Matrix</span>
+              <span className="font-semibold text-sm text-slate-900 dark:text-slate-100">Step 2 — Permission Matrix</span>
             </div>
 
             <div className="relative w-full max-w-md">
@@ -722,7 +732,7 @@ export function ApplicationModuleRoleBuilder({
                       )}
                     >
                       <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all [&[data-state=open]]:bg-blue-600/5 group/trigger">
-                        <div className="flex items-center justify-between w-full pr-6 text-left" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between w-full pr-6 text-left">
                           <div className="flex items-center gap-5">
                             <div className={cn(
                               "w-12 h-12 rounded-2xl flex items-center justify-center transition-all border relative shadow-sm",
@@ -771,11 +781,11 @@ export function ApplicationModuleRoleBuilder({
 
                             return (
                               <div key={module.moduleCode} className={cn(
-                                "p-6 grid grid-cols-12 gap-8 items-start transition-all",
+                                "p-6 grid grid-cols-12 gap-6 items-start transition-all",
                                 isModuleActive ? "bg-blue-50/20 dark:bg-blue-900/5" : "hover:bg-slate-50/50 dark:hover:bg-slate-800/30"
                               )}>
-                                {/* Module Identity Column */}
-                                <div className="col-span-2 border-r border-slate-100 dark:border-slate-800 pr-6 space-y-4 pt-1">
+                                {/* Module Identity Column - narrower to give more width to permissions */}
+                                <div className="col-span-1 xl:col-span-2 border-r border-slate-100 dark:border-slate-800 pr-4 xl:pr-6 space-y-4 pt-1 min-w-0">
                                   <div>
                                     <h4 className={cn(
                                       "text-[12px] font-black uppercase tracking-tight leading-4 mb-1",
@@ -800,23 +810,22 @@ export function ApplicationModuleRoleBuilder({
                                     >
                                       {isAllModuleSelected ? 'FULL SYNC' : isModuleActive ? 'PARTIAL' : 'NOT ACTIVE'}
                                     </button>
-                                    <div className="flex justify-between items-center px-1.5 opacity-50">
-                                      <span className="text-[8px] font-black uppercase text-slate-400 tracking-tighter">Impact Score</span>
-                                      <span className="text-[9px] font-black text-slate-800 dark:text-slate-300 tracking-tighter">{(module.permissions.length * 0.5).toFixed(1)} CR/T</span>
-                                    </div>
                                   </div>
                                 </div>
 
-                                {/* Capability Matrix Grid (Fixed 6-Column) */}
-                                <div className="col-span-10">
-                                  <div className="grid grid-cols-6 gap-3">
+                                {/* Capability Matrix Grid - wider area for permissions */}
+                                <div className="col-span-11 xl:col-span-10 min-w-0">
+                                  <TooltipProvider delayDuration={300}>
+                                  <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-3">
                                     {module.permissions.map((perm) => {
                                       const isPermSelected = selectedPerms.includes(perm.code);
                                       const { icon, risk } = analyzePermissionType(perm.code);
+                                      const tooltipText = [perm.name, perm.description].filter(Boolean).join(' — ') || perm.code || 'Permission';
 
                                       return (
+                                        <Tooltip key={perm.code}>
+                                          <TooltipTrigger asChild>
                                         <button
-                                          key={perm.code}
                                           onClick={() => togglePermissionSelection(app.appCode, module.moduleCode, perm.code)}
                                           className={cn(
                                             "group/chip relative flex flex-col gap-2 p-3 rounded-2xl border transition-all hover:shadow-xl text-left h-full select-none",
@@ -826,7 +835,6 @@ export function ApplicationModuleRoleBuilder({
                                                   : "bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800 shadow-blue-500/5 shadow-inner"
                                               : "bg-white dark:bg-slate-900/40 border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-800/50 shadow-sm"
                                           )}
-                                          title={perm.description}
                                         >
                                           <div className="flex items-start justify-between">
                                             <div className={cn(
@@ -845,7 +853,7 @@ export function ApplicationModuleRoleBuilder({
 
                                           <div className="flex-1 min-w-0">
                                             <div className={cn(
-                                              "text-[10px] font-black uppercase leading-tight truncate tracking-tight mb-0.5",
+                                              "text-[10px] font-black uppercase leading-tight line-clamp-2 tracking-tight mb-0.5 break-words",
                                               isPermSelected ? "text-slate-900 dark:text-white" : "text-slate-500"
                                             )}>
                                               {perm.name}
@@ -859,9 +867,15 @@ export function ApplicationModuleRoleBuilder({
                                             <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
                                           )}
                                         </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" className="max-w-xs text-xs bg-blue-600 text-white border-blue-500">
+                                            {tooltipText}
+                                          </TooltipContent>
+                                        </Tooltip>
                                       );
                                     })}
                                   </div>
+                                  </TooltipProvider>
                                 </div>
                               </div>
                             );
@@ -924,6 +938,7 @@ export function ApplicationModuleRoleBuilder({
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

@@ -112,6 +112,12 @@ export function OrganizationTreeManagement({
     description: ''
   });
 
+  // Loading states for CRUD operations
+  const [isCreating, setIsCreating] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isCreatingLocation, setIsCreatingLocation] = useState(false);
+
   // Load data
   const loadData = async () => {
     try {
@@ -313,15 +319,15 @@ export function OrganizationTreeManagement({
 
   // CRUD Operations
   const createSubOrganization = async () => {
-    // Allow creating without parent for top-level organizations
-    // Only require parent selection if organizations already exist
-
+    if (isCreating) return; // Prevent double submission
+    
     // Client-side validation
     if (!subForm.name || subForm.name.trim().length < 2) {
       toast.error('Organization name must be at least 2 characters long');
       return;
     }
 
+    setIsCreating(true);
     try {
       console.log('📝 Creating sub-organization:', {
         name: subForm.name,
@@ -354,10 +360,13 @@ export function OrganizationTreeManagement({
     } catch (error: any) {
       console.error('❌ Failed to create sub-organization:', error);
       toast.error(error.message || 'Failed to create sub-organization');
+    } finally {
+      setIsCreating(false);
     }
   };
 
   const updateOrganization = async () => {
+    if (isUpdating) return; // Prevent double submission
     if (!selectedOrg) return;
 
     // Client-side validation
@@ -366,6 +375,7 @@ export function OrganizationTreeManagement({
       return;
     }
 
+    setIsUpdating(true);
     try {
       const response = await makeRequest(`/entities/${selectedOrg.entityId}`, {
         method: 'PUT',
@@ -386,14 +396,19 @@ export function OrganizationTreeManagement({
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update organization');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
   const deleteOrganization = async (orgId: string, orgName: string) => {
+    if (isDeleting) return; // Prevent double submission
+    
     if (!confirm(`Are you sure you want to delete "${orgName}"? This action cannot be undone.`)) {
       return;
     }
 
+    setIsDeleting(true);
     try {
       const response = await makeRequest(`/entities/${orgId}`, {
         method: 'DELETE',
@@ -406,12 +421,16 @@ export function OrganizationTreeManagement({
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete organization');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
   const createLocation = async () => {
+    if (isCreatingLocation) return; // Prevent double submission
     if (!selectedOrg) return;
 
+    setIsCreatingLocation(true);
     try {
       const response = await makeRequest('/entities/location', {
         method: 'POST',
@@ -450,6 +469,8 @@ export function OrganizationTreeManagement({
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to create location');
+    } finally {
+      setIsCreatingLocation(false);
     }
   };
 
@@ -1082,9 +1103,12 @@ export function OrganizationTreeManagement({
           }}
           onDeleteOrganization={(orgId) => {
             const org = findOrganizationById(orgId, processedHierarchy);
-            if (org) {
-              deleteOrganization(org.entityId, org.entityName);
+            if (!org) return;
+            if (!org.parentEntityId && !(org as any).parentOrganizationId) {
+              toast.error('Cannot delete the primary organization created during onboarding.');
+              return;
             }
+            deleteOrganization(org.entityId, org.entityName);
           }}
           onAddSubOrganization={(parentId) => {
             const org = findOrganizationById(parentId, processedHierarchy);
@@ -1109,16 +1133,19 @@ export function OrganizationTreeManagement({
         subForm={subForm}
         setSubForm={setSubForm}
         onCreateSubOrganization={createSubOrganization}
+        isCreating={isCreating}
         showEdit={showEdit}
         setShowEdit={setShowEdit}
         editForm={editForm}
         setEditForm={setEditForm}
         onUpdateOrganization={updateOrganization}
+        isUpdating={isUpdating}
         showCreateLocation={showCreateLocation}
         setShowCreateLocation={setShowCreateLocation}
         locationForm={locationForm}
         setLocationForm={setLocationForm}
         onCreateLocation={createLocation}
+        isCreatingLocation={isCreatingLocation}
         showCreditTransfer={showCreditTransfer}
         setShowCreditTransfer={setShowCreditTransfer}
         creditTransferForm={creditTransferForm}

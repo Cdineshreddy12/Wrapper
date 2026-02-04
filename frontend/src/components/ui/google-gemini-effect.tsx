@@ -42,7 +42,7 @@ export const GoogleGeminiEffect = ({
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="text-3xl md:text-7xl font-bold text-center bg-clip-text text-transparent bg-gradient-to-b from-slate-900 to-slate-600 tracking-tight"
+          className="text-2xl sm:text-3xl md:text-7xl font-bold text-center bg-clip-text text-transparent bg-gradient-to-b from-slate-900 to-slate-600 tracking-tight"
         >
           {title || `Ecosystem Interconnectivity`}
         </motion.h2>
@@ -196,7 +196,7 @@ export const GoogleGeminiEffect = ({
                 <div className="w-full h-full flex flex-col items-center justify-center text-center">
                   <div className="w-12 h-12 rounded-xl overflow-hidden shadow-lg mb-1">
                     <img
-                      src="/src/public/Zopkit Simple Logo.jpg"
+                      src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg"
                       alt="Zopkit"
                       className="w-full h-full object-cover"
                     />

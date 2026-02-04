@@ -200,7 +200,6 @@ export const useStepNavigation = (
         const hasFirstName = !!values.firstName && !hasError('firstName', errors);
         const hasLastName = !!values.lastName && !hasError('lastName', errors);
         const hasAdminEmail = !!values.adminEmail && isValidEmail(values.adminEmail) && !hasError('adminEmail', errors);
-        const hasSupportEmail = !!values.supportEmail && isValidEmail(values.supportEmail) && !hasError('supportEmail', errors);
         
         // FIXED: Mobile validation - required for certain classifications, but always validate format if provided
         const needsMobile = userClassification === 'withGST' || userClassification === 'enterprise';
@@ -215,7 +214,12 @@ export const useStepNavigation = (
           hasMobile = !hasError('adminMobile', errors);
         }
         
-        return hasFirstName && hasLastName && hasAdminEmail && hasSupportEmail && hasMobile;
+        return hasFirstName && hasLastName && hasAdminEmail && hasMobile;
+      case 'organizationHierarchy':
+      case 'creditPackages':
+      case 'settingsOverview':
+        // Informational steps - always allow proceeding (no validation required)
+        return true;
       case 'review':
         // On review step, canProceed should always return true
         // The submit button will be controlled by canSubmit which checks termsAccepted
@@ -281,7 +285,7 @@ export const useStepNavigation = (
         }
         break;
       case 'adminDetails':
-        stepFields.push('firstName', 'lastName', 'adminEmail', 'supportEmail');
+        stepFields.push('firstName', 'lastName', 'adminEmail');
         
         // FIXED: Always validate adminMobile format if provided, but only require it for certain classifications
         // This ensures format validation happens before moving to next step, not just on submission
@@ -305,9 +309,23 @@ export const useStepNavigation = (
         // Optional but validate if present
         stepFields.push('contactJobTitle', 'preferredContactMethod', 'billingEmail');
         break;
+      case 'organizationHierarchy':
+      case 'creditPackages':
+      case 'settingsOverview':
+        // Informational steps - no validation required, allow proceeding immediately
+        // Skip validation and proceed directly
+        setCurrentStep(prev => prev + 1);
+        return true;
     }
     
     // STRICT VALIDATION: Trigger validation for ALL step-specific fields
+    // Only if stepFields array has items (skip for informational steps)
+    if (stepFields.length === 0) {
+      // No fields to validate, proceed
+      setCurrentStep(prev => prev + 1);
+      return true;
+    }
+    
     const validationResults = await Promise.all(
       stepFields.map(field => form.trigger(field as any))
     );

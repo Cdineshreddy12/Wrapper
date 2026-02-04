@@ -1,7 +1,6 @@
 import React from "react"
 import { createRoot } from "react-dom/client"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { Toaster as SonnerToaster } from "@/components/ui/sonner"
 import { NuqsAdapter } from 'nuqs/adapters/react'
 import App from "@/App"
 import "@/index.css"
@@ -41,7 +40,6 @@ createRoot(document.getElementById("root") as HTMLElement).render(
     <QueryClientProvider client={queryClient}>
       <NuqsAdapter>
         <App />
-        <SonnerToaster position="top-right" richColors offset="80px" gap={12} />
       </NuqsAdapter>
     </QueryClientProvider>
   </React.StrictMode>

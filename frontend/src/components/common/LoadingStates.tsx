@@ -4,9 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { ZopkitRoundLoader } from './ZopkitRoundLoader';
 
 // ============================================================================
-// LOADING STATES
+// LOADING STATES (use ZopkitRoundLoader everywhere)
 // ============================================================================
 
 interface LoadingSpinnerProps {
@@ -15,17 +16,7 @@ interface LoadingSpinnerProps {
 }
 
 export function LoadingSpinner({ size = 'md', className }: LoadingSpinnerProps) {
-  const sizeClasses = {
-    xs: 'w-3 h-3',
-    sm: 'w-4 h-4',
-    md: 'w-6 h-6',
-    lg: 'w-8 h-8',
-    xl: 'w-12 h-12'
-  };
-
-  return (
-    <div className={cn('animate-spin rounded-full border-2 border-gray-100 border-t-blue-500', sizeClasses[size], className)} />
-  );
+  return <ZopkitRoundLoader size={size as 'xs' | 'sm' | 'md' | 'lg' | 'xl'} className={className} />;
 }
 
 interface PageLoadingProps {
@@ -45,9 +36,9 @@ export function PageLoading({
       showBackground ? 'min-h-screen bg-background' : 'min-h-[400px]',
       className
     )}>
-      <div className="text-center">
-        <LoadingSpinner size="lg" className="mx-auto mb-4" />
-        <p className="text-muted-foreground">{message}</p>
+      <div className="text-center flex flex-col items-center">
+        <ZopkitRoundLoader size="page" className="mb-4" />
+        <p className="text-muted-foreground mt-2">{message}</p>
       </div>
     </div>
   );
@@ -390,8 +381,8 @@ export function LoadingOverlay({
       {children}
       {isLoading && (
         <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10">
-          <div className="text-center">
-            <LoadingSpinner size="lg" className="mx-auto mb-2" />
+          <div className="text-center flex flex-col items-center">
+            <ZopkitRoundLoader size="xl" className="mb-2" />
             <p className="text-sm text-muted-foreground">{message}</p>
           </div>
         </div>

@@ -71,6 +71,8 @@ export default defineConfig(({ mode }) => {
   return {
     plugins,
     resolve: {
+      // Ensure a single copy of React so hooks work (fixes "Invalid hook call")
+      dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(__dirname, './src'),
         '@components': path.resolve(__dirname, './src/components'),

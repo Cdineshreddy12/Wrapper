@@ -523,8 +523,8 @@ const ApplicationCreditAllocations: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent>
                   {SUPPORTED_APPLICATIONS.map((app) => (
-                    <SelectItem key={app.code} value={app.code}>
-                      {app.name} - {app.description}
+                    <SelectItem key={app.code} value={app.code} title={`${app.name} – ${app.description}`}>
+                      {app.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

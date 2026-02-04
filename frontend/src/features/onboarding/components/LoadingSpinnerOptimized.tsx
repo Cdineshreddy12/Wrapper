@@ -5,7 +5,6 @@ import {
   Server,
   ShieldCheck,
   Sparkles,
-  Rocket,
   Database,
   Cpu
 } from 'lucide-react';
@@ -29,13 +28,14 @@ interface LoadingSpinnerProps {
   showProgress?: boolean;
   onComplete?: () => void;
   userName?: string;
+  companyName?: string;
 }
 
 const DEFAULT_STEPS: LoadingStep[] = [
-  { id: 'env', label: 'Initializing Environment', subtext: 'Provisioning secure containers...', duration: 1500 },
-  { id: 'db', label: 'Configuring Database', subtext: 'Syncing schema and indexes...', duration: 2000 },
-  { id: 'auth', label: 'Verifying Permissions', subtext: 'Setting up RBAC policies...', duration: 1200 },
-  { id: 'ui', label: 'Polishing Pixels', subtext: 'Generating user workspace...', duration: 1800 },
+  { id: 'org', label: 'Creating Organization', subtext: 'Setting up your workspace and company profile...', duration: 1800 },
+  { id: 'db', label: 'Configuring Database', subtext: 'Initializing secure data storage and backups...', duration: 2000 },
+  { id: 'auth', label: 'Setting Up Security', subtext: 'Configuring authentication and access controls...', duration: 1500 },
+  { id: 'features', label: 'Enabling Features', subtext: 'Activating billing, users, and team management...', duration: 1700 },
 ];
 
 export const LoadingSpinnerOptimized: React.FC<LoadingSpinnerProps> = ({
@@ -43,7 +43,8 @@ export const LoadingSpinnerOptimized: React.FC<LoadingSpinnerProps> = ({
   size = 'md',
   showProgress = false,
   onComplete,
-  userName = "Creator"
+  userName = "Creator",
+  companyName
 }) => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -115,10 +116,10 @@ export const LoadingSpinnerOptimized: React.FC<LoadingSpinnerProps> = ({
 
   const getSpecificIcon = (id: string) => {
     switch (id) {
-      case 'env': return <Server className="w-4 h-4" />;
+      case 'org': return <Server className="w-4 h-4" />;
       case 'db': return <Database className="w-4 h-4" />;
       case 'auth': return <ShieldCheck className="w-4 h-4" />;
-      case 'ui': return <Sparkles className="w-4 h-4" />;
+      case 'features': return <Sparkles className="w-4 h-4" />;
       default: return <Cpu className="w-4 h-4" />;
     }
   };
@@ -150,25 +151,32 @@ export const LoadingSpinnerOptimized: React.FC<LoadingSpinnerProps> = ({
         {/* Header Section - Simplified */}
         <div className="p-8 border-b border-slate-200 text-center">
           <div className="flex flex-col items-center">
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-6 shadow-lg transition-all duration-500 ${
-              status === LaunchStatus.COMPLETED
-                ? 'bg-emerald-500 scale-110'
-                : 'bg-indigo-500'
-            }`}>
-              {status === LaunchStatus.COMPLETED ? (
-                <Rocket className="w-8 h-8 text-white" />
-              ) : (
-                <Sparkles className="w-8 h-8 text-white" />
-              )}
+            {/* Logo */}
+            <div className="mb-4 relative">
+              <div className="absolute inset-0 bg-white/20 rounded-xl blur-md"></div>
+              <img
+                src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg"
+                alt="Zopkit Logo"
+                className="relative h-14 w-auto object-contain rounded-lg"
+              />
             </div>
 
+            {/* Company Name */}
+            {companyName && (
+              <div className="mb-4">
+                <h1 className="text-xl font-bold text-gray-900 tracking-tight">
+                  Welcome, {companyName}
+                </h1>
+              </div>
+            )}
+
             <h2 className="text-2xl font-bold text-gray-900 mb-2 tracking-tight">
-              {status === LaunchStatus.COMPLETED ? `Welcome, ${userName}!` : (message || 'Setting up your HQ')}
+              {status === LaunchStatus.COMPLETED ? `Welcome, ${userName}!` : (message || 'Setting up your organization...')}
             </h2>
             <p className="text-gray-600 text-base max-w-xs mx-auto">
               {status === LaunchStatus.COMPLETED
-                ? "Your workspace is ready for liftoff."
-                : "Sit tight, we're building something special for you."}
+                ? "Your workspace is ready! Start managing your team and business operations."
+                : "We're configuring your workspace with all the tools you need to succeed."}
             </p>
           </div>
         </div>

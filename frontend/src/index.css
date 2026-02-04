@@ -47,6 +47,20 @@ body {
   background: transparent;
 }
 
+/* Tour pulse animation */
+@keyframes tour-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 3px rgb(255, 255, 255), 0 0 20px rgba(99, 102, 241, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgb(255, 255, 255), 0 0 30px rgba(99, 102, 241, 0.4);
+  }
+}
+
+.tour-pulse {
+  animation: tour-pulse 2s ease-in-out infinite;
+}
+
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 10px;
@@ -212,8 +226,8 @@ body {
   --secondary-foreground: oklch(0.18 0.01 280);
   --muted: oklch(0.96 0.01 285);
   --muted-foreground: oklch(0.5 0.02 280);
-  --accent: oklch(0.92 0.08 290);
-  --accent-foreground: oklch(0.18 0.01 280);
+  --accent: oklch(0.92 0.08 250);
+  --accent-foreground: oklch(0.18 0.01 250);
   --destructive: oklch(0.58 0.25 25);
   --border: oklch(0.9 0.01 285);
   --input: oklch(0.9 0.01 285);
@@ -246,7 +260,7 @@ body {
   --secondary-foreground: oklch(0.95 0.005 270);
   --muted: oklch(0.25 0.03 285);
   --muted-foreground: oklch(0.65 0.02 280);
-  --accent: oklch(0.3 0.08 290);
+  --accent: oklch(0.3 0.08 250);
   --accent-foreground: oklch(0.95 0.005 270);
   --destructive: oklch(0.65 0.22 20);
   --border: oklch(0.25 0.02 285);

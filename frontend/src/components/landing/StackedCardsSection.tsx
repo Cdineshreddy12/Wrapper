@@ -702,7 +702,7 @@ export const StackedCard: React.FC<CardProps> = ({
           zIndex: index,
           transformOrigin: "top center",
         }}
-        className="relative w-full max-w-[95vw] lg:max-w-[1400px] h-[85vh] flex flex-col will-change-transform"
+        className="relative w-full max-w-[95vw] lg:max-w-[1400px] h-[90vh] sm:h-[85vh] min-h-[600px] flex flex-col will-change-transform"
       >
 
         <div className={`relative w-full h-full bg-white rounded-[2rem] shadow-2xl overflow-hidden border border-slate-200 flex flex-col lg:flex-row isolate ${isLast ? 'shadow-none' : ''} cursor-pointer transition-all duration-300 ${isActive ? 'ring-2 ring-blue-500 shadow-blue-500/20' : 'hover:shadow-xl hover:shadow-slate-500/10'}`} onClick={onClick}>
@@ -717,7 +717,7 @@ export const StackedCard: React.FC<CardProps> = ({
           {/* --- LEFT SIDE: Content --- */}
           <motion.div
             style={{ y: textParallax }}
-            className="w-full lg:w-[40%] p-8 md:p-10 flex flex-col relative z-20 bg-white border-r border-slate-100"
+            className="w-full lg:w-[40%] p-6 md:p-8 lg:p-10 flex flex-col relative z-20 bg-white border-r border-slate-100"
           >
             {/* Header Pill */}
             <div className="flex items-center space-x-3 mb-4">
@@ -729,7 +729,7 @@ export const StackedCard: React.FC<CardProps> = ({
               </span>
             </div>
 
-            <h2 className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight mb-2 leading-tight">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 tracking-tight mb-2 leading-tight">
               {app.name}
             </h2>
 

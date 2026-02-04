@@ -14,11 +14,28 @@ import AccountSettings from './AccountSettings'
 export const Settings: React.FC = () => {
   const { actualTheme, glassmorphismEnabled, setGlassmorphismEnabled } = useTheme()
   const [navigationMode, setNavigationMode] = useState<'traditional' | 'dock'>('traditional')
+  const [activeTab, setActiveTab] = useState<string>('general')
 
   // Get current settings from localStorage or defaults
   React.useEffect(() => {
     const savedNavigationMode = localStorage.getItem('navigation-mode') as 'traditional' | 'dock' || 'traditional'
     setNavigationMode(savedNavigationMode)
+    
+    // Check if tour wants to open account tab
+    const urlParams = new URLSearchParams(window.location.search)
+    if (urlParams.get('tab') === 'account') {
+      setActiveTab('account')
+    }
+    
+    // Listen for tour event to open account tab
+    const handleTourAccountTab = () => {
+      setActiveTab('account')
+    }
+    window.addEventListener('tour-open-account-tab', handleTourAccountTab)
+    
+    return () => {
+      window.removeEventListener('tour-open-account-tab', handleTourAccountTab)
+    }
   }, [])
 
   const handleNavigationModeChange = (mode: 'traditional' | 'dock') => {
@@ -34,6 +51,7 @@ export const Settings: React.FC = () => {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
       className="max-w-6xl mx-auto p-6 space-y-8"
+      data-tour-feature="settings-general"
     >
       <div className="space-y-2">
         <h1 className="text-3xl font-bold text-foreground">Settings</h1>
@@ -42,13 +60,13 @@ export const Settings: React.FC = () => {
         </p>
       </div>
 
-      <Tabs defaultValue="general" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList>
           <TabsTrigger value="general">
             <Monitor className="h-4 w-4 mr-2" />
             General
           </TabsTrigger>
-          <TabsTrigger value="account">
+          <TabsTrigger value="account" data-tour-feature="settings-account">
             <Building2 className="h-4 w-4 mr-2" />
             Account Details
           </TabsTrigger>

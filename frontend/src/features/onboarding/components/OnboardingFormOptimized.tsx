@@ -1,12 +1,10 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useOnboardingForm } from '../hooks';
 import { useFormPersistenceOptimized } from '../hooks/useFormPersistenceOptimized';
 import { UserClassification } from './FlowSelector';
 import { MultiStepForm } from './MultiStepForm';
 import { ErrorBoundary } from './ErrorBoundary';
-import { LoadingSpinnerOptimized } from './LoadingSpinnerOptimized';
-import { SuccessMessage } from './SuccessMessage';
+import { OnboardingWelcomeSuccess } from './OnboardingWelcomeSuccess';
 import { toast as sonnerToast } from 'sonner';
 import { useRateLimit } from '../hooks/useRateLimit';
 import { sanitizeFormData } from '../utils/sanitization';
@@ -136,11 +134,12 @@ export const determineUserClassification = (
 };
 
 export const OnboardingFormOptimized = () => {
-  const navigate = useNavigate();
   const [selectedFlow] = useState<'newBusiness' | 'existingBusiness'>('newBusiness');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [redirectUrl, setRedirectUrl] = useState('/dashboard');
+  const [companyName, setCompanyName] = useState<string | undefined>();
 
   const [userClassification] = useState<UserClassification | undefined>(() => {
     const classification = determineUserClassification(
@@ -402,19 +401,16 @@ export const OnboardingFormOptimized = () => {
         onboardingLogger.info('Onboarding submit success', { responseData: response.data });
         sonnerToast.dismiss(loadingToastId);
         clearFormData();
-
+        const baseUrl = response.data?.data?.redirectUrl || '/dashboard';
+        const url = baseUrl.startsWith('/dashboard') && !baseUrl.includes('onboarding=complete')
+          ? (baseUrl.includes('?') ? `${baseUrl}&onboarding=complete` : `${baseUrl}?onboarding=complete`)
+          : baseUrl;
+        setRedirectUrl(url);
+        setCompanyName(companyName); // Use the extracted companyName from above
         sonnerToast.success('🎉 Organization Created Successfully!', {
-          description: 'Redirecting to your dashboard...',
+          description: 'Setting up your workspace...',
           duration: 2000,
         });
-
-        const redirectUrl = response.data?.data?.redirectUrl || '/dashboard';
-        await new Promise(resolve => setTimeout(resolve, 800));
-        if (redirectUrl.startsWith('http')) {
-          window.location.href = redirectUrl;
-        } else {
-          navigate(redirectUrl);
-        }
         setIsSubmitted(true);
       } else {
         const msg = response.data.message || 'Onboarding failed';
@@ -438,7 +434,7 @@ export const OnboardingFormOptimized = () => {
         duration: 8000
       });
     }
-  }, [selectedFlow, clearFormData, form, setIsSubmitting, isRateLimited, recordAttempt, getTimeUntilReset, setCurrentStep, navigate]);
+  }, [selectedFlow, clearFormData, form, setIsSubmitting, isRateLimited, recordAttempt, getTimeUntilReset, setCurrentStep]);
 
   const handleError = useCallback((error: Error, errorInfo: any) => {
     onboardingLogger.error('Onboarding ErrorBoundary', { message: error.message, stack: error.stack, componentStack: errorInfo?.componentStack });
@@ -454,7 +450,7 @@ export const OnboardingFormOptimized = () => {
   }, [currentStep]);
 
   if (isSubmitted) {
-    return <SuccessMessage />;
+    return <OnboardingWelcomeSuccess redirectUrl={redirectUrl} companyName={companyName} />;
   }
 
   if (!flowConfig) {
@@ -477,16 +473,6 @@ export const OnboardingFormOptimized = () => {
           </div>
         </div>
       </ErrorBoundary>
-    );
-  }
-
-  if (isSubmitting) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 relative overflow-hidden">
-        <div className="relative z-10">
-          <LoadingSpinnerOptimized size="lg" message="Setting up your organization..." showProgress={true} />
-        </div>
-      </div>
     );
   }
 
@@ -514,6 +500,7 @@ export const OnboardingFormOptimized = () => {
           currentStep={currentStep}
           onStepChange={handleStepChange}
           userClassification={userClassification}
+          isSubmitting={isSubmitting}
         />
       </div>
     </ErrorBoundary>

@@ -78,9 +78,10 @@ DELETE FROM credit_configurations WHERE tenant_id IN (SELECT tenant_id FROM tena
 -- 21. Nullify primary_organization_id in tenant_users
 UPDATE tenant_users SET primary_organization_id = NULL WHERE tenant_id IN (SELECT tenant_id FROM tenants);
 
--- 22. entities (clear parent ref then delete)
-UPDATE entities SET parent_entity_id = NULL WHERE tenant_id IN (SELECT tenant_id FROM tenants);
-DELETE FROM entities WHERE tenant_id IN (SELECT tenant_id FROM tenants);
+-- 22. entities (delete leaves first to avoid trigger; repeat until empty)
+DELETE FROM entities
+WHERE tenant_id IN (SELECT tenant_id FROM tenants)
+  AND NOT EXISTS (SELECT 1 FROM entities e2 WHERE e2.parent_entity_id = entities.entity_id);
 
 -- 23. custom_roles
 DELETE FROM custom_roles WHERE tenant_id IN (SELECT tenant_id FROM tenants);

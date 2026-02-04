@@ -143,6 +143,7 @@ export function TabNavigation({
               key={tab.id}
               value={tab.id}
               disabled={tab.disabled}
+              data-tour-step={tab.id}
               className={cn(
                 tabTriggerVariants({ variant, size }),
                 tabsTriggerClassName
@@ -181,7 +182,7 @@ export function TabNavigationList({
   size = "md",
 }: Omit<TabNavigationProps, "defaultValue" | "tabsListClassName" | "tabsContentClassName">) {
   return (
-    <Tabs value={value} onValueChange={onValueChange} orientation={orientation}>
+      <Tabs value={value} onValueChange={onValueChange} orientation={orientation}>
       <TabsList
         className={cn(
           tabListVariants({ variant, orientation, size }),
@@ -196,6 +197,7 @@ export function TabNavigationList({
               key={tab.id}
               value={tab.id}
               disabled={tab.disabled}
+              data-tour-step={tab.id}
               className={cn(
                 tabTriggerVariants({ variant, size }),
                 tabsTriggerClassName

@@ -257,6 +257,40 @@ export const BusinessDetailsStep: React.FC<BusinessDetailsStepProps> = memo(({ f
               )}
             />
 
+            {/* Company Website */}
+            <FormField
+              control={form.control}
+              name="website"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className={`${labelClasses} flex items-center gap-2`}>
+                    Company Website
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs bg-slate-900 text-white">
+                        <p>Your company website URL helps establish credibility and provides a reference for your business.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </FormLabel>
+                  <div className={inputContainerClasses}>
+                    <Globe className={iconClasses} />
+                    <FormControl>
+                      <Input
+                        {...field}
+                        value={field.value ?? ''}
+                        type="url"
+                        className={`${inputClasses} pl-11`}
+                        placeholder="https://www.yourcompany.com"
+                      />
+                    </FormControl>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Company Type - Merged from separate step */}
             <FormField

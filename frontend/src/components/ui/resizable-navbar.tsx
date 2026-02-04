@@ -246,8 +246,8 @@ export const NavbarLogo = ({ visible }: { visible?: boolean }) => {
                 src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Full_Logo_kezq1b.jpg"
                 alt="Zopkit"
                 className={cn(
-                    "block w-auto object-contain transition-all duration-300",
-                    visible ? "h-8" : "h-9"
+                    "block w-auto object-cover transition-all rounded-3xl duration-300",
+                    visible ? "h-14" : "h-18"
                 )}
             />
         </a>

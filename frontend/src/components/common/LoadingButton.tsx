@@ -1,6 +1,7 @@
 import { Button, ButtonProps } from '@/components/ui/button'
-import { LucideIcon, RefreshCw, Loader2 } from 'lucide-react'
+import { LucideIcon, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ZopkitRoundLoader } from './ZopkitRoundLoader'
 
 interface IconButtonProps extends ButtonProps {
     startIcon?: LucideIcon
@@ -27,29 +28,25 @@ interface LoadingButtonProps extends IconButtonProps {
     loadingLabel?: string
 }
 
-export  function LoadingButton({
+export function LoadingButton({
     isLoading,
     variant = 'outline',
     children,
-    startIcon,
+    startIcon: StartIcon,
     startIconClassName,
     loadingLabel,
     ...props
 }: LoadingButtonProps) {
     return (
-        <IconButton
+        <Button
             variant={variant}
             {...props}
             disabled={isLoading}
-            startIcon={isLoading ? Loader2 : startIcon}
-            startIconClassName={cn(
-                startIconClassName,
-                isLoading && "animate-spin"
-            )}
+            className={cn('gap-2', props.className)}
         >
+            {isLoading ? <ZopkitRoundLoader size="xs" className="shrink-0" /> : StartIcon && <StartIcon className={cn(startIconClassName, 'w-4 h-4')} />}
             {isLoading && loadingLabel ? loadingLabel : children}
-        </IconButton>
-
+        </Button>
     )
 }
 

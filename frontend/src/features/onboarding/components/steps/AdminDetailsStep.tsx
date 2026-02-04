@@ -75,10 +75,12 @@ export const AdminDetailsStep = memo(({ form, userClassification }: AdminDetails
     }
   };
   
-  // Sync read-only Admin Email (and name) from Kinde so form state matches display and validation passes
-  // useLayoutEffect runs before paint so value is set before any validation runs
+  // Sync Admin Email (and name) from Kinde only once on mount so form state matches display.
+  // Run only once when user is available to avoid overwriting user-typed/cleared values (fixes state issues when typing and backspacing).
+  const hasSyncedFromKindeRef = React.useRef(false);
   React.useLayoutEffect(() => {
-    if (!user?.email) return;
+    if (!user?.email || hasSyncedFromKindeRef.current) return;
+    hasSyncedFromKindeRef.current = true;
     const updates: Array<{ field: any; value: any }> = [];
     const currentAdminEmail = form.getValues('adminEmail');
     if (!currentAdminEmail || (typeof currentAdminEmail === 'string' && !currentAdminEmail.trim())) {
@@ -110,7 +112,6 @@ export const AdminDetailsStep = memo(({ form, userClassification }: AdminDetails
           description: 'Set up your administrator account as the company founder.',
           emailPlaceholder: 'founder@yourcompany.com',
           mobilePlaceholder: '+1 (555) 123-4567',
-          websitePlaceholder: 'https://www.yourcompany.com',
           showDomainIntegration: false
         };
       case 'corporateEmployee':
@@ -119,7 +120,6 @@ export const AdminDetailsStep = memo(({ form, userClassification }: AdminDetails
           description: 'Configure your administrator access for the corporate environment.',
           emailPlaceholder: 'admin@company.com',
           mobilePlaceholder: '+1 (555) 123-4567',
-          websitePlaceholder: 'https://www.company.com',
           showDomainIntegration: true
         };
       case 'withDomainMail':
@@ -128,7 +128,6 @@ export const AdminDetailsStep = memo(({ form, userClassification }: AdminDetails
           description: 'Complete your professional administrator account configuration.',
           emailPlaceholder: 'admin@yourdomain.com',
           mobilePlaceholder: '+1 (555) 123-4567',
-          websitePlaceholder: 'https://www.yourdomain.com',
           showDomainIntegration: true
         };
       case 'enterprise':
@@ -137,7 +136,6 @@ export const AdminDetailsStep = memo(({ form, userClassification }: AdminDetails
           description: 'Set up your enterprise administrator account with advanced features.',
           emailPlaceholder: 'admin@enterprise.com',
           mobilePlaceholder: '+1 (555) 123-4567',
-          websitePlaceholder: 'https://www.enterprise.com',
           showDomainIntegration: true
         };
       default:
@@ -146,7 +144,6 @@ export const AdminDetailsStep = memo(({ form, userClassification }: AdminDetails
           description: 'Provide administrator contact and account details.',
           emailPlaceholder: 'admin@company.com',
           mobilePlaceholder: '+1 (555) 123-4567',
-          websitePlaceholder: 'https://www.company.com',
           showDomainIntegration: false
         };
     }
@@ -292,12 +289,6 @@ export const AdminDetailsStep = memo(({ form, userClassification }: AdminDetails
                 </FormControl>
                 {/* Don't show validation error when field is read-only and auto-filled from Kinde */}
                 {!user?.email && <FormMessage />}
-                {user?.email && (
-                  <p className="text-xs text-blue-600 mt-1 font-medium flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                    Auto-filled from your Kinde account
-                  </p>
-                )}
                 {personalizedContent.showDomainIntegration && (
                   <p className="text-xs text-green-600 mt-1 font-medium flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
@@ -335,73 +326,6 @@ export const AdminDetailsStep = memo(({ form, userClassification }: AdminDetails
             )}
           />
         </div>
-
-            {/* Support Email and Website */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField
-                control={form.control}
-                name="supportEmail"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className={`${labelClasses} flex items-center gap-2`}>
-                      Support Email <span className="text-red-500">*</span>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs bg-slate-900 text-white">
-                          <p className="font-semibold mb-1">Mandatory Field</p>
-                          <p>Email address for customer support inquiries. This is where customers will send support requests and where support-related notifications will be sent.</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        value={field.value || ''}
-                        type="email"
-                        className={inputClasses}
-                        placeholder="support@company.com"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                    <p className="text-xs text-slate-500 mt-1">
-                      For customer support inquiries
-                    </p>
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="website"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className={`${labelClasses} flex items-center gap-2`}>
-                      Company Website
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs bg-slate-900 text-white">
-                          <p>Your company website URL helps establish credibility and provides a reference for your business.</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        value={field.value || ''}
-                        type="url"
-                        className={inputClasses}
-                        placeholder={personalizedContent.websitePlaceholder}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
           </div>
 
           {/* OPTIONAL FIELDS SECTION */}
@@ -712,8 +636,8 @@ export const AdminDetailsStep = memo(({ form, userClassification }: AdminDetails
             </div>
         </div>
 
-          {/* Tax Registration Section */}
-          <div className="space-y-6 pt-6 border-t-2 border-slate-200">
+          {/* PAN / Tax Registration Section - commented out as of now */}
+          {/* <div className="space-y-6 pt-6 border-t-2 border-slate-200">
             <div className="pb-4">
               <h2 className="text-lg font-bold text-slate-700 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-slate-300"></span>
@@ -746,7 +670,7 @@ export const AdminDetailsStep = memo(({ form, userClassification }: AdminDetails
                   </div>
                   <FormControl>
                     <Switch
-                      checked={field.value}
+                      checked={Boolean(field.value)}
                       onCheckedChange={(checked) => {
                         field.onChange(checked);
                         if (checked) {
@@ -879,7 +803,7 @@ export const AdminDetailsStep = memo(({ form, userClassification }: AdminDetails
                 )}
               </div>
             )}
-          </div>
+          </div> */}
         </div>
 
         {/* Feature Highlights based on Classification */}

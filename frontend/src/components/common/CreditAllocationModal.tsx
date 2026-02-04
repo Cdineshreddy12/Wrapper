@@ -8,6 +8,7 @@ import { CreditCard, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
+import { useTenantApplications } from '@/hooks/useSharedQueries';
 
 interface CreditAllocationModalProps {
   isOpen: boolean;
@@ -17,13 +18,6 @@ interface CreditAllocationModalProps {
   entityType: 'organization' | 'location';
   availableCredits?: number;
 }
-
-const SUPPORTED_APPLICATIONS = [
-  { code: 'crm', name: 'CRM', description: 'Customer Relationship Management' },
-  { code: 'hr', name: 'HR', description: 'Human Resources Management' },
-  { code: 'affiliate', name: 'Affiliate', description: 'Affiliate Management' },
-  { code: 'system', name: 'System', description: 'System Administration' }
-];
 
 export function CreditAllocationModal({
   isOpen,
@@ -41,6 +35,9 @@ export function CreditAllocationModal({
     allocationPurpose: '',
     autoReplenish: false
   });
+
+  // Fetch organization applications instead of using hardcoded list
+  const { data: organizationApplications = [], isLoading: isLoadingApplications } = useTenantApplications();
 
   // Reset form when modal opens
   useEffect(() => {
@@ -108,7 +105,7 @@ export function CreditAllocationModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CreditCard className="w-5 h-5" />
@@ -127,24 +124,46 @@ export function CreditAllocationModal({
             </div>
           </div>
 
-          {/* Application Selection */}
+          {/* Application Selection - show short name, full text on hover */}
           <div>
             <label className="text-sm font-medium">Application</label>
             <Select
               value={allocationForm.targetApplication}
               onValueChange={(value) => setAllocationForm({...allocationForm, targetApplication: value})}
+              disabled={isLoadingApplications}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Select application" />
+              <SelectTrigger className="min-w-0 [&>span]:min-w-0 [&>span]:block [&>span]:overflow-hidden [&>span]:text-ellipsis [&>span]:whitespace-nowrap [&>span]:truncate">
+                <SelectValue placeholder={isLoadingApplications ? "Loading applications..." : "Select application"} />
               </SelectTrigger>
-              <SelectContent>
-                {SUPPORTED_APPLICATIONS.map((app) => (
-                  <SelectItem key={app.code} value={app.code}>
-                    {app.name} - {app.description}
-                  </SelectItem>
-                ))}
+              <SelectContent className="max-h-[min(16rem,70vh)]">
+                {isLoadingApplications ? (
+                  <div className="p-2 text-sm text-muted-foreground">Loading applications...</div>
+                ) : organizationApplications.length === 0 ? (
+                  <div className="p-2 text-sm text-muted-foreground">No applications available</div>
+                ) : (
+                  organizationApplications
+                    .filter((app: any) => app.isEnabled !== false) // Only show enabled applications
+                    .map((app: any) => {
+                      const displayName = app.appName || app.name || app.appCode || 'Application';
+                      const fullLabel = app.description ? `${displayName} – ${app.description}` : displayName;
+                      return (
+                        <SelectItem
+                          key={app.appId || app.appCode}
+                          value={app.appCode || app.appId}
+                          title={fullLabel}
+                        >
+                          {displayName}
+                        </SelectItem>
+                      );
+                    })
+                )}
               </SelectContent>
             </Select>
+            {organizationApplications.length === 0 && !isLoadingApplications && (
+              <p className="text-xs text-muted-foreground mt-1">
+                No applications are available for this organization.
+              </p>
+            )}
           </div>
 
           {/* Credit Amount */}

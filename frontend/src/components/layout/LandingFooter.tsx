@@ -90,7 +90,7 @@ export function LandingFooter() {
             
             <div className="mt-8">
               <h4 className="font-semibold text-slate-900 mb-2">Subscribe to our newsletter</h4>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input 
                   type="email" 
                   placeholder="Enter your email" 

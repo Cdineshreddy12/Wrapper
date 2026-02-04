@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building, MoreVertical, Eye, Edit, Copy, Trash2, Search, Download, Archive, RefreshCw, Shield, Plus, LayoutGrid, Layers, Users, Grid } from 'lucide-react';
+import { ShieldPlus, MoreVertical, Eye, Edit, Copy, Trash2, Search, Download, Archive, RefreshCw, Shield, Plus, Crown, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { PearlButton } from '@/components/ui/pearl-button';
@@ -42,6 +42,7 @@ import { useTheme } from '@/components/theme/ThemeProvider';
 import { useRoles, useInvalidateQueries } from '@/hooks/useSharedQueries';
 import { getPermissionSummary as getPermissionSummaryUtil } from './utils/permissionUtils';
 import { cn } from '@/lib/utils';
+import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader';
 
 // Use the enhanced Role interface from api.ts - no need for separate DashboardRole
 type DashboardRole = Role;
@@ -95,10 +96,11 @@ export function RoleManagementDashboard() {
   const [totalPages, setTotalPages] = useState(0);
 
   // Use shared hook with caching instead of direct API calls
-  const { data: rolesData = [], isLoading: rolesLoading, refetch: refetchRoles } = useRoles({
+  const { data: rolesData = [], isLoading: rolesLoading, isFetching: rolesFetching, refetch: refetchRoles } = useRoles({
     search: searchQuery,
     type: typeFilter !== 'all' ? typeFilter : undefined
   });
+  const showRolesLoading = rolesLoading || (rolesFetching && rolesData.length === 0);
   const { invalidateRoles } = useInvalidateQueries();
 
   // Sync roles data to local state for compatibility with pagination/filtering
@@ -472,6 +474,7 @@ export function RoleManagementDashboard() {
   }) => {
     const { actualTheme } = useTheme();
     const permissionSummary = getPermissionSummary(role.permissions);
+    const isReadOnlyRole = role.roleName === 'Organization Admin';
 
     // Use computed fields from API if available
     const displayCount = (role as any).permissionCount || permissionSummary.total;
@@ -480,9 +483,16 @@ export function RoleManagementDashboard() {
 
     return (
       <tr
-        className="group transition-all duration-200 border-b last:border-0 hover:bg-sky-50/50 border-sky-100"
+        className={cn(
+          "group transition-all duration-200 last:border-0",
+          actualTheme === 'dark'
+            ? "hover:bg-slate-800/60"
+            : actualTheme === 'monochrome'
+              ? "hover:bg-gray-800/50"
+              : "hover:bg-slate-50/80"
+        )}
       >
-        <td className="p-4 align-middle">
+        <td className="px-5 py-4 align-middle">
           <Checkbox
             checked={isSelected}
             onCheckedChange={onToggleSelect}
@@ -493,32 +503,42 @@ export function RoleManagementDashboard() {
           />
         </td>
 
-        <td className="p-4 align-middle">
-          <div className="flex items-center gap-3 min-w-[240px]">
+        <td className="px-5 py-4 align-middle">
+          <div className="flex items-center gap-4 min-w-[240px]">
             <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center text-lg font-semibold shrink-0 shadow-sm"
-              style={{ backgroundColor: `${role.color}15`, color: role.color, border: `1px solid ${role.color}30` }}
+              className={cn(
+                "w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-sm ring-1 ring-black/5",
+                !role.color && "bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400"
+              )}
+              style={role.color ? { backgroundColor: `${role.color}18`, color: role.color, border: `1px solid ${role.color}25` } : undefined}
             >
-              {role.metadata?.icon || '👤'}
+              {role.metadata?.icon ? (
+                <span className="text-base">{role.metadata.icon}</span>
+              ) : (
+                <Crown className="w-5 h-5" />
+              )}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className={cn(
-                "font-bold truncate text-sm",
+                "font-semibold truncate text-sm",
                 actualTheme === 'dark' ? "text-white" : actualTheme === 'monochrome' ? "text-gray-100" : "text-slate-900"
               )} title={role.roleName}>
                 {role.roleName}
               </div>
-              <div className={cn(
-                "text-xs truncate max-w-[200px]",
-                actualTheme === 'dark' ? "text-purple-300/70" : actualTheme === 'monochrome' ? "text-gray-400" : "text-slate-500"
-              )} title={role.description}>
+              <div
+                className={cn(
+                  "text-xs truncate max-w-[220px]",
+                  actualTheme === 'dark' ? "text-slate-400" : actualTheme === 'monochrome' ? "text-gray-400" : "text-slate-500"
+                )}
+                title={role.description || 'No description provided'}
+              >
                 {role.description || 'No description provided'}
               </div>
             </div>
           </div>
         </td>
 
-        <td className="p-4 align-middle text-center">
+        <td className="px-5 py-4 align-middle text-center">
           <Badge variant="outline" className={cn(
             "font-mono font-medium",
             actualTheme === 'dark' ? "bg-purple-500/10 border-purple-500/30 text-purple-200" :
@@ -529,7 +549,7 @@ export function RoleManagementDashboard() {
           </Badge>
         </td>
 
-        <td className="p-4 align-middle text-center">
+        <td className="px-5 py-4 align-middle text-center">
           <div className="flex items-center justify-center gap-2">
             <div className="flex flex-col items-center">
               <span className="text-[10px] uppercase tracking-wider opacity-50 font-bold">Apps</span>
@@ -543,7 +563,7 @@ export function RoleManagementDashboard() {
           </div>
         </td>
 
-        <td className="p-4 align-middle">
+        <td className="px-5 py-4 align-middle">
           <div className="flex flex-wrap items-center gap-2 justify-center">
             {permissionSummary.admin > 0 && (
               <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-50 border border-rose-100 dark:bg-rose-500/10 dark:border-rose-500/20" title="Admin Permissions">
@@ -569,11 +589,16 @@ export function RoleManagementDashboard() {
           </div>
         </td>
 
-        <td className="p-4 align-middle text-center">
+        <td className="px-5 py-4 align-middle text-center">
           <div className="flex flex-col items-center gap-1">
             <Badge
               variant={role.isSystemRole ? "default" : "secondary"}
-              className="text-[10px] h-5 uppercase tracking-tighter bg-sky-50 text-sky-700 border-sky-200"
+              className={cn(
+                "text-[10px] h-5 uppercase tracking-tighter font-medium",
+                actualTheme === 'dark'
+                  ? role.isSystemRole ? "bg-blue-600/30 text-blue-300 border-blue-500/40" : "bg-slate-700 text-slate-300 border-slate-600"
+                  : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600"
+              )}
             >
               {role.isSystemRole ? 'System' : 'Custom'}
             </Badge>
@@ -583,13 +608,13 @@ export function RoleManagementDashboard() {
           </div>
         </td>
 
-        <td className="p-4 align-middle text-right">
+        <td className="px-5 py-4 align-middle text-right">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 w-8 p-0 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="h-9 w-9 p-0 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 hover:ring-1 hover:ring-slate-200 dark:hover:ring-slate-600"
                 onClick={(e) => e.stopPropagation()}
               >
                 <MoreVertical className="w-4 h-4" />
@@ -606,19 +631,23 @@ export function RoleManagementDashboard() {
               <DropdownMenuItem onClick={() => handleViewRole(role)} className="gap-2">
                 <Eye className="h-4 w-4" /> View Details
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleEditRole(role)} className="gap-2">
-                <Edit className="h-4 w-4" /> Edit Role
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleCloneRole(role)} className="gap-2">
-                <Copy className="h-4 w-4" /> Clone Role
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => handleDeleteRole(role)}
-                className="gap-2 text-rose-500 focus:text-rose-400 focus:bg-rose-500/10"
-              >
-                <Trash2 className="h-4 w-4" /> Delete Role
-              </DropdownMenuItem>
+              {!isReadOnlyRole && (
+                <>
+                  <DropdownMenuItem onClick={() => handleEditRole(role)} className="gap-2">
+                    <Edit className="h-4 w-4" /> Edit Role
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleCloneRole(role)} className="gap-2">
+                    <Copy className="h-4 w-4" /> Clone Role
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => handleDeleteRole(role)}
+                    className="gap-2 text-rose-500 focus:text-rose-400 focus:bg-rose-500/10"
+                  >
+                    <Trash2 className="h-4 w-4" /> Delete Role
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </td>
@@ -647,9 +676,9 @@ export function RoleManagementDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
-            <PearlButton onClick={handleCreateRole}>
-              <Building className="w-4 h-4" />
-              <span className="hidden sm:inline">Build Role from Apps</span>
+            <PearlButton onClick={handleCreateRole} className="gap-2" data-tour-feature="create-role">
+              <ShieldPlus className="w-4 h-4" />
+              <span className="hidden sm:inline">Build Role</span>
               <span className="sm:hidden">New Role</span>
             </PearlButton>
           </div>
@@ -912,21 +941,31 @@ export function RoleManagementDashboard() {
 
         {/* Roles List */}
         <Card className={cn(
-          "overflow-hidden overflow-x-auto",
+          "overflow-hidden overflow-x-auto rounded-2xl border-0 shadow-lg",
           actualTheme === 'dark'
-            ? (glassmorphismEnabled ? 'bg-slate-900 border-purple-500/30' : 'bg-slate-900 border-slate-700')
-            : (actualTheme === 'monochrome' ? 'bg-gray-900 border-gray-500/30' : '')
+            ? (glassmorphismEnabled ? 'bg-slate-900/95 border border-slate-700/50' : 'bg-slate-900 border-slate-700')
+            : (actualTheme === 'monochrome' ? 'bg-gray-900 border-gray-500/30' : 'bg-white border-slate-200/80 shadow-slate-200/50')
         )}>
-          {rolesLoading ? (
+          {showRolesLoading ? (
             <CardContent className="p-12 text-center">
-              <RefreshCw className={cn("w-8 h-8 animate-spin mx-auto text-gray-400", actualTheme === 'dark' && "text-white")} />
+              <ZopkitRoundLoader size="xl" className={cn("mx-auto", actualTheme === 'dark' && "text-white")} />
               <p className={cn("mt-3 font-medium text-gray-600", actualTheme === 'dark' ? "text-white" : actualTheme === 'monochrome' ? "text-gray-300" : "")}>Loading roles...</p>
             </CardContent>
           ) : (
             <table className="w-full border-collapse min-w-[1000px]">
-              <thead className="bg-gradient-to-r from-sky-50 to-blue-50 border-b border-sky-100 sticky top-0 z-20">
-                <tr className="text-[10px] uppercase tracking-widest font-black text-sky-900">
-                  <th className="p-4 text-left w-12">
+              <thead className={cn(
+                "sticky top-0 z-20",
+                actualTheme === 'dark'
+                  ? "bg-slate-800/95 border-b border-slate-700"
+                  : actualTheme === 'monochrome'
+                    ? "bg-gray-800 border-b border-gray-700"
+                    : "bg-gradient-to-r from-slate-50 via-blue-50/30 to-slate-50 border-b border-slate-200"
+              )}>
+                <tr className={cn(
+                  "text-[11px] uppercase tracking-widest font-bold",
+                  actualTheme === 'dark' ? "text-slate-300" : actualTheme === 'monochrome' ? "text-gray-300" : "text-slate-600"
+                )}>
+                  <th className="px-5 py-4 text-left w-12">
                     <Checkbox
                       checked={selectedRoles.size === roles.length && roles.length > 0}
                       onCheckedChange={selectedRoles.size === roles.length ? clearSelection : selectAllRoles}
@@ -936,19 +975,18 @@ export function RoleManagementDashboard() {
                       )}
                     />
                   </th>
-                  <th className="p-4 text-left min-w-[200px]">Role & Description</th>
-                  <th className="p-4 text-center w-24">Users</th>
-                  <th className="p-4 text-center w-32">Apps/Modules</th>
-                  <th className="p-4 text-center">Capability Breakdown</th>
-                  <th className="p-4 text-center w-32">Type</th>
-                  <th className="p-4 text-right w-16">Actions</th>
+                  <th className="px-5 py-4 text-left min-w-[220px]">Role & Description</th>
+                  <th className="px-5 py-4 text-center w-24">Users</th>
+                  <th className="px-5 py-4 text-center w-32">Apps/Modules</th>
+                  <th className="px-5 py-4 text-center">Capability Breakdown</th>
+                  <th className="px-5 py-4 text-center w-32">Type</th>
+                  <th className="px-5 py-4 text-right w-16">Actions</th>
                 </tr>
               </thead>
               <tbody className={cn(
-                "divide-y",
-                actualTheme === 'dark' ? 'divide-purple-500/10' :
-                  actualTheme === 'monochrome' ? 'divide-gray-500/10' :
-                    'divide-slate-100'
+                "divide-y divide-slate-100 dark:divide-slate-800/80",
+                actualTheme === 'dark' && 'divide-slate-700/50',
+                actualTheme === 'monochrome' && 'divide-gray-700/50'
               )}>
                 {filteredRoles.length === 0 ? (
                   <tr>

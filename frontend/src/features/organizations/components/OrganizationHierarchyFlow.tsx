@@ -221,6 +221,7 @@ function convertHierarchyToFlow(
           ? (typeof org.reservedCredits === 'string' ? parseFloat(org.reservedCredits) || 0 : org.reservedCredits)
           : undefined,
         entityLevel: org.entityLevel || org.organizationLevel || 0,
+        isPrimaryOrganization: !parentId && entityType !== 'location',
         onNodeClick,
         onEditOrganization,
         onDeleteOrganization,
@@ -506,9 +507,15 @@ export function OrganizationHierarchyFlow(props: OrganizationHierarchyFlowProps)
   });
 
   return (
-    <ReactFlowProvider>
-      <OrganizationHierarchyFlowInner {...props} />
-    </ReactFlowProvider>
+    <div
+      data-tour-feature="organization-hierarchy"
+      className="w-full h-full min-h-[400px]"
+      style={{ width: '100%', height: '100%' }}
+    >
+      <ReactFlowProvider>
+        <OrganizationHierarchyFlowInner {...props} />
+      </ReactFlowProvider>
+    </div>
   );
 }
 

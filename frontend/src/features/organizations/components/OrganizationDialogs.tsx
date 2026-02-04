@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ArrowRightLeft, CreditCard } from 'lucide-react';
+import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader';
 import { Organization } from '@/types/organization';
 
 interface OrganizationDialogsProps {
@@ -19,6 +20,7 @@ interface OrganizationDialogsProps {
   };
   setSubForm: (form: (prev: any) => any) => void;
   onCreateSubOrganization: () => void;
+  isCreating?: boolean;
   
   // Edit Organization Dialog
   showEdit: boolean;
@@ -30,6 +32,7 @@ interface OrganizationDialogsProps {
   };
   setEditForm: (form: (prev: any) => any) => void;
   onUpdateOrganization: () => void;
+  isUpdating?: boolean;
   
   // Create Location Dialog
   showCreateLocation: boolean;
@@ -46,6 +49,7 @@ interface OrganizationDialogsProps {
   };
   setLocationForm: (form: (prev: any) => any) => void;
   onCreateLocation: () => void;
+  isCreatingLocation?: boolean;
   
   // Credit Transfer Dialog
   showCreditTransfer: boolean;
@@ -78,16 +82,19 @@ export function OrganizationDialogs({
   subForm,
   setSubForm,
   onCreateSubOrganization,
+  isCreating = false,
   showEdit,
   setShowEdit,
   editForm,
   setEditForm,
   onUpdateOrganization,
+  isUpdating = false,
   showCreateLocation,
   setShowCreateLocation,
   locationForm,
   setLocationForm,
   onCreateLocation,
+  isCreatingLocation = false,
   showCreditTransfer,
   setShowCreditTransfer,
   creditTransferForm,
@@ -178,11 +185,18 @@ export function OrganizationDialogs({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateSub(false)}>
+            <Button variant="outline" onClick={() => setShowCreateSub(false)} disabled={isCreating}>
               Cancel
             </Button>
-            <Button onClick={onCreateSubOrganization} disabled={!subForm.name.trim()}>
-              {selectedOrg ? 'Create Sub-Organization' : 'Create Organization'}
+            <Button onClick={onCreateSubOrganization} disabled={!subForm.name.trim() || isCreating}>
+              {isCreating ? (
+                <>
+                  <ZopkitRoundLoader size="xs" className="mr-2" />
+                  Creating...
+                </>
+              ) : (
+                selectedOrg ? 'Create Sub-Organization' : 'Create Organization'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -228,11 +242,18 @@ export function OrganizationDialogs({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEdit(false)}>
+            <Button variant="outline" onClick={() => setShowEdit(false)} disabled={isUpdating}>
               Cancel
             </Button>
-            <Button onClick={onUpdateOrganization} disabled={!editForm.name.trim()}>
-              Update Organization
+            <Button onClick={onUpdateOrganization} disabled={!editForm.name.trim() || isUpdating}>
+              {isUpdating ? (
+                <>
+                  <ZopkitRoundLoader size="xs" className="mr-2" />
+                  Updating...
+                </>
+              ) : (
+                'Update Organization'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -354,14 +375,21 @@ export function OrganizationDialogs({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateLocation(false)}>
+            <Button variant="outline" onClick={() => setShowCreateLocation(false)} disabled={isCreatingLocation}>
               Cancel
             </Button>
             <Button
               onClick={onCreateLocation}
-              disabled={!locationForm.name.trim() || !locationForm.address.trim() || !locationForm.city.trim() || !locationForm.country.trim()}
+              disabled={!locationForm.name.trim() || !locationForm.address.trim() || !locationForm.city.trim() || !locationForm.country.trim() || isCreatingLocation}
             >
-              Create Location
+              {isCreatingLocation ? (
+                <>
+                  <ZopkitRoundLoader size="xs" className="mr-2" />
+                  Creating...
+                </>
+              ) : (
+                'Create Location'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

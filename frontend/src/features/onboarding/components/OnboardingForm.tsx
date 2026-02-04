@@ -4,8 +4,7 @@ import { useFormPersistence } from '../hooks/useFormPersistence';
 import { UserClassification } from './FlowSelector';
 import { MultiStepForm } from './MultiStepForm';
 import { ErrorBoundary } from './ErrorBoundary';
-import { LoadingSpinner } from './LoadingSpinner';
-import { SuccessMessage } from './SuccessMessage';
+import { OnboardingWelcomeSuccess } from './OnboardingWelcomeSuccess';
 import { useToast } from './Toast';
 import { toast as sonnerToast } from 'sonner'; // Direct import for reliability
 import { useRateLimit } from '../hooks/useRateLimit';
@@ -138,7 +137,9 @@ export const OnboardingForm = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  
+  const [redirectUrl, setRedirectUrl] = useState('/dashboard');
+  const [companyName, setCompanyName] = useState<string | undefined>();
+
   const [userClassification] = useState<UserClassification | undefined>(() => {
     const classification = determineUserClassification(
       undefined, 
@@ -380,20 +381,19 @@ export const OnboardingForm = () => {
       });
 
       if (response.data.success) {
-        // Dismiss loading toast
         sonnerToast.dismiss(loadingToastId);
-        
         clearFormData();
-        
-        // Show success animation with progress
+        const baseUrl = response.data?.data?.redirectUrl || '/dashboard';
+        const url = baseUrl.startsWith('/dashboard') && !baseUrl.includes('onboarding=complete')
+          ? (baseUrl.includes('?') ? `${baseUrl}&onboarding=complete` : `${baseUrl}?onboarding=complete`)
+          : baseUrl;
+        const extractedCompanyName = submissionData.companyName || businessDetails.companyName || sanitizedData.companyName || sanitizedData.businessName;
+        setRedirectUrl(url);
+        setCompanyName(extractedCompanyName);
         sonnerToast.success('🎉 Organization Created Successfully!', {
           description: 'Setting up your workspace...',
           duration: 3000,
         });
-        
-        // Small delay for smooth transition
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
         setIsSubmitted(true);
       } else {
         throw new Error(response.data.message || 'Onboarding failed');
@@ -745,7 +745,7 @@ export const OnboardingForm = () => {
   }, []);
 
   if (isSubmitted) {
-    return <SuccessMessage />;
+    return <OnboardingWelcomeSuccess redirectUrl={redirectUrl} companyName={companyName} />;
   }
 
   if (!flowConfig) {
@@ -768,23 +768,6 @@ export const OnboardingForm = () => {
           </div>
         </div>
       </ErrorBoundary>
-    );
-  }
-
-  if (isSubmitting) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 relative overflow-hidden">
-        {/* Animated background elements */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-200/30 rounded-full blur-3xl animate-pulse"></div>
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-200/30 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
-          <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-pink-200/30 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
-        </div>
-        
-        <div className="relative z-10">
-          <LoadingSpinner size="lg" message="Setting up your organization..." showProgress={true} />
-        </div>
-      </div>
     );
   }
 
@@ -812,6 +795,7 @@ export const OnboardingForm = () => {
           currentStep={currentStep}
           onStepChange={setCurrentStep}
           userClassification={userClassification}
+          isSubmitting={isSubmitting}
         />
       </div>
     </ErrorBoundary>

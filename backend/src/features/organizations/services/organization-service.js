@@ -622,8 +622,26 @@ export class OrganizationService {
 
   /**
    * Delete organization (soft delete)
+   * Cannot delete the primary organization created during onboarding (root org with no parent).
    */
   async deleteOrganization(organizationId, deletedBy) {
+    // Prevent deleting the primary/root organization (created during onboarding)
+    const orgRow = await db
+      .select({ parentEntityId: entities.parentEntityId, entityType: entities.entityType })
+      .from(entities)
+      .where(and(
+        eq(entities.entityId, organizationId),
+        eq(entities.entityType, 'organization')
+      ))
+      .limit(1);
+
+    if (orgRow.length === 0) {
+      throw new Error('Organization not found');
+    }
+    if (orgRow[0].parentEntityId == null) {
+      throw new Error('Cannot delete the primary organization created during onboarding');
+    }
+
     // Check if organization has sub-organizations
     const subOrgs = await db
       .select({ organizationId: entities.entityId })

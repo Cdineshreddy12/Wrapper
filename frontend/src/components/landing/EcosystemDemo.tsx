@@ -13,7 +13,7 @@ const EcosystemDemo = () => {
       {/* Google Gemini Effect Section */}
       <GoogleGeminiEffectDemo />
       
-      <CostComparison />
+      {/* <CostComparison /> */}
   
       {/* Integration Benefits Section */}
       <div className="min-h-screen  flex flex-col items-center justify-center px-4">

@@ -490,7 +490,7 @@ const CostComparison = () => {
             </div>
 
             {/* Cost Calculator Widget */}
-            <div className="w-full md:w-auto bg-slate-50 border border-slate-200 rounded-xl p-5 shadow-sm min-w-[320px]">
+            <div className="w-full md:w-auto bg-slate-50 border border-slate-200 rounded-xl p-5 shadow-sm min-w-0 md:min-w-[320px]">
               <div className="flex items-center space-x-2 mb-4 text-slate-700 font-semibold">
                 <Calculator className="w-5 h-5 text-blue-600" />
                 <span>Cost Estimator</span>
@@ -545,7 +545,7 @@ const CostComparison = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         {/* Advanced Filters Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
           {/* App Tabs */}
           <div className="flex flex-wrap gap-1">
             <button
@@ -573,7 +573,7 @@ const CostComparison = () => {
           </div>
 
           {/* View Toggles */}
-          <div className="flex items-center gap-2 border-l border-slate-200 pl-4 ml-auto">
+          <div className="flex items-center gap-2 sm:border-l sm:border-slate-200 sm:pl-4 sm:ml-auto w-full sm:w-auto">
             <button
               onClick={() => setSmartView(!smartView)}
               className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${smartView ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'

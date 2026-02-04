@@ -16,7 +16,10 @@ import {
   Sparkles,
   ChevronUp,
   ChevronDown,
-  ArrowRight
+  ArrowRight,
+  Building2,
+  Coins,
+  Settings2
 } from 'lucide-react';
 
 interface OnboardingLayoutProps {
@@ -32,6 +35,7 @@ interface OnboardingLayoutProps {
   onEditStep?: (stepNumber: number) => void;
   onStepClick?: (stepNumber: number) => void;
   userClassification?: UserClassification;
+  isSubmitting?: boolean;
 }
 
 export const OnboardingLayout = React.memo(({
@@ -46,7 +50,8 @@ export const OnboardingLayout = React.memo(({
   onSubmit,
   onEditStep,
   onStepClick,
-  userClassification
+  userClassification,
+  isSubmitting = false
 }: OnboardingLayoutProps) => {
   const [showSupport, setShowSupport] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -90,7 +95,7 @@ export const OnboardingLayout = React.memo(({
           icon: <Zap className="w-4 h-4 text-amber-600" />,
           color: "amber"
         };
-      case 3: // Owner/Personal
+      case 3: // Admin Details
         return {
           title: "Secure Vault",
           subtitle: "AES-256 Encryption",
@@ -98,7 +103,31 @@ export const OnboardingLayout = React.memo(({
           icon: <ShieldCheck className="w-4 h-4 text-blue-600" />,
           color: "blue"
         };
-      case 4: // Review
+      case 4: // Organization Hierarchy
+        return {
+          title: "Organization Structure",
+          subtitle: "Hierarchy Management",
+          text: "Learn how to organize your company into departments, locations, and sub-organizations for better credit allocation and access control.",
+          icon: <Building2 className="w-4 h-4 text-indigo-600" />,
+          color: "indigo"
+        };
+      case 5: // Credit Packages
+        return {
+          title: "Credit System",
+          subtitle: "Power Your Operations",
+          text: "Credits fuel your business operations. Choose a package that matches your needs, or start with free credits and upgrade later.",
+          icon: <Coins className="w-4 h-4 text-amber-600" />,
+          color: "amber"
+        };
+      case 6: // Settings Overview
+        return {
+          title: "Settings Preview",
+          subtitle: "Full Control",
+          text: "After onboarding, you'll have access to comprehensive settings to customize your workspace, manage billing, and configure preferences.",
+          icon: <Settings2 className="w-4 h-4 text-slate-600" />,
+          color: "slate"
+        };
+      case 7: // Review
         return {
           title: "Compliance Audit",
           subtitle: "Final System Check",
@@ -337,6 +366,7 @@ export const OnboardingLayout = React.memo(({
               onPrev={onPrev}
               onNext={onNext}
               onSubmit={onSubmit}
+              isSubmitting={isSubmitting}
             />
           </div>
         </div>
