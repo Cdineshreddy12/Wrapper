@@ -505,6 +505,23 @@ export const DashboardFeatureTour = ({ onComplete, onSkip, initialStep = 0, onDi
     };
   }, [isVisible, cleanupAllHighlights]);
 
+  // Update connector on scroll/resize (must be before any early return to satisfy Rules of Hooks)
+  useEffect(() => {
+    if (!isVisible) return;
+
+    const updateConnector = () => {
+      setConnectorUpdateTrigger((prev: number) => prev + 1);
+    };
+
+    window.addEventListener('scroll', updateConnector, true);
+    window.addEventListener('resize', updateConnector);
+
+    return () => {
+      window.removeEventListener('scroll', updateConnector, true);
+      window.removeEventListener('resize', updateConnector);
+    };
+  }, [isVisible]);
+
   if (!isVisible || currentStep >= tourSteps.length) {
     return null;
   }
@@ -730,27 +747,9 @@ export const DashboardFeatureTour = ({ onComplete, onSkip, initialStep = 0, onDi
 
     return { path, endX, endY };
   };
-  
-  // Update connector on scroll/resize
-  useEffect(() => {
-    if (!isVisible) return;
-    
-    const updateConnector = () => {
-      setConnectorUpdateTrigger((prev: number) => prev + 1);
-    };
-    
-    window.addEventListener('scroll', updateConnector, true);
-    window.addEventListener('resize', updateConnector);
-    
-    return () => {
-      window.removeEventListener('scroll', updateConnector, true);
-      window.removeEventListener('resize', updateConnector);
-    };
-  }, [isVisible]);
 
   // Recalculate connector path (triggered by connectorUpdateTrigger on scroll/resize)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _ = connectorUpdateTrigger; // Force recalculation on scroll/resize
+  void connectorUpdateTrigger; // Force re-render so getConnectorPath() runs with fresh layout
   const connector = getConnectorPath();
 
   return (

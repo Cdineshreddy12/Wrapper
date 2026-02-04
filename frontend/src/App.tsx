@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useState } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 
 // React Router future flags to suppress deprecation warnings
 const router = {
@@ -51,6 +51,7 @@ import { OrganizationPage } from '@/features/organizations'
 import PaymentSuccess from './pages/PaymentSuccess'
 import PaymentCancelled from './pages/PaymentCancelled'
 import NotFound from './pages/NotFound'
+import { ErrorBoundary } from '@/errors/ErrorBoundary'
 import { ActivityDashboard } from './pages/ActivityDashboardPage'
 import { PaymentDetailsPage } from './pages/PaymentDetailsPage'
 import { BillingUpgradePage } from './pages/BillingUpgradePage'
@@ -76,6 +77,34 @@ const LoadingScreen = () => (
   </div>
 )
 
+// Fallback when PaymentSuccess page throws (e.g. context/API error in production)
+function PaymentSuccessErrorFallback() {
+  const navigate = useNavigate()
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className="max-w-md w-full rounded-xl border border-slate-200 bg-white p-6 shadow-xl text-center">
+        <p className="text-slate-900 font-bold mb-2">Something went wrong</p>
+        <p className="text-slate-600 text-sm mb-6">The payment success page could not load. Your payment may still have gone through.</p>
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/billing')}
+            className="w-full rounded-lg bg-blue-600 py-3 px-4 text-white font-semibold hover:bg-blue-700"
+          >
+            Return to Billing
+          </button>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="w-full rounded-lg border border-slate-300 py-3 px-4 text-slate-700 font-medium hover:bg-slate-50"
+          >
+            Refresh page
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function App() {
   return (
@@ -195,7 +224,13 @@ function AppContent() {
           path="/payment-success"
           element={
             <ProtectedRoute>
-              <PaymentSuccess />
+              <ErrorBoundary
+                fallback={
+                  <PaymentSuccessErrorFallback />
+                }
+              >
+                <PaymentSuccess />
+              </ErrorBoundary>
             </ProtectedRoute>
           }
         />
