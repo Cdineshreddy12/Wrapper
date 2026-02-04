@@ -38,10 +38,7 @@ export const getFlowConfig = (flowId: 'newBusiness' | 'existingBusiness'): FlowC
         { id: 'businessDetails', number: 1, title: 'Business Details', description: 'Company information and business profile' },
         { id: 'taxDetails', number: 2, title: 'Tax Details', description: 'Tax registration and compliance information' },
         { id: 'adminDetails', number: 3, title: 'Admin Details', description: 'Administrator and contact information' },
-        { id: 'organizationHierarchy', number: 4, title: 'Organization Structure', description: 'Learn about organizing your company hierarchy' },
-        { id: 'creditPackages', number: 5, title: 'Credit Packages', description: 'Choose your credit package' },
-        { id: 'settingsOverview', number: 6, title: 'Settings Overview', description: 'Explore available settings and preferences' },
-        { id: 'review', number: 7, title: 'Review & Submit', description: 'Review all information before submission' },
+        { id: 'review', number: 4, title: 'Review & Submit', description: 'Review all information before submission' },
       ],
     },
     existingBusiness: {
@@ -52,10 +49,7 @@ export const getFlowConfig = (flowId: 'newBusiness' | 'existingBusiness'): FlowC
         { id: 'businessDetails', number: 1, title: 'Business Details', description: 'Company information and business profile' },
         { id: 'taxDetails', number: 2, title: 'Tax Details', description: 'Tax registration and compliance information' },
         { id: 'adminDetails', number: 3, title: 'Admin Details', description: 'Administrator and contact information' },
-        { id: 'organizationHierarchy', number: 4, title: 'Organization Structure', description: 'Learn about organizing your company hierarchy' },
-        { id: 'creditPackages', number: 5, title: 'Credit Packages', description: 'Choose your credit package' },
-        { id: 'settingsOverview', number: 6, title: 'Settings Overview', description: 'Explore available settings and preferences' },
-        { id: 'review', number: 7, title: 'Review & Submit', description: 'Review all information before submission' },
+        { id: 'review', number: 4, title: 'Review & Submit', description: 'Review all information before submission' },
       ],
     },
   };

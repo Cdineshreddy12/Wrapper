@@ -5,9 +5,6 @@ import { StepConfig } from '../config/flowConfigs';
 import { BusinessDetailsStep } from './steps/BusinessDetailsStep';
 import { TaxDetailsStep } from './steps/TaxDetailsStep';
 import { AdminDetailsStep } from './steps/AdminDetailsStep';
-import { OrganizationHierarchyStep } from './steps/OrganizationHierarchyStep';
-import { CreditPackagesStep } from './steps/CreditPackagesStep';
-import { SettingsOverviewStep } from './steps/SettingsOverviewStep';
 import { ReviewStep } from './steps/ReviewStep';
 import { UserClassification } from './FlowSelector';
 import { AlertTriangle } from 'lucide-react';
@@ -48,12 +45,6 @@ export const StepRenderer = memo(({
       return <TaxDetailsStep form={form} userClassification={userClassification} />;
     case 'adminDetails':
       return <AdminDetailsStep form={form} userClassification={userClassification} />;
-    case 'organizationHierarchy':
-      return <OrganizationHierarchyStep form={form} userClassification={userClassification} />;
-    case 'creditPackages':
-      return <CreditPackagesStep form={form} userClassification={userClassification} />;
-    case 'settingsOverview':
-      return <SettingsOverviewStep form={form} userClassification={userClassification} />;
     case 'review':
       return <ReviewStep form={form} onEditStep={onEditStep} userClassification={userClassification} />;
     default:

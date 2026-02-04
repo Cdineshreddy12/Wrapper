@@ -16,10 +16,7 @@ import {
   Sparkles,
   ChevronUp,
   ChevronDown,
-  ArrowRight,
-  Building2,
-  Coins,
-  Settings2
+  ArrowRight
 } from 'lucide-react';
 
 interface OnboardingLayoutProps {
@@ -103,31 +100,7 @@ export const OnboardingLayout = React.memo(({
           icon: <ShieldCheck className="w-4 h-4 text-blue-600" />,
           color: "blue"
         };
-      case 4: // Organization Hierarchy
-        return {
-          title: "Organization Structure",
-          subtitle: "Hierarchy Management",
-          text: "Learn how to organize your company into departments, locations, and sub-organizations for better credit allocation and access control.",
-          icon: <Building2 className="w-4 h-4 text-indigo-600" />,
-          color: "indigo"
-        };
-      case 5: // Credit Packages
-        return {
-          title: "Credit System",
-          subtitle: "Power Your Operations",
-          text: "Credits fuel your business operations. Choose a package that matches your needs, or start with free credits and upgrade later.",
-          icon: <Coins className="w-4 h-4 text-amber-600" />,
-          color: "amber"
-        };
-      case 6: // Settings Overview
-        return {
-          title: "Settings Preview",
-          subtitle: "Full Control",
-          text: "After onboarding, you'll have access to comprehensive settings to customize your workspace, manage billing, and configure preferences.",
-          icon: <Settings2 className="w-4 h-4 text-slate-600" />,
-          color: "slate"
-        };
-      case 7: // Review
+      case 4: // Review
         return {
           title: "Compliance Audit",
           subtitle: "Final System Check",

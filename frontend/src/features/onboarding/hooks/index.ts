@@ -215,11 +215,6 @@ export const useStepNavigation = (
         }
         
         return hasFirstName && hasLastName && hasAdminEmail && hasMobile;
-      case 'organizationHierarchy':
-      case 'creditPackages':
-      case 'settingsOverview':
-        // Informational steps - always allow proceeding (no validation required)
-        return true;
       case 'review':
         // On review step, canProceed should always return true
         // The submit button will be controlled by canSubmit which checks termsAccepted
@@ -309,13 +304,6 @@ export const useStepNavigation = (
         // Optional but validate if present
         stepFields.push('contactJobTitle', 'preferredContactMethod', 'billingEmail');
         break;
-      case 'organizationHierarchy':
-      case 'creditPackages':
-      case 'settingsOverview':
-        // Informational steps - no validation required, allow proceeding immediately
-        // Skip validation and proceed directly
-        setCurrentStep(prev => prev + 1);
-        return true;
     }
     
     // STRICT VALIDATION: Trigger validation for ALL step-specific fields
