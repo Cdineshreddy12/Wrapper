@@ -180,22 +180,28 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = React.memo(({
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Check onboarding status (skip for certain routes and debug routes)
-  if (!skipOnboardingCheck && 
-      location.pathname !== '/onboarding' && 
-      backendAuthStatus?.needsOnboarding) {
-    
+  // Check onboarding status (skip for certain routes and for already-onboarded/invited users to prevent redirect loop)
+  const isInvitedOrOnboarded =
+    backendAuthStatus?.onboardingCompleted === true ||
+    backendAuthStatus?.userType === 'INVITED_USER' ||
+    backendAuthStatus?.isInvitedUser === true;
+
+  if (
+    !skipOnboardingCheck &&
+    location.pathname !== '/onboarding' &&
+    backendAuthStatus?.needsOnboarding &&
+    !isInvitedOrOnboarded
+  ) {
     console.log('🔄 ProtectedRoute: User needs onboarding, redirecting...', {
       needsOnboarding: backendAuthStatus.needsOnboarding,
       onboardingCompleted: backendAuthStatus.onboardingCompleted,
       pathname: location.pathname
     });
-    
-    // Build onboarding URL with context
+
     const params = new URLSearchParams();
     params.set('from', 'protected_route');
-    if (user.email) params.set('email', user.email);
-    
+    if (user?.email) params.set('email', user.email);
+
     return <Navigate to={`/onboarding?${params.toString()}`} replace />;
   }
 

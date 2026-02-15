@@ -1,5 +1,5 @@
 import React, { memo, useMemo, useState, useRef } from 'react';
-import { Database, CreditCard, Package, ShieldCheck, ExternalLink, ArrowRight, Layers, Layout, Cpu, Zap, Activity, Shield } from 'lucide-react';
+import { Database, CreditCard, Package, ShieldCheck, ExternalLink, ArrowRight, Layers, Layout, Cpu, Zap, Activity, Shield, Settings } from 'lucide-react';
 import { Application, AppThemeConfig, ThemeType } from '@/types/application';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { cn } from '@/lib/utils';
@@ -88,13 +88,31 @@ export const ApplicationCard = memo(function ApplicationCard({ application, onVi
     }
   };
 
+  const handleCardClick = () => {
+    const url = getApplicationUrl(application);
+    if (url) {
+      window.location.href = url;
+    }
+  };
+
+  const handleOpenSettings = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onView(application);
+  };
+
+  const handleExternalLink = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = getApplicationUrl(application);
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <div className="perspective-1000 w-full h-[280px]">
       <div
         ref={cardRef}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
-        onClick={() => onView(application)}
+        onClick={handleCardClick}
         style={{
           transform: `rotateX(${rotate.x}deg) rotateY(${rotate.y}deg)`,
         }}
@@ -133,12 +151,31 @@ export const ApplicationCard = memo(function ApplicationCard({ application, onVi
               <div className={cn("absolute inset-0 rounded-[24px] opacity-15 blur-xl", theme.colorClass.replace('text-', 'bg-'))} />
             </div>
 
-            <div className={cn(
-              "w-10 h-10 rounded-full border flex items-center justify-center transition-all duration-500 opacity-60",
-              isDark ? "border-white/10 text-slate-400" : "border-slate-200 text-slate-500",
-              "group-hover:opacity-100 group-hover:bg-white dark:group-hover:bg-slate-800 group-hover:shadow-lg"
-            )}>
-              <ExternalLink className="w-4 h-4" />
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleOpenSettings}
+                className={cn(
+                  "w-9 h-9 rounded-full border flex items-center justify-center transition-all duration-500 opacity-60 hover:opacity-100",
+                  isDark ? "border-white/10 text-slate-400 hover:bg-white/10" : "border-slate-200 text-slate-500 hover:bg-slate-100",
+                  "group-hover:opacity-100 group-hover:bg-white dark:group-hover:bg-slate-800 group-hover:shadow-lg"
+                )}
+                title="Application settings"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleExternalLink}
+                className={cn(
+                  "w-9 h-9 rounded-full border flex items-center justify-center transition-all duration-500 opacity-60 hover:opacity-100",
+                  isDark ? "border-white/10 text-slate-400 hover:bg-white/10" : "border-slate-200 text-slate-500 hover:bg-slate-100",
+                  "group-hover:opacity-100 group-hover:bg-white dark:group-hover:bg-slate-800 group-hover:shadow-lg"
+                )}
+                title="Open in new tab"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </button>
             </div>
           </div>
 

@@ -28,23 +28,24 @@ class DatabaseConnectionManager {
 
       const databaseUrl = process.env.DATABASE_URL;
       if (!databaseUrl) {
+        console.error('❌ DATABASE_URL is not set. Add it to backend/.env (e.g. DATABASE_URL=postgresql://user:pass@localhost:5432/dbname)');
         throw new Error('DATABASE_URL environment variable is required');
       }
 
-      console.log('🔌 Initializing database connections...');
+      console.log('🔌 Connecting to database...');
 
       // App connection (with RLS enforced)
       this.appConnection = postgres(databaseUrl, {
         max: 10,
         idle_timeout: 20,
-        connect_timeout: 10,
+        connect_timeout: 5,
       });
 
       // System connection (bypassing RLS for admin operations)
       this.systemConnection = postgres(databaseUrl, {
         max: 5,
         idle_timeout: 30,
-        connect_timeout: 10,
+        connect_timeout: 5,
         // Add options to bypass RLS if needed
         transform: {
           value: (value) => value,
@@ -59,7 +60,11 @@ class DatabaseConnectionManager {
       console.log('✅ Database connections initialized successfully');
 
     } catch (error) {
-      console.error('❌ Failed to initialize database connections:', error);
+      console.error('❌ Failed to initialize database connections:', error.message || error);
+      if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+        console.error('   Make sure PostgreSQL is running and DATABASE_URL in .env is correct.');
+        console.error('   Example: postgresql://user:password@localhost:5432/your_db');
+      }
       throw error;
     }
   }

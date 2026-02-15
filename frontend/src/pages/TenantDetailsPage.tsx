@@ -14,11 +14,11 @@ export function TenantDetailsPage() {
   const { tenantId } = useParams<{ tenantId: string }>();
   const navigate = useNavigate();
 
-  // Fetch tenant details
+  // Fetch tenant details (backend route is GET /admin/tenants/:tenantId/details)
   const { data: tenantData, isLoading } = useQuery({
     queryKey: ['admin', 'tenant', tenantId],
     queryFn: async () => {
-      const response = await api.get(`/admin/tenants/${tenantId}`);
+      const response = await api.get(`/admin/tenants/${tenantId}/details`);
       return response.data.data;
     },
     enabled: !!tenantId

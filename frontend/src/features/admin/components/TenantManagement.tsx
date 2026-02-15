@@ -125,7 +125,7 @@ export const TenantManagement: React.FC = () => {
 
       if (detailsResponse.data.success) {
         // Navigate to tenant details page
-        navigate(`/company-admin/tenants/${tenantId}`);
+        navigate(`/company-admin/tenants/${tenant.tenantId}`);
       }
     } catch (error) {
       console.error('Failed to fetch tenant details:', error);

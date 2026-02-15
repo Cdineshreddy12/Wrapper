@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import { useAuthStatus, useTenant } from '@/hooks/useSharedQueries';
@@ -87,8 +87,20 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
   const tenantId = authData?.authStatus?.tenantId;
   const { data: tenantData, isLoading: tenantLoading } = useTenant(tenantId);
 
-  // Fetch user context from API
+  // Refs to avoid putting authData/tenantData/kindeUser in effect deps (prevents infinite re-renders from new object refs)
+  const authDataRef = useRef(authData);
+  const tenantDataRef = useRef(tenantData);
+  const kindeUserRef = useRef(kindeUser);
+  const hasSyncedForAuthRef = useRef(false);
+  authDataRef.current = authData;
+  tenantDataRef.current = tenantData;
+  kindeUserRef.current = kindeUser;
+
+  // Fetch user context from API (reads latest auth/tenant/kindeUser from refs so deps stay stable)
   const fetchUserContext = useCallback(async (showToast = false) => {
+    const authData = authDataRef.current;
+    const tenantData = tenantDataRef.current;
+    const kindeUser = kindeUserRef.current;
     try {
       console.log('🔄 Refreshing user context...');
 
@@ -173,7 +185,7 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
     } finally {
       setLoading(false);
     }
-  }, [authData, kindeUser, tenantData, location.pathname]);
+  }, [location.pathname]);
 
   // Manual refresh function exposed to components
   const refreshUserContext = useCallback(async () => {
@@ -210,22 +222,30 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
     window.location.href = '/login';
   }, []);
 
-  // Initial load - use shared auth hook data
+  // Reset sync guard when user logs out so next login syncs again
   useEffect(() => {
-    // Only fetch user context if user is authenticated
-    // This prevents unnecessary API calls on public pages like invitation acceptance
-    if (isAuthenticated && authData) {
-      fetchUserContext(false);
-    } else if (isAuthenticated && !authLoading && !authData && !authError) {
-      // If auth data is not available but user is authenticated, still proceed
-      setLoading(false);
-    } else if (!isAuthenticated) {
+    if (!isAuthenticated) {
+      hasSyncedForAuthRef.current = false;
       setLoading(false);
     }
-  }, [isAuthenticated, authData, authLoading, authError, fetchUserContext]);
+  }, [isAuthenticated]);
 
-  // Update tenant data when cached tenant data changes
+  // Initial load - run ONCE when auth becomes ready (do not depend on authData/fetchUserContext identity to avoid loop)
   useEffect(() => {
+    if (!isAuthenticated || authLoading) return;
+    if (hasSyncedForAuthRef.current) return;
+    if (!authDataRef.current) {
+      if (!authError) setLoading(false);
+      return;
+    }
+    hasSyncedForAuthRef.current = true;
+    fetchUserContext(false);
+  }, [isAuthenticated, authLoading, authError, fetchUserContext]);
+
+  // Update tenant data when cached tenant data changes (depend on stable tenantId to avoid loop)
+  const tenantIdStable = tenantData?.tenantId;
+  useEffect(() => {
+    const tenantData = tenantDataRef.current;
     if (tenantData && user) {
       setTenant({
         tenantId: tenantData.tenantId || user.tenantId,
@@ -234,7 +254,7 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
         industry: tenantData.industry || 'Business',
       });
     }
-  }, [tenantData, user]);
+  }, [tenantIdStable, user?.tenantId]);
 
   // Auto-refresh effect
   useEffect(() => {
@@ -266,7 +286,7 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
   // Update loading state to include tenant loading
   const effectiveLoading = loading || authLoading || tenantLoading;
 
-  const value: UserContextType = {
+  const value = useMemo<UserContextType>(() => ({
     user,
     tenant,
     permissions,
@@ -280,7 +300,7 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
     autoRefresh,
     setAutoRefresh,
     lastRefreshTime
-  };
+  }), [user, tenant, permissions, roles, effectiveLoading, refreshUserContext, checkPermission, hasRole, logout, autoRefresh, lastRefreshTime]);
 
   return (
     <UserContext.Provider value={value}>

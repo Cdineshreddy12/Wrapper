@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import useSilentAuth from '@/hooks/useSilentAuth';
@@ -26,6 +26,9 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
 
   const [initializationComplete, setInitializationComplete] = useState(false);
   const [authCheckComplete, setAuthCheckComplete] = useState(false);
+  // Stable primitive for effect deps - avoid 'user' object to prevent re-render loop
+  const userId = user?.id ?? user?.sub ?? null;
+  const initStartedRef = useRef(false);
 
   // Paths that don't require authentication
   const publicPaths = [
@@ -43,12 +46,21 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
     location.pathname === path || location.pathname.startsWith(path)
   );
 
-  // Initialize silent authentication
+  // Reset init guard when user logs out so next login runs again
   useEffect(() => {
+    if (!isAuthenticated && !isLoading) {
+      initStartedRef.current = false;
+    }
+  }, [isAuthenticated, isLoading]);
+
+  // Initialize silent authentication (run once when deps settle; avoid 'user' object in deps to prevent loop)
+  useEffect(() => {
+    if (isLoading) return;
+    if (initStartedRef.current) return;
+
     const initializeSilentAuth = async () => {
-      if (isLoading || authCheckComplete) {
-        return;
-      }
+      if (authCheckComplete) return;
+      initStartedRef.current = true;
 
       console.log('🔄 SilentAuthGuard: Starting initialization...', {
         isLoading,
@@ -60,13 +72,8 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
       });
 
       try {
-        // Wait for Kinde to finish loading
-        if (isLoading) {
-          return;
-        }
-
         // If user is already authenticated, no need for silent auth
-        if (isAuthenticated && user) {
+        if (isAuthenticated && userId) {
           console.log('✅ SilentAuthGuard: User already authenticated');
           setAuthCheckComplete(true);
           setInitializationComplete(true);
@@ -109,15 +116,16 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
 
     initializeSilentAuth();
   }, [
-    isLoading, 
-    isAuthenticated, 
-    user, 
-    checkSilentAuth, 
-    hasChecked, 
-    isChecking, 
-    location.pathname, 
+    isLoading,
+    isAuthenticated,
+    userId,
+    location.pathname,
     isPublicPath,
-    authCheckComplete
+    authCheckComplete,
+    hasChecked,
+    isChecking,
+    checkSilentAuth,
+    getAuthState
   ]);
 
   // Handle authenticated user routing

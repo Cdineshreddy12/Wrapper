@@ -1,0 +1,8 @@
+{
+  "watch": ["src"],
+  "ext": "js,json,mjs,cjs",
+  "ignore": ["node_modules", "*.log", ".env", ".env.*", "dist", "coverage", ".git", "src/db/migrations"],
+  "delay": "8000",
+  "legacyWatch": true,
+  "verbose": false
+}

@@ -16,3 +16,5 @@ coverage
 .env.test.local
 .env.production.local
 
+# Prevent format-on-save from touching config (avoids Vite dev server restart loop)
+vite.config.ts

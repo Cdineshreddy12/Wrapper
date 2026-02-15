@@ -13,7 +13,9 @@ import {
   Lock,
   Edit,
   Eye,
-  Hash
+  Hash,
+  Settings,
+  Play
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Container } from '@/components/common/Page';
@@ -85,6 +87,19 @@ export function ApplicationDetailsPage() {
     customPermissions,
     baseUrl,
   } = application;
+
+  const getApplicationUrl = (): string => {
+    if (baseUrl) return baseUrl;
+    const baseDomain = window.location.origin;
+    const urlPatterns: Record<string, string> = {
+      affiliateConnect: `${baseDomain}/affiliate`,
+      crm: 'https://crm.zopkit.com',
+      hr: `${baseDomain}/hr`,
+    };
+    return urlPatterns[appCode] || `${baseDomain}/apps/${appCode}`;
+  };
+
+  const applicationUrl = getApplicationUrl();
 
   const getMetricCardClasses = () => {
     return glassmorphismEnabled
@@ -191,6 +206,46 @@ export function ApplicationDetailsPage() {
                 {description || "No description available for this application."}
               </p>
             </div>
+          </div>
+        </div>
+
+        {/* Application settings */}
+        <div className={cn(
+          "relative rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-6",
+          glassmorphismEnabled
+            ? "bg-gradient-to-br from-violet-100/20 via-purple-100/10 to-indigo-100/10 dark:from-slate-900/40 dark:via-slate-800/30 dark:to-slate-900/40 backdrop-blur-2xl border border-white/20 dark:border-white/10"
+            : "bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700"
+        )}>
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              "p-2.5 rounded-xl",
+              glassmorphismEnabled ? "bg-white/60 dark:bg-white/20 backdrop-blur-md" : "bg-slate-200/80 dark:bg-slate-700"
+            )}>
+              <Settings className="h-6 w-6 text-slate-700 dark:text-slate-300" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Application settings</h2>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Launch the app or open in a new tab
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              onClick={() => { window.location.href = applicationUrl; }}
+              className="gap-2 bg-primary hover:bg-primary/90"
+            >
+              <Play className="h-4 w-4" />
+              Open application
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => window.open(applicationUrl, '_blank', 'noopener,noreferrer')}
+              className="gap-2"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open in new tab
+            </Button>
           </div>
         </div>
 

@@ -5,8 +5,11 @@
   "main": "src/app.js",
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/app.js",
-    "start": "node src/app.js",
+    "dev": "nodemon src/bootstrap.js",
+    "start": "node src/bootstrap.js",
+    "start:check": "node scripts/check-startup.mjs",
+    "dev:check": "node scripts/check-startup.mjs",
+    "test:db": "node scripts/test-db.mjs",
     "build": "echo 'No build step required for JavaScript'",
     "test": "vitest run",
     "test:watch": "vitest",

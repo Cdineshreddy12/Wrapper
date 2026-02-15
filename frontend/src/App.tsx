@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState } from 'react'
+import React, { useMemo, useEffect, useState, Suspense } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 
 // React Router future flags to suppress deprecation warnings
@@ -23,49 +23,52 @@ import { UserContextProvider } from './contexts/UserContextProvider'
 import { EntityScopeProvider } from './contexts/EntityScopeContext'
 import { ThemeProvider } from './components/theme/ThemeProvider'
 
-
-// Layout Components
+// Layout & guards (small; keep eager)
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { PermissionGuard } from '@/components/auth/PermissionGuard'
-// Onboarding feature - using optimized version for better performance
-import { OnboardingGuard, OnboardingPageGuard, OnboardingPage } from '@/features/onboarding/indexOptimized'
-
-// Pages
-import { Landing, ProductPage, IndustryPage, PrivacyPolicy, TermsOfService, CookiePolicy, Security, Pricing } from '@/pages/landing'
-import { Login } from '@/pages/Login'
-import { AuthCallback } from '@/pages/AuthCallback'
-import { InviteAccept } from '@/pages/InviteAccept'
-import { UserManagementDashboard } from '@/features/users/components/UserManagementDashboard'
+import { OnboardingGuard, OnboardingPageGuard } from '@/features/onboarding/indexOptimized'
 import { UserManagementProvider } from '@/features/users/components/context/UserManagementContext'
-import { Billing } from '@/features/billing'
-import { Permissions } from '@/features/permissions'
-import UserApplicationAccessPage from '@/pages/UserApplicationAccess'
-import SuiteDashboard from '@/pages/SuiteDashboard'
-// Admin feature
-import { AdminDashboardPage } from '@/features/admin'
-import { ApplicationPage } from './pages/ApplicationPage'
-import { RolesPage } from './pages/RolesPage'
-import { Settings } from '@/features/settings'
-import { OrganizationPage } from '@/features/organizations'
-import PaymentSuccess from './pages/PaymentSuccess'
-import PaymentCancelled from './pages/PaymentCancelled'
-import NotFound from './pages/NotFound'
 import { ErrorBoundary } from '@/errors/ErrorBoundary'
-import { ActivityDashboard } from './pages/ActivityDashboardPage'
-import { PaymentDetailsPage } from './pages/PaymentDetailsPage'
-import { BillingUpgradePage } from './pages/BillingUpgradePage'
-import { ApplicationDetailsPage } from './pages/ApplicationDetailsPage'
-import { RoleDetailsPage } from './pages/RoleDetailsPage'
-import { RoleBuilderPage } from './pages/RoleBuilderPage'
-import { InviteUserPage } from './pages/InviteUserPage'
-import { UserDetailsPage } from './pages/UserDetailsPage'
-import { TenantDetailsPage } from './pages/TenantDetailsPage'
-import { CampaignDetailsPage } from './pages/CampaignDetailsPage'
 
-// TEST PAGES - Remove after testing is complete
-import TestWelcomeScreen from './pages/test/TestWelcomeScreen'
-import TestLoadingScreen from './pages/test/TestLoadingScreen'
+// Lazy-loaded pages (code-split per route for faster initial load)
+const Landing = React.lazy(() => import('@/pages/landing').then(m => ({ default: m.Landing })))
+const ProductPage = React.lazy(() => import('@/pages/landing').then(m => ({ default: m.ProductPage })))
+const IndustryPage = React.lazy(() => import('@/pages/landing').then(m => ({ default: m.IndustryPage })))
+const PrivacyPolicy = React.lazy(() => import('@/pages/landing').then(m => ({ default: m.PrivacyPolicy })))
+const TermsOfService = React.lazy(() => import('@/pages/landing').then(m => ({ default: m.TermsOfService })))
+const CookiePolicy = React.lazy(() => import('@/pages/landing').then(m => ({ default: m.CookiePolicy })))
+const Security = React.lazy(() => import('@/pages/landing').then(m => ({ default: m.Security })))
+const Pricing = React.lazy(() => import('@/pages/landing').then(m => ({ default: m.Pricing })))
+const Login = React.lazy(() => import('@/pages/Login').then(m => ({ default: m.Login })))
+const AuthCallback = React.lazy(() => import('@/pages/AuthCallback').then(m => ({ default: m.AuthCallback })))
+const InviteAccept = React.lazy(() => import('@/pages/InviteAccept').then(m => ({ default: m.InviteAccept })))
+const OnboardingPage = React.lazy(() => import('@/features/onboarding/indexOptimized').then(m => ({ default: m.OnboardingPage })))
+const PaymentSuccess = React.lazy(() => import('./pages/PaymentSuccess'))
+const PaymentCancelled = React.lazy(() => import('./pages/PaymentCancelled'))
+const SuiteDashboard = React.lazy(() => import('@/pages/SuiteDashboard'))
+const UserManagementDashboard = React.lazy(() => import('@/features/users/components/UserManagementDashboard').then(m => ({ default: m.UserManagementDashboard })))
+const Billing = React.lazy(() => import('@/features/billing').then(m => ({ default: m.Billing })))
+const Permissions = React.lazy(() => import('@/features/permissions').then(m => ({ default: m.Permissions })))
+const UserApplicationAccessPage = React.lazy(() => import('@/pages/UserApplicationAccess'))
+const AdminDashboardPage = React.lazy(() => import('@/features/admin').then(m => ({ default: m.AdminDashboardPage })))
+const ApplicationPage = React.lazy(() => import('./pages/ApplicationPage').then(m => ({ default: m.ApplicationPage })))
+const RolesPage = React.lazy(() => import('./pages/RolesPage').then(m => ({ default: m.RolesPage })))
+const Settings = React.lazy(() => import('@/features/settings').then(m => ({ default: m.Settings })))
+const OrganizationPage = React.lazy(() => import('@/features/organizations').then(m => ({ default: m.OrganizationPage })))
+const NotFound = React.lazy(() => import('./pages/NotFound'))
+const ActivityDashboard = React.lazy(() => import('./pages/ActivityDashboardPage').then(m => ({ default: m.ActivityDashboard })))
+const PaymentDetailsPage = React.lazy(() => import('./pages/PaymentDetailsPage').then(m => ({ default: m.PaymentDetailsPage })))
+const BillingUpgradePage = React.lazy(() => import('./pages/BillingUpgradePage').then(m => ({ default: m.BillingUpgradePage })))
+const ApplicationDetailsPage = React.lazy(() => import('./pages/ApplicationDetailsPage').then(m => ({ default: m.ApplicationDetailsPage })))
+const RoleDetailsPage = React.lazy(() => import('./pages/RoleDetailsPage').then(m => ({ default: m.RoleDetailsPage })))
+const RoleBuilderPage = React.lazy(() => import('./pages/RoleBuilderPage').then(m => ({ default: m.RoleBuilderPage })))
+const InviteUserPage = React.lazy(() => import('./pages/InviteUserPage').then(m => ({ default: m.InviteUserPage })))
+const UserDetailsPage = React.lazy(() => import('./pages/UserDetailsPage').then(m => ({ default: m.UserDetailsPage })))
+const TenantDetailsPage = React.lazy(() => import('./pages/TenantDetailsPage').then(m => ({ default: m.TenantDetailsPage })))
+const CampaignDetailsPage = React.lazy(() => import('./pages/CampaignDetailsPage').then(m => ({ default: m.CampaignDetailsPage })))
+const TestWelcomeScreen = React.lazy(() => import('./pages/test/TestWelcomeScreen'))
+const TestLoadingScreen = React.lazy(() => import('./pages/test/TestLoadingScreen'))
 
 // Professional Loading component using Zopkit round loader
 const LoadingScreen = () => (
@@ -154,7 +157,8 @@ function AppContent() {
       {/* New Version Available Banner */}
       <NewVersionBanner />
 
-      <Routes>
+      <Suspense fallback={<LoadingScreen />}>
+        <Routes>
         {/* Public Routes */}
         <Route
           path="/landing"
@@ -332,7 +336,8 @@ function AppContent() {
             )
           }
         />
-      </Routes>
+        </Routes>
+      </Suspense>
     </div>
   )
 }
@@ -342,12 +347,10 @@ function AppContent() {
 
 // Root redirect component to handle initial route decisions
 function RootRedirect() {
-  const { isAuthenticated, isLoading } = useKindeAuth()
+  const { isAuthenticated, isLoading, getToken } = useKindeAuth()
   const { data: authData, isLoading: authLoading } = useAuthStatus()
   const [isChecking, setIsChecking] = useState(true)
   const [onboardingStatus, setOnboardingStatus] = useState<any>(null)
-
-  const backendAuthStatus = authData?.authStatus
 
   useEffect(() => {
     async function checkStatus() {
@@ -364,8 +367,6 @@ function RootRedirect() {
           const stateData = JSON.parse(stateParam);
 
           if (stateData.app_code && stateData.redirect_url) {
-            // Get the token from Kinde
-            const { getToken } = useKindeAuth();
             const token = await getToken();
 
             if (token) {
@@ -414,9 +415,10 @@ function RootRedirect() {
         return
       }
 
-      // Use auth data from shared hook
-      if (backendAuthStatus) {
-        setOnboardingStatus({ authStatus: backendAuthStatus })
+      // Use auth data from shared hook (read inside effect; do not put authData in deps to avoid infinite loop from new object refs)
+      const authStatus = authData?.authStatus
+      if (authStatus) {
+        setOnboardingStatus({ authStatus })
       } else {
         setOnboardingStatus({ hasUser: false, hasTenant: false })
       }
@@ -425,7 +427,8 @@ function RootRedirect() {
     }
 
     checkStatus()
-  }, [isAuthenticated, isLoading, authLoading, backendAuthStatus])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- authData intentionally omitted to prevent re-render loop
+  }, [isAuthenticated, isLoading, authLoading])
 
   // Show loading while checking
   if (isLoading || authLoading || isChecking) {
@@ -444,9 +447,14 @@ function RootRedirect() {
     return <Navigate to="/landing" replace />
   }
 
-  // Authenticated but no onboarding status yet
+  // Authenticated but no onboarding status yet (still loading)
   if (!onboardingStatus) {
     return <Navigate to="/landing" replace />
+  }
+
+  // Placeholder when backend auth status wasn't available - send to dashboard and let guards handle it (avoids redirect loop)
+  if (!onboardingStatus.authStatus) {
+    return <Navigate to="/dashboard" replace />
   }
 
   // Check if user needs onboarding based on the actual backend response structure

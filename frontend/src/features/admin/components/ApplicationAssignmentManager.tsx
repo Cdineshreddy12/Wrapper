@@ -707,8 +707,8 @@ const ApplicationAssignmentManager: React.FC = () => {
                                 : "bg-white dark:bg-slate-900/30 border-slate-100 dark:border-slate-800"
                             )}
                           >
-                            <AccordionTrigger className="px-8 py-6 hover:no-underline hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all [&[data-state=open]]:bg-blue-600/5 group/trigger">
-                              <div className="flex items-center justify-between w-full pr-6 text-left" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                            <div className="flex items-center">
+                              <AccordionTrigger className="flex-1 px-8 py-6 hover:no-underline hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all [&[data-state=open]]:bg-blue-600/5 group/trigger text-left">
                                 <div className="flex items-center gap-6">
                                   <div className={cn(
                                     "w-12 h-12 rounded-2xl flex items-center justify-center transition-all border relative shadow-sm",
@@ -729,30 +729,29 @@ const ApplicationAssignmentManager: React.FC = () => {
                                     </div>
                                   </div>
                                 </div>
-
-                                <div className="flex items-center gap-4">
-                                  {!isAppAssigned ? (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleAssignApplicationDirectly(app); }}
-                                      className="rounded-xl px-4 h-9 text-[9px] font-black uppercase tracking-widest border-blue-200 text-blue-600 hover:bg-blue-600 hover:text-white transition-all"
-                                    >
-                                      <Plus className="w-3.5 h-3.5 mr-2" /> Deploy Domain
-                                    </Button>
-                                  ) : (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleRemoveAssignment(tenantApp.id, selectedTenant.companyName, app.appName); }}
-                                      className="rounded-xl px-4 h-9 text-[9px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 hover:text-rose-600 border border-transparent hover:border-rose-100"
-                                    >
-                                      Decommission
-                                    </Button>
-                                  )}
-                                </div>
+                              </AccordionTrigger>
+                              <div className="flex items-center gap-4 pr-6">
+                                {!isAppAssigned ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleAssignApplicationDirectly(app)}
+                                    className="rounded-xl px-4 h-9 text-[9px] font-black uppercase tracking-widest border-blue-200 text-blue-600 hover:bg-blue-600 hover:text-white transition-all"
+                                  >
+                                    <Plus className="w-3.5 h-3.5 mr-2" /> Deploy Domain
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleRemoveAssignment(tenantApp.id, selectedTenant.companyName, app.appName)}
+                                    className="rounded-xl px-4 h-9 text-[9px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 hover:text-rose-600 border border-transparent hover:border-rose-100"
+                                  >
+                                    Decommission
+                                  </Button>
+                                )}
                               </div>
-                            </AccordionTrigger>
+                            </div>
                             <AccordionContent className="p-0 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950/20">
                               <div className="divide-y divide-slate-100 dark:divide-slate-800/50">
                                 {app.modules?.map((module: ApplicationModule) => {

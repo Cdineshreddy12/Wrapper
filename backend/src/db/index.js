@@ -2,22 +2,20 @@ import { dbManager, getAppDb, getSystemDb, initializeDrizzleInstances } from './
 import * as schema from './schema/index.js';
 import 'dotenv/config';
 
-// Initialize connection manager and drizzle instances
+process.stdout.write('🔌 Connecting to PostgreSQL...\n');
 await dbManager.initialize();
 const { appDb, systemDb } = initializeDrizzleInstances();
 
 // Export connections for backward compatibility
-export const db = appDb;  // Default to app connection (RLS enforced)
-export const systemDbConnection = systemDb;  // System connection (RLS bypassed)
+export const db = appDb;
+export const systemDbConnection = systemDb;
+export const connectionString = process.env.DATABASE_URL || '';
 
-// Export dbManager for middleware usage
 export { dbManager };
 
-// Legacy exports for backward compatibility
-export const sql = dbManager.getAppConnection();  // Default connection
-export const systemSql = dbManager.getSystemConnection();  // System connection
+export const sql = dbManager.getAppConnection();
+export const systemSql = dbManager.getSystemConnection();
 
-// Create drizzle instance for backward compatibility
 export { appDb as drizzle };
 
 // Close connection helper

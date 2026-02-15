@@ -1,4 +1,7 @@
 import kindeService from '../services/kinde-service.js';
+import { db } from '../../../db/index.js';
+import { tenants, tenantUsers } from '../../../db/schema/index.js';
+import { eq, and } from 'drizzle-orm';
 
 export default async function authRoutes(fastify, options) {
   // OAuth login for onboarding (no specific organization yet)
@@ -527,6 +530,106 @@ export default async function authRoutes(fastify, options) {
       return reply.code(401).send({
         error: 'Unauthorized',
         message: 'Failed to refresh token',
+      });
+    }
+  });
+
+  /**
+   * POST /validate-token
+   * Validate Kinde RS256 token and return user + tenant for external apps (e.g. Operations backend).
+   * Body: { "token": "eyJ..." } or header: Authorization: Bearer <token>
+   */
+  fastify.post('/validate-token', async (request, reply) => {
+    try {
+      const token =
+        request.body?.token ||
+        request.headers.authorization?.replace(/^Bearer\s+/i, '');
+
+      if (!token) {
+        return reply.code(400).send({
+          success: false,
+          error: 'Missing token',
+          message: 'Provide token in body { "token": "..." } or Authorization: Bearer <token>',
+        });
+      }
+
+      const userInfo = await kindeService.getUserInfo(token);
+      const kindeId = userInfo?.id || userInfo?.sub;
+      const orgCode = userInfo?.org_code || userInfo?.org_codes?.[0];
+
+      if (!kindeId) {
+        return reply.code(401).send({
+          success: false,
+          error: 'Invalid token',
+          message: 'Token did not contain a user identifier',
+        });
+      }
+
+      if (!orgCode) {
+        return reply.code(403).send({
+          success: false,
+          error: 'No organization',
+          message: 'Token has no organization context',
+        });
+      }
+
+      const tenantRows = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.kindeOrgId, orgCode))
+        .limit(1);
+
+      if (tenantRows.length === 0) {
+        return reply.code(404).send({
+          success: false,
+          error: 'Tenant not found',
+          message: `No tenant for org_code: ${orgCode}`,
+        });
+      }
+
+      const tenant = tenantRows[0];
+      const userRows = await db
+        .select()
+        .from(tenantUsers)
+        .where(
+          and(
+            eq(tenantUsers.tenantId, tenant.tenantId),
+            eq(tenantUsers.kindeUserId, kindeId)
+          )
+        )
+        .limit(1);
+
+      if (userRows.length === 0) {
+        return reply.code(404).send({
+          success: false,
+          error: 'User not found',
+          message: 'User not found in tenant',
+        });
+      }
+
+      const u = userRows[0];
+      return reply.send({
+        success: true,
+        user: {
+          id: u.userId,
+          email: u.email,
+          firstName: u.firstName ?? undefined,
+          lastName: u.lastName ?? undefined,
+          name: u.name,
+          kindeId: u.kindeUserId,
+        },
+        tenant: {
+          id: tenant.tenantId,
+          name: tenant.companyName,
+          kindeOrgId: tenant.kindeOrgId,
+        },
+      });
+    } catch (error) {
+      console.error('❌ validate-token error:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Validation failed',
+        message: error.message,
       });
     }
   });

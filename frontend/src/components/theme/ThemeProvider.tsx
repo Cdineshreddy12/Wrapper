@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react'
 
 type Theme = 'light' | 'dark' | 'monochrome' | 'system'
 
@@ -103,35 +103,33 @@ export function ThemeProvider({
     return () => mediaQuery.removeEventListener('change', handleChange)
   }, [theme])
 
-  const value = {
+  const setThemeCallback = useCallback((newTheme: Theme) => {
+    console.log('🎨 Theme change requested:', newTheme)
+    setTheme(newTheme)
+    localStorage.setItem(storageKey, newTheme)
+  }, [storageKey])
+
+  const setGlassmorphismEnabledCallback = useCallback((enabled: boolean) => {
+    console.log('✨ Glassmorphism change requested:', enabled)
+    setGlassmorphismEnabled(enabled)
+    localStorage.setItem('glassmorphism-enabled', enabled.toString())
+    const body = document.body
+    if (enabled) {
+      body.classList.add('glassmorphism-enabled')
+    } else {
+      body.classList.remove('glassmorphism-enabled')
+    }
+    body.style.transition = 'all 0.5s ease-in-out'
+    setTimeout(() => { body.style.transition = '' }, 500)
+  }, [])
+
+  const value = useMemo(() => ({
     theme,
-    setTheme: (newTheme: Theme) => {
-      console.log('🎨 Theme change requested:', newTheme)
-      setTheme(newTheme)
-      localStorage.setItem(storageKey, newTheme)
-    },
+    setTheme: setThemeCallback,
     actualTheme,
     glassmorphismEnabled,
-    setGlassmorphismEnabled: (enabled: boolean) => {
-      console.log('✨ Glassmorphism change requested:', enabled)
-      setGlassmorphismEnabled(enabled)
-      localStorage.setItem('glassmorphism-enabled', enabled.toString())
-
-      // Add/remove glassmorphism-enabled class to body
-      const body = document.body
-      if (enabled) {
-        body.classList.add('glassmorphism-enabled')
-      } else {
-        body.classList.remove('glassmorphism-enabled')
-      }
-
-      // Add smooth transition class to body during glassmorphism changes
-      body.style.transition = 'all 0.5s ease-in-out'
-      setTimeout(() => {
-        body.style.transition = ''
-      }, 500)
-    },
-  }
+    setGlassmorphismEnabled: setGlassmorphismEnabledCallback,
+  }), [theme, actualTheme, glassmorphismEnabled, setThemeCallback, setGlassmorphismEnabledCallback])
 
   return (
     <ThemeContext.Provider value={value}>

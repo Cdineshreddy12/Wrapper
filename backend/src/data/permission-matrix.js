@@ -1208,17 +1208,366 @@ export const BUSINESS_SUITE_MATRIX = {
         ]
       }
     }
+  },
+
+  // 📦 **OPERATIONS MANAGEMENT APPLICATION**
+  operations: {
+    appInfo: {
+      appCode: 'operations',
+      appName: 'Operations Management',
+      description: 'End-to-end operations: inventory, procurement, suppliers, logistics, orders, fulfillments, and analytics',
+      icon: '📦',
+      baseUrl: 'https://ops.zopkit.com',
+      version: '1.0.0',
+      isCore: true,
+      sortOrder: 4
+    },
+    modules: {
+      dashboard: {
+        moduleCode: 'dashboard',
+        moduleName: 'Operations Dashboard',
+        description: 'Operations overview and analytics dashboard',
+        isCore: true,
+        permissions: [
+          { code: 'view', name: 'View Dashboard', description: 'Access operations dashboard' },
+          { code: 'customize', name: 'Customize Dashboard', description: 'Customize dashboard layout and widgets' },
+          { code: 'export', name: 'Export Reports', description: 'Export dashboard reports' }
+        ]
+      },
+      inventory: {
+        moduleCode: 'inventory',
+        moduleName: 'Inventory Management',
+        description: 'Manage inventory, stock levels, and movements',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Inventory', description: 'View inventory information' },
+          { code: 'read_all', name: 'View All Inventory', description: 'View all inventory items' },
+          { code: 'create', name: 'Create Inventory Items', description: 'Add new inventory items' },
+          { code: 'update', name: 'Edit Inventory', description: 'Modify inventory information' },
+          { code: 'delete', name: 'Delete Inventory', description: 'Remove inventory items' },
+          { code: 'export', name: 'Export Inventory', description: 'Export inventory data' },
+          { code: 'import', name: 'Import Inventory', description: 'Import inventory from files' },
+          { code: 'adjust', name: 'Adjust Stock Levels', description: 'Adjust inventory quantities' },
+          { code: 'movement', name: 'Track Movements', description: 'Track inventory movements' }
+        ]
+      },
+      warehouse: {
+        moduleCode: 'warehouse',
+        moduleName: 'Warehouse Management',
+        description: 'Warehouse operations, cycle counts, and pick paths',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Warehouse', description: 'View warehouse and location information' },
+          { code: 'read_all', name: 'View All Warehouses', description: 'View all warehouses' },
+          { code: 'create', name: 'Create Warehouse', description: 'Add new warehouses or locations' },
+          { code: 'update', name: 'Edit Warehouse', description: 'Modify warehouse information' },
+          { code: 'delete', name: 'Delete Warehouse', description: 'Remove warehouses' },
+          { code: 'cycle_count', name: 'Cycle Count', description: 'Perform cycle counts' },
+          { code: 'pick_path', name: 'Manage Pick Paths', description: 'Manage pick paths and routing' }
+        ]
+      },
+      procurement: {
+        moduleCode: 'procurement',
+        moduleName: 'Procurement Management',
+        description: 'Requisitions, purchase orders, and procurement workflow',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Procurement', description: 'View requisitions and purchase orders' },
+          { code: 'read_all', name: 'View All Procurement', description: 'View all procurement in organization' },
+          { code: 'create', name: 'Create Requisition', description: 'Create new requisitions' },
+          { code: 'update', name: 'Edit Procurement', description: 'Modify requisitions and POs' },
+          { code: 'delete', name: 'Delete Procurement', description: 'Remove requisitions or POs' },
+          { code: 'approve', name: 'Approve Requisition', description: 'Approve procurement requests' },
+          { code: 'export', name: 'Export Procurement', description: 'Export procurement data' }
+        ]
+      },
+      suppliers: {
+        moduleCode: 'suppliers',
+        moduleName: 'Supplier Management',
+        description: 'Manage suppliers, performance, and risk assessments',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Suppliers', description: 'View supplier information' },
+          { code: 'read_all', name: 'View All Suppliers', description: 'View all suppliers in organization' },
+          { code: 'create', name: 'Create Suppliers', description: 'Add new suppliers' },
+          { code: 'update', name: 'Edit Suppliers', description: 'Modify supplier information' },
+          { code: 'delete', name: 'Delete Suppliers', description: 'Remove suppliers' },
+          { code: 'view_performance', name: 'View Supplier Performance', description: 'View supplier performance metrics' },
+          { code: 'view_risk', name: 'View Risk Assessments', description: 'View supplier risk assessments' },
+          { code: 'export', name: 'Export Suppliers', description: 'Export supplier data' }
+        ]
+      },
+      transportation: {
+        moduleCode: 'transportation',
+        moduleName: 'Transportation & Logistics',
+        description: 'Transportation orders, logistics, and shipping',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Transportation', description: 'View transportation and logistics data' },
+          { code: 'read_all', name: 'View All Transportation', description: 'View all transportation orders' },
+          { code: 'create', name: 'Create Transportation Order', description: 'Create transportation orders' },
+          { code: 'update', name: 'Edit Transportation', description: 'Modify transportation information' },
+          { code: 'delete', name: 'Delete Transportation', description: 'Remove transportation orders' },
+          { code: 'export', name: 'Export Transportation', description: 'Export transportation data' }
+        ]
+      },
+      orders: {
+        moduleCode: 'orders',
+        moduleName: 'Order Management',
+        description: 'Manage orders, fulfillment, and shipments',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Orders', description: 'View order information' },
+          { code: 'read_all', name: 'View All Orders', description: 'View all orders in organization' },
+          { code: 'create', name: 'Create Orders', description: 'Create new orders' },
+          { code: 'update', name: 'Edit Orders', description: 'Modify order information' },
+          { code: 'delete', name: 'Delete Orders', description: 'Remove orders' },
+          { code: 'process', name: 'Process Orders', description: 'Process and fulfill orders' },
+          { code: 'export', name: 'Export Orders', description: 'Export order data' }
+        ]
+      },
+      fulfillments: {
+        moduleCode: 'fulfillments',
+        moduleName: 'Fulfillment Management',
+        description: 'Order fulfillment and shipment tracking',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Fulfillments', description: 'View fulfillment information' },
+          { code: 'read_all', name: 'View All Fulfillments', description: 'View all fulfillments' },
+          { code: 'create', name: 'Create Fulfillment', description: 'Create fulfillments' },
+          { code: 'update', name: 'Edit Fulfillment', description: 'Modify fulfillment status' },
+          { code: 'delete', name: 'Delete Fulfillment', description: 'Remove fulfillments' },
+          { code: 'export', name: 'Export Fulfillments', description: 'Export fulfillment data' }
+        ]
+      },
+      shipments: {
+        moduleCode: 'shipments',
+        moduleName: 'Shipment Management',
+        description: 'Shipment tracking and carrier management',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Shipments', description: 'View shipment information' },
+          { code: 'read_all', name: 'View All Shipments', description: 'View all shipments' },
+          { code: 'create', name: 'Create Shipment', description: 'Create new shipments' },
+          { code: 'update', name: 'Edit Shipment', description: 'Modify shipment information' },
+          { code: 'delete', name: 'Delete Shipment', description: 'Remove shipments' },
+          { code: 'track', name: 'Track Shipments', description: 'Track shipment status' },
+          { code: 'export', name: 'Export Shipments', description: 'Export shipment data' }
+        ]
+      },
+      catalog: {
+        moduleCode: 'catalog',
+        moduleName: 'Product Catalog',
+        description: 'Product catalog and categories',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Catalog', description: 'View product catalog' },
+          { code: 'read_all', name: 'View All Catalog', description: 'View all catalog items' },
+          { code: 'create', name: 'Create Catalog Items', description: 'Add catalog products' },
+          { code: 'update', name: 'Edit Catalog', description: 'Modify catalog information' },
+          { code: 'delete', name: 'Delete Catalog Items', description: 'Remove catalog items' },
+          { code: 'export', name: 'Export Catalog', description: 'Export catalog data' }
+        ]
+      },
+      quality: {
+        moduleCode: 'quality',
+        moduleName: 'Quality Management',
+        description: 'Quality checks and compliance',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Quality', description: 'View quality data' },
+          { code: 'read_all', name: 'View All Quality', description: 'View all quality records' },
+          { code: 'create', name: 'Create Quality Record', description: 'Add quality records' },
+          { code: 'update', name: 'Edit Quality', description: 'Modify quality information' },
+          { code: 'delete', name: 'Delete Quality', description: 'Remove quality records' },
+          { code: 'export', name: 'Export Quality', description: 'Export quality data' }
+        ]
+      },
+      rfx: {
+        moduleCode: 'rfx',
+        moduleName: 'RFx & Sourcing',
+        description: 'RFQ, RFP, and sourcing events',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View RFx', description: 'View RFx and sourcing events' },
+          { code: 'read_all', name: 'View All RFx', description: 'View all RFx in organization' },
+          { code: 'create', name: 'Create RFx', description: 'Create new RFx events' },
+          { code: 'update', name: 'Edit RFx', description: 'Modify RFx information' },
+          { code: 'delete', name: 'Delete RFx', description: 'Remove RFx events' },
+          { code: 'submit_response', name: 'Submit Response', description: 'Submit vendor responses' },
+          { code: 'evaluate', name: 'Evaluate Responses', description: 'Evaluate RFx responses' },
+          { code: 'export', name: 'Export RFx', description: 'Export RFx data' }
+        ]
+      },
+      finance: {
+        moduleCode: 'finance',
+        moduleName: 'Finance & Invoices',
+        description: 'Invoices and financial operations',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Finance', description: 'View invoice and finance data' },
+          { code: 'read_all', name: 'View All Finance', description: 'View all finance records' },
+          { code: 'create', name: 'Create Invoice', description: 'Create invoices' },
+          { code: 'update', name: 'Edit Finance', description: 'Modify finance records' },
+          { code: 'delete', name: 'Delete Finance', description: 'Remove finance records' },
+          { code: 'export', name: 'Export Finance', description: 'Export finance data' }
+        ]
+      },
+      tax_compliance: {
+        moduleCode: 'tax_compliance',
+        moduleName: 'Tax Compliance',
+        description: 'Tax compliance and reporting',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Tax Compliance', description: 'View tax compliance data' },
+          { code: 'read_all', name: 'View All Tax', description: 'View all tax records' },
+          { code: 'create', name: 'Create Tax Record', description: 'Create tax records' },
+          { code: 'update', name: 'Edit Tax', description: 'Modify tax information' },
+          { code: 'export', name: 'Export Tax', description: 'Export tax compliance data' }
+        ]
+      },
+      supply_chain: {
+        moduleCode: 'supply_chain',
+        moduleName: 'Supply Chain',
+        description: 'Supply chain planning and demand',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Supply Chain', description: 'View supply chain data' },
+          { code: 'read_all', name: 'View All Supply Chain', description: 'View all supply chain data' },
+          { code: 'create', name: 'Create Supply Chain', description: 'Create supply chain records' },
+          { code: 'update', name: 'Edit Supply Chain', description: 'Modify supply chain information' },
+          { code: 'export', name: 'Export Supply Chain', description: 'Export supply chain data' }
+        ]
+      },
+      analytics: {
+        moduleCode: 'analytics',
+        moduleName: 'Analytics & Reporting',
+        description: 'Operations analytics and reports',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Analytics', description: 'View analytics and reports' },
+          { code: 'read_all', name: 'View All Analytics', description: 'View all analytics in organization' },
+          { code: 'create', name: 'Create Reports', description: 'Create custom reports' },
+          { code: 'export', name: 'Export Analytics', description: 'Export analytics data' },
+          { code: 'schedule', name: 'Schedule Reports', description: 'Schedule automated reports' }
+        ]
+      },
+      contracts: {
+        moduleCode: 'contracts',
+        moduleName: 'Contract Management',
+        description: 'Vendor and service contracts',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Contracts', description: 'View contract information' },
+          { code: 'read_all', name: 'View All Contracts', description: 'View all contracts' },
+          { code: 'create', name: 'Create Contract', description: 'Create new contracts' },
+          { code: 'update', name: 'Edit Contract', description: 'Modify contract information' },
+          { code: 'delete', name: 'Delete Contract', description: 'Remove contracts' },
+          { code: 'export', name: 'Export Contracts', description: 'Export contract data' }
+        ]
+      },
+      service_appointments: {
+        moduleCode: 'service_appointments',
+        moduleName: 'Service Appointments',
+        description: 'Service bookings and appointments',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Appointments', description: 'View service appointments' },
+          { code: 'read_all', name: 'View All Appointments', description: 'View all appointments' },
+          { code: 'create', name: 'Create Appointment', description: 'Create new appointments' },
+          { code: 'update', name: 'Edit Appointment', description: 'Modify appointment information' },
+          { code: 'delete', name: 'Delete Appointment', description: 'Remove appointments' },
+          { code: 'export', name: 'Export Appointments', description: 'Export appointment data' }
+        ]
+      },
+      notifications: {
+        moduleCode: 'notifications',
+        moduleName: 'Notifications',
+        description: 'Notifications and alerts',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Notifications', description: 'View notifications' },
+          { code: 'read_all', name: 'View All Notifications', description: 'View all notifications' },
+          { code: 'create', name: 'Create Notification', description: 'Create notifications' },
+          { code: 'update', name: 'Edit Notification', description: 'Modify notification settings' },
+          { code: 'manage_preferences', name: 'Manage Preferences', description: 'Manage notification preferences' }
+        ]
+      },
+      system: {
+        moduleCode: 'system',
+        moduleName: 'System Configuration',
+        description: 'Operations system settings and user management',
+        isCore: true,
+        permissions: [
+          { code: 'settings_read', name: 'View Settings', description: 'View system settings' },
+          { code: 'settings_update', name: 'Update Settings', description: 'Update system settings' },
+          { code: 'users_read', name: 'View Users', description: 'View user information' },
+          { code: 'users_read_all', name: 'View All Users', description: 'View all users in organization' },
+          { code: 'users_create', name: 'Create Users', description: 'Create new user accounts' },
+          { code: 'users_update', name: 'Edit Users', description: 'Modify user information' },
+          { code: 'users_delete', name: 'Delete Users', description: 'Remove user accounts' },
+          { code: 'roles_read', name: 'View Roles', description: 'View role information' },
+          { code: 'roles_read_all', name: 'View All Roles', description: 'View all roles in organization' },
+          { code: 'roles_create', name: 'Create Roles', description: 'Create new roles' },
+          { code: 'roles_update', name: 'Edit Roles', description: 'Modify role permissions' },
+          { code: 'roles_delete', name: 'Delete Roles', description: 'Remove roles' },
+          { code: 'wrapper_sync', name: 'Wrapper Sync', description: 'Trigger and view Wrapper tenant sync' }
+        ]
+      }
+    }
+  },
+
+  // 📱 **APPLICATION CATALOG / APPLICATION MANAGEMENT**
+  applications: {
+    appInfo: {
+      appCode: 'applications',
+      appName: 'Application Catalog',
+      description: 'View and manage applications available to your organization',
+      icon: '📱',
+      baseUrl: '/dashboard',
+      version: '1.0.0',
+      isCore: true,
+      sortOrder: 0
+    },
+    modules: {
+      catalog: {
+        moduleCode: 'catalog',
+        moduleName: 'Application Catalog',
+        description: 'Browse and access assigned applications',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Catalog', description: 'View available applications' },
+          { code: 'read_all', name: 'View All Apps', description: 'View all applications in catalog' },
+          { code: 'request', name: 'Request Application', description: 'Request access to an application' }
+        ]
+      },
+      dashboard: {
+        moduleCode: 'dashboard',
+        moduleName: 'Applications Dashboard',
+        description: 'Overview of assigned applications and usage',
+        isCore: true,
+        permissions: [
+          { code: 'view', name: 'View Dashboard', description: 'View applications dashboard' },
+          { code: 'customize', name: 'Customize', description: 'Customize applications dashboard' }
+        ]
+      }
+    }
   }
 };
 
 // 🎯 **PLAN-BASED ACCESS CONTROL**
 export const PLAN_ACCESS_MATRIX = {
   free: {
-    applications: ['crm'],
+    applications: ['applications', 'crm'],
     modules: {
+      applications: ['catalog', 'dashboard'],
       crm: ['leads', 'contacts', 'dashboard']
     },
     permissions: {
+      applications: {
+        catalog: ['read', 'read_all', 'request'],
+        dashboard: ['view']
+      },
       crm: {
         leads: ['read', 'create', 'update', 'delete'],
         contacts: ['read', 'create', 'update', 'delete'],
@@ -1234,13 +1583,18 @@ export const PLAN_ACCESS_MATRIX = {
 
 
   starter: {
-    applications: ['crm', 'hr', 'project_management'],
+    applications: ['applications', 'crm', 'hr', 'project_management'],
     modules: {
+      applications: ['catalog', 'dashboard'],
       crm: ['leads', 'contacts', 'accounts', 'opportunities', 'dashboard'],
       hr: ['employees', 'leave', 'dashboard'],
       project_management: ['projects', 'tasks', 'team', 'dashboard']
     },
     permissions: {
+      applications: {
+        catalog: ['read', 'read_all', 'request'],
+        dashboard: ['view', 'customize']
+      },
       crm: {
         leads: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import', 'assign', 'convert'],
         contacts: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
@@ -1268,13 +1622,18 @@ export const PLAN_ACCESS_MATRIX = {
   },
 
   professional: {
-    applications: ['crm', 'hr', 'project_management'],
+    applications: ['applications', 'crm', 'hr', 'project_management'],
     modules: {
+      applications: ['catalog', 'dashboard'],
       crm: ['leads', 'contacts', 'accounts', 'opportunities', 'quotations', 'invoices', 'inventory', 'product_orders', 'tickets', 'communications', 'calendar', 'dashboard'],
       hr: ['employees', 'payroll', 'leave', 'dashboard'],
       project_management: ['projects', 'tasks', 'sprints', 'time_tracking', 'team', 'backlog', 'documents', 'analytics', 'reports', 'chat', 'calendar', 'kanban', 'dashboard', 'notifications', 'workspace']
     },
     permissions: {
+      applications: {
+        catalog: ['read', 'read_all', 'request'],
+        dashboard: ['view', 'customize']
+      },
       crm: {
         leads: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import', 'assign', 'convert'],
         contacts: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
@@ -1322,14 +1681,20 @@ export const PLAN_ACCESS_MATRIX = {
 
 
   enterprise: {
-    applications: ['crm', 'hr', 'affiliateConnect', 'project_management'],
+    applications: ['applications', 'crm', 'hr', 'affiliateConnect', 'project_management', 'operations'],
     modules: {
+      applications: ['catalog', 'dashboard'],
       crm: ['leads', 'accounts', 'contacts', 'opportunities', 'quotations', 'invoices', 'inventory', 'product_orders', 'sales_orders', 'tickets', 'communications', 'calendar', 'ai_insights', 'form_builder', 'analytics', 'dashboard', 'system'],
       hr: ['employees', 'payroll', 'leave', 'dashboard'],
       affiliateConnect: ['dashboard', 'products', 'affiliates', 'tracking', 'commissions', 'campaigns', 'influencers', 'payments', 'analytics', 'fraud', 'communications', 'integrations', 'settings', 'support'],
-      project_management: ['projects', 'tasks', 'sprints', 'time_tracking', 'team', 'backlog', 'documents', 'analytics', 'reports', 'chat', 'calendar', 'kanban', 'dashboard', 'notifications', 'workspace', 'workflow', 'system']
+      project_management: ['projects', 'tasks', 'sprints', 'time_tracking', 'team', 'backlog', 'documents', 'analytics', 'reports', 'chat', 'calendar', 'kanban', 'dashboard', 'notifications', 'workspace', 'workflow', 'system'],
+      operations: ['dashboard', 'inventory', 'warehouse', 'procurement', 'suppliers', 'transportation', 'orders', 'fulfillments', 'shipments', 'catalog', 'quality', 'rfx', 'finance', 'tax_compliance', 'supply_chain', 'analytics', 'contracts', 'service_appointments', 'notifications', 'system']
     },
     permissions: {
+      applications: {
+        catalog: ['read', 'read_all', 'request'],
+        dashboard: ['view', 'customize']
+      },
       crm: {
         leads: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import', 'assign', 'convert'],
         accounts: ['read', 'read_all', 'create', 'update', 'delete', 'view_contacts', 'export', 'import', 'assign'],
@@ -1389,6 +1754,28 @@ export const PLAN_ACCESS_MATRIX = {
         workspace: ['read', 'read_all', 'create', 'update', 'delete', 'manage_members', 'manage_roles', 'manage_settings', 'export', 'archive', 'restore'],
         workflow: ['read', 'read_all', 'create', 'update', 'delete', 'activate', 'deactivate', 'view_executions', 'manage_rules', 'manage_actions', 'export', 'import'],
         system: ['settings_read', 'settings_update', 'users_read', 'users_read_all', 'users_create', 'users_update', 'users_delete', 'users_activate', 'users_reset_password', 'users_export', 'users_import', 'roles_read', 'roles_read_all', 'roles_create', 'roles_update', 'roles_delete', 'roles_assign', 'roles_export', 'integrations_read', 'integrations_create', 'integrations_update', 'integrations_delete', 'audit_read', 'audit_read_all', 'audit_export', 'audit_view_details', 'audit_filter', 'audit_generate_reports', 'audit_archive', 'audit_purge', 'activity_logs_read', 'activity_logs_read_all', 'activity_logs_export', 'activity_logs_view_details', 'activity_logs_filter', 'activity_logs_generate_reports', 'activity_logs_archive', 'activity_logs_purge']
+      },
+      operations: {
+        dashboard: ['view', 'customize', 'export'],
+        inventory: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import', 'adjust', 'movement'],
+        warehouse: ['read', 'read_all', 'create', 'update', 'delete', 'cycle_count', 'pick_path'],
+        procurement: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'export'],
+        suppliers: ['read', 'read_all', 'create', 'update', 'delete', 'view_performance', 'view_risk', 'export'],
+        transportation: ['read', 'read_all', 'create', 'update', 'delete', 'export'],
+        orders: ['read', 'read_all', 'create', 'update', 'delete', 'process', 'export'],
+        fulfillments: ['read', 'read_all', 'create', 'update', 'delete', 'export'],
+        shipments: ['read', 'read_all', 'create', 'update', 'delete', 'track', 'export'],
+        catalog: ['read', 'read_all', 'create', 'update', 'delete', 'export'],
+        quality: ['read', 'read_all', 'create', 'update', 'delete', 'export'],
+        rfx: ['read', 'read_all', 'create', 'update', 'delete', 'submit_response', 'evaluate', 'export'],
+        finance: ['read', 'read_all', 'create', 'update', 'delete', 'export'],
+        tax_compliance: ['read', 'read_all', 'create', 'update', 'export'],
+        supply_chain: ['read', 'read_all', 'create', 'update', 'export'],
+        analytics: ['read', 'read_all', 'create', 'export', 'schedule'],
+        contracts: ['read', 'read_all', 'create', 'update', 'delete', 'export'],
+        service_appointments: ['read', 'read_all', 'create', 'update', 'delete', 'export'],
+        notifications: ['read', 'read_all', 'create', 'update', 'manage_preferences'],
+        system: ['settings_read', 'settings_update', 'users_read', 'users_read_all', 'users_create', 'users_update', 'users_delete', 'roles_read', 'roles_read_all', 'roles_create', 'roles_update', 'roles_delete', 'wrapper_sync']
       }
     },
     credits: {

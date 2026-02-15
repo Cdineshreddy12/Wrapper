@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
@@ -28,83 +28,79 @@ export const OnboardingGuard = React.memo(({ children, redirectTo = '/login' }: 
   const onboardingData = onboardingResponse?.data
   const backendAuthStatus = authData?.authStatus
 
-  useEffect(() => {
-    // Only run onboarding check when component mounts or when critical auth data changes
-    // Don't re-run on every pathname change within dashboard
-    const isDashboardPath = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/org/')
+  // Refs to read latest data in effect without putting objects in deps (prevents infinite re-render loop)
+  const authStatusRef = useRef(backendAuthStatus)
+  const onboardingDataRef = useRef(onboardingData)
+  authStatusRef.current = backendAuthStatus
+  onboardingDataRef.current = onboardingData
 
-    // Check if we just completed onboarding (URL parameter)
-    const urlParams = new URLSearchParams(location.search)
+  // Stable primitives for deps - never use backendAuthStatus/onboardingData (objects) in deps
+  const authReady = !authLoading && !!authData
+  const onboardingReady = !!onboardingResponse && !!onboardingData
+  const pathname = location.pathname
+  const search = location.search
+
+  useEffect(() => {
+    const backendAuthStatus = authStatusRef.current
+    const onboardingData = onboardingDataRef.current
+
+    // Only run onboarding check when auth/onboarding data is ready
+    if (!backendAuthStatus && !onboardingData && !authReady) return
+
+    const isDashboardPath = pathname.startsWith('/dashboard') || pathname.startsWith('/org/')
+
+    const urlParams = new URLSearchParams(search)
     const justCompletedOnboarding = urlParams.get('onboarding') === 'complete'
 
-    // If onboarding was just completed, force a delay to allow auth state to sync
     if (justCompletedOnboarding) {
       console.log('🎯 OnboardingGuard: Onboarding just completed, adding delay for auth sync')
       const timer = setTimeout(() => {
-        // After delay, determine status based on auth data
-        if (backendAuthStatus) {
+        const authStatus = authStatusRef.current
+        if (authStatus) {
           const status: OnboardingStatus = {
-            needsOnboarding: backendAuthStatus.needsOnboarding ?? !backendAuthStatus.onboardingCompleted,
-            onboardingCompleted: backendAuthStatus.onboardingCompleted || false,
-            hasUser: !!backendAuthStatus.userId,
-            hasTenant: !!backendAuthStatus.tenantId
+            needsOnboarding: authStatus.needsOnboarding ?? !authStatus.onboardingCompleted,
+            onboardingCompleted: authStatus.onboardingCompleted || false,
+            hasUser: !!authStatus.userId,
+            hasTenant: !!authStatus.tenantId
           }
-
-          // Check if this is an invited user (they should never need onboarding)
-          const isInvitedUser = backendAuthStatus.userType === 'INVITED_USER' ||
-                                backendAuthStatus.isInvitedUser === true ||
-                                backendAuthStatus.onboardingCompleted === true
-
-          // INVITED USERS: Always skip onboarding
+          const isInvitedUser = authStatus.userType === 'INVITED_USER' ||
+            authStatus.isInvitedUser === true ||
+            authStatus.onboardingCompleted === true
           if (isInvitedUser) {
-            console.log('✅ OnboardingGuard - Invited user detected, skipping onboarding')
             status.needsOnboarding = false
             status.onboardingCompleted = true
           }
-
-          console.log('✅ OnboardingGuard - Final computed status:', status)
           setOnboardingStatus(status)
         }
       }, 2000)
       return () => clearTimeout(timer)
-    } else if (onboardingData && backendAuthStatus && !isDashboardPath) {
-      // Only check onboarding status when NOT in dashboard (to avoid repeated checks)
-      // Use data from shared hooks to determine status
+    }
+
+    if (onboardingData && backendAuthStatus && !isDashboardPath) {
       const status: OnboardingStatus = {
         needsOnboarding: onboardingData.needsOnboarding ?? !onboardingData.isOnboarded,
         onboardingCompleted: onboardingData.isOnboarded || false,
         hasUser: !!onboardingData.user,
         hasTenant: !!onboardingData.organization
       }
-
-      // Check if this is an invited user (they should never need onboarding)
       const isInvitedUser = backendAuthStatus.userType === 'INVITED_USER' ||
-                            backendAuthStatus.isInvitedUser === true ||
-                            backendAuthStatus.onboardingCompleted === true ||
-                            onboardingData.user?.userType === 'INVITED_USER'
-
-      // INVITED USERS: Always skip onboarding
+        backendAuthStatus.isInvitedUser === true ||
+        backendAuthStatus.onboardingCompleted === true ||
+        onboardingData.user?.userType === 'INVITED_USER'
       if (isInvitedUser) {
-        console.log('✅ OnboardingGuard - Invited user detected, skipping onboarding')
         status.needsOnboarding = false
         status.onboardingCompleted = true
       }
-
-      console.log('✅ OnboardingGuard - Final computed status:', status)
       setOnboardingStatus(status)
-    } else if (onboardingData && backendAuthStatus && isDashboardPath && !onboardingStatus) {
-      // Only set onboarding status for dashboard if we don't already have it
-      const status: OnboardingStatus = {
-        needsOnboarding: false, // Assume onboarded if in dashboard
+    } else if (onboardingData && backendAuthStatus && isDashboardPath) {
+      setOnboardingStatus({
+        needsOnboarding: false,
         onboardingCompleted: true,
         hasUser: !!backendAuthStatus.userId,
         hasTenant: !!backendAuthStatus.tenantId
-      }
-
-      console.log('✅ OnboardingGuard - Dashboard path, assuming onboarded:', status)
-      setOnboardingStatus(status)
+      })
     }
-  }, [isAuthenticated, kindeLoading, user?.email, onboardingData, backendAuthStatus])
+  }, [isAuthenticated, kindeLoading, user?.email, authReady, onboardingReady, pathname, search])
 
   // Show loading while checking authentication and onboarding status
   if (kindeLoading || (isAuthenticated && (authLoading || onboardingLoading))) {
