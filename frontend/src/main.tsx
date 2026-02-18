@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { NuqsAdapter } from 'nuqs/adapters/react'
 import App from "@/App"
+import { ErrorBoundary } from "@/errors/ErrorBoundary"
 import "@/index.css"
 
 
@@ -35,12 +36,19 @@ const queryClient = new QueryClient({
   },
 })
 
-createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <NuqsAdapter>
-        <App />
-      </NuqsAdapter>
-    </QueryClientProvider>
-  </React.StrictMode>
-) 
+const rootEl = document.getElementById("root")
+if (!rootEl) {
+  document.body.innerHTML = '<div style="padding:2rem;font-family:system-ui;background:#f9fafb;color:#111">Root element #root not found.</div>'
+} else {
+  createRoot(rootEl).render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <NuqsAdapter>
+            <App />
+          </NuqsAdapter>
+        </QueryClientProvider>
+      </ErrorBoundary>
+    </React.StrictMode>
+  )
+} 

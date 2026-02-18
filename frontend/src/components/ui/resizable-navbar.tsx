@@ -7,6 +7,7 @@ import {
     useMotionValue,
 } from "framer-motion";
 import React, { useRef, useState, useEffect } from "react";
+import { config } from "@/lib/config";
 
 // Types
 interface NavbarProps {
@@ -243,7 +244,7 @@ export const NavbarLogo = ({ visible }: { visible?: boolean }) => {
             )}
         >
              <img
-                src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Full_Logo_kezq1b.jpg"
+                src={config.FULL_LOGO_URL}
                 alt="Zopkit"
                 className={cn(
                     "block w-auto object-cover transition-all rounded-3xl duration-300",

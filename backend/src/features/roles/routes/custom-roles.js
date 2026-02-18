@@ -1,5 +1,6 @@
 import CustomRoleService from '../services/custom-role-service.js';
 import { authenticateToken, requirePermission } from '../../../middleware/auth.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 import { trackUsage } from '../../../middleware/usage.js';
 
 /**
@@ -14,7 +15,7 @@ export default async function customRolesRoutes(fastify, options) {
    * Uses organization_applications to filter by tenant access
    */
   fastify.get('/builder-options', {
-    preHandler: [authenticateToken, requirePermission('roles:read'), trackUsage]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_READ), trackUsage]
   }, async (request, reply) => {
     try {
       const { tenantId } = request.userContext;
@@ -50,7 +51,7 @@ export default async function customRolesRoutes(fastify, options) {
    * Creates custom role using selected apps, modules, and permissions
    */
   fastify.post('/create-from-builder', {
-    preHandler: [authenticateToken, requirePermission('roles:create'), trackUsage]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_CREATE), trackUsage]
   }, async (request, reply) => {
     try {
       const { tenantId } = request.userContext;
@@ -103,7 +104,7 @@ export default async function customRolesRoutes(fastify, options) {
    * Updates existing custom role using builder format data
    */
   fastify.put('/update-from-builder/:roleId', {
-    preHandler: [authenticateToken, requirePermission('roles:edit'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_EDIT), trackUsage],
     schema: {
       params: {
         type: 'object',

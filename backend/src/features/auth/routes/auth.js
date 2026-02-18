@@ -1,4 +1,5 @@
 import kindeService from '../services/kinde-service.js';
+import jwt from 'jsonwebtoken';
 import { db } from '../../../db/index.js';
 import { tenants, tenantUsers } from '../../../db/schema/index.js';
 import { eq, and } from 'drizzle-orm';
@@ -553,6 +554,61 @@ export default async function authRoutes(fastify, options) {
         });
       }
 
+      // Optional: accept Operations-issued JWT when shared secret is configured
+      const sharedSecret = process.env.OPERATIONS_JWT_SECRET || process.env.SHARED_APP_JWT_SECRET;
+      if (sharedSecret) {
+        try {
+          const decoded = jwt.verify(token, sharedSecret);
+          if (decoded?.currentTenantId && decoded?.email) {
+            // Resolve tenant by currentTenantId (Wrapper tenantId or kindeOrgId)
+            let [tenant] = await db
+              .select()
+              .from(tenants)
+              .where(eq(tenants.tenantId, decoded.currentTenantId))
+              .limit(1);
+            if (!tenant) {
+              [tenant] = await db
+                .select()
+                .from(tenants)
+                .where(eq(tenants.kindeOrgId, decoded.currentTenantId))
+                .limit(1);
+            }
+            if (tenant) {
+              const [u] = await db
+                .select()
+                .from(tenantUsers)
+                .where(
+                  and(
+                    eq(tenantUsers.tenantId, tenant.tenantId),
+                    eq(tenantUsers.email, decoded.email)
+                  )
+                )
+                .limit(1);
+              if (u) {
+                return reply.send({
+                  success: true,
+                  user: {
+                    id: u.userId,
+                    email: u.email,
+                    firstName: u.firstName ?? undefined,
+                    lastName: u.lastName ?? undefined,
+                    name: u.name,
+                    kindeId: u.kindeUserId,
+                  },
+                  tenant: {
+                    id: tenant.tenantId,
+                    name: tenant.companyName,
+                    kindeOrgId: tenant.kindeOrgId,
+                  },
+                });
+              }
+            }
+          }
+        } catch (_) {
+          // Not an Operations JWT or invalid; fall through to Kinde
+        }
+      }
+
       const userInfo = await kindeService.getUserInfo(token);
       const kindeId = userInfo?.id || userInfo?.sub;
       const orgCode = userInfo?.org_code || userInfo?.org_codes?.[0];
@@ -565,11 +621,63 @@ export default async function authRoutes(fastify, options) {
         });
       }
 
+      const email = userInfo?.email || userInfo?.preferred_email;
+
       if (!orgCode) {
-        return reply.code(403).send({
-          success: false,
-          error: 'No organization',
-          message: 'Token has no organization context',
+        // Fallback: token has no org_code (e.g. Operations Kinde app). Resolve tenant by email.
+        if (!email) {
+          return reply.code(403).send({
+            success: false,
+            error: 'No organization',
+            message: 'Token has no organization context and no email to resolve tenant',
+          });
+        }
+        const byEmail = await db
+          .select({
+            tenantId: tenants.tenantId,
+            companyName: tenants.companyName,
+            kindeOrgId: tenants.kindeOrgId,
+            userId: tenantUsers.userId,
+            userEmail: tenantUsers.email,
+            firstName: tenantUsers.firstName,
+            lastName: tenantUsers.lastName,
+            userName: tenantUsers.name,
+            kindeUserId: tenantUsers.kindeUserId,
+          })
+          .from(tenantUsers)
+          .innerJoin(tenants, eq(tenants.tenantId, tenantUsers.tenantId))
+          .where(eq(tenantUsers.email, email))
+          .limit(2);
+        if (byEmail.length === 0) {
+          return reply.code(404).send({
+            success: false,
+            error: 'User not found',
+            message: `No tenant found for email: ${email}`,
+          });
+        }
+        if (byEmail.length > 1) {
+          return reply.code(403).send({
+            success: false,
+            error: 'No organization',
+            message: 'Token has no organization context; user has multiple tenants. Use Kinde org in login or select org.',
+          });
+        }
+        const row = byEmail[0];
+        return reply.send({
+          success: true,
+          user: {
+            id: row.userId,
+            email: row.userEmail,
+            firstName: row.firstName ?? undefined,
+            lastName: row.lastName ?? undefined,
+            name: row.userName,
+            kindeId: row.kindeUserId,
+          },
+          tenant: {
+            id: row.tenantId,
+            name: row.companyName,
+            kindeOrgId: row.kindeOrgId,
+          },
         });
       }
 

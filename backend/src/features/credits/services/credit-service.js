@@ -7,7 +7,7 @@ import { randomUUID } from 'crypto';
 import { amazonMQPublisher } from '../../../utils/amazon-mq-publisher.js';
 
 // Supported applications (for operation code extraction)
-const SUPPORTED_APPLICATIONS = ['crm', 'hr', 'affiliate', 'system'];
+const SUPPORTED_APPLICATIONS = ['crm', 'hr', 'affiliate', 'system', 'operations'];
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -61,7 +61,7 @@ export class CreditService {
       const searchEntityId = entityId || tenantId;
 
       // First, validate that the entity exists in the entities table
-      const { entities } = await import('../db/schema/index.js');
+      const { entities } = await import('../../../db/schema/index.js');
       const [existingEntity] = await db
         .select()
         .from(entities)
@@ -1089,34 +1089,37 @@ export class CreditService {
         changedBy: userId
       });
 
-      // Publish credit configuration change event to AWS MQ
-      try {
-        await amazonMQPublisher.publishCreditEvent('crm', 'credit_config_updated', tenantId, {
-          configId: result[0].configId,
-          operationCode: result[0].operationCode,
-          creditCost: parseFloat(result[0].creditCost),
-          unit: result[0].unit,
-          unitMultiplier: parseFloat(result[0].unitMultiplier),
-          freeAllowance: result[0].freeAllowance,
-          freeAllowancePeriod: result[0].freeAllowancePeriod,
-          volumeTiers: result[0].volumeTiers,
-          allowOverage: result[0].allowOverage,
-          overageLimit: result[0].overageLimit,
-          overagePeriod: result[0].overagePeriod,
-          overageCost: result[0].overageCost ? parseFloat(result[0].overageCost) : null,
-          isActive: result[0].isActive,
-          updatedBy: result[0].updatedBy,
-          entityId: result[0].configId,
-          updatedAt: result[0].updatedAt,
-          changeType: existing.length > 0 ? 'updated' : 'created',
-          previousConfig: existing.length > 0 ? {
-            creditCost: parseFloat(existing[0].creditCost),
-            unit: existing[0].unit,
-            isActive: existing[0].isActive
-          } : null
-        });
-      } catch (streamError) {
-        console.warn('⚠️ Failed to publish credit config change event:', streamError.message);
+      // Publish credit configuration change event to AWS MQ (all apps)
+      const configEventPayload = {
+        configId: result[0].configId,
+        operationCode: result[0].operationCode,
+        creditCost: parseFloat(result[0].creditCost),
+        unit: result[0].unit,
+        unitMultiplier: parseFloat(result[0].unitMultiplier),
+        freeAllowance: result[0].freeAllowance,
+        freeAllowancePeriod: result[0].freeAllowancePeriod,
+        volumeTiers: result[0].volumeTiers,
+        allowOverage: result[0].allowOverage,
+        overageLimit: result[0].overageLimit,
+        overagePeriod: result[0].overagePeriod,
+        overageCost: result[0].overageCost ? parseFloat(result[0].overageCost) : null,
+        isActive: result[0].isActive,
+        updatedBy: result[0].updatedBy,
+        entityId: result[0].configId,
+        updatedAt: result[0].updatedAt,
+        changeType: existing.length > 0 ? 'updated' : 'created',
+        previousConfig: existing.length > 0 ? {
+          creditCost: parseFloat(existing[0].creditCost),
+          unit: existing[0].unit,
+          isActive: existing[0].isActive
+        } : null
+      };
+      for (const app of ['crm', 'operations']) {
+        try {
+          await amazonMQPublisher.publishCreditEvent(app, 'credit_config_updated', tenantId, configEventPayload);
+        } catch (streamError) {
+          console.warn(`⚠️ Failed to publish credit config change event to ${app}:`, streamError.message);
+        }
       }
 
       return {
@@ -1803,24 +1806,171 @@ export class CreditService {
 
       console.log(`✅ Added ${creditAmount} credits to ${normalizedEntityType}${normalizedEntityId ? ` (${normalizedEntityId})` : ''} for tenant ${tenantId}`);
 
-      // Publish credit allocation event to AWS MQ (for CRM sync)
-      try {
-        await amazonMQPublisher.publishCreditAllocation('crm', tenantId, normalizedEntityId, creditAmount, {
-          allocationId: `alloc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          reason: source,
-          entityType: normalizedEntityType,
-          previousBalance: previousBalance,
-          newBalance: newBalance,
-          sourceId: sourceId,
-          description: description,
-          allocatedBy: initiatedBy
-        });
-      } catch (streamError) {
-        console.warn('⚠️ Failed to publish credit allocation event to CRM:', streamError.message);
+      // Publish credit allocation event to AWS MQ (for all application syncs)
+      const allocationMetadata = {
+        allocationId: `alloc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        reason: source,
+        entityType: normalizedEntityType,
+        previousBalance: previousBalance,
+        newBalance: newBalance,
+        sourceId: sourceId,
+        description: description,
+        allocatedBy: initiatedBy
+      };
+
+      // Publish to all supported applications so each can sync credits locally
+      const targetApps = ['crm', 'operations'];
+      for (const app of targetApps) {
+        try {
+          await amazonMQPublisher.publishCreditAllocation(app, tenantId, normalizedEntityId, creditAmount, allocationMetadata);
+        } catch (streamError) {
+          console.warn(`⚠️ Failed to publish credit allocation event to ${app}:`, streamError.message);
+        }
       }
 
     } catch (error) {
       console.error('Error adding credits to entity:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Allocate credits from an entity's balance to a specific application.
+   * Deducts from the entity's main credit pool and publishes a credit.allocated
+   * event to the target application so it can sync the allocation locally.
+   */
+  static async allocateCreditsToApplication({ tenantId, sourceEntityId, targetApplication, creditAmount, allocationPurpose, initiatedBy }) {
+    try {
+      console.log('📦 Allocating credits to application:', {
+        tenantId, sourceEntityId, targetApplication, creditAmount, allocationPurpose
+      });
+
+      if (!tenantId || !sourceEntityId || !targetApplication || !creditAmount || creditAmount <= 0) {
+        throw new Error('Missing required fields: tenantId, sourceEntityId, targetApplication, and a positive creditAmount are required');
+      }
+
+      // initiated_by column is UUID type; Kinde IDs (kp_...) are not valid UUIDs
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const initiatedByUuid = initiatedBy && UUID_REGEX.test(initiatedBy) ? initiatedBy : null;
+      // For RLS context, use the original ID (string config accepts any value)
+      const rlsUserId = initiatedBy || 'system';
+
+      const { default: postgres } = await import('postgres');
+      const sqlConn = postgres(process.env.DATABASE_URL);
+
+      let previousBalance = 0;
+      let newBalance = 0;
+      let allocationId;
+
+      try {
+        // Set RLS context
+        await sqlConn`SELECT set_config('app.tenant_id', ${tenantId}, false)`;
+        await sqlConn`SELECT set_config('app.user_id', ${rlsUserId}, false)`;
+        await sqlConn`SELECT set_config('app.is_admin', 'true', false)`;
+
+        // Check current balance for the source entity
+        const existingCredits = await sqlConn`
+          SELECT * FROM credits
+          WHERE tenant_id = ${tenantId}
+          AND entity_id = ${sourceEntityId}
+          LIMIT 1
+        `;
+
+        if (existingCredits.length === 0) {
+          throw new Error('No credit record found for the source entity');
+        }
+
+        previousBalance = parseFloat(existingCredits[0].available_credits);
+
+        if (previousBalance < creditAmount) {
+          throw new Error(`Insufficient credits. Available: ${previousBalance}, Requested: ${creditAmount}`);
+        }
+
+        newBalance = previousBalance - creditAmount;
+
+        // Deduct from entity's main balance
+        await sqlConn`
+          UPDATE credits
+          SET available_credits = available_credits - ${creditAmount},
+              last_updated_at = NOW()
+          WHERE credit_id = ${existingCredits[0].credit_id}
+          AND available_credits >= ${creditAmount}
+        `;
+
+        // Record the allocation transaction
+        const { randomUUID } = await import('crypto');
+        allocationId = `app_alloc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        await sqlConn`
+          INSERT INTO credit_transactions (
+            tenant_id, entity_id, transaction_type, amount,
+            previous_balance, new_balance, operation_code,
+            initiated_by
+          ) VALUES (
+            ${tenantId}, ${sourceEntityId}, 'allocation', ${creditAmount.toString()},
+            ${previousBalance.toString()}, ${newBalance.toString()},
+            ${'application_allocation:' + targetApplication},
+            ${initiatedByUuid}
+          )
+        `;
+
+        console.log('✅ Deducted credits from entity balance:', {
+          previousBalance, newBalance, creditAmount, targetApplication
+        });
+
+      } finally {
+        await sqlConn.end();
+      }
+
+      // Publish credit allocation event to the target application via Amazon MQ
+      // Use sourceEntityId (UUID) since downstream apps store orgCode as UUID
+      const allocationEventData = {
+        entityId: sourceEntityId,
+        targetApplication,
+        allocatedCredits: creditAmount,
+        usedCredits: 0,
+        availableCredits: creditAmount,
+        allocationType: 'organization',
+        allocationPurpose: allocationPurpose || `Credit allocation to ${targetApplication}`,
+        allocationSource: 'admin_allocation',
+        allocatedBy: initiatedBy,
+        allocatedAt: new Date().toISOString(),
+        allocationId,
+        metadata: {
+          sourceEntityId,
+          previousEntityBalance: previousBalance,
+          newEntityBalance: newBalance,
+          purpose: allocationPurpose
+        }
+      };
+
+      try {
+        await amazonMQPublisher.publishCreditEvent(
+          targetApplication,
+          'credit.allocated',
+          tenantId,
+          allocationEventData,
+          initiatedBy || 'system'
+        );
+        console.log(`✅ Published credit.allocated event to ${targetApplication}`);
+      } catch (publishError) {
+        console.warn(`⚠️ Failed to publish credit allocation event to ${targetApplication}:`, publishError.message);
+      }
+
+      return {
+        success: true,
+        allocationId,
+        sourceEntityId,
+        targetApplication,
+        creditAmount,
+        previousBalance,
+        newBalance,
+        allocationPurpose,
+        timestamp: new Date().toISOString()
+      };
+
+    } catch (error) {
+      console.error('❌ Error allocating credits to application:', error);
       throw error;
     }
   }
@@ -2092,7 +2242,7 @@ export class CreditService {
       let tenantId, fromEntityId;
 
       // First, try to find the entity to determine the tenant
-      const { entities } = await import('../db/schema/index.js');
+      const { entities } = await import('../../../db/schema/index.js');
       const [sourceEntity] = await db
         .select()
         .from(entities)
@@ -3026,7 +3176,7 @@ export class CreditService {
       }
 
       // Validate user exists
-      const { tenantUsers } = await import('../db/schema/index.js');
+      const { tenantUsers } = await import('../../../db/schema/index.js');
       const userExists = await db
         .select()
         .from(tenantUsers)

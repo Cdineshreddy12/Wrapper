@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import useSilentAuth from '@/hooks/useSilentAuth';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { logger } from '@/lib/logger';
 
 interface SilentLoginButtonProps {
   children: React.ReactNode;
@@ -41,19 +42,19 @@ export const SilentLoginButton: React.FC<SilentLoginButtonProps> = ({
     setIsLoggingIn(true);
 
     try {
-      console.log('🔑 SilentLoginButton: Starting login process...', { orgCode, connectionId });
+      logger.debug('🔑 SilentLoginButton: Starting login process...', { orgCode, connectionId });
 
       // First try silent authentication
       const silentAuthResult = await checkSilentAuth();
       
       if (silentAuthResult) {
-        console.log('✅ SilentLoginButton: Silent authentication successful');
+        logger.debug('✅ SilentLoginButton: Silent authentication successful');
         onSuccess?.();
         return;
       }
 
       // If silent auth fails, proceed with regular login
-      console.log('ℹ️ SilentLoginButton: Silent auth failed, proceeding with regular login');
+      logger.debug('ℹ️ SilentLoginButton: Silent auth failed, proceeding with regular login');
       
       const loginOptions: any = {};
       
@@ -67,11 +68,11 @@ export const SilentLoginButton: React.FC<SilentLoginButtonProps> = ({
 
       await handleLogin(loginOptions);
       
-      console.log('✅ SilentLoginButton: Regular login initiated');
+      logger.debug('✅ SilentLoginButton: Regular login initiated');
       onSuccess?.();
 
     } catch (error) {
-      console.error('❌ SilentLoginButton: Login failed:', error);
+      logger.error('❌ SilentLoginButton: Login failed:', error);
       onError?.(error);
     } finally {
       setIsLoggingIn(false);

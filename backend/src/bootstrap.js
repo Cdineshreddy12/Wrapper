@@ -17,6 +17,19 @@ try {
   if (appModule.default && typeof appModule.default.then === 'function') {
     await appModule.default;
   }
+} catch (err) {
+  clearInterval(progress);
+  if (err.code === 'ECANCELED') {
+    console.error('\n⚠️  Watcher restarted during startup (file changed while loading).');
+    console.error('   Run "npm start" to start without watch, or try "npm run dev" again.\n');
+    process.exitCode = 0;
+  } else {
+    console.error('\n❌ Failed to start server:', err.message);
+    if (err.code) console.error('   code:', err.code);
+    if (err.stack) console.error(err.stack);
+    process.exitCode = 1;
+    throw err;
+  }
 } finally {
   clearInterval(progress);
 }

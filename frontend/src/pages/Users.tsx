@@ -759,7 +759,7 @@ export function Users() {
     'Admin': 'bg-red-100 text-red-800',
     'contacts manager': 'bg-blue-100 text-blue-800',
     'Member': 'bg-green-100 text-green-800',
-    'No role assigned': 'bg-gray-100 text-gray-800',
+    'No role assigned': 'bg-amber-100 text-amber-800 border border-amber-300',
     'admin': 'bg-red-100 text-red-800',
     'manager': 'bg-blue-100 text-blue-800',
     'user': 'bg-green-100 text-green-800'
@@ -991,19 +991,21 @@ export function Users() {
 
                   {/* Roles & Status Column */}
                   <div className="col-span-3 space-y-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {getStatusBadge(user)}
 
                       {/* Show role if available */}
                       {user.role && user.role !== 'No role assigned' && (
-                        <Badge className={getRoleColor(user.role)}>
+                        <Badge className={getRoleColor(user.role)} title="Assigned role">
                           {user.role}
                         </Badge>
                       )}
 
-                      {/* Show "No role assigned" for users without roles */}
+                      {/* Show "No role assigned" clearly so it stands out */}
                       {(!user.role || user.role === 'No role assigned') && (
-                        <Badge variant="outline">No role assigned</Badge>
+                        <Badge variant="outline" className={getRoleColor('No role assigned')} title="No role assigned — assign in user actions">
+                          No role assigned
+                        </Badge>
                       )}
                     </div>
 

@@ -889,6 +889,7 @@ export function OrganizationTreeManagement({
   const handleTransferCreditsSubmit = async () => {
     try {
       const transferData = {
+        fromEntityId: selectedOrg?.entityId || creditTransferForm.sourceEntityId || undefined,
         toEntityType: creditTransferForm.destinationEntityType,
         toEntityId: creditTransferForm.destinationEntityId,
         creditAmount: parseFloat(creditTransferForm.amount),
@@ -1120,6 +1121,12 @@ export function OrganizationTreeManagement({
             const org = findOrganizationById(parentId, processedHierarchy);
             if (org) {
               handleAddLocation(org);
+            }
+          }}
+          onTransferCredits={(orgId) => {
+            const org = findOrganizationById(orgId, processedHierarchy);
+            if (org) {
+              handleTransferCredits(org);
             }
           }}
         />

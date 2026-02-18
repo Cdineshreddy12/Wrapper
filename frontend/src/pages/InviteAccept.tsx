@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Loader2, CheckCircle, AlertTriangle, Users, Building2 } from 'lucide-react'
 import { SocialLogin } from '@/components/auth/SocialLogin'
 import toast from 'react-hot-toast'
 import api from '@/lib/api'
+import { logger } from '@/lib/logger'
+import { useInvalidateQueries, queryKeys } from '@/hooks/useSharedQueries'
 
 interface InvitationDetails {
   email: string
@@ -20,6 +23,8 @@ interface InvitationDetails {
 export function InviteAccept() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { invalidateAuthStatus, invalidateOnboardingStatus } = useInvalidateQueries()
   const { isAuthenticated, user, isLoading } = useKindeAuth()
   
   const [invitation, setInvitation] = useState<InvitationDetails | null>(null)
@@ -37,7 +42,7 @@ export function InviteAccept() {
       // If we have a token, use token-based flow
       if (token) {
         try {
-          console.log('🔍 Fetching invitation details by token:', { token })
+          logger.debug('🔍 Fetching invitation details by token:', { token })
           
           const response = await api.get('/invitations/details-by-token', {
             params: { token }
@@ -50,7 +55,7 @@ export function InviteAccept() {
           }
           setLoading(false)
         } catch (err: any) {
-          console.error('Error fetching invitation by token:', err)
+          logger.error('Error fetching invitation by token:', err)
           if (err.response?.status === 404) {
             setError('Invitation not found or has expired')
           } else if (err.response?.status === 410) {
@@ -73,7 +78,7 @@ export function InviteAccept() {
       }
 
       try {
-        console.log('🔍 Fetching invitation details:', { orgCode, email })
+        logger.debug('🔍 Fetching invitation details:', { orgCode, email })
         
         const response = await api.get('/invitations/details', {
           params: { org: orgCode, email: email || '' }
@@ -86,7 +91,7 @@ export function InviteAccept() {
         }
         setLoading(false)
       } catch (err: any) {
-        console.error('Error fetching invitation:', err)
+        logger.error('Error fetching invitation:', err)
         if (err.response?.status === 404) {
           setError('Invitation not found or has expired')
         } else {
@@ -102,7 +107,7 @@ export function InviteAccept() {
   // Handle post-authentication invite acceptance
   useEffect(() => {
     if (isAuthenticated && user && invitation && !accepting) {
-      console.log('✅ User authenticated with invitation, proceeding to accept...')
+      logger.debug('✅ User authenticated with invitation, proceeding to accept...')
       // Add a small delay to ensure auth state is fully settled
       const timer = setTimeout(() => {
         handleAcceptInvitation()
@@ -115,7 +120,7 @@ export function InviteAccept() {
   // Additional effect to handle authentication state changes
   useEffect(() => {
     if (isAuthenticated && user && !invitation && token) {
-      console.log('🔄 User authenticated but invitation not loaded, refetching...')
+      logger.debug('🔄 User authenticated but invitation not loaded, refetching...')
       // User just authenticated, refetch invitation details
       const fetchInvitationDetails = async () => {
         try {
@@ -129,7 +134,7 @@ export function InviteAccept() {
             setError(response.data.message || 'Failed to load invitation')
           }
         } catch (err: any) {
-          console.error('Error refetching invitation after auth:', err)
+          logger.error('Error refetching invitation after auth:', err)
           setError('Failed to load invitation details after authentication')
         }
       }
@@ -142,14 +147,14 @@ export function InviteAccept() {
   useEffect(() => {
     if (token) {
       localStorage.setItem('pendingInvitationToken', token)
-      console.log('💾 Stored invitation token in localStorage:', token)
+      logger.debug('💾 Stored invitation token in localStorage:', token)
     }
     
     // Cleanup on unmount
     return () => {
       if (token) {
         localStorage.removeItem('pendingInvitationToken')
-        console.log('🧹 Cleaned up invitation token from localStorage')
+        logger.debug('🧹 Cleaned up invitation token from localStorage')
       }
     }
   }, [token])
@@ -158,7 +163,7 @@ export function InviteAccept() {
   useEffect(() => {
     const pendingToken = localStorage.getItem('pendingInvitationToken')
     if (pendingToken && !token) {
-      console.log('🔄 Found pending invitation token in localStorage:', pendingToken)
+      logger.debug('🔄 Found pending invitation token in localStorage:', pendingToken)
       // Redirect back to invitation acceptance with the stored token
       navigate(`/invite/accept?token=${pendingToken}`, { replace: true })
     }
@@ -166,11 +171,11 @@ export function InviteAccept() {
 
   const handleAcceptInvitation = async () => {
     if (!invitation || !user) {
-      console.log('❌ Cannot accept invitation:', { hasInvitation: !!invitation, hasUser: !!user })
+      logger.debug('❌ Cannot accept invitation:', { hasInvitation: !!invitation, hasUser: !!user })
       return
     }
 
-    console.log('🚀 Starting invitation acceptance process...', {
+    logger.debug('🚀 Starting invitation acceptance process...', {
       invitation: invitation,
       user: user,
       token: token
@@ -180,7 +185,7 @@ export function InviteAccept() {
     try {
       // Use token-based acceptance if we have a token
       if (token) {
-        console.log('✅ Accepting invitation by token:', { 
+        logger.debug('✅ Accepting invitation by token:', { 
           token, 
           kindeUserId: user.id 
         })
@@ -190,23 +195,26 @@ export function InviteAccept() {
           kindeUserId: user.id
         })
 
-        console.log('✅ Invitation acceptance response:', response.data)
+        logger.debug('✅ Invitation acceptance response:', response.data)
 
         if (response.data.success) {
           toast.success(`Welcome to ${invitation.organizationName}!`)
-          
-          // INVITED USERS: Always redirect to dashboard (they skip onboarding)
-          // The backend ensures onboardingCompleted=true for invited users
-          console.log('🎉 Invitation accepted successfully, redirecting to dashboard...')
+          localStorage.removeItem('pendingInvitationToken')
+          // Invalidate and refetch auth/onboarding so dashboard sees updated status (avoids redirect to onboarding)
+          invalidateAuthStatus()
+          invalidateOnboardingStatus()
+          await queryClient.refetchQueries({ queryKey: queryKeys.authStatus })
+          await queryClient.refetchQueries({ queryKey: queryKeys.onboardingStatus })
+          logger.debug('🎉 Invitation accepted successfully, redirecting to dashboard...')
           setTimeout(() => {
             navigate('/dashboard?welcome=true&invited=true')
-          }, 1500)
+          }, 800)
         } else {
           throw new Error(response.data.message || 'Failed to accept invitation')
         }
       } else {
         // Legacy org/email based acceptance
-        console.log('✅ Accepting invitation:', { 
+        logger.debug('✅ Accepting invitation:', { 
           org: invitation.orgCode, 
           email: invitation.email, 
           kindeUserId: user.id 
@@ -218,23 +226,25 @@ export function InviteAccept() {
           kindeUserId: user.id
         })
 
-        console.log('✅ Invitation acceptance response:', response.data)
+        logger.debug('✅ Invitation acceptance response:', response.data)
 
         if (response.data.success) {
           toast.success(`Welcome to ${invitation.organizationName}!`)
-          
-          // INVITED USERS: Always redirect to dashboard (they skip onboarding)
-          // The backend ensures onboardingCompleted=true for invited users
-          console.log('🎉 Invitation accepted successfully, redirecting to dashboard...')
+          localStorage.removeItem('pendingInvitationToken')
+          invalidateAuthStatus()
+          invalidateOnboardingStatus()
+          await queryClient.refetchQueries({ queryKey: queryKeys.authStatus })
+          await queryClient.refetchQueries({ queryKey: queryKeys.onboardingStatus })
+          logger.debug('🎉 Invitation accepted successfully, redirecting to dashboard...')
           setTimeout(() => {
             navigate('/dashboard?welcome=true&invited=true')
-          }, 1500)
+          }, 800)
         } else {
           throw new Error(response.data.message || 'Failed to accept invitation')
         }
       }
     } catch (err: any) {
-      console.error('❌ Error accepting invitation:', err)
+      logger.error('❌ Error accepting invitation:', err)
       if (err.response?.status === 409) {
         toast.error('This invitation has already been accepted')
         setTimeout(() => {

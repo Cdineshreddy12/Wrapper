@@ -4,6 +4,7 @@
  */
 
 import { authenticateToken, requirePermission } from '../../../middleware/auth.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 import { db } from '../../../db/index.js';
 import { entities, tenants, credits } from '../../../db/schema/index.js';
 import { eq, and, desc, sql, count, isNull } from 'drizzle-orm';
@@ -13,7 +14,7 @@ export default async function adminEntityManagementRoutes(fastify, options) {
 
   // Get all entities across all tenants with filtering
   fastify.get('/all', {
-    preHandler: [authenticateToken, requirePermission('admin.entities.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_ENTITIES_VIEW)],
     schema: {
       description: 'Get all entities across tenants with filtering',
       querystring: {
@@ -123,7 +124,7 @@ export default async function adminEntityManagementRoutes(fastify, options) {
 
   // Get entity details with full hierarchy path
   fastify.get('/:entityId/details', {
-    preHandler: [authenticateToken, requirePermission('admin.entities.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_ENTITIES_VIEW)],
     schema: {
       description: 'Get detailed entity information with hierarchy',
       params: {
@@ -203,7 +204,7 @@ export default async function adminEntityManagementRoutes(fastify, options) {
 
   // Update entity status
   fastify.patch('/:entityId/status', {
-    preHandler: [authenticateToken, requirePermission('admin.entities.manage')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_ENTITIES_MANAGE)],
     schema: {
       description: 'Update entity status',
       params: {
@@ -249,7 +250,7 @@ export default async function adminEntityManagementRoutes(fastify, options) {
 
   // Bulk entity operations
   fastify.post('/bulk/status', {
-    preHandler: [authenticateToken, requirePermission('admin.entities.manage')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_ENTITIES_MANAGE)],
     schema: {
       description: 'Bulk update entity status',
       body: {
@@ -291,7 +292,7 @@ export default async function adminEntityManagementRoutes(fastify, options) {
 
   // Get entity statistics across all tenants
   fastify.get('/stats/overview', {
-    preHandler: [authenticateToken, requirePermission('admin.entities.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_ENTITIES_VIEW)],
     schema: {
       description: 'Get entity statistics overview'
     }
@@ -348,7 +349,7 @@ export default async function adminEntityManagementRoutes(fastify, options) {
 
   // Search entities across all tenants
   fastify.get('/search', {
-    preHandler: [authenticateToken, requirePermission('admin.entities.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_ENTITIES_VIEW)],
     schema: {
       description: 'Search entities across all tenants',
       querystring: {
@@ -416,7 +417,7 @@ export default async function adminEntityManagementRoutes(fastify, options) {
 
   // Get entity hierarchy for a specific tenant
   fastify.get('/hierarchy/:tenantId', {
-    preHandler: [authenticateToken, requirePermission('admin.entities.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_ENTITIES_VIEW)],
     schema: {
       description: 'Get entity hierarchy for a specific tenant',
       params: {

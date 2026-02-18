@@ -371,7 +371,7 @@ function RootRedirect() {
 
             if (token) {
               // Generate app-specific token using backend
-              const backendUrl = 'https://zopkit.com/api';
+              const backendUrl = config.API_BASE_URL + '/api';
               const response = await fetch(`${backendUrl}/auth/validate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -445,6 +445,12 @@ function RootRedirect() {
   // Not authenticated - go to landing
   if (!isAuthenticated) {
     return <Navigate to="/landing" replace />
+  }
+
+  // If authenticated and has pending invitation, always send to invite accept first (avoid onboarding redirect)
+  const pendingToken = typeof window !== 'undefined' ? localStorage.getItem('pendingInvitationToken') : null
+  if (pendingToken) {
+    return <Navigate to={`/invite/accept?token=${pendingToken}`} replace />
   }
 
   // Authenticated but no onboarding status yet (still loading)

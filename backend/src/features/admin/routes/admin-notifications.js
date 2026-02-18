@@ -8,6 +8,7 @@ import { smartTargetingService } from '../../../services/ai/smart-targeting-serv
 import { sentimentService } from '../../../services/ai/sentiment-service.js';
 import { notificationAnalyticsService } from '../../../services/notification-analytics-service.js';
 import { authenticateToken, requirePermission } from '../../../middleware/auth.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 import { db } from '../../../db/index.js';
 import { tenants, tenantUsers, notifications } from '../../../db/schema/index.js';
 import { eq, and, inArray, sql, desc, count, gte, lte, or, like } from 'drizzle-orm';
@@ -29,7 +30,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Send notification to a single tenant
    */
   fastify.post('/send', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.send')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_SEND)],
     schema: {
       body: {
         type: 'object',
@@ -118,7 +119,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Send notification to multiple tenants
    */
   fastify.post('/bulk-send', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.send')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_SEND)],
     schema: {
       body: {
         type: 'object',
@@ -376,7 +377,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Get sent notifications history
    */
   fastify.get('/sent', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_VIEW)],
     schema: {
       querystring: {
         type: 'object',
@@ -469,7 +470,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Get notification statistics
    */
   fastify.get('/stats', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_VIEW)],
     schema: {
       querystring: {
         type: 'object',
@@ -512,7 +513,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Preview notification before sending
    */
   fastify.post('/preview', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.send')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_SEND)],
     schema: {
       body: {
         type: 'object',
@@ -561,7 +562,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Get all notification templates
    */
   fastify.get('/templates', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_VIEW)],
     schema: {
       querystring: {
         type: 'object',
@@ -628,7 +629,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Create a notification template
    */
   fastify.post('/templates', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.manage')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_MANAGE)],
     schema: {
       body: {
         type: 'object',
@@ -675,7 +676,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Update a notification template
    */
   fastify.put('/templates/:templateId', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.manage')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_MANAGE)],
     schema: {
       params: {
         type: 'object',
@@ -729,7 +730,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Delete a notification template
    */
   fastify.delete('/templates/:templateId', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.manage')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_MANAGE)],
     schema: {
       params: {
         type: 'object',
@@ -762,7 +763,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Get template categories
    */
   fastify.get('/templates/categories', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.view')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_VIEW)]
   }, async (request, reply) => {
     try {
       const categories = templateService.getCategories();
@@ -785,7 +786,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Get a specific template
    */
   fastify.get('/templates/:templateId', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_VIEW)],
     schema: {
       params: {
         type: 'object',
@@ -818,7 +819,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Render a template with variables
    */
   fastify.post('/templates/:templateId/render', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.send')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_SEND)],
     schema: {
       params: {
         type: 'object',
@@ -860,7 +861,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Generate notification content using AI
    */
   fastify.post('/ai/generate', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.send')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_SEND)],
     schema: {
       body: {
         type: 'object',
@@ -907,7 +908,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Personalize notification content for a tenant
    */
   fastify.post('/ai/personalize', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.send')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_SEND)],
     schema: {
       body: {
         type: 'object',
@@ -948,7 +949,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Suggest target tenants using AI
    */
   fastify.post('/ai/suggest-targets', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.send')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_SEND)],
     schema: {
       body: {
         type: 'object',
@@ -990,7 +991,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Analyze notification content sentiment
    */
   fastify.post('/ai/analyze-sentiment', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.send')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_SEND)],
     schema: {
       body: {
         type: 'object',
@@ -1033,7 +1034,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Generate template using AI
    */
   fastify.post('/templates/ai-generate', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.manage')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_MANAGE)],
     schema: {
       body: {
         type: 'object',
@@ -1089,7 +1090,7 @@ export default async function adminNotificationRoutes(fastify, options) {
    * Get comprehensive analytics dashboard data
    */
   fastify.get('/analytics', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_VIEW)],
     schema: {
       querystring: {
         type: 'object',

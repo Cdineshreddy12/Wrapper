@@ -2,6 +2,7 @@ import React from 'react';
 import { Check, ChevronRight, FileText, Clock, AlertCircle, CheckCircle2, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFormContext } from '../contexts/FormContext';
+import { config as appConfig } from '@/lib/config';
 
 /**
  * Custom progress indicator that can be used as children of MultiStepForm
@@ -53,7 +54,7 @@ export const CustomProgressIndicator: React.FC<{ className?: string }> = ({ clas
         <div className="flex items-center space-x-3 mb-4">
           <div className="w-24 h-24 rounded-xl overflow-hidden shadow-lg">
             <img
-              src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg"
+              src={appConfig.LOGO_URL}
               alt="Zopkit"
               className="w-full h-full object-fit"
             />

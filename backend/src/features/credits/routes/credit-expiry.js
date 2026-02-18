@@ -1,4 +1,5 @@
 import { CreditExpiryService } from '../services/credit-expiry-service.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 import { authenticateToken, requirePermission } from '../../../middleware/auth.js';
 
 /**
@@ -10,7 +11,7 @@ export default async function creditExpiryRoutes(fastify, options) {
 
   // Process expired credits (admin only, can be called via cron)
   fastify.post('/process-expired', {
-    preHandler: [authenticateToken, requirePermission('credits.manage')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.CREDITS_BALANCE_MANAGE)]
   }, async (request, reply) => {
     try {
       const result = await CreditExpiryService.processExpiredCredits();
@@ -91,7 +92,7 @@ export default async function creditExpiryRoutes(fastify, options) {
 
   // Send expiry warnings
   fastify.post('/send-warnings', {
-    preHandler: [authenticateToken, requirePermission('credits.manage')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.CREDITS_BALANCE_MANAGE)]
   }, async (request, reply) => {
     try {
       const { daysAhead = 7 } = request.body || {};

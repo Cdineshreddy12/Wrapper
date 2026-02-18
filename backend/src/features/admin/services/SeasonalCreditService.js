@@ -67,7 +67,7 @@ export class SeasonalCreditService {
         throw new Error('targetApplications is required when allocationMode is "application_specific"');
       }
       // Validate application codes
-      const validApps = ['crm', 'hr', 'affiliate', 'system'];
+      const validApps = ['crm', 'hr', 'affiliate', 'system', 'operations'];
       const invalidApps = campaignData.targetApplications.filter(app => !validApps.includes(app));
       if (invalidApps.length > 0) {
         throw new Error(`Invalid application codes: ${invalidApps.join(', ')}. Valid codes: ${validApps.join(', ')}`);

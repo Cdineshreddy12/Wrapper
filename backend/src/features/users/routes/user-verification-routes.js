@@ -39,7 +39,7 @@ export default async function userRoutes(fastify, options) {
       headers: {
         type: 'object',
         properties: {
-          'X-Request-Source': { type: 'string', enum: ['crm-backend'] },
+          'X-Request-Source': { type: 'string', enum: ['crm-backend', 'operations-backend', 'operations-tenant-sync'] },
           'Authorization': { type: 'string', description: 'Bearer token (optional)' }
         }
       },
@@ -117,8 +117,9 @@ export default async function userRoutes(fastify, options) {
 
       console.log(`🔍 User Tenant Verification - Email: ${email}, Request Source: ${requestSource}`);
 
-      // Validate request source
-      if (requestSource !== 'crm-backend') {
+      // Validate request source (allow CRM and Operations backends)
+      const allowedSources = ['crm-backend', 'operations-backend', 'operations-tenant-sync'];
+      if (!requestSource || !allowedSources.includes(requestSource)) {
         console.log(`❌ Invalid request source: ${requestSource}`);
         return reply.code(401).send({
           success: false,

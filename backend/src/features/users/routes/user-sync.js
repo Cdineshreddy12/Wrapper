@@ -1,6 +1,7 @@
 import { UserClassificationService } from '../services/user-classification-service.js';
 import { UserSyncService } from '../services/user-sync-service.js';
 import { requirePermissions } from '../../../middleware/permission-middleware.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 
 /**
  * 🔄 User Sync and Classification API Routes
@@ -16,7 +17,7 @@ export default async function userSyncRoutes(fastify, options) {
     config: {
       routeId: 'user-classification'
     },
-    preHandler: requirePermissions(['crm.system.users_read']),
+    preHandler: requirePermissions([PERMISSIONS.CRM_SYSTEM_USERS_READ]),
     schema: {
       tags: ['User Management'],
       summary: 'Get user classification by application access',
@@ -270,7 +271,7 @@ export default async function userSyncRoutes(fastify, options) {
 
   // Get users for a specific application
   fastify.get('/classification/:appCode', {
-    preHandler: requirePermissions(['crm.system.users_read']),
+    preHandler: requirePermissions([PERMISSIONS.CRM_SYSTEM_USERS_READ]),
     schema: {
       tags: ['User Management'],
       summary: 'Get users for a specific application',
@@ -312,7 +313,7 @@ export default async function userSyncRoutes(fastify, options) {
 
   // Get application access for a specific user
   fastify.get('/user/:userId/access', {
-    preHandler: requirePermissions(['crm.system.users_read']),
+    preHandler: requirePermissions([PERMISSIONS.CRM_SYSTEM_USERS_READ]),
     schema: {
       tags: ['User Management'],
       summary: 'Get application access for a specific user',
@@ -357,7 +358,7 @@ export default async function userSyncRoutes(fastify, options) {
 
   // Sync all users to their respective applications
   fastify.post('/sync/all', {
-    preHandler: requirePermissions(['crm.system.users_update']),
+    preHandler: requirePermissions([PERMISSIONS.CRM_SYSTEM_USERS_UPDATE]),
     schema: {
       tags: ['User Sync'],
       summary: 'Sync all users to their respective applications',
@@ -428,7 +429,7 @@ export default async function userSyncRoutes(fastify, options) {
 
   // Sync users for a specific application
   fastify.post('/sync/application/:appCode', {
-    preHandler: requirePermissions(['crm.system.users_update']),
+    preHandler: requirePermissions([PERMISSIONS.CRM_SYSTEM_USERS_UPDATE]),
     schema: {
       tags: ['User Sync'],
       summary: 'Sync users for a specific application',
@@ -489,7 +490,7 @@ export default async function userSyncRoutes(fastify, options) {
 
   // Sync a specific user to their allowed applications
   fastify.post('/sync/user/:userId', {
-    preHandler: requirePermissions(['crm.system.users_update']),
+    preHandler: requirePermissions([PERMISSIONS.CRM_SYSTEM_USERS_UPDATE]),
     schema: {
       tags: ['User Sync'],
       summary: 'Sync a specific user to their applications',
@@ -544,7 +545,7 @@ export default async function userSyncRoutes(fastify, options) {
 
   // Refresh user classification (when roles change)
   fastify.post('/refresh/:userId', {
-    preHandler: requirePermissions(['crm.system.users_update']),
+    preHandler: requirePermissions([PERMISSIONS.CRM_SYSTEM_USERS_UPDATE]),
     schema: {
       tags: ['User Management'],
       summary: 'Refresh user classification after role changes',
@@ -636,7 +637,7 @@ export default async function userSyncRoutes(fastify, options) {
     config: {
       routeId: 'user-sync-status'
     },
-    preHandler: requirePermissions(['crm.system.users_read']),
+    preHandler: requirePermissions([PERMISSIONS.CRM_SYSTEM_USERS_READ]),
     schema: {
       tags: ['User Sync'],
       summary: 'Get sync status for tenant',
@@ -691,7 +692,7 @@ export default async function userSyncRoutes(fastify, options) {
 
   // Test sync connectivity to applications
   fastify.post('/test-connectivity', {
-    preHandler: requirePermissions(['crm.system.settings_read']),
+    preHandler: requirePermissions([PERMISSIONS.CRM_SYSTEM_SETTINGS_READ]),
     schema: {
       tags: ['User Sync'],
       summary: 'Test connectivity to applications',

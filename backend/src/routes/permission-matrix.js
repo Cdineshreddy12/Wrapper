@@ -2,6 +2,7 @@
 // Provides API access to the permission matrix system
 
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
+import { PERMISSIONS } from '../constants/permissions.js';
 import { trackUsage } from '../middleware/usage.js';
 import { permissionMatrixService as PermissionMatrixService } from '../features/roles/index.js';
 import { 
@@ -35,7 +36,7 @@ export default async function permissionMatrixRoutes(fastify, options) {
 
   // 🔍 **GET COMPLETE PERMISSION MATRIX**
   fastify.get('/matrix', {
-    preHandler: [authenticateToken, requirePermission('permissions:read'), trackUsage]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.PERMISSIONS_ASSIGNMENT_READ), trackUsage]
   }, async (request, reply) => {
     try {
       console.log('📡 GET /api/permission-matrix/matrix - Fetching complete permission matrix');
@@ -666,7 +667,7 @@ export default async function permissionMatrixRoutes(fastify, options) {
 
   // 👥 **GET AVAILABLE ROLE TEMPLATES**
   fastify.get('/role-templates', {
-    preHandler: [authenticateToken, requirePermission('permissions:read'), trackUsage]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.PERMISSIONS_ASSIGNMENT_READ), trackUsage]
   }, async (request, reply) => {
     try {
       console.log('📡 GET /api/permission-matrix/role-templates');
@@ -692,7 +693,7 @@ export default async function permissionMatrixRoutes(fastify, options) {
 
   // 🎯 **ASSIGN ROLE TEMPLATE TO USER**
   fastify.post('/assign-template', {
-    preHandler: [authenticateToken, requirePermission('permissions:manage'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.PERMISSIONS_ASSIGNMENT_MANAGE), trackUsage],
     schema: {
       body: {
         type: 'object',
@@ -730,7 +731,7 @@ export default async function permissionMatrixRoutes(fastify, options) {
 
   // 📊 **GET PERMISSION ANALYTICS**
   fastify.get('/analytics', {
-    preHandler: [authenticateToken, requirePermission('permissions:read'), trackUsage]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.PERMISSIONS_ASSIGNMENT_READ), trackUsage]
   }, async (request, reply) => {
     try {
       const { tenantId } = request.userContext;
@@ -757,7 +758,7 @@ export default async function permissionMatrixRoutes(fastify, options) {
 
   // 🔍 **VALIDATE PERMISSION MATRIX** (Admin only)
   fastify.get('/validate', {
-    preHandler: [authenticateToken, requirePermission('admin:system'), trackUsage]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_SYSTEM_MANAGE), trackUsage]
   }, async (request, reply) => {
     try {
       console.log('🔍 Validating permission matrix...');
@@ -830,7 +831,7 @@ export default async function permissionMatrixRoutes(fastify, options) {
 
   // 🧹 **REVOKE ALL USER PERMISSIONS** (Admin only)
   fastify.post('/revoke-user-permissions', {
-    preHandler: [authenticateToken, requirePermission('permissions:manage'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.PERMISSIONS_ASSIGNMENT_MANAGE), trackUsage],
     schema: {
       body: {
         type: 'object',

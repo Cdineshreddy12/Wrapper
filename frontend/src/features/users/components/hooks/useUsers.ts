@@ -94,7 +94,11 @@ export const useUserMutations = () => {
     },
     onError: (error: any) => {
       LoggingService.logError(error, 'deleteUser', { userId: error.variables });
-      toast.error(error.response?.data?.message || 'Failed to delete user');
+      const msg =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        (error.response?.status === 403 ? 'Only tenant administrators can remove users.' : 'Failed to delete user');
+      toast.error(msg);
     },
   });
 

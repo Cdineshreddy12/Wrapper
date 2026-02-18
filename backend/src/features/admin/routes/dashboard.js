@@ -4,6 +4,7 @@
  */
 
 import { authenticateToken, requirePermission } from '../../../middleware/auth.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 import { db } from '../../../db/index.js';
 import { tenants, entities, credits, creditTransactions, contactSubmissions } from '../../../db/schema/index.js';
 import { eq, desc, sql, count, sum } from 'drizzle-orm';
@@ -12,7 +13,7 @@ export default async function adminDashboardRoutes(fastify, options) {
 
   // Overview dashboard data - aggregates key metrics across all tenants
   fastify.get('/overview', {
-    preHandler: [authenticateToken, requirePermission('admin.dashboard.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_DASHBOARD_VIEW)],
     schema: {
       description: 'Get comprehensive admin dashboard overview',
       response: {
@@ -157,7 +158,7 @@ export default async function adminDashboardRoutes(fastify, options) {
 
   // Get recent activity across the platform
   fastify.get('/recent-activity', {
-    preHandler: [authenticateToken, requirePermission('admin.dashboard.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_DASHBOARD_VIEW)],
     schema: {
       description: 'Get recent activity across all tenants',
       querystring: {
@@ -237,7 +238,7 @@ export default async function adminDashboardRoutes(fastify, options) {
 
   // Get contact submissions (clients/leads)
   fastify.get('/contact-submissions', {
-    preHandler: [authenticateToken, requirePermission('admin.dashboard.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_DASHBOARD_VIEW)],
     schema: {
       description: 'Get all contact form and demo submissions',
       querystring: {

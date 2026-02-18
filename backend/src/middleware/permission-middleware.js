@@ -7,68 +7,66 @@ import { tenantUsers, userRoleAssignments, customRoles } from '../db/schema/inde
  */
 export function requirePermissions(requiredPermissions) {
   return async (request, reply) => {
-    console.log('🔐 [PermissionMiddleware] Permission check initiated:', {
+    request.log.debug({
       requiredPermissions,
       userId: request.userContext?.internalUserId,
       tenantId: request.userContext?.tenantId,
       isAuthenticated: request.userContext?.isAuthenticated,
       isAdmin: request.userContext?.isAdmin,
       isTenantAdmin: request.userContext?.isTenantAdmin
-    });
+    }, 'Permission check initiated');
 
     if (!request.userContext?.isAuthenticated) {
-      console.log('❌ [PermissionMiddleware] User not authenticated');
+      request.log.debug('User not authenticated');
       return reply.code(401).send({ error: 'Authentication required' });
     }
 
     // Admin users have all permissions
     if (request.userContext.isAdmin || request.userContext.isTenantAdmin) {
-      console.log('✅ [PermissionMiddleware] Admin user detected, granting access');
+      request.log.debug('Admin user detected, granting access');
       return;
     }
 
     try {
       // Get user permissions
-      console.log('🔍 [PermissionMiddleware] Fetching user permissions...');
+      request.log.debug('Fetching user permissions...');
       const userPermissions = await getUserPermissions(
         request.userContext.internalUserId,
         request.userContext.tenantId
       );
 
-      console.log('📋 [PermissionMiddleware] User permissions fetched:', {
+      request.log.debug({
         moduleCount: Object.keys(userPermissions.modules).length,
         roleCount: userPermissions.roles.length,
         modules: Object.keys(userPermissions.modules),
         roles: userPermissions.roles.map(r => r.roleName)
-      });
+      }, 'User permissions fetched');
 
       // Check if user has required permissions
       const hasPermission = checkPermissions(userPermissions, requiredPermissions);
       
-      console.log('🔍 [PermissionMiddleware] Permission check result:', {
+      request.log.debug({
         hasPermission,
         required: requiredPermissions,
         userModules: Object.keys(userPermissions.modules)
-      });
+      }, 'Permission check result');
 
       if (!hasPermission) {
-        console.log('❌ [PermissionMiddleware] Permission denied:', {
+        request.log.debug({
           required: requiredPermissions,
           userPermissions: userPermissions.modules
-        });
+        }, 'Permission denied');
         return reply.code(403).send({ 
           error: 'Insufficient permissions',
           required: requiredPermissions
         });
       }
 
-      console.log('✅ [PermissionMiddleware] Permission granted');
+      request.log.debug('Permission granted');
       // Add permissions to request context
       request.userContext.permissions = userPermissions;
     } catch (error) {
-      console.error('❌ [PermissionMiddleware] Permission check failed:', error);
-      console.error('❌ [PermissionMiddleware] Error stack:', error.stack);
-      request.log.error('Permission check failed:', error);
+      request.log.error({ err: error }, 'Permission check failed');
       return reply.code(500).send({ error: 'Permission check failed' });
     }
   };
@@ -79,11 +77,6 @@ export function requirePermissions(requiredPermissions) {
  */
 export async function getUserPermissions(userId, tenantId) {
   try {
-    console.log('🔍 [PermissionMiddleware] getUserPermissions called:', {
-      userId,
-      tenantId
-    });
-
     // Get user roles and their permissions
     const userRoles = await db
       .select({
@@ -96,24 +89,12 @@ export async function getUserPermissions(userId, tenantId) {
         eq(customRoles.tenantId, tenantId)
       ));
 
-    console.log('📝 [PermissionMiddleware] User roles found:', {
-      roleCount: userRoles.length,
-      roles: userRoles.map(({ role }) => ({
-        roleId: role.roleId,
-        roleName: role.roleName,
-        hasPermissions: !!role.permissions
-      }))
-    });
-
     // Aggregate permissions from all roles
     const aggregatedPermissions = {};
     
     for (const { role } of userRoles) {
-      console.log(`🔍 [PermissionMiddleware] Processing role: ${role.roleName}`);
-      
       // Check for Super Admin role with '*' permissions
       if (role.permissions === '*' || role.roleName === 'Super Administrator' || role.priority >= 1000) {
-        console.log(`🔑 [PermissionMiddleware] Super Admin role detected: ${role.roleName} - granting ALL permissions`);
         // Return early with admin flag - they have all permissions
         return {
           modules: '*', // Special marker for all permissions
@@ -133,7 +114,6 @@ export async function getUserPermissions(userId, tenantId) {
           ? JSON.parse(role.permissions) 
           : role.permissions || {};
         
-        console.log(`📋 [PermissionMiddleware] Role ${role.roleName} permissions:`, Object.keys(rolePermissions));
       } catch (parseError) {
         console.error(`❌ [PermissionMiddleware] Failed to parse permissions for role ${role.roleName}:`, parseError);
         rolePermissions = {};
@@ -142,7 +122,6 @@ export async function getUserPermissions(userId, tenantId) {
       // Merge permissions - Handle both legacy array format and new object format
       Object.keys(rolePermissions).forEach(module => {
         if (module === 'metadata' || module === 'inheritance' || module === 'restrictions') {
-          console.log(`⏭️ [PermissionMiddleware] Skipping non-permission object: ${module}`);
           return;
         }
 
@@ -154,8 +133,6 @@ export async function getUserPermissions(userId, tenantId) {
         
         // Handle legacy array format (e.g., "crm": ["leads", "contacts", "dashboard"])
         if (Array.isArray(modulePermissions)) {
-          console.log(`🔄 [PermissionMiddleware] Processing legacy array format for ${module}:`, modulePermissions);
-          
           // Convert array format to object format
           modulePermissions.forEach(permission => {
             if (typeof permission === 'string') {
@@ -172,14 +149,11 @@ export async function getUserPermissions(userId, tenantId) {
                 }
               });
               
-              console.log(`➕ [PermissionMiddleware] Added legacy permissions for ${module}.${permission}:`, basicActions);
             }
           });
         }
         // Handle new object format (e.g., "crm": { "contacts": ["read", "create"] })
         else if (typeof modulePermissions === 'object' && modulePermissions !== null) {
-          console.log(`🔄 [PermissionMiddleware] Processing object format for ${module}`);
-          
           Object.keys(modulePermissions).forEach(section => {
             if (!aggregatedPermissions[module][section]) {
               aggregatedPermissions[module][section] = [];
@@ -192,11 +166,7 @@ export async function getUserPermissions(userId, tenantId) {
               ...new Set([...existingPerms, ...newPerms])
             ];
             
-            console.log(`➕ [PermissionMiddleware] Added permissions for ${module}.${section}:`, newPerms);
           });
-        }
-        else {
-          console.warn(`⚠️ [PermissionMiddleware] Unknown permission format for ${module}:`, modulePermissions);
         }
       });
     }
@@ -209,12 +179,6 @@ export async function getUserPermissions(userId, tenantId) {
         priority: role.priority || 100
       }))
     };
-
-    console.log('✅ [PermissionMiddleware] Permission aggregation complete:', {
-      totalModules: Object.keys(result.modules).length,
-      totalRoles: result.roles.length,
-      modules: Object.keys(result.modules)
-    });
 
     return result;
   } catch (error) {
@@ -234,7 +198,6 @@ export function checkPermissions(userPermissions, requiredPermissions) {
 
   // Check for Super Admin permissions
   if (userPermissions.isSuperAdmin || userPermissions.modules === '*') {
-    console.log('🔑 [PermissionMiddleware] Super Admin detected - granting all permissions');
     return true;
   }
 

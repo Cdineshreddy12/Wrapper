@@ -3,6 +3,7 @@ import { Database, CreditCard, Package, ShieldCheck, ExternalLink, ArrowRight, L
 import { Application, AppThemeConfig, ThemeType } from '@/types/application';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { cn } from '@/lib/utils';
+import { config } from '@/lib/config';
 import { ApplicationCardDecoration } from './ApplicationCardDecoration';
 import { PearlButton } from '@/components/ui/pearl-button';
 
@@ -44,7 +45,7 @@ const getApplicationUrl = (application: Application): string => {
   const baseDomain = window.location.origin;
   const urlPatterns: Record<string, string> = {
     affiliateConnect: `${baseDomain}/affiliate`,
-    crm: `https://crm.zopkit.com`,
+    crm: config.CRM_DOMAIN,
     hr: `${baseDomain}/hr`,
   };
 

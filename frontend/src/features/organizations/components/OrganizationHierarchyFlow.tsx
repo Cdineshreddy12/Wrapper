@@ -39,6 +39,7 @@ interface OrganizationHierarchyFlowProps {
   onDeleteOrganization?: (orgId: string) => void;
   onAddSubOrganization?: (parentId: string) => void;
   onAddLocation?: (parentId: string) => void;
+  onTransferCredits?: (orgId: string) => void;
 }
 
 // Convert hierarchy tree to React Flow nodes and edges with proper hierarchical layout
@@ -51,7 +52,8 @@ function convertHierarchyToFlow(
   onDeleteOrganization?: (orgId: string) => void,
   onAddSubOrganization?: (parentId: string) => void,
   onAddLocation?: (parentId: string) => void,
-  onAllocateCredits?: (entityId: string) => void
+  onAllocateCredits?: (entityId: string) => void,
+  onTransferCredits?: (orgId: string) => void
 ) {
   const nodes: any[] = [];
   const edges: Edge[] = [];
@@ -194,7 +196,7 @@ function convertHierarchyToFlow(
   // No tenant node created - start from primary organizations
 
   // Create nodes and edges
-  function createNodesAndEdges(org: any, parentId: string | null, onAllocateCredits?: (entityId: string) => void): void {
+  function createNodesAndEdges(org: any, parentId: string | null, onAllocateCredits?: (entityId: string) => void, onTransferCreditsCallback?: (orgId: string) => void): void {
     const nodeId = org.entityId || org.organizationId;
     const nodeName = org.entityName || org.organizationName;
     const entityType = org.entityType || 'organization';
@@ -228,6 +230,7 @@ function convertHierarchyToFlow(
         onAddSubOrganization,
         onAddLocation,
         onAllocateCredits,
+        onTransferCredits: onTransferCreditsCallback,
       },
       style: {
         width: NODE_WIDTH,
@@ -261,13 +264,13 @@ function convertHierarchyToFlow(
     // Process children
     const children = org.children || [];
     children.forEach((child: any) => {
-      createNodesAndEdges(child, nodeId, onAllocateCredits);
+      createNodesAndEdges(child, nodeId, onAllocateCredits, onTransferCreditsCallback);
     });
   }
 
   // Create all nodes and edges, starting from primary organizations
   hierarchy.hierarchy.forEach((org: any) => {
-    createNodesAndEdges(org, null, onAllocateCredits); // No parent connection
+    createNodesAndEdges(org, null, onAllocateCredits, onTransferCredits);
   });
 
   // Center all nodes horizontally
@@ -298,6 +301,7 @@ function OrganizationHierarchyFlowInner({
   onDeleteOrganization,
   onAddSubOrganization,
   onAddLocation,
+  onTransferCredits,
 }: OrganizationHierarchyFlowProps) {
   const [showCreditAllocationModal, setShowCreditAllocationModal] = useState(false);
   const [selectedEntityForAllocation, setSelectedEntityForAllocation] = useState<{
@@ -354,11 +358,12 @@ function OrganizationHierarchyFlowInner({
       onDeleteOrganization,
       onAddSubOrganization,
       onAddLocation,
-      handleAllocateCredits
+      handleAllocateCredits,
+      onTransferCredits
     );
     console.log('✅ Converted to flow:', result.nodes.length, 'nodes', result.edges.length, 'edges');
     return result;
-  }, [hierarchy, tenantId, tenantName, onNodeClick, onEditOrganization, onDeleteOrganization, onAddSubOrganization, onAddLocation, handleAllocateCredits]);
+  }, [hierarchy, tenantId, tenantName, onNodeClick, onEditOrganization, onDeleteOrganization, onAddSubOrganization, onAddLocation, handleAllocateCredits, onTransferCredits]);
 
   // Fit view when nodes change
   useEffect(() => {

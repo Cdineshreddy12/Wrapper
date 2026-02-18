@@ -1,6 +1,7 @@
 import { SubscriptionService } from '../services/subscription-service.js';
 import { TenantService } from '../../../services/tenant-service.js';
 import { authenticateToken, requirePermission } from '../../../middleware/auth.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 import { trackUsage } from '../../../middleware/usage.js';
 import { getPlanLimits } from '../../../middleware/planRestrictions.js';
 import { db } from '../../../db/index.js';
@@ -686,7 +687,7 @@ export default async function subscriptionRoutes(fastify, options) {
 
   // Create customer portal session
   fastify.post('/portal', {
-    preHandler: [authenticateToken, requirePermission('billing:manage'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.BILLING_PLANS_MANAGE), trackUsage],
     schema: {
       body: {
         type: 'object',
@@ -718,7 +719,7 @@ export default async function subscriptionRoutes(fastify, options) {
 
   // Update payment method
   fastify.post('/payment-method', {
-    preHandler: [authenticateToken, requirePermission('billing:manage'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.BILLING_PLANS_MANAGE), trackUsage],
     schema: {
       body: {
         type: 'object',
@@ -749,7 +750,7 @@ export default async function subscriptionRoutes(fastify, options) {
 
   // Reactivate subscription
   fastify.post('/reactivate', {
-    preHandler: [authenticateToken, requirePermission('billing:manage'), trackUsage]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.BILLING_PLANS_MANAGE), trackUsage]
   }, async (request, reply) => {
     try {
       const result = await SubscriptionService.reactivateSubscription(request.user.tenantId);
@@ -767,7 +768,7 @@ export default async function subscriptionRoutes(fastify, options) {
 
   // Apply coupon
   fastify.post('/coupon', {
-    preHandler: [authenticateToken, requirePermission('billing:manage'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.BILLING_PLANS_MANAGE), trackUsage],
     schema: {
       body: {
         type: 'object',
@@ -802,7 +803,7 @@ export default async function subscriptionRoutes(fastify, options) {
 
   // Get upcoming invoice
   fastify.get('/upcoming-invoice', {
-    preHandler: [authenticateToken, requirePermission('billing:read'), trackUsage]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.BILLING_PLANS_READ), trackUsage]
   }, async (request, reply) => {
     try {
       const invoice = await SubscriptionService.getUpcomingInvoice(request.user.tenantId);
@@ -819,7 +820,7 @@ export default async function subscriptionRoutes(fastify, options) {
 
   // Download invoice
   fastify.get('/invoice/:invoiceId/download', {
-    preHandler: [authenticateToken, requirePermission('billing:read'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.BILLING_PLANS_READ), trackUsage],
     schema: {
       params: {
         type: 'object',

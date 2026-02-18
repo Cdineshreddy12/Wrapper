@@ -4,6 +4,7 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuthStatus, useOnboardingStatus } from '@/hooks/useSharedQueries'
 import AnimatedLoader from '@/components/common/AnimatedLoader'
+import { logger } from '@/lib/logger'
 
 interface OnboardingGuardProps {
   children: React.ReactNode
@@ -51,9 +52,21 @@ export const OnboardingGuard = React.memo(({ children, redirectTo = '/login' }: 
 
     const urlParams = new URLSearchParams(search)
     const justCompletedOnboarding = urlParams.get('onboarding') === 'complete'
+    const justAcceptedInvitation = urlParams.get('invited') === 'true'
+
+    // Invited users landing on dashboard after accept: skip onboarding redirect
+    if (justAcceptedInvitation && isDashboardPath) {
+      setOnboardingStatus({
+        needsOnboarding: false,
+        onboardingCompleted: true,
+        hasUser: !!backendAuthStatus?.userId,
+        hasTenant: !!backendAuthStatus?.tenantId
+      })
+      return
+    }
 
     if (justCompletedOnboarding) {
-      console.log('🎯 OnboardingGuard: Onboarding just completed, adding delay for auth sync')
+      logger.debug('🎯 OnboardingGuard: Onboarding just completed, adding delay for auth sync')
       const timer = setTimeout(() => {
         const authStatus = authStatusRef.current
         if (authStatus) {
@@ -117,19 +130,19 @@ export const OnboardingGuard = React.memo(({ children, redirectTo = '/login' }: 
   // If not authenticated AND Kinde is not loading, redirect to login
   // This prevents redirect loops while Kinde is still initializing
   if (!isAuthenticated && !kindeLoading) {
-    console.log('🔄 OnboardingGuard - Not authenticated (Kinde loaded), redirecting to:', redirectTo)
+    logger.debug('🔄 OnboardingGuard - Not authenticated (Kinde loaded), redirecting to:', redirectTo)
     return <Navigate to={redirectTo} replace />
   }
 
   // If we have onboarding status and user needs onboarding, redirect to onboarding
   if (onboardingStatus?.needsOnboarding) {
-    console.log('🔄 OnboardingGuard - User needs onboarding, redirecting to /onboarding')
+    logger.debug('🔄 OnboardingGuard - User needs onboarding, redirecting to /onboarding')
     return <Navigate to="/onboarding" replace />
   }
 
   // If onboarding is completed, allow access to children
   if (onboardingStatus?.onboardingCompleted) {
-    console.log('✅ OnboardingGuard - Onboarding completed, allowing access')
+    logger.debug('✅ OnboardingGuard - Onboarding completed, allowing access')
     return <>{children}</>
   }
 

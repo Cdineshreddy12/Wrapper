@@ -2130,8 +2130,8 @@ export default async function invitationRoutes(fastify, options) {
 
       console.log('🔍 Getting invitation details by token:', { token });
 
-      // Find invitation by token
-      const [invitation] = await db
+      // Find invitation by token first
+      let [invitation] = await db
         .select()
         .from(tenantInvitations)
         .where(and(
@@ -2139,6 +2139,21 @@ export default async function invitationRoutes(fastify, options) {
           eq(tenantInvitations.status, 'pending')
         ))
         .limit(1);
+
+      // If not found and token looks like a UUID (e.g. invitation id used by mistake), try by invitation_id
+      if (!invitation && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(token).trim())) {
+        [invitation] = await db
+          .select()
+          .from(tenantInvitations)
+          .where(and(
+            eq(tenantInvitations.invitationId, token),
+            eq(tenantInvitations.status, 'pending')
+          ))
+          .limit(1);
+        if (invitation) {
+          console.log('🔍 Found invitation by invitation_id (token was UUID):', invitation.invitationId);
+        }
+      }
 
       if (!invitation) {
         console.log('❌ Invitation not found for token:', token);
@@ -2289,11 +2304,23 @@ export default async function invitationRoutes(fastify, options) {
       console.log('✅ Accepting invitation by token:', { token, kindeUserId });
 
       // Find invitation by token in tenantInvitations table
-      const [invitation] = await db
+      let [invitation] = await db
         .select()
         .from(tenantInvitations)
         .where(eq(tenantInvitations.invitationToken, token))
         .limit(1);
+
+      // If not found and token looks like a UUID (invitation id), try by invitation_id
+      if (!invitation && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(token).trim())) {
+        [invitation] = await db
+          .select()
+          .from(tenantInvitations)
+          .where(eq(tenantInvitations.invitationId, token))
+          .limit(1);
+        if (invitation) {
+          console.log('🔍 Found invitation by invitation_id for accept:', invitation.invitationId);
+        }
+      }
 
       if (!invitation) {
         console.log('❌ Invitation not found for token:', token);
@@ -2361,6 +2388,9 @@ export default async function invitationRoutes(fastify, options) {
           error: 'Organization not found'
         });
       }
+
+      // Collect role assignments so we can publish role_assigned to other apps
+      const roleAssignmentsToPublish = [];
 
       // CRITICAL: Ensure user is in the correct organization(s)
       console.log('🔗 Ensuring user is in correct Kinde organizations for invitation...');
@@ -2509,6 +2539,30 @@ export default async function invitationRoutes(fastify, options) {
           })
           .where(eq(tenantUsers.userId, existingUser.userId))
           .returning();
+
+        // Publish invitation-accepted event to all applications (existing user path)
+        try {
+          const { amazonMQPublisher } = await import('../utils/amazon-mq-publisher.js');
+          const nameParts = (newUser.name || newUser.email || '').split(' ');
+          const firstName = nameParts[0] || '';
+          const lastName = nameParts.slice(1).join(' ') || '';
+          await amazonMQPublisher.publishUserEventToSuite('user_invitation_accepted', invitation.tenantId, newUser.userId, {
+            userId: newUser.userId,
+            email: newUser.email,
+            firstName: firstName,
+            lastName: lastName,
+            name: newUser.name || newUser.email || `${firstName} ${lastName}`.trim(),
+            isActive: newUser.isActive !== undefined ? newUser.isActive : true,
+            onboardingCompleted: true,
+            kindeUserId: newUser.kindeUserId,
+            invitedBy: invitation.invitedBy,
+            invitationId: invitation.invitationId,
+            acceptedAt: new Date().toISOString()
+          });
+          console.log('📡 Published user_invitation_accepted event to all applications (existing user)');
+        } catch (publishErr) {
+          console.warn('⚠️ Failed to publish user_invitation_accepted (existing user):', publishErr.message);
+        }
       } else {
         // Create new user record
         console.log('✅ Creating new user record:', {
@@ -2564,6 +2618,22 @@ export default async function invitationRoutes(fastify, options) {
             createdAt: newUser.createdAt ? (typeof newUser.createdAt === 'string' ? newUser.createdAt : newUser.createdAt.toISOString()) : new Date().toISOString()
           });
           console.log('📡 Published user_created event to AWS MQ');
+          // Also publish invitation-accepted so all applications get a consistent event
+          await amazonMQPublisher.publishUserEventToSuite('user_invitation_accepted', invitation.tenantId, newUser.userId, {
+            userId: newUser.userId,
+            email: newUser.email,
+            firstName,
+            lastName,
+            name: newUser.name || `${firstName} ${lastName}`.trim(),
+            isActive: newUser.isActive !== undefined ? newUser.isActive : true,
+            onboardingCompleted: true,
+            kindeUserId: newUser.kindeUserId,
+            invitedBy: invitation.invitedBy,
+            invitationId: invitation.invitationId,
+            createdAt: newUser.createdAt ? (typeof newUser.createdAt === 'string' ? newUser.createdAt : newUser.createdAt.toISOString()) : new Date().toISOString(),
+            acceptedAt: new Date().toISOString()
+          });
+          console.log('📡 Published user_invitation_accepted event to all applications (new user)');
         } catch (streamError) {
           console.warn('⚠️ Failed to publish user creation event to AWS MQ:', streamError.message);
           // Don't fail the user creation if stream publishing fails
@@ -2612,14 +2682,16 @@ export default async function invitationRoutes(fastify, options) {
 
               if (!existingRoleAssignment) {
                 try {
-                  await db
+                  const [inserted] = await db
                     .insert(userRoleAssignments)
                     .values({
                       userId: newUser.userId,
                       roleId: targetEntity.roleId,
                       assignedBy: invitation.invitedBy,
                       assignedAt: new Date()
-                    });
+                    })
+                    .returning();
+                  if (inserted) roleAssignmentsToPublish.push(inserted);
                   assignedRoleIds.add(targetEntity.roleId);
                   console.log('✅ Assigned role to user:', {
                     userId: newUser.userId,
@@ -2635,6 +2707,7 @@ export default async function invitationRoutes(fastify, options) {
               } else {
                 console.log('ℹ️ Role assignment already exists, skipping duplicate');
                 assignedRoleIds.add(targetEntity.roleId);
+                roleAssignmentsToPublish.push(existingRoleAssignment);
               }
             }
             continue; // Skip creating duplicate membership
@@ -2704,14 +2777,16 @@ export default async function invitationRoutes(fastify, options) {
 
             if (!existingRoleAssignment) {
               try {
-                await db
+                const [inserted] = await db
                   .insert(userRoleAssignments)
                   .values({
                     userId: newUser.userId,
                     roleId: targetEntity.roleId,
                     assignedBy: invitation.invitedBy,
                     assignedAt: new Date()
-                  });
+                  })
+                  .returning();
+                if (inserted) roleAssignmentsToPublish.push(inserted);
                 assignedRoleIds.add(targetEntity.roleId);
                 console.log('✅ Assigned role to user:', {
                   userId: newUser.userId,
@@ -2729,6 +2804,7 @@ export default async function invitationRoutes(fastify, options) {
             } else {
               console.log('ℹ️ Role assignment already exists, skipping duplicate');
               assignedRoleIds.add(targetEntity.roleId);
+              roleAssignmentsToPublish.push(existingRoleAssignment);
             }
           }
         }
@@ -2750,14 +2826,16 @@ export default async function invitationRoutes(fastify, options) {
         console.log('📋 Processing single-entity invitation');
 
         if (invitation.roleId) {
-          await db
+          const [inserted] = await db
             .insert(userRoleAssignments)
             .values({
               userId: newUser.userId,
               roleId: invitation.roleId,
               assignedBy: invitation.invitedBy,
               assignedAt: new Date()
-            });
+            })
+            .returning();
+          if (inserted) roleAssignmentsToPublish.push(inserted);
           console.log('✅ Assigned role to user:', {
             userId: newUser.userId,
             roleId: invitation.roleId,
@@ -2872,14 +2950,16 @@ export default async function invitationRoutes(fastify, options) {
 
             if (!existingRoleAssignment) {
               try {
-                await db
+                const [inserted] = await db
                   .insert(userRoleAssignments)
                   .values({
                     userId: newUser.userId,
                     roleId: invitation.roleId,
                     assignedBy: invitation.invitedBy,
                     assignedAt: new Date()
-                  });
+                  })
+                  .returning();
+                if (inserted) roleAssignmentsToPublish.push(inserted);
                 console.log('✅ Assigned role to user:', {
                   userId: newUser.userId,
                   roleId: invitation.roleId,
@@ -2895,6 +2975,7 @@ export default async function invitationRoutes(fastify, options) {
               }
             } else {
               console.log('ℹ️ Role assignment already exists, skipping duplicate');
+              roleAssignmentsToPublish.push(existingRoleAssignment);
             }
           }
 
@@ -2910,6 +2991,25 @@ export default async function invitationRoutes(fastify, options) {
           console.log('✅ Set primary organization to:', targetEntityId);
         } else {
           console.warn('⚠️ No target entity found for single-entity invitation');
+        }
+      }
+
+      // Publish role_assigned to other apps so invited user has the role in CRM, Ops, Accounting, etc.
+      if (roleAssignmentsToPublish.length > 0) {
+        try {
+          const { amazonMQPublisher } = await import('../utils/amazon-mq-publisher.js');
+          for (const a of roleAssignmentsToPublish) {
+            await amazonMQPublisher.publishRoleEventToSuite('role_assigned', invitation.tenantId, a.roleId, {
+              assignmentId: a.id,
+              userId: newUser.userId,
+              roleId: a.roleId,
+              assignedAt: a.assignedAt ? (typeof a.assignedAt === 'string' ? a.assignedAt : a.assignedAt.toISOString()) : new Date().toISOString(),
+              assignedBy: invitation.invitedBy
+            });
+          }
+          console.log('📡 Published role_assigned events for invitation acceptance:', roleAssignmentsToPublish.length);
+        } catch (publishError) {
+          console.warn('⚠️ Failed to publish role assignment events (invitation accept):', publishError.message);
         }
       }
 

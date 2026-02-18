@@ -6,6 +6,7 @@ import { UseFormReturn } from 'react-hook-form';
 import { newBusinessData, existingBusinessData } from '../schemas';
 import { StepConfig } from '../config/flowConfigs';
 import { UserClassification } from './FlowSelector';
+import { config } from '@/lib/config';
 import { 
   ShieldCheck, 
   Loader2, 
@@ -165,7 +166,7 @@ export const OnboardingLayout = React.memo(({
                   {/* Logo Glass Container - Centered & Attractive */}
                   <div className="relative  bg-white/10 p-0 m-0 backdrop-blur-xl rounded-2xl shadow-[0_8px_32px_0_rgba(31,38,135,0.05)] border border-white/60 ring-1 ring-white/40 group-hover:bg-white/60 transition-all duration-300 flex items-center justify-center  hover:shadow-lg hover:shadow-pink-100/50 hover:scale-[1.02]">
               <img
-                src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg"
+                src={config.LOGO_URL}
                 alt="Zopkit Logo"
                       className="h-24 w-full object-contain rounded-lg drop-shadow-md"
               />
@@ -285,7 +286,7 @@ export const OnboardingLayout = React.memo(({
         <div className="flex justify-between items-center mb-2">
            <div className="flex items-center gap-3">
              <img 
-               src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg" 
+               src={config.LOGO_URL} 
                alt="Zopkit Logo" 
                className="h-8 w-auto object-contain"
              />

@@ -1513,6 +1513,107 @@ export const BUSINESS_SUITE_MATRIX = {
           { code: 'roles_delete', name: 'Delete Roles', description: 'Remove roles' },
           { code: 'wrapper_sync', name: 'Wrapper Sync', description: 'Trigger and view Wrapper tenant sync' }
         ]
+      },
+      // --- Additional modules for full Ops sidebar coverage ---
+      marketing: {
+        moduleCode: 'marketing',
+        moduleName: 'Marketing',
+        description: 'Marketing campaigns and cart recovery',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Marketing', description: 'View marketing campaigns and data' },
+          { code: 'read_all', name: 'View All Marketing', description: 'View all marketing data' },
+          { code: 'create', name: 'Create Campaigns', description: 'Create marketing campaigns' },
+          { code: 'update', name: 'Edit Campaigns', description: 'Modify marketing campaigns' },
+          { code: 'delete', name: 'Delete Campaigns', description: 'Remove marketing campaigns' },
+          { code: 'export', name: 'Export Marketing', description: 'Export marketing data' }
+        ]
+      },
+      customers: {
+        moduleCode: 'customers',
+        moduleName: 'Customer Management',
+        description: 'Manage customers, profiles, and communication',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Customers', description: 'View customer information' },
+          { code: 'read_all', name: 'View All Customers', description: 'View all customers' },
+          { code: 'create', name: 'Create Customer', description: 'Add new customers' },
+          { code: 'update', name: 'Edit Customer', description: 'Modify customer information' },
+          { code: 'delete', name: 'Delete Customer', description: 'Remove customers' },
+          { code: 'export', name: 'Export Customers', description: 'Export customer data' }
+        ]
+      },
+      returns: {
+        moduleCode: 'returns',
+        moduleName: 'Returns Management',
+        description: 'Process and track product returns',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Returns', description: 'View return requests' },
+          { code: 'read_all', name: 'View All Returns', description: 'View all return requests' },
+          { code: 'create', name: 'Create Return', description: 'Initiate a return' },
+          { code: 'update', name: 'Edit Return', description: 'Modify return information' },
+          { code: 'delete', name: 'Delete Return', description: 'Remove return records' },
+          { code: 'approve', name: 'Approve Return', description: 'Approve return requests' },
+          { code: 'export', name: 'Export Returns', description: 'Export return data' }
+        ]
+      },
+      customer_portal: {
+        moduleCode: 'customer_portal',
+        moduleName: 'Customer Portal',
+        description: 'Customer-facing portal: shop, services, bookings, payments, wishlist',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Customer Portal', description: 'Access customer portal' },
+          { code: 'read_all', name: 'View All Portal Data', description: 'View all portal data' },
+          { code: 'manage_shop', name: 'Manage Shop', description: 'Manage customer shop settings' },
+          { code: 'manage_services', name: 'Manage Services', description: 'Manage customer service bookings' },
+          { code: 'manage_orders', name: 'Manage Orders', description: 'Manage customer orders' },
+          { code: 'manage_bookings', name: 'Manage Bookings', description: 'Manage customer bookings' },
+          { code: 'manage_payments', name: 'Manage Payments', description: 'Manage customer payments' },
+          { code: 'manage_wishlist', name: 'Manage Wishlist', description: 'Manage customer wishlists' },
+          { code: 'manage_preferences', name: 'Manage Preferences', description: 'Manage customer preferences' },
+          { code: 'export', name: 'Export Portal Data', description: 'Export customer portal data' }
+        ]
+      },
+      vendor_management: {
+        moduleCode: 'vendor_management',
+        moduleName: 'Multi-Vendor Management',
+        description: 'Vendor profiles, products, ratings, policies, and analytics',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Vendors', description: 'View vendor information' },
+          { code: 'read_all', name: 'View All Vendors', description: 'View all vendors' },
+          { code: 'create', name: 'Create Vendor', description: 'Add new vendors' },
+          { code: 'update', name: 'Edit Vendor', description: 'Modify vendor information' },
+          { code: 'delete', name: 'Delete Vendor', description: 'Remove vendors' },
+          { code: 'manage_products', name: 'Manage Vendor Products', description: 'Manage vendor product listings' },
+          { code: 'manage_ratings', name: 'Manage Ratings', description: 'Manage vendor ratings and reviews' },
+          { code: 'manage_policies', name: 'Manage Policies', description: 'Manage vendor policies' },
+          { code: 'manage_communication', name: 'Manage Communication', description: 'Manage vendor communication' },
+          { code: 'view_analytics', name: 'View Analytics', description: 'View vendor analytics' },
+          { code: 'manage_certifications', name: 'Manage Certifications', description: 'Manage vendor certifications' },
+          { code: 'manage_portfolios', name: 'Manage Portfolios', description: 'Manage vendor portfolios' },
+          { code: 'export', name: 'Export Vendors', description: 'Export vendor data' }
+        ]
+      },
+      service_providers: {
+        moduleCode: 'service_providers',
+        moduleName: 'Service Provider Portal',
+        description: 'Service provider catalog, pricing, promotions, and bundles',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Providers', description: 'View service providers' },
+          { code: 'read_all', name: 'View All Providers', description: 'View all service providers' },
+          { code: 'create', name: 'Create Provider', description: 'Add service providers' },
+          { code: 'update', name: 'Edit Provider', description: 'Modify provider information' },
+          { code: 'delete', name: 'Delete Provider', description: 'Remove service providers' },
+          { code: 'manage_catalog', name: 'Manage Catalog', description: 'Manage service catalog' },
+          { code: 'manage_pricing', name: 'Manage Pricing', description: 'Manage pricing rules' },
+          { code: 'manage_promotions', name: 'Manage Promotions', description: 'Manage promotions and bundles' },
+          { code: 'view_analytics', name: 'View Analytics', description: 'View pricing analytics' },
+          { code: 'export', name: 'Export Providers', description: 'Export provider data' }
+        ]
       }
     }
   },
@@ -1688,7 +1789,7 @@ export const PLAN_ACCESS_MATRIX = {
       hr: ['employees', 'payroll', 'leave', 'dashboard'],
       affiliateConnect: ['dashboard', 'products', 'affiliates', 'tracking', 'commissions', 'campaigns', 'influencers', 'payments', 'analytics', 'fraud', 'communications', 'integrations', 'settings', 'support'],
       project_management: ['projects', 'tasks', 'sprints', 'time_tracking', 'team', 'backlog', 'documents', 'analytics', 'reports', 'chat', 'calendar', 'kanban', 'dashboard', 'notifications', 'workspace', 'workflow', 'system'],
-      operations: ['dashboard', 'inventory', 'warehouse', 'procurement', 'suppliers', 'transportation', 'orders', 'fulfillments', 'shipments', 'catalog', 'quality', 'rfx', 'finance', 'tax_compliance', 'supply_chain', 'analytics', 'contracts', 'service_appointments', 'notifications', 'system']
+      operations: ['dashboard', 'inventory', 'warehouse', 'procurement', 'suppliers', 'transportation', 'orders', 'fulfillments', 'shipments', 'catalog', 'quality', 'rfx', 'finance', 'tax_compliance', 'supply_chain', 'analytics', 'contracts', 'service_appointments', 'notifications', 'system', 'marketing', 'customers', 'returns', 'customer_portal', 'vendor_management', 'service_providers']
     },
     permissions: {
       applications: {
@@ -1775,7 +1876,13 @@ export const PLAN_ACCESS_MATRIX = {
         contracts: ['read', 'read_all', 'create', 'update', 'delete', 'export'],
         service_appointments: ['read', 'read_all', 'create', 'update', 'delete', 'export'],
         notifications: ['read', 'read_all', 'create', 'update', 'manage_preferences'],
-        system: ['settings_read', 'settings_update', 'users_read', 'users_read_all', 'users_create', 'users_update', 'users_delete', 'roles_read', 'roles_read_all', 'roles_create', 'roles_update', 'roles_delete', 'wrapper_sync']
+        system: ['settings_read', 'settings_update', 'users_read', 'users_read_all', 'users_create', 'users_update', 'users_delete', 'roles_read', 'roles_read_all', 'roles_create', 'roles_update', 'roles_delete', 'wrapper_sync'],
+        marketing: ['read', 'read_all', 'create', 'update', 'delete', 'export'],
+        customers: ['read', 'read_all', 'create', 'update', 'delete', 'export'],
+        returns: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'export'],
+        customer_portal: ['read', 'read_all', 'manage_shop', 'manage_services', 'manage_orders', 'manage_bookings', 'manage_payments', 'manage_wishlist', 'manage_preferences', 'export'],
+        vendor_management: ['read', 'read_all', 'create', 'update', 'delete', 'manage_products', 'manage_ratings', 'manage_policies', 'manage_communication', 'view_analytics', 'manage_certifications', 'manage_portfolios', 'export'],
+        service_providers: ['read', 'read_all', 'create', 'update', 'delete', 'manage_catalog', 'manage_pricing', 'manage_promotions', 'view_analytics', 'export']
       }
     },
     credits: {

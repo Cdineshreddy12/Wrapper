@@ -2,6 +2,7 @@ import React from 'react';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import { Button } from '../ui/button';
 import { Building2, Plus } from 'lucide-react';
+import { logger } from '@/lib/logger';
 
 interface OrganizationCreationButtonProps {
   size?: 'sm' | 'lg';
@@ -19,7 +20,7 @@ export const OrganizationCreationButton: React.FC<OrganizationCreationButtonProp
   const { login, isLoading } = useKindeAuth();
 
   const handleCreateOrg = () => {
-    console.log('🏢 OrganizationCreationButton: Starting organization creation flow');
+    logger.debug('🏢 OrganizationCreationButton: Starting organization creation flow');
     
     // Use Kinde's built-in organization creation
     login({

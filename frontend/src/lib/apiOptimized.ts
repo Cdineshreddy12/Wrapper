@@ -2,9 +2,11 @@
 
 import axios, { AxiosError } from 'axios'
 import toast from 'react-hot-toast'
+import { logger } from '@/lib/logger'
+import { config } from '@/lib/config'
 
 // Point directly to backend since all routes are registered under /api/*
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+const API_BASE_URL = config.API_URL
 
 // Store for Kinde token getter function
 let kindeTokenGetter: (() => Promise<string | null>) | null = null;
@@ -80,7 +82,7 @@ const getKindeToken = async (): Promise<string | null> => {
     return null;
 
   } catch (error) {
-    console.error('Error getting authentication token:', error);
+    logger.error('Error getting authentication token:', error);
     cachedToken = null;
     tokenCacheTime = 0;
     return null;
@@ -113,7 +115,7 @@ apiOptimized.interceptors.request.use(async (config) => {
 
   return config
 }, (error) => {
-  console.error('API Request Error:', error);
+  logger.error('API Request Error:', error);
   return Promise.reject(error);
 })
 
@@ -122,7 +124,7 @@ apiOptimized.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     if (error.response?.status === 401) {
-      console.log('Authentication required')
+      logger.debug('Authentication required')
       localStorage.removeItem('kinde_token')
       localStorage.removeItem('authToken')
       // Clear our cache too

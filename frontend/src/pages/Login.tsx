@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 import { motion, AnimatePresence } from 'framer-motion'
 import api from '@/lib/api'
 import { crmAuthService } from '../services/crmAuthService'
+import { config } from '@/lib/config'
 
 // --- Animated Components ---
 
@@ -196,7 +197,7 @@ export function Login() {
       if (crmRedirectCount > 3) {
         console.error('🚨 CRM INFINITE LOOP DETECTED - Too many redirects')
         localStorage.removeItem('crm_redirect_count')
-        window.location.href = 'https://crm.zopkit.com/'
+        window.location.href = config.CRM_DOMAIN + '/'
         return
       }
       localStorage.setItem('crm_redirect_count', (crmRedirectCount + 1).toString())
@@ -394,7 +395,7 @@ export function Login() {
               <div className="relative">
                 <div className="absolute inset-0 bg-indigo-500/10 blur-xl rounded-full group-hover:bg-indigo-500/20 transition-all duration-500" />
                 <img
-                  src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg"
+                  src={config.LOGO_URL}
                   alt="Zopkit"
                   className="relative w-24 h-24 rounded-2xl object-contain shadow-2xl ring-4 ring-white z-10"
                 />
@@ -469,7 +470,7 @@ export function Login() {
                    {/* Mobile Logo */}
                    <div className="lg:hidden flex justify-center mb-6">
                     <img
-                      src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg"
+                      src={config.LOGO_URL}
                       alt="Zopkit"
                       className="w-20 h-20 rounded-xl shadow-lg ring-4 ring-white"
                     />

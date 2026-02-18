@@ -2,6 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { KindeProvider as OriginalKindeProvider, useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import useSilentAuth from '@/hooks/useSilentAuth';
 import { setKindeTokenGetter } from '@/lib/api';
+import { config } from '@/lib/config';
+import { logger } from '@/lib/logger';
 
 interface KindeProviderProps {
   children: React.ReactNode;
@@ -22,20 +24,20 @@ function TokenSetupComponent() {
     // Enhanced token getter with backup storage
     setKindeTokenGetter(async () => {
       try {
-        console.log('🔑 TokenGetter: Called - isAuthenticated:', isAuthenticated, 'user:', !!user);
+        logger.debug('🔑 TokenGetter: Called - isAuthenticated:', isAuthenticated, 'user:', !!user);
 
         const token = await getToken();
 
         if (token) {
-          console.log('✅ TokenGetter: Successfully retrieved token from Kinde');
+          logger.debug('✅ TokenGetter: Successfully retrieved token from Kinde');
           // Always store as backup when we get a valid token
           localStorage.setItem('kinde_backup_token', token);
           return token;
         } else {
-          console.log('❌ TokenGetter: No token from Kinde, trying backup...');
+          logger.debug('❌ TokenGetter: No token from Kinde, trying backup...');
           const backupToken = localStorage.getItem('kinde_backup_token');
           if (backupToken) {
-            console.log('🔄 TokenGetter: Using backup token');
+            logger.debug('🔄 TokenGetter: Using backup token');
             return backupToken;
           }
           return null;
@@ -47,7 +49,7 @@ function TokenSetupComponent() {
                               error?.error === 'invalid_grant';
         
         if (isInvalidGrant) {
-          console.log('⚠️ TokenGetter: invalid_grant error - trying backup token');
+          logger.debug('⚠️ TokenGetter: invalid_grant error - trying backup token');
           // Clear potentially corrupted refresh tokens
           try {
             const storageKeys = Object.keys(localStorage);
@@ -60,12 +62,12 @@ function TokenSetupComponent() {
             // Ignore errors when clearing
           }
         } else {
-          console.error('❌ TokenGetter: Error getting token, trying backup...', error);
+          logger.error('❌ TokenGetter: Error getting token, trying backup...', error);
         }
         
         const backupToken = localStorage.getItem('kinde_backup_token');
         if (backupToken) {
-          console.log('🔄 TokenGetter: Using backup token after error');
+          logger.debug('🔄 TokenGetter: Using backup token after error');
           return backupToken;
         }
         return null;
@@ -81,10 +83,10 @@ function TokenSetupComponent() {
           const token = await getToken();
           if (token) {
             localStorage.setItem('kinde_backup_token', token);
-            console.log('💾 Stored backup token for user:', user.email);
+            logger.debug('💾 Stored backup token for user:', user.email);
           }
         } catch (error) {
-          console.log('❌ Failed to store backup token:', error);
+          logger.debug('❌ Failed to store backup token:', error);
         }
       }
     };
@@ -98,7 +100,7 @@ function TokenSetupComponent() {
       const hadBackupToken = localStorage.getItem('kinde_backup_token');
       if (hadBackupToken) {
         localStorage.removeItem('kinde_backup_token');
-        console.log('🗑️ Cleared backup token on logout');
+        logger.debug('🗑️ Cleared backup token on logout');
       }
     }
   }, [isAuthenticated]);
@@ -115,15 +117,15 @@ function SilentAuthInitializer() {
   useEffect(() => {
     // Only start silent auth check once Kinde is loaded and we haven't started yet
     if (!isLoading && !initStarted && !hasChecked && !isChecking) {
-      console.log('🔄 SilentAuth: Initializing silent authentication...');
+      logger.debug('🔄 SilentAuth: Initializing silent authentication...');
       setInitStarted(true);
 
       // Add a small delay to ensure everything is properly initialized
       const timer = setTimeout(() => {
         checkSilentAuth().then((result) => {
-          console.log('✅ SilentAuth: Initial silent auth check completed:', result);
+          logger.debug('✅ SilentAuth: Initial silent auth check completed:', result);
         }).catch((error) => {
-          console.log('ℹ️ SilentAuth: Initial silent auth check failed (expected):', error);
+          logger.debug('ℹ️ SilentAuth: Initial silent auth check failed (expected):', error);
         });
       }, 200);
 
@@ -138,7 +140,7 @@ export const KindeProvider: React.FC<KindeProviderProps> = ({
   children
 }) => {
   // Keep the auth subdomain - Kinde handles domain-wide cookies automatically
-  const domain = import.meta.env.VITE_KINDE_DOMAIN || 'https://auth.zopkit.com';
+  const domain = config.KINDE_DOMAIN;
   const clientId = import.meta.env.VITE_KINDE_CLIENT_ID;
 
   // CRITICAL: Set a consistent redirect URI to prevent OAuth 400 errors
@@ -150,7 +152,7 @@ export const KindeProvider: React.FC<KindeProviderProps> = ({
   const logoutUri = (import.meta.env.VITE_KINDE_LOGOUT_URI || window.location.origin).replace(/\/$/, '');
 
   if (!domain || !clientId) {
-    console.error('Kinde configuration missing. Please check environment variables.');
+    logger.error('Kinde configuration missing. Please check environment variables.');
     return (
       <div className="min-h-screen flex items-center justify-center bg-red-50">
         <div className="text-center p-8 max-w-md">
@@ -178,30 +180,30 @@ export const KindeProvider: React.FC<KindeProviderProps> = ({
   }
 
   // Let Kinde handle organization management automatically
-  console.log('🔄 KindeProvider: Using Kinde built-in organization handling');
+  logger.debug('🔄 KindeProvider: Using Kinde built-in organization handling');
 
   // Validate configuration to prevent OAuth 400 errors
   useEffect(() => {
     const validateConfig = () => {
-      console.log('🔍 KindeProvider: Validating OAuth configuration...');
+      logger.debug('🔍 KindeProvider: Validating OAuth configuration...');
 
       // Check domain format
       if (!domain.startsWith('https://')) {
-        console.error('❌ VITE_KINDE_DOMAIN must start with https://');
+        logger.error('❌ VITE_KINDE_DOMAIN must start with https://');
       }
 
       // Check client ID format
       if (!clientId || clientId.trim() === '') {
-        console.error('❌ VITE_KINDE_CLIENT_ID is empty or missing');
+        logger.error('❌ VITE_KINDE_CLIENT_ID is empty or missing');
       }
 
       // Check redirect URI format
       if (!redirectUri || !redirectUri.startsWith('http')) {
-        console.error('❌ Redirect URI is invalid:', redirectUri);
+        logger.error('❌ Redirect URI is invalid:', redirectUri);
       }
 
       // Log configuration (without sensitive data)
-      console.log('✅ OAuth Configuration:', {
+      logger.debug('✅ OAuth Configuration:', {
         domain,
         clientIdLength: clientId?.length,
         redirectUri, // Log full redirect URI for debugging

@@ -36,20 +36,22 @@
 
 import axios, { AxiosError } from 'axios'
 import toast from 'react-hot-toast'
+import { logger } from '@/lib/logger'
+import { config } from '@/lib/config'
 
 // Point directly to backend since all routes are registered under /api/*
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+const API_BASE_URL = config.API_URL
 
 // Store for Kinde token getter function
 let kindeTokenGetter: (() => Promise<string | null>) | null = null;
 
 // Debug utility to inspect all stored tokens
 export const debugStoredTokens = () => {
-  console.log('🔍 === TOKEN DEBUG INFORMATION ===');
+  logger.debug('🔍 === TOKEN DEBUG INFORMATION ===');
 
-  console.log('📁 localStorage keys:', Object.keys(localStorage));
-  console.log('📁 sessionStorage keys:', Object.keys(sessionStorage));
-  console.log('🍪 cookies:', document.cookie.split(';').map(c => c.trim().split('=')[0]));
+  logger.debug('📁 localStorage keys:', Object.keys(localStorage));
+  logger.debug('📁 sessionStorage keys:', Object.keys(sessionStorage));
+  logger.debug('🍪 cookies:', document.cookie.split(';').map(c => c.trim().split('=')[0]));
 
   // Check for potential token locations
   const potentialTokenLocations = [
@@ -62,22 +64,22 @@ export const debugStoredTokens = () => {
     'refresh_token'
   ];
 
-  console.log('🔑 Checking potential token locations:');
+  logger.debug('🔑 Checking potential token locations:');
   potentialTokenLocations.forEach(key => {
     const localValue = localStorage.getItem(key);
     const sessionValue = sessionStorage.getItem(key);
 
     if (localValue) {
-      console.log(`📦 localStorage.${key}: ${localValue.substring(0, 50)}... (${localValue.length} chars)`);
+      logger.debug(`📦 localStorage.${key}: ${localValue.substring(0, 50)}... (${localValue.length} chars)`);
       if (isValidJWT(localValue)) {
-        console.log(`✅ ${key} in localStorage is a valid JWT`);
+        logger.debug(`✅ ${key} in localStorage is a valid JWT`);
       }
     }
 
     if (sessionValue) {
-      console.log(`📦 sessionStorage.${key}: ${sessionValue.substring(0, 50)}... (${sessionValue.length} chars)`);
+      logger.debug(`📦 sessionStorage.${key}: ${sessionValue.substring(0, 50)}... (${sessionValue.length} chars)`);
       if (isValidJWT(sessionValue)) {
-        console.log(`✅ ${key} in sessionStorage is a valid JWT`);
+        logger.debug(`✅ ${key} in sessionStorage is a valid JWT`);
       }
     }
   });
@@ -88,14 +90,14 @@ export const debugStoredTokens = () => {
     const [name, value] = cookie.trim().split('=');
     if (name && value && (name.includes('token') || name.includes('kinde') || name.includes('auth'))) {
       const decodedValue = decodeURIComponent(value);
-      console.log(`🍪 Cookie ${name}: ${decodedValue.substring(0, 50)}... (${decodedValue.length} chars)`);
+      logger.debug(`🍪 Cookie ${name}: ${decodedValue.substring(0, 50)}... (${decodedValue.length} chars)`);
       if (isValidJWT(decodedValue)) {
-        console.log(`✅ ${name} cookie is a valid JWT`);
+        logger.debug(`✅ ${name} cookie is a valid JWT`);
       }
     }
   });
 
-  console.log('🔍 === END TOKEN DEBUG ===');
+  logger.debug('🔍 === END TOKEN DEBUG ===');
 };
 
 // Function to set the Kinde token getter (called from components that have access to useKindeAuth)
@@ -123,35 +125,35 @@ const isValidJWT = (token: string): boolean => {
 
 // Function to get Kinde token from localStorage/sessionStorage
 const getKindeToken = async () => {
-  console.log('🔍 Starting enhanced token search...');
+  logger.debug('🔍 Starting enhanced token search...');
 
   // Method 0: Check for backup token first
   const backupToken = localStorage.getItem('kinde_backup_token');
   if (backupToken && isValidJWT(backupToken)) {
-    console.log('🔄 Found valid backup token, using it');
+    logger.debug('🔄 Found valid backup token, using it');
     return backupToken;
   }
 
   // Method 1: Try Kinde SDK if available
   if (kindeTokenGetter) {
     try {
-      console.log('🔑 Trying Kinde SDK getToken()...');
+      logger.debug('🔑 Trying Kinde SDK getToken()...');
       const token = await kindeTokenGetter();
       if (token && isValidJWT(token)) {
-        console.log('✅ Got valid token from Kinde SDK');
+        logger.debug('✅ Got valid token from Kinde SDK');
         localStorage.setItem('kinde_backup_token', token);
         return token;
       } else if (token) {
-        console.log('⚠️ Kinde SDK returned invalid token format');
+        logger.debug('⚠️ Kinde SDK returned invalid token format');
       }
     } catch (error) {
-      console.log('❌ Kinde SDK getToken() failed:', error);
+      logger.debug('❌ Kinde SDK getToken() failed:', error);
     }
   }
 
   // Method 2: Enhanced manual search
   try {
-    console.log('🔍 Performing enhanced manual token search...');
+    logger.debug('🔍 Performing enhanced manual token search...');
 
     // Search all storage locations for JWT-like tokens
     const searchLocations = [
@@ -160,32 +162,32 @@ const getKindeToken = async () => {
     ];
 
     for (const { storage, name } of searchLocations) {
-      console.log(`🔍 Searching in ${name}...`);
+      logger.debug(`🔍 Searching in ${name}...`);
 
       // Check for Kinde-specific patterns
       const kindeKeys = ['kinde_session', 'kinde_auth', 'kinde_token', 'kinde.access_token'];
       for (const key of kindeKeys) {
         const value = storage.getItem(key);
         if (value) {
-          console.log(`📱 Found ${key} in ${name}`);
+          logger.debug(`📱 Found ${key} in ${name}`);
           try {
             const parsed = JSON.parse(value);
             if (parsed.access_token && isValidJWT(parsed.access_token)) {
-              console.log('✅ Found valid access_token in', key);
+              logger.debug('✅ Found valid access_token in', key);
               return parsed.access_token;
             }
             if (parsed.id_token && isValidJWT(parsed.id_token)) {
-              console.log('✅ Found valid id_token in', key);
+              logger.debug('✅ Found valid id_token in', key);
               return parsed.id_token;
             }
             if (parsed.token && isValidJWT(parsed.token)) {
-              console.log('✅ Found valid token in', key);
+              logger.debug('✅ Found valid token in', key);
               return parsed.token;
             }
           } catch (e) {
             // If it's not JSON, check if the value itself is a JWT
             if (isValidJWT(value)) {
-              console.log('✅ Found JWT token directly in', key);
+              logger.debug('✅ Found JWT token directly in', key);
               return value;
             }
           }
@@ -200,7 +202,7 @@ const getKindeToken = async () => {
             key.toLowerCase().includes('kinde')) {
           const value = storage.getItem(key);
           if (value && isValidJWT(value)) {
-            console.log(`✅ Found JWT token in ${name} key: ${key}`);
+            logger.debug(`✅ Found JWT token in ${name} key: ${key}`);
             return value;
           }
         }
@@ -208,7 +210,7 @@ const getKindeToken = async () => {
     }
 
     // Method 3: Enhanced search for any JWT tokens in storage
-    console.log('🔍 Performing comprehensive JWT search...');
+    logger.debug('🔍 Performing comprehensive JWT search...');
 
     // Check all storage for any JWT-like tokens
     for (const { storage, name } of searchLocations) {
@@ -216,30 +218,30 @@ const getKindeToken = async () => {
       for (const key of allKeys) {
         const value = storage.getItem(key);
         if (value && isValidJWT(value)) {
-          console.log(`✅ Found JWT token in ${name} key: ${key}`);
+          logger.debug(`✅ Found JWT token in ${name} key: ${key}`);
           return value;
         }
       }
     }
 
     // Method 4: Check cookies as final fallback
-    console.log('🔍 Checking cookies for JWT tokens...');
+    logger.debug('🔍 Checking cookies for JWT tokens...');
     const cookies = document.cookie.split(';');
-    console.log('🍪 Available cookies:', cookies.map(c => c.trim().split('=')[0]));
+    logger.debug('🍪 Available cookies:', cookies.map(c => c.trim().split('=')[0]));
 
     for (const cookie of cookies) {
       const [name, value] = cookie.trim().split('=');
       if (name && value) {
         const decodedValue = decodeURIComponent(value);
         if (isValidJWT(decodedValue)) {
-          console.log('✅ Found JWT token in cookies:', name);
+          logger.debug('✅ Found JWT token in cookies:', name);
           return decodedValue;
         }
       }
     }
 
     // Method 5: Last resort - check for any long strings that might be tokens
-    console.log('🔍 Last resort: checking for any long strings that might be tokens...');
+    logger.debug('🔍 Last resort: checking for any long strings that might be tokens...');
     for (const { storage, name } of searchLocations) {
       const allKeys = Object.keys(storage);
       for (const key of allKeys) {
@@ -247,32 +249,32 @@ const getKindeToken = async () => {
         if (value && value.length > 100 && !value.includes(' ') && !value.includes('{') && !value.includes('"')) {
           // Check if it looks like a JWT (has dots and reasonable length)
           if (value.split('.').length === 3 && value.length > 200) {
-            console.log(`🎯 Found potential JWT in ${name} key: ${key} (length: ${value.length})`);
+            logger.debug(`🎯 Found potential JWT in ${name} key: ${key} (length: ${value.length})`);
             try {
               // Quick validation
               const parts = value.split('.');
               JSON.parse(atob(parts[0].replace(/-/g, '+').replace(/_/g, '/')));
-              console.log('✅ Validated as JWT token');
+              logger.debug('✅ Validated as JWT token');
               return value;
             } catch (e) {
-              console.log('❌ Failed JWT validation for potential token');
+              logger.debug('❌ Failed JWT validation for potential token');
             }
           }
         }
       }
     }
 
-    console.log('❌ No authentication token found in any storage location');
-    console.log('💡 This might mean the user is not authenticated or tokens are stored differently');
-    console.log('🔍 Available storage keys for debugging:');
-    console.log('📁 localStorage keys:', Object.keys(localStorage));
-    console.log('📁 sessionStorage keys:', Object.keys(sessionStorage));
-    console.log('🍪 cookies:', document.cookie.split(';').map(c => c.trim().split('=')[0]));
+    logger.debug('❌ No authentication token found in any storage location');
+    logger.debug('💡 This might mean the user is not authenticated or tokens are stored differently');
+    logger.debug('🔍 Available storage keys for debugging:');
+    logger.debug('📁 localStorage keys:', Object.keys(localStorage));
+    logger.debug('📁 sessionStorage keys:', Object.keys(sessionStorage));
+    logger.debug('🍪 cookies:', document.cookie.split(';').map(c => c.trim().split('=')[0]));
 
     return null;
   } catch (error) {
-    console.error('🚨 Error getting authentication token:', error);
-    console.error('🚨 Error details:', error);
+    logger.error('🚨 Error getting authentication token:', error);
+    logger.error('🚨 Error details:', error);
     return null;
   }
 };
@@ -300,11 +302,11 @@ api.interceptors.request.use(async (config) => {
 
     // Set the Authorization header
     config.headers['Authorization'] = `Bearer ${authToken}`;
-    console.log('🔑 Added authentication token to request headers');
-    console.log('🔍 Token preview:', authToken.substring(0, 20) + '...');
+    logger.debug('🔑 Added authentication token to request headers');
+    logger.debug('🔍 Token preview:', authToken.substring(0, 20) + '...');
   } else {
-    console.log('❌ No valid authentication token found for request');
-    console.log('🔍 authToken details:', {
+    logger.debug('❌ No valid authentication token found for request');
+    logger.debug('🔍 authToken details:', {
       exists: !!authToken,
       length: authToken?.length || 0,
       trimmedLength: authToken?.trim()?.length || 0,
@@ -314,12 +316,12 @@ api.interceptors.request.use(async (config) => {
 
     // Ensure we NEVER send incomplete Bearer headers
     if (config.headers?.Authorization === 'Bearer' || config.headers?.Authorization === '') {
-      console.log('🚨 Removing incomplete Authorization header');
+      logger.debug('🚨 Removing incomplete Authorization header');
       delete config.headers.Authorization;
     }
   }
 
-  console.log('🔍 API Request:', {
+  logger.debug('🔍 API Request:', {
     method: config.method?.toUpperCase(),
     url: config.url,
     baseURL: config.baseURL,
@@ -333,7 +335,7 @@ api.interceptors.request.use(async (config) => {
   
   return config
 }, (error) => {
-  console.error('🚨 API Request Error:', error);
+  logger.error('🚨 API Request Error:', error);
   return Promise.reject(error);
 })
 
@@ -343,7 +345,7 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     // Don't log authentication errors in production
     if (error.response?.status !== 401) {
-      console.error('🚨 API Error:', {
+      logger.error('🚨 API Error:', {
         status: error.response?.status,
         url: error.config?.url,
         method: error.config?.method,
@@ -353,7 +355,7 @@ api.interceptors.response.use(
 
     // Handle authentication errors
     if (error.response?.status === 401) {
-      console.log('🔐 Authentication required - redirecting to login')
+      logger.debug('🔐 Authentication required - redirecting to login')
       // Clear any stale auth data
       localStorage.removeItem('kinde_token')
       localStorage.removeItem('authToken')
@@ -367,7 +369,7 @@ api.interceptors.response.use(
       const responseData = error.response.data as any
       
       if (responseData?.code === 'TRIAL_EXPIRED' || responseData?.code === 'SUBSCRIPTION_EXPIRED') {
-        console.log('🚫 Trial/Subscription expired response intercepted:', responseData)
+        logger.debug('🚫 Trial/Subscription expired response intercepted:', responseData)
         
         // Store trial/subscription expiry state for banner to use
         const expiredData = {
@@ -413,7 +415,7 @@ api.interceptors.response.use(
 
     // Handle server errors - but don't spam toasts for trial expiry scenarios
     if (error.response?.status && error.response.status >= 500) {
-      console.error('🚨 Server error intercepted:', error.response.status)
+      logger.error('🚨 Server error intercepted:', error.response.status)
       
       // Don't show server error toasts if we're in a trial expiry state
       const trialExpired = localStorage.getItem('trialExpired')

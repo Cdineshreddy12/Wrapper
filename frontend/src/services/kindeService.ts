@@ -1,4 +1,5 @@
 import { api } from '../lib/api';
+import { logger } from '@/lib/logger';
 
 // Types for Kinde service
 export interface CreateOrganizationRequest {
@@ -81,7 +82,7 @@ class KindeService {
    */
   async createOrganization(data: CreateOrganizationRequest): Promise<CreateOrganizationResponse> {
     try {
-      console.log('🏢 KindeService.createOrganization - Creating organization:', data);
+      logger.debug('🏢 KindeService.createOrganization - Creating organization:', data);
 
       const response = await api.post('/auth/setup-organization', {
         companyName: data.companyName,
@@ -91,10 +92,10 @@ class KindeService {
         name: data.adminName
       });
 
-      console.log('✅ KindeService.createOrganization - Success:', response.data);
+      logger.debug('✅ KindeService.createOrganization - Success:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('❌ KindeService.createOrganization - Error:', error);
+      logger.error('❌ KindeService.createOrganization - Error:', error);
       
       // Handle different error types
       if (error.response?.data) {
@@ -118,7 +119,7 @@ class KindeService {
    */
   async createUser(data: CreateUserRequest): Promise<CreateUserResponse> {
     try {
-      console.log('👤 KindeService.createUser - Creating user:', data);
+      logger.debug('👤 KindeService.createUser - Creating user:', data);
 
       const response = await api.post('/auth/create-user', {
         email: data.email,
@@ -127,10 +128,10 @@ class KindeService {
         organizationCode: data.organizationCode
       });
 
-      console.log('✅ KindeService.createUser - Success:', response.data);
+      logger.debug('✅ KindeService.createUser - Success:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('❌ KindeService.createUser - Error:', error);
+      logger.error('❌ KindeService.createUser - Error:', error);
       
       if (error.response?.data) {
         return {
@@ -153,14 +154,14 @@ class KindeService {
    */
   async getUserOrganizations(): Promise<{ organizations: OrganizationInfo[]; success: boolean }> {
     try {
-      console.log('🔍 KindeService.getUserOrganizations - Getting user organizations');
+      logger.debug('🔍 KindeService.getUserOrganizations - Getting user organizations');
 
       const response = await api.get('/auth/user-organizations');
       
-      console.log('✅ KindeService.getUserOrganizations - Success:', response.data);
+      logger.debug('✅ KindeService.getUserOrganizations - Success:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('❌ KindeService.getUserOrganizations - Error:', error);
+      logger.error('❌ KindeService.getUserOrganizations - Error:', error);
       
       return {
         organizations: [],
@@ -174,7 +175,7 @@ class KindeService {
    */
   async addUserToOrganization(userId: string, orgCode: string, options: { exclusive?: boolean } = {}): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
-      console.log('🔗 KindeService.addUserToOrganization - Adding user to organization:', { userId, orgCode, options });
+      logger.debug('🔗 KindeService.addUserToOrganization - Adding user to organization:', { userId, orgCode, options });
 
       const response = await api.post('/auth/add-user-to-organization', {
         userId,
@@ -182,10 +183,10 @@ class KindeService {
         exclusive: options.exclusive || false
       });
 
-      console.log('✅ KindeService.addUserToOrganization - Success:', response.data);
+      logger.debug('✅ KindeService.addUserToOrganization - Success:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('❌ KindeService.addUserToOrganization - Error:', error);
+      logger.error('❌ KindeService.addUserToOrganization - Error:', error);
       
       if (error.response?.data) {
         return {
@@ -208,17 +209,17 @@ class KindeService {
    */
   async removeUserFromOrganization(userId: string, orgCode: string): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
-      console.log('🗑️ KindeService.removeUserFromOrganization - Removing user from organization:', { userId, orgCode });
+      logger.debug('🗑️ KindeService.removeUserFromOrganization - Removing user from organization:', { userId, orgCode });
 
       const response = await api.post('/auth/remove-user-from-organization', {
         userId,
         orgCode
       });
 
-      console.log('✅ KindeService.removeUserFromOrganization - Success:', response.data);
+      logger.debug('✅ KindeService.removeUserFromOrganization - Success:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('❌ KindeService.removeUserFromOrganization - Error:', error);
+      logger.error('❌ KindeService.removeUserFromOrganization - Error:', error);
       
       if (error.response?.data) {
         return {
@@ -241,14 +242,14 @@ class KindeService {
    */
   async getOrganizationDetails(orgCode: string): Promise<{ success: boolean; organization?: OrganizationInfo; error?: string }> {
     try {
-      console.log('🔍 KindeService.getOrganizationDetails - Getting organization details:', orgCode);
+      logger.debug('🔍 KindeService.getOrganizationDetails - Getting organization details:', orgCode);
 
       const response = await api.get(`/auth/organization/${orgCode}`);
       
-      console.log('✅ KindeService.getOrganizationDetails - Success:', response.data);
+      logger.debug('✅ KindeService.getOrganizationDetails - Success:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('❌ KindeService.getOrganizationDetails - Error:', error);
+      logger.error('❌ KindeService.getOrganizationDetails - Error:', error);
       
       if (error.response?.data) {
         return {
@@ -271,16 +272,16 @@ class KindeService {
    */
   async listOrganizations(limit: number = 100, offset: number = 0): Promise<{ success: boolean; organizations?: OrganizationInfo[]; error?: string }> {
     try {
-      console.log('🔍 KindeService.listOrganizations - Getting all organizations');
+      logger.debug('🔍 KindeService.listOrganizations - Getting all organizations');
 
       const response = await api.get('/auth/organizations', {
         params: { limit, offset }
       });
       
-      console.log('✅ KindeService.listOrganizations - Success:', response.data);
+      logger.debug('✅ KindeService.listOrganizations - Success:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('❌ KindeService.listOrganizations - Error:', error);
+      logger.error('❌ KindeService.listOrganizations - Error:', error);
       
       if (error.response?.data) {
         return {
@@ -303,7 +304,7 @@ class KindeService {
    */
   async listUsers(limit: number = 100, offset: number = 0, organizationCode?: string): Promise<{ success: boolean; users?: UserInfo[]; error?: string }> {
     try {
-      console.log('🔍 KindeService.listUsers - Getting all users');
+      logger.debug('🔍 KindeService.listUsers - Getting all users');
 
       const params: any = { limit, offset };
       if (organizationCode) {
@@ -312,10 +313,10 @@ class KindeService {
 
       const response = await api.get('/auth/users', { params });
       
-      console.log('✅ KindeService.listUsers - Success:', response.data);
+      logger.debug('✅ KindeService.listUsers - Success:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('❌ KindeService.listUsers - Error:', error);
+      logger.error('❌ KindeService.listUsers - Error:', error);
       
       if (error.response?.data) {
         return {
@@ -338,14 +339,14 @@ class KindeService {
    */
   async getUserById(userId: string): Promise<{ success: boolean; user?: UserInfo; error?: string }> {
     try {
-      console.log('🔍 KindeService.getUserById - Getting user:', userId);
+      logger.debug('🔍 KindeService.getUserById - Getting user:', userId);
 
       const response = await api.get(`/auth/users/${userId}`);
       
-      console.log('✅ KindeService.getUserById - Success:', response.data);
+      logger.debug('✅ KindeService.getUserById - Success:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('❌ KindeService.getUserById - Error:', error);
+      logger.error('❌ KindeService.getUserById - Error:', error);
       
       if (error.response?.data) {
         return {
@@ -368,14 +369,14 @@ class KindeService {
    */
   async updateUser(userId: string, userData: Partial<UserInfo>): Promise<{ success: boolean; user?: UserInfo; error?: string }> {
     try {
-      console.log('🔄 KindeService.updateUser - Updating user:', { userId, userData });
+      logger.debug('🔄 KindeService.updateUser - Updating user:', { userId, userData });
 
       const response = await api.put(`/auth/users/${userId}`, userData);
       
-      console.log('✅ KindeService.updateUser - Success:', response.data);
+      logger.debug('✅ KindeService.updateUser - Success:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('❌ KindeService.updateUser - Error:', error);
+      logger.error('❌ KindeService.updateUser - Error:', error);
       
       if (error.response?.data) {
         return {
@@ -398,14 +399,14 @@ class KindeService {
    */
   async deleteUser(userId: string): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
-      console.log('🗑️ KindeService.deleteUser - Deleting user:', userId);
+      logger.debug('🗑️ KindeService.deleteUser - Deleting user:', userId);
 
       const response = await api.delete(`/auth/users/${userId}`);
       
-      console.log('✅ KindeService.deleteUser - Success:', response.data);
+      logger.debug('✅ KindeService.deleteUser - Success:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('❌ KindeService.deleteUser - Error:', error);
+      logger.error('❌ KindeService.deleteUser - Error:', error);
       
       if (error.response?.data) {
         return {

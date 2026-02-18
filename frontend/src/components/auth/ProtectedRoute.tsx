@@ -7,6 +7,7 @@ import { Shield, Lock, AlertCircle } from 'lucide-react';
 import AuthButton from './AuthButton';
 import { useAuthStatus } from '@/hooks/useSharedQueries';
 import AnimatedLoader from '@/components/common/AnimatedLoader';
+import { logger } from '@/lib/logger';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -138,7 +139,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = React.memo(({
 
   const backendAuthStatus = authData?.authStatus || null;
 
-  console.log('🔒 ProtectedRoute: Called for path:', location.pathname, {
+  logger.debug('🔒 ProtectedRoute: Called for path:', location.pathname, {
     isAuthenticated,
     isLoading,
     hasUser: !!user,
@@ -150,7 +151,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = React.memo(({
 
   // Show loading spinner while checking authentication
   if (isLoading || authStatusLoading) {
-    console.log('🔄 ProtectedRoute: Still loading for:', location.pathname);
+    logger.debug('🔄 ProtectedRoute: Still loading for:', location.pathname);
     if (FallbackComponent) {
       return <FallbackComponent />;
     }
@@ -160,7 +161,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = React.memo(({
   // Handle unauthenticated users
   // Only redirect if Kinde is not still loading (prevents redirect loops)
   if ((!isAuthenticated || !user) && !isLoading) {
-    console.log('🚫 ProtectedRoute: Not authenticated (Kinde loaded), redirecting to login', {
+    logger.debug('🚫 ProtectedRoute: Not authenticated (Kinde loaded), redirecting to login', {
       isAuthenticated,
       hasUser: !!user,
       isLoading,
@@ -176,7 +177,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = React.memo(({
 
   // Check backend authentication status
   if (!backendAuthStatus?.isAuthenticated) {
-    console.log('🚫 ProtectedRoute: Backend says user not authenticated');
+    logger.debug('🚫 ProtectedRoute: Backend says user not authenticated');
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
@@ -192,7 +193,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = React.memo(({
     backendAuthStatus?.needsOnboarding &&
     !isInvitedOrOnboarded
   ) {
-    console.log('🔄 ProtectedRoute: User needs onboarding, redirecting...', {
+    logger.debug('🔄 ProtectedRoute: User needs onboarding, redirecting...', {
       needsOnboarding: backendAuthStatus.needsOnboarding,
       onboardingCompleted: backendAuthStatus.onboardingCompleted,
       pathname: location.pathname
@@ -206,7 +207,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = React.memo(({
   }
 
   // Log successful authentication for debugging
-  console.log('✅ ProtectedRoute: Access granted for:', location.pathname, {
+  logger.debug('✅ ProtectedRoute: Access granted for:', location.pathname, {
     isAuthenticated,
     hasUser: !!user,
     userId: user.id,

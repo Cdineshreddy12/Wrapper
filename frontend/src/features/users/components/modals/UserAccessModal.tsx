@@ -200,6 +200,10 @@ export const UserAccessContent: React.FC<UserAccessContentProps> = ({ user }) =>
       }
       const response = await api.post(`/tenants/current/users/${localUser.userId}/assign-roles`, { roleIds: [...currentRoleIds, roleId] });
       if (response.data.success) {
+        const newRole = rolesData.find((r: any) => r.roleId === roleId);
+        if (newRole) {
+          setLocalUser(prev => prev ? { ...prev, roles: [...(prev.roles || []), { roleId: newRole.roleId, roleName: newRole.roleName }] } : prev);
+        }
         toast.success('Role assigned successfully');
         queryClient.invalidateQueries({ queryKey: ['users'] });
         queryClient.invalidateQueries({ queryKey: ['organization-assignments'] });
@@ -231,6 +235,7 @@ export const UserAccessContent: React.FC<UserAccessContentProps> = ({ user }) =>
     try {
       const response = await api.delete(`/admin/users/${localUser.userId}/roles/${roleId}`);
       if (response.data.success) {
+        setLocalUser(prev => prev ? { ...prev, roles: (prev.roles || []).filter(r => r.roleId !== roleId) } : prev);
         toast.success('Role removed successfully');
         queryClient.invalidateQueries({ queryKey: ['users'] });
         queryClient.invalidateQueries({ queryKey: ['organization-assignments'] });
@@ -291,8 +296,18 @@ export const UserAccessContent: React.FC<UserAccessContentProps> = ({ user }) =>
     }
   };
 
-  const userRoleIds = useMemo(() => new Set(localUser?.roles?.map(r => r.roleId) || []), [localUser]);
-  const availableRoles = rolesData.filter(role => !userRoleIds.has(role.roleId));
+  // Assigned roles: support both roleId (UUID) and roleName (some APIs return name in roleId)
+  const userRoleIds = useMemo(
+    () => new Set(localUser?.roles?.map(r => r.roleId || (r as any).id).filter(Boolean) || []),
+    [localUser]
+  );
+  const userAssignedRoleNames = useMemo(
+    () => new Set(localUser?.roles?.map(r => r.roleName).filter(Boolean) || []),
+    [localUser]
+  );
+  const availableRoles = rolesData.filter(
+    role => !userRoleIds.has(role.roleId) && !userAssignedRoleNames.has(role.roleName)
+  );
 
   if (!localUser) return null;
 
@@ -457,25 +472,41 @@ export const UserAccessContent: React.FC<UserAccessContentProps> = ({ user }) =>
           </div>
         </div>
 
-        {/* Right Panel: Roles */}
+        {/* Right Panel: Global Roles */}
         <div className="w-full md:w-[340px] bg-muted/5 border-l border-border/40 p-6 flex flex-col overflow-y-auto">
           <div className="space-y-6">
-            <h3 className="text-sm font-semibold flex items-center gap-2 text-foreground/90">
-              <Shield className="w-4 h-4 text-muted-foreground" /> Global Roles
-            </h3>
+            <div>
+              <h3 className="text-sm font-semibold flex items-center gap-2 text-foreground/90">
+                <Shield className="w-4 h-4 text-muted-foreground" /> Global Roles
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Apply tenant-wide. Per-organization roles are set in the left panel (e.g. “ops mgmt” on zopkit).
+              </p>
+            </div>
 
-            {/* Current Roles */}
+            {/* Summary */}
+            <div className="px-3 py-2 rounded-lg bg-muted/50 border border-border/40">
+              <p className="text-xs font-medium text-foreground/80">
+                <span className="text-emerald-600 dark:text-emerald-400">{localUser.roles?.length ?? 0} assigned</span>
+                <span className="text-muted-foreground mx-1.5">·</span>
+                <span className="text-muted-foreground">{availableRoles.length} not assigned</span>
+              </p>
+            </div>
+
+            {/* Assigned to this user */}
             <div className="space-y-3">
-              <Label className="text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">Assigned</Label>
+              <Label className="text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">
+                Assigned to this user ({localUser.roles?.length ?? 0})
+              </Label>
               {localUser.roles && localUser.roles.length > 0 ? (
                 <div className="space-y-2">
                   {localUser.roles.map(role => (
                     <div
                       key={role.roleId}
-                      className="group flex items-center justify-between p-3 bg-background rounded-xl border border-border/40 shadow-sm hover:shadow-md transition-all"
+                      className="group flex items-center justify-between p-3 bg-background rounded-xl border-2 border-emerald-200/60 dark:border-emerald-800/40 shadow-sm hover:shadow-md transition-all"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
                           <Shield className="w-4 h-4" />
                         </div>
                         <span className="text-sm font-medium text-foreground">{role.roleName}</span>
@@ -486,6 +517,7 @@ export const UserAccessContent: React.FC<UserAccessContentProps> = ({ user }) =>
                         className="h-8 w-8 p-0 flex items-center justify-center rounded-full"
                         onClick={() => handleDeassignRole(role.roleId, role.roleName)}
                         disabled={assigning}
+                        title="Remove this role"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </PearlButton>
@@ -493,23 +525,26 @@ export const UserAccessContent: React.FC<UserAccessContentProps> = ({ user }) =>
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-muted-foreground italic px-4 py-6 text-center border-2 border-dashed border-border/40 rounded-xl">
-                  No global roles assigned
+                <div className="text-sm text-muted-foreground italic px-4 py-6 text-center border-2 border-dashed border-amber-300/50 dark:border-amber-600/30 rounded-xl bg-amber-50/30 dark:bg-amber-900/10">
+                  No global roles assigned. Add one from “Not assigned” below.
                 </div>
               )}
             </div>
 
-            {/* Available Roles */}
-            {availableRoles.length > 0 && (
-              <div className="space-y-3 pt-2">
-                <Label className="text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">Available</Label>
+            {/* Not assigned — click to add */}
+            <div className="space-y-3 pt-2">
+              <Label className="text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">
+                Not assigned — click to add ({availableRoles.length})
+              </Label>
+              {availableRoles.length > 0 ? (
                 <div className="space-y-2">
                   {availableRoles.map(role => (
                     <button
                       key={role.roleId}
-                      className="w-full flex items-center justify-between p-2.5 rounded-lg border border-transparent hover:bg-background hover:shadow-sm hover:border-border/40 transition-all group text-left"
+                      className="w-full flex items-center justify-between p-2.5 rounded-lg border border-dashed border-border/50 hover:bg-background hover:shadow-sm hover:border-primary/30 transition-all group text-left"
                       onClick={() => handleAssignRole(role.roleId, role.roleName)}
                       disabled={assigning}
+                      title={`Assign ${role.roleName}`}
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 group-hover:bg-primary transition-colors" />
@@ -521,8 +556,10 @@ export const UserAccessContent: React.FC<UserAccessContentProps> = ({ user }) =>
                     </button>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="text-xs text-muted-foreground italic py-2">All roles are already assigned to this user.</p>
+              )}
+            </div>
           </div>
         </div>
       </div>

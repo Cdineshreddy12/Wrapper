@@ -286,9 +286,10 @@ export default async function userRoutes(fastify, options) {
         });
       }
 
-      // Check if request comes from CRM backend
+      // Check if request comes from CRM or Operations backend
       const requestSource = request.headers['x-request-source'];
-      if (requestSource !== 'crm-backend') {
+      const allowedSources = ['crm-backend', 'operations-backend', 'operations-tenant-sync'];
+      if (!requestSource || !allowedSources.includes(requestSource)) {
         console.log('❌ Invalid request source:', requestSource);
         return reply.code(403).send({
           success: false,

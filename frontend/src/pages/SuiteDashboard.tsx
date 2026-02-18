@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import api from '../lib/api';
+import { config } from '@/lib/config';
 
 interface Application {
   appId: string;
@@ -34,7 +35,7 @@ const SuiteDashboard: React.FC = () => {
     try {
       // Create a custom axios instance for the external API
       const customApi = api.create({
-        baseURL: 'https://wrapper.zopkit.com',
+        baseURL: config.WRAPPER_DOMAIN,
         withCredentials: true,
         headers: {
           'Content-Type': 'application/json',

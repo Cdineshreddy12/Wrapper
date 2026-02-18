@@ -3,6 +3,7 @@
  * Provides comprehensive credit monitoring without modifying existing routes
  */
 
+import { PERMISSIONS } from '../../../constants/permissions.js';
 import { authenticateToken, requirePermission } from '../../../middleware/auth.js';
 import { db } from '../../../db/index.js';
 import { credits, creditTransactions, tenants, entities, subscriptions } from '../../../db/schema/index.js';
@@ -15,7 +16,7 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
 
   // Get comprehensive credit overview across all tenants
   fastify.get('/overview', {
-    preHandler: [authenticateToken, requirePermission('admin.credits.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_VIEW)],
     schema: {
       description: 'Get comprehensive credit overview across all tenants'
     }
@@ -108,7 +109,7 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
 
   // Get credit usage analytics
   fastify.get('/analytics', {
-    preHandler: [authenticateToken, requirePermission('admin.credits.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_VIEW)],
     schema: {
       description: 'Get credit usage analytics',
       querystring: {
@@ -221,7 +222,7 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
 
   // Get credit alerts and warnings
   fastify.get('/alerts', {
-    preHandler: [authenticateToken, requirePermission('admin.credits.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_VIEW)],
     schema: {
       description: 'Get credit alerts and warnings'
     }
@@ -315,7 +316,7 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
 
   // Bulk credit allocation
   fastify.post('/bulk-allocate', {
-    preHandler: [authenticateToken, requirePermission('admin.credits.manage')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_MANAGE)],
     schema: {
       description: 'Bulk allocate credits to multiple entities',
       body: {
@@ -450,7 +451,7 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
 
   // Get all entities with their current credit balances
   fastify.get('/entity-balances', {
-    preHandler: [authenticateToken, requirePermission('admin.credits.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_VIEW)],
     schema: {
       description: 'Get all entities with their current credit balances',
       querystring: {
@@ -560,7 +561,7 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
 
   // Get credit transaction history with filtering
   fastify.get('/transactions', {
-    preHandler: [authenticateToken, requirePermission('admin.credits.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_VIEW)],
     schema: {
       description: 'Get credit transaction history',
       querystring: {
@@ -661,7 +662,7 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
 
   // Get all application allocations across all tenants (admin view)
   fastify.get('/application-allocations', {
-    preHandler: [authenticateToken, requirePermission('admin.credits.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_VIEW)],
     schema: {
       description: 'Get all application credit allocations across all tenants'
     }
@@ -784,7 +785,7 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
    * Process all credit expiries (free, seasonal, subscription)
    */
   fastify.post('/process-expiries', {
-    preHandler: [authenticateToken, requirePermission('admin.credits.manage')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_MANAGE)],
     schema: {
       body: {
         type: 'object',
@@ -908,7 +909,7 @@ export default async function adminCreditOverviewRoutes(fastify, options) {
    * Get summary of all expiring credits (free, seasonal, subscription)
    */
   fastify.get('/expiring-summary', {
-    preHandler: [authenticateToken, requirePermission('admin.credits.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_VIEW)],
     schema: {
       querystring: {
         type: 'object',

@@ -70,8 +70,17 @@ export function UserManagementModals() {
   
   const handleDeleteUser = () => {
     if (!state.deletingUser) return;
-    
-    userMutations.deleteUser.mutate(state.deletingUser.userId, {
+    // Use internal UUID (backend expects tenant_users.user_id)
+    const userIdToDelete =
+      state.deletingUser.userId ||
+      (state.deletingUser as any).id ||
+      (state.deletingUser as any).originalData?.user?.userId;
+    if (!userIdToDelete) {
+      console.error('Delete user: no userId found on user object', state.deletingUser);
+      return;
+    }
+    console.log('🗑️ Deleting user', { userId: userIdToDelete, email: state.deletingUser.email });
+    userMutations.deleteUser.mutate(userIdToDelete, {
       onSuccess: () => {
         actions.closeModal('delete');
       }

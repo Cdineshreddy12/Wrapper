@@ -978,7 +978,25 @@ export function RoleManagementDashboard() {
                   <th className="px-5 py-4 text-left min-w-[220px]">Role & Description</th>
                   <th className="px-5 py-4 text-center w-24">Users</th>
                   <th className="px-5 py-4 text-center w-32">Apps/Modules</th>
-                  <th className="px-5 py-4 text-center">Capability Breakdown</th>
+                  <th className="px-5 py-4 text-center">
+                    <div className="flex flex-col items-center gap-1">
+                      <span>Capability Breakdown</span>
+                      <div className="flex items-center gap-3 text-[9px] uppercase tracking-wide font-normal opacity-70">
+                        <span className="flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                          Admin
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                          Write
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          Read
+                        </span>
+                      </div>
+                    </div>
+                  </th>
                   <th className="px-5 py-4 text-center w-32">Type</th>
                   <th className="px-5 py-4 text-right w-16">Actions</th>
                 </tr>

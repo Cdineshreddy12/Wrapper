@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
+import { config } from '@/lib/config';
 
 interface User {
   userId: string;
@@ -202,10 +203,10 @@ const getAppIcon = (appCode: string): string => {
 
 const getAppUrl = (appCode: string): string => {
   const appUrls: Record<string, string> = {
-    'crm': 'https://crm.zopkit.com',
-    'hr': 'http://localhost:3003',
-    'affiliate': 'http://localhost:3004',
-    'system': 'http://localhost:3000'
+    'crm': config.CRM_DOMAIN,
+    'hr': config.HR_APP_URL,
+    'affiliate': config.AFFILIATE_APP_URL,
+    'system': config.API_BASE_URL
   };
   return appUrls[appCode] || '';
 };

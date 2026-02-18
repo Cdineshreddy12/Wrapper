@@ -18,11 +18,16 @@ class AmazonMQPublisher {
     this.reconnectDelay = 5000; // 5 seconds
     
     // Business suite applications that should receive inter-app events
-    // Can be overridden via env: BUSINESS_SUITE_TARGET_APPS=crm,accounting,finance
+    // Can be overridden via env: BUSINESS_SUITE_TARGET_APPS=crm,accounting,ops
     const suiteAppsEnv = process.env.BUSINESS_SUITE_TARGET_APPS;
-    this.businessSuiteApps = suiteAppsEnv 
-      ? suiteAppsEnv.split(',').map(app => app.trim())
-      : ['crm', 'accounting'];
+    let apps = suiteAppsEnv
+      ? suiteAppsEnv.split(',').map(app => app.trim()).filter(Boolean)
+      : ['crm', 'accounting', 'ops'];
+    // Always include 'ops' so Operations Management receives events (idempotent)
+    if (!apps.includes('ops')) {
+      apps = [...apps, 'ops'];
+    }
+    this.businessSuiteApps = apps;
   }
 
   /**
@@ -148,13 +153,14 @@ class AmazonMQPublisher {
    * To: 'crm.user.created'
    * 
    * Also handles: 'user_created' -> 'user.created'
+   * Maps 'operations' -> 'ops' so messages reach ops-events (bound to ops.#).
    */
   generateRoutingKey(targetApplication, eventType) {
     // Normalize eventType: replace underscores with dots
     const normalizedEventType = eventType.replace(/_/g, '.');
-    
-    // Format: <targetApplication>.<normalizedEventType>
-    return `${targetApplication}.${normalizedEventType}`;
+    // Map app names to queue binding prefixes (ops-events is bound to ops.#, not operations.#)
+    const routingPrefix = targetApplication === 'operations' ? 'ops' : targetApplication;
+    return `${routingPrefix}.${normalizedEventType}`;
   }
 
   /**
@@ -323,6 +329,20 @@ class AmazonMQPublisher {
           deletedAt: roleData.deletedAt,
           transferredToRoleId: roleData.transferredToRoleId,
           affectedUsersCount: roleData.affectedUsersCount
+        }),
+        ...(eventType === 'role_assigned' && {
+          assignmentId: roleData.assignmentId,
+          userId: roleData.userId,
+          assignedAt: roleData.assignedAt,
+          assignedBy: roleData.assignedBy,
+          expiresAt: roleData.expiresAt
+        }),
+        ...(eventType === 'role_unassigned' && {
+          assignmentId: roleData.assignmentId,
+          userId: roleData.userId,
+          unassignedAt: roleData.unassignedAt,
+          unassignedBy: roleData.unassignedBy,
+          reason: roleData.reason
         })
       },
       publishedBy

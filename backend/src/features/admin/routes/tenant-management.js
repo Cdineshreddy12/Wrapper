@@ -4,6 +4,7 @@
  */
 
 import { authenticateToken, requirePermission } from '../../../middleware/auth.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 import { db } from '../../../db/index.js';
 import { tenants, tenantUsers, entities, credits, auditLogs } from '../../../db/schema/index.js';
 import { eq, and, desc, sql, count, gte, lte } from 'drizzle-orm';
@@ -14,7 +15,7 @@ export default async function adminTenantManagementRoutes(fastify, options) {
 
   // Debug endpoint to check credit consistency
   fastify.get('/:tenantId/credit-debug', {
-    preHandler: [authenticateToken, requirePermission('admin.tenants.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_TENANTS_VIEW)],
     schema: {
       description: 'Debug credit calculation for a tenant'
     }
@@ -96,7 +97,7 @@ export default async function adminTenantManagementRoutes(fastify, options) {
 
   // Clean up orphaned credit records for a tenant
   fastify.post('/:tenantId/clean-orphaned-credits', {
-    preHandler: [authenticateToken, requirePermission('admin.tenants.manage')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_TENANTS_MANAGE)],
     schema: {
       description: 'Clean up credit records that don\'t have corresponding entities',
       params: {
@@ -163,7 +164,7 @@ export default async function adminTenantManagementRoutes(fastify, options) {
 
   // Get detailed tenant information including relationships
   fastify.get('/:tenantId/details', {
-    preHandler: [authenticateToken, requirePermission('admin.tenants.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_TENANTS_VIEW)],
     schema: {
       description: 'Get comprehensive tenant details',
       params: {
@@ -241,7 +242,7 @@ export default async function adminTenantManagementRoutes(fastify, options) {
 
   // Update tenant status (activate/deactivate)
   fastify.patch('/:tenantId/status', {
-    preHandler: [authenticateToken, requirePermission('admin.tenants.manage')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_TENANTS_MANAGE)],
     schema: {
       description: 'Update tenant status',
       params: {
@@ -288,7 +289,7 @@ export default async function adminTenantManagementRoutes(fastify, options) {
 
   // Bulk tenant operations
   fastify.post('/bulk/status', {
-    preHandler: [authenticateToken, requirePermission('admin.tenants.manage')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_TENANTS_MANAGE)],
     schema: {
       description: 'Bulk update tenant status',
       body: {
@@ -331,7 +332,7 @@ export default async function adminTenantManagementRoutes(fastify, options) {
 
   // Get tenant activity log - Comprehensive activity logs for admin
   fastify.get('/:tenantId/activity', {
-    preHandler: [authenticateToken, requirePermission('admin.tenants.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_TENANTS_VIEW)],
     schema: {
       description: 'Get comprehensive tenant activity logs (admin only)',
       params: {
@@ -496,7 +497,7 @@ export default async function adminTenantManagementRoutes(fastify, options) {
 
   // Export tenant data
   fastify.get('/:tenantId/export', {
-    preHandler: [authenticateToken, requirePermission('admin.tenants.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_TENANTS_VIEW)],
     schema: {
       description: 'Export comprehensive tenant data',
       params: {
@@ -553,7 +554,7 @@ export default async function adminTenantManagementRoutes(fastify, options) {
 
   // Get tenant statistics for monitoring
   fastify.get('/:tenantId/stats', {
-    preHandler: [authenticateToken, requirePermission('admin.tenants.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_TENANTS_VIEW)],
     schema: {
       description: 'Get tenant statistics',
       params: {
@@ -613,7 +614,7 @@ export default async function adminTenantManagementRoutes(fastify, options) {
 
   // Comprehensive tenant list with relationships and credit summaries
   fastify.get('/comprehensive', {
-    preHandler: [authenticateToken, requirePermission('admin.tenants.view')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_TENANTS_VIEW)],
     schema: {
       description: 'Get comprehensive tenant list with relationships and credit data',
       querystring: {

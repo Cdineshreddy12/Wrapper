@@ -10,6 +10,7 @@ import Logger from '../../../utils/logger.js';
 import ActivityLogger, { ACTIVITY_TYPES, RESOURCE_TYPES } from '../../../services/activityLogger.js';
 // crmSyncStreams removed - migrated to RabbitMQ (AmazonMQPublisher)
 import { PermissionMatrixUtils } from '../../../data/permission-matrix.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 
 /**
  * Publish role events to relevant applications based on permissions
@@ -237,7 +238,7 @@ export default async function roleRoutes(fastify, options) {
 
   // Create role from template with customizations
   fastify.post('/from-template', {
-    preHandler: [authenticateToken, requirePermission('roles:create'), checkRoleLimit, trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_CREATE), checkRoleLimit, trackUsage],
     schema: {
       body: {
         type: 'object',
@@ -288,7 +289,7 @@ export default async function roleRoutes(fastify, options) {
 
   // Get tenant roles with advanced filtering
   fastify.get('/', {
-    preHandler: [authenticateToken, requirePermission('roles:read'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_READ), trackUsage],
     schema: {
       querystring: {
         type: 'object',
@@ -498,7 +499,7 @@ export default async function roleRoutes(fastify, options) {
 
   // Create custom role with advanced features
   fastify.post('/', {
-    preHandler: [authenticateToken, requirePermission('roles:create'), checkRoleLimit, trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_CREATE), checkRoleLimit, trackUsage],
     schema: {
       body: {
         type: 'object',
@@ -762,7 +763,7 @@ export default async function roleRoutes(fastify, options) {
 
   // Update role with advanced permissions
   fastify.put('/:roleId', {
-    preHandler: [authenticateToken, requirePermission('roles:edit'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_EDIT), trackUsage],
     schema: {
       params: {
         type: 'object',
@@ -894,7 +895,7 @@ export default async function roleRoutes(fastify, options) {
 
   // Clone role with modifications
   fastify.post('/:roleId/clone', {
-    preHandler: [authenticateToken, requirePermission('roles:create'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_CREATE), trackUsage],
     schema: {
       params: {
         type: 'object',
@@ -949,7 +950,7 @@ export default async function roleRoutes(fastify, options) {
 
   // Validate role permissions
   fastify.post('/:roleId/validate', {
-    preHandler: [authenticateToken, requirePermission('roles:read'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_READ), trackUsage],
     schema: {
       params: {
         type: 'object',
@@ -997,7 +998,7 @@ export default async function roleRoutes(fastify, options) {
 
   // Bulk operations on roles
   fastify.post('/bulk', {
-    preHandler: [authenticateToken, requirePermission('roles:manage'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_MANAGE), trackUsage],
     schema: {
       body: {
         type: 'object',
@@ -1034,7 +1035,7 @@ export default async function roleRoutes(fastify, options) {
 
   // Delete role with safety checks
   fastify.delete('/:roleId', {
-    preHandler: [authenticateToken, requirePermission('roles:delete'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_DELETE), trackUsage],
     schema: {
       params: {
         type: 'object',
@@ -1133,7 +1134,7 @@ export default async function roleRoutes(fastify, options) {
 
   // Specific bulk delete endpoint (for frontend compatibility)
   fastify.post('/bulk/delete', {
-    preHandler: [authenticateToken, requirePermission('roles:delete'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_DELETE), trackUsage],
     schema: {
       body: {
         type: 'object',
@@ -1170,7 +1171,7 @@ export default async function roleRoutes(fastify, options) {
 
   // Specific bulk deactivate endpoint (for frontend compatibility)
   fastify.post('/bulk/deactivate', {
-    preHandler: [authenticateToken, requirePermission('roles:manage'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_MANAGE), trackUsage],
     schema: {
       body: {
         type: 'object',
@@ -1205,7 +1206,7 @@ export default async function roleRoutes(fastify, options) {
 
   // Specific bulk export endpoint (for frontend compatibility)
   fastify.post('/bulk/export', {
-    preHandler: [authenticateToken, requirePermission('roles:read'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_READ), trackUsage],
     schema: {
       body: {
         type: 'object',

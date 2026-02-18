@@ -5,7 +5,7 @@ import { Handle, Position } from 'reactflow';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Building, MapPin, Edit, Trash2, Plus, MoreVertical, CreditCard } from 'lucide-react';
+import { Building, MapPin, Edit, Trash2, Plus, MoreVertical, CreditCard, ArrowRightLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -33,6 +33,7 @@ interface OrganizationNodeData {
   onAddSubOrganization?: (parentId: string) => void;
   onAddLocation?: (parentId: string) => void;
   onAllocateCredits?: (entityId: string) => void;
+  onTransferCredits?: (orgId: string) => void;
 }
 
 export function OrganizationNode({ id, data, selected }: NodeProps<OrganizationNodeData>) {
@@ -53,6 +54,7 @@ export function OrganizationNode({ id, data, selected }: NodeProps<OrganizationN
     onAddSubOrganization,
     onAddLocation,
     onAllocateCredits,
+    onTransferCredits,
   } = data;
 
   const isLocation = entityType === 'location';
@@ -96,6 +98,13 @@ export function OrganizationNode({ id, data, selected }: NodeProps<OrganizationN
     e.stopPropagation();
     if (onAllocateCredits) {
       onAllocateCredits(id);
+    }
+  };
+
+  const handleTransferCredits = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onTransferCredits) {
+      onTransferCredits(id);
     }
   };
 
@@ -165,6 +174,12 @@ export function OrganizationNode({ id, data, selected }: NodeProps<OrganizationN
                 <DropdownMenuItem onClick={handleAllocateCredits}>
                   <CreditCard className="w-4 h-4 mr-2" />
                   Allocate Credits
+                </DropdownMenuItem>
+              )}
+              {!isLocation && onTransferCredits && (
+                <DropdownMenuItem onClick={handleTransferCredits}>
+                  <ArrowRightLeft className="w-4 h-4 mr-2" />
+                  Transfer Credits
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />

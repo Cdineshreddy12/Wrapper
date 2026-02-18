@@ -1,5 +1,5 @@
 import { jwtService } from './jwtService';
-import { CRM_DOMAIN, CRM_CALLBACK_PATH } from '../lib/config';
+import { config, CRM_DOMAIN, CRM_CALLBACK_PATH } from '../lib/config';
 
 // Define user interface for type safety - compatible with Kinde UserProfile
 interface User {
@@ -32,7 +32,7 @@ class CRMAuthService {
 
   constructor() {
     // Get environment variables from config or use defaults
-    this.CRM_DOMAIN = CRM_DOMAIN || 'https://crm.zopkit.com';
+    this.CRM_DOMAIN = CRM_DOMAIN;
     this.CRM_CALLBACK_PATH = CRM_CALLBACK_PATH || '/callback';
   }
 
@@ -140,15 +140,17 @@ class CRMAuthService {
       }
       
       // Only allow CRM domain in production
-      if (!returnUrl.hostname.includes('crm.zopkit.com')) {
+      const crmHostname = new URL(CRM_DOMAIN).hostname;
+      if (!returnUrl.hostname.includes(crmHostname)) {
         console.warn('⚠️ Invalid CRM domain:', returnUrl.hostname);
         return false;
       }
       
       // Block dangerous paths
+      const wrapperHostname = new URL(config.WRAPPER_DOMAIN).hostname;
       if (returnUrl.pathname.includes('/callback') || 
           returnUrl.pathname.includes('/login') ||
-          returnUrl.hostname.includes('wrapper.zopkit.com')) {
+          returnUrl.hostname.includes(wrapperHostname)) {
         console.warn('⚠️ Dangerous returnTo URL blocked:', returnUrl.pathname);
         return false;
       }

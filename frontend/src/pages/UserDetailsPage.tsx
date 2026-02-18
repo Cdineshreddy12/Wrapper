@@ -209,8 +209,13 @@ export function UserDetailsPage() {
                             {getStatusBadge()}
                           </div>
                           <div className="flex items-center justify-between py-1 border-b pb-3">
-                            <span className="text-sm text-muted-foreground">Assigned Role</span>
-                            <span className="text-sm font-medium">{user.roles?.[0]?.roleName || 'None'}</span>
+                            <span className="text-sm text-muted-foreground">Assigned role(s)</span>
+                            <span className="text-sm font-medium">
+                              {user.roles?.length
+                                ? user.roles.map((r: { roleName: string }) => r.roleName).join(', ')
+                                : <span className="text-amber-600 dark:text-amber-400">No role assigned</span>
+                              }
+                            </span>
                           </div>
                           <div className="flex items-center justify-between py-1">
                             <span className="text-sm text-muted-foreground">Onboarding</span>

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader'
 import { useNavigate } from 'react-router-dom'
+import { config } from '@/lib/config'
 
 export function AuthCallback() {
   const { isLoading, isAuthenticated, error, getToken, user } = useKindeAuth()
@@ -288,7 +289,7 @@ export function AuthCallback() {
 
                 if (token) {
                   // Validate token and get user context using backend
-                  const backendUrl = 'https://wrapper.zopkit.com'
+                  const backendUrl = config.WRAPPER_DOMAIN
                   const response = await fetch(`${backendUrl}/auth/validate`, {
                     method: 'POST',
                     headers: {
@@ -375,6 +376,14 @@ export function AuthCallback() {
             console.log('🔄 AuthCallback: Reloading page to refresh authentication state')
             window.location.href = '/dashboard?onboarding=complete'
           }, 1000)
+          return
+        }
+
+        // If user has a pending invitation (e.g. returned from sign-in on invite accept page), send them to invite flow first
+        const pendingInvitationToken = localStorage.getItem('pendingInvitationToken')
+        if (pendingInvitationToken) {
+          console.log('✅ AuthCallback: Pending invitation detected, redirecting to invite accept')
+          navigate(`/invite/accept?token=${pendingInvitationToken}`, { replace: true })
           return
         }
 

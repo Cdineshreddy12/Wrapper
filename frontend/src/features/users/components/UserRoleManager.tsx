@@ -326,25 +326,43 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
               </div>
             </div>
 
-            {/* Current Roles */}
-            <div className="p-6 border-b border-gray-200">
-              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-4">Current Roles</h4>
+            {/* Role assignment summary */}
+            {!rolesLoading && (
+              <div className="px-6 py-3 bg-slate-100 border-b border-gray-200 rounded-none">
+                <p className="text-sm font-medium text-slate-700">
+                  <span className="text-emerald-600 font-semibold">{userRoles.length} assigned</span>
+                  <span className="text-slate-400 mx-2">•</span>
+                  <span className="text-slate-600">{availableRolesToAssign.length} not assigned</span>
+                  <span className="text-slate-400 ml-1 text-xs">(of {availableRoles.length} total roles)</span>
+                </p>
+              </div>
+            )}
+
+            {/* Assigned to this user */}
+            <div className="p-6 border-b border-gray-200 bg-emerald-50/30">
+              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-1 flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
+                  {userRoles.length}
+                </span>
+                Assigned to this user
+              </h4>
+              <p className="text-xs text-gray-500 mb-4">These roles are currently active. Remove to revoke access.</p>
               {rolesLoading ? (
                 <div className="text-center py-4">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
                 </div>
               ) : userRoles.length === 0 ? (
-                <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                  <Shield className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-600 font-medium">No roles assigned</p>
-                  <p className="text-sm text-gray-500">Assign roles below to grant permissions</p>
+                <div className="text-center py-6 bg-white rounded-lg border-2 border-dashed border-amber-300 bg-amber-50/50">
+                  <Shield className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                  <p className="text-amber-800 font-medium">No roles assigned</p>
+                  <p className="text-sm text-amber-700">This user has no roles. Assign roles in the section below to grant permissions.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {userRoles.map(role => (
                     <div
                       key={role.roleId}
-                      className="flex items-center justify-between p-3 border border-gray-200 rounded-lg bg-white shadow-sm"
+                      className="flex items-center justify-between p-3 border-2 border-emerald-200 rounded-lg bg-white shadow-sm"
                     >
                       <div className="flex items-center gap-3">
                         <div 
@@ -374,24 +392,30 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
               )}
             </div>
 
-            {/* Available Roles */}
+            {/* Not assigned — click to assign */}
             <div className="p-6">
-              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-4">Assign New Role</h4>
+              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-1 flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-200 text-slate-600 text-xs font-bold">
+                  {availableRolesToAssign.length}
+                </span>
+                Not assigned
+              </h4>
+              <p className="text-xs text-gray-500 mb-4">Click “Assign role” to add one of these roles to this user.</p>
               {loadingRoles ? (
                 <div className="text-center py-6">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
                   <p className="text-sm text-gray-500 mt-2">Loading available roles...</p>
                 </div>
               ) : availableRolesToAssign.length === 0 ? (
-                <div className="text-center py-6 text-gray-500">
-                  {availableRoles.length === 0 ? 'No roles available' : 'All available roles are already assigned.'}
+                <div className="text-center py-6 rounded-lg border border-slate-200 bg-slate-50 text-slate-600">
+                  {availableRoles.length === 0 ? 'No roles available in this tenant.' : 'All available roles are already assigned to this user.'}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {availableRolesToAssign.map((role: any) => (
                     <div
                       key={role.roleId}
-                      className="p-3 border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all bg-white"
+                      className="p-3 border-2 border-dashed border-slate-200 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all bg-white"
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2">
@@ -418,7 +442,7 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
                         className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
                       >
                          {saving ? <div className="animate-spin w-3 h-3 border-b-2 border-blue-700 rounded-full" /> : <Plus className="w-3 h-3" />}
-                         Assign Role
+                         Assign role
                       </button>
                     </div>
                   ))}

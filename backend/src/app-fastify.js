@@ -44,6 +44,7 @@ const fastify = Fastify({
   bodyLimit: 1048576, // 1MB limit
   requestIdHeader: 'x-request-id'
 });
+process.stdout.write('  ✓ Fastify & plugins loaded\n');
 
 // Initialize Elasticsearch logger and hook into Fastify logs
 let enhancedLogger = null;

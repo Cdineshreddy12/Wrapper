@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import { authAPI, User } from '@/lib/api'
+import { logger } from '@/lib/logger'
 
 interface AuthState {
   user: User | null
@@ -59,7 +60,7 @@ export const useAuthStore = create<AuthState>()(
             })
           }
         } catch (error) {
-          console.error('Auth check failed:', error)
+          logger.error('Auth check failed:', error)
           set({ 
             user: null, 
             isAuthenticated: false,
@@ -72,7 +73,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           await authAPI.logout()
         } catch (error) {
-          console.error('Logout error:', error)
+          logger.error('Logout error:', error)
         } finally {
           localStorage.removeItem('authToken')
           set({ 

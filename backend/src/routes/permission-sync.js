@@ -6,6 +6,7 @@
 import AutoPermissionSyncService from '../services/permission-sync-service.js';
 import { customRoleService as CustomRoleService } from '../features/roles/index.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
+import { PERMISSIONS } from '../constants/permissions.js';
 
 export default async function permissionSyncRoutes(fastify, options) {
   
@@ -14,7 +15,7 @@ export default async function permissionSyncRoutes(fastify, options) {
    * Syncs permissions and automatically updates all organizations
    */
   fastify.post('/sync', {
-    preHandler: [authenticateToken, requirePermission('system:admin')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.SYSTEM_ADMIN_MANAGE)]
   }, async (request, reply) => {
     try {
       console.log('🚀 API: Starting full permission sync with auto-updates...');
@@ -42,7 +43,7 @@ export default async function permissionSyncRoutes(fastify, options) {
    * Update a specific organization's access based on subscription tier
    */
   fastify.post('/update-organization-access', {
-    preHandler: [authenticateToken, requirePermission('system:admin')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.SYSTEM_ADMIN_MANAGE)]
   }, async (request, reply) => {
     try {
       const { tenantId, subscriptionTier } = request.body;
@@ -79,7 +80,7 @@ export default async function permissionSyncRoutes(fastify, options) {
    * Called when an organization's subscription tier changes
    */
   fastify.post('/subscription-tier-change', {
-    preHandler: [authenticateToken, requirePermission('system:admin')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.SYSTEM_ADMIN_MANAGE)]
   }, async (request, reply) => {
     try {
       const { tenantId, newTier, oldTier } = request.body;
@@ -120,7 +121,7 @@ export default async function permissionSyncRoutes(fastify, options) {
    * Returns the current permission tier configuration
    */
   fastify.get('/tier-configuration', {
-    preHandler: [authenticateToken, requirePermission('system:admin')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.SYSTEM_ADMIN_MANAGE)]
   }, async (request, reply) => {
     try {
       const { PERMISSION_TIERS } = await import('../config/permission-tiers.js');
@@ -191,7 +192,7 @@ export default async function permissionSyncRoutes(fastify, options) {
    * Clear permission-related caches
    */
   fastify.post('/clear-caches', {
-    preHandler: [authenticateToken, requirePermission('system:admin')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.SYSTEM_ADMIN_MANAGE)]
   }, async (request, reply) => {
     try {
       console.log('🧹 API: Clearing permission caches...');

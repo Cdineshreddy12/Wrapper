@@ -3,6 +3,7 @@ import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Shield, Loader2 } from 'lucide-react';
+import { logger } from '@/lib/logger';
 
 
 interface SocialLoginProps {
@@ -81,17 +82,17 @@ export const SocialLogin: React.FC<SocialLoginProps> = ({
         // Try both camelCase and snake_case for compatibility
         loginOptions.connectionId = googleConnectionId;
         loginOptions.connection_id = googleConnectionId;
-        console.log('🔐 SocialLogin: Using custom auth with Google connection ID:', googleConnectionId);
+        logger.debug('🔐 SocialLogin: Using custom auth with Google connection ID:', googleConnectionId);
       } else {
         // Fallback to connection_id for other providers or if connection ID not configured
         loginOptions.connection_id = provider;
-        console.log('🔐 SocialLogin: Using standard auth with connection_id');
+        logger.debug('🔐 SocialLogin: Using standard auth with connection_id');
       }
 
       // Add organization context if available
       if (finalOrgCode) {
         loginOptions.org_code = finalOrgCode;
-        console.log('🏢 SocialLogin: Using organization code for login:', finalOrgCode);
+        logger.debug('🏢 SocialLogin: Using organization code for login:', finalOrgCode);
       }
 
       // Check for external redirect parameters
@@ -103,11 +104,11 @@ export const SocialLogin: React.FC<SocialLoginProps> = ({
       const isInvitationFlow = window.location.pathname.includes('/invite/accept');
       
       if (isInvitationFlow) {
-        console.log('🎯 SocialLogin: Invitation flow detected, using popup authentication');
+        logger.debug('🎯 SocialLogin: Invitation flow detected, using popup authentication');
         loginOptions.popup = true;
         // Don't set redirect options for popup auth
       } else if (redirectTo) {
-        console.log('🔄 SocialLogin: External redirect detected:', redirectTo);
+        logger.debug('🔄 SocialLogin: External redirect detected:', redirectTo);
         loginOptions.app_state = {
           redirectTo,
           app: app || 'external'
@@ -119,10 +120,10 @@ export const SocialLogin: React.FC<SocialLoginProps> = ({
         };
       }
 
-      console.log('🚀 SocialLogin: Login options:', loginOptions);
+      logger.debug('🚀 SocialLogin: Login options:', loginOptions);
       await login(loginOptions);
     } catch (error) {
-      console.error(`${provider} login error:`, error);
+      logger.error(`${provider} login error:`, error);
       setLoadingProvider(null);
       if (onError) {
         onError(`Failed to authenticate with ${provider}`);

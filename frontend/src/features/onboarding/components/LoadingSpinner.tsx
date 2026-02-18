@@ -9,6 +9,7 @@ import {
   Zap,
   Cpu
 } from 'lucide-react';
+import { config } from '@/lib/config';
 
 // Types derived from usage
 export interface LoadingStep {
@@ -161,7 +162,7 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
             <div className="mb-6 relative">
               <div className="absolute inset-0 bg-white/20 rounded-xl blur-md"></div>
               <img
-                src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg"
+                src={config.LOGO_URL}
                 alt="Zopkit Logo"
                 className="relative h-16 w-auto object-contain rounded-lg"
               />

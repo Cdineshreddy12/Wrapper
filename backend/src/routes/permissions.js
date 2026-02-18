@@ -1,4 +1,5 @@
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
+import { PERMISSIONS } from '../constants/permissions.js';
 import { trackUsage } from '../middleware/usage.js';
 import permissionService from '../services/permissionService.js';
 import { db } from '../db/index.js';
@@ -28,7 +29,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Get available permissions with categories and operations
   fastify.get('/available', {
-    preHandler: [authenticateToken, requirePermission('permissions:read'), trackUsage]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.PERMISSIONS_ASSIGNMENT_READ), trackUsage]
   }, async ( request , reply ) => {
     try {
       console.log('📡 GET /api/permissions/available - Fetching permission structure');
@@ -119,7 +120,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Get tenant users for permission management
   fastify.get('/users', {
-    preHandler: [authenticateToken, requirePermission('users:read'), trackUsage]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.USERS_DATA_READ), trackUsage]
   }, async (request, reply) => {
     try {
       const tenantId = getTenantId(request);
@@ -148,7 +149,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Get user permissions
   fastify.get('/users/:userId/permissions', {
-    preHandler: [authenticateToken, requirePermission('permissions:read'), trackUsage]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.PERMISSIONS_ASSIGNMENT_READ), trackUsage]
   }, async (request, reply) => {
     try {
       const { userId } = request.params;
@@ -185,7 +186,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Bulk assign permissions
   fastify.post('/bulk-assign', {
-    preHandler: [authenticateToken, requirePermission('permissions:assign'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.PERMISSIONS_ASSIGNMENT_ASSIGN), trackUsage],
     schema: {
       body: {
         type: 'object',
@@ -282,7 +283,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Apply template to user
   fastify.post('/users/:userId/apply-template', {
-    preHandler: [authenticateToken, requirePermission('permissions:assign'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.PERMISSIONS_ASSIGNMENT_ASSIGN), trackUsage],
     schema: {
       params: {
         type: 'object',
@@ -383,7 +384,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Remove user permissions
   fastify.delete('/users/:userId/permissions', {
-    preHandler: [authenticateToken, requirePermission('permissions:assign'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.PERMISSIONS_ASSIGNMENT_ASSIGN), trackUsage],
     schema: {
       params: {
         type: 'object',
@@ -440,7 +441,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Get permission templates
   fastify.get('/templates', {
-    preHandler: [authenticateToken, requirePermission('permissions:read'), trackUsage]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.PERMISSIONS_ASSIGNMENT_READ), trackUsage]
   }, async (request, reply) => {
     try {
       const templates = await getPermissionTemplates();
@@ -511,7 +512,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Update role
   fastify.put('/roles/:roleId', {
-    preHandler: [authenticateToken, requirePermission('roles:update'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_UPDATE), trackUsage],
     schema: {
       params: {
         type: 'object',
@@ -581,7 +582,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Delete role
   fastify.delete('/roles/:roleId', {
-    preHandler: [authenticateToken, requirePermission('roles:delete'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_DELETE), trackUsage],
     schema: {
       params: {
         type: 'object',
@@ -769,7 +770,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Get user role assignments
   fastify.get('/assignments', {
-    preHandler: [authenticateToken, requirePermission('roles:read'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_READ), trackUsage],
     schema: {
       querystring: {
         type: 'object',
@@ -805,7 +806,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Assign role to user
   fastify.post('/assignments', {
-    preHandler: [authenticateToken, requirePermission('roles:assign'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_ASSIGNMENT_ASSIGN), trackUsage],
     schema: {
       body: {
         type: 'object',
@@ -875,7 +876,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Remove role assignment by assignmentId
   fastify.delete('/assignments/:assignmentId', {
-    preHandler: [authenticateToken, requirePermission('roles:assign'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_ASSIGNMENT_ASSIGN), trackUsage],
     schema: {
       params: {
         type: 'object',
@@ -925,7 +926,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Remove role assignment by userId and roleId (deassign)
   fastify.delete('/assignments/user/:userId/role/:roleId', {
-    preHandler: [authenticateToken, requirePermission('roles:assign'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_ASSIGNMENT_ASSIGN), trackUsage],
     schema: {
       params: {
         type: 'object',
@@ -978,7 +979,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Get permission audit log
   fastify.get('/audit', {
-    preHandler: [authenticateToken, requirePermission('audit:read'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.AUDIT_LOG_READ), trackUsage],
     schema: {
       querystring: {
         type: 'object',
@@ -1050,7 +1051,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Get user effective permissions
   fastify.get('/user/:userId/effective', {
-    preHandler: [authenticateToken, requirePermission('permissions:read'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.PERMISSIONS_ASSIGNMENT_READ), trackUsage],
     schema: {
       params: {
         type: 'object',
@@ -1081,7 +1082,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Bulk role assignment
   fastify.post('/assignments/bulk', {
-    preHandler: [authenticateToken, requirePermission('roles:assign'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_ASSIGNMENT_ASSIGN), trackUsage],
     schema: {
       body: {
         type: 'object',
@@ -1125,7 +1126,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Migrate role permissions to hierarchical format
   fastify.post('/migrate-role-permissions', {
-    preHandler: [authenticateToken, requirePermission('roles:update'), trackUsage]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_UPDATE), trackUsage]
   }, async (request, reply) => {
     try {
       const tenantId = getTenantId(request);
@@ -1275,7 +1276,7 @@ export default async function permissionRoutes(fastify, options) {
 
   // Get permission summary
   fastify.get('/summary', {
-    preHandler: [authenticateToken, requirePermission('permissions:read'), trackUsage]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.PERMISSIONS_ASSIGNMENT_READ), trackUsage]
   }, async (request, reply) => {
     try {
       const permissionData = await permissionService.getAvailablePermissions();

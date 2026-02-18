@@ -25,6 +25,7 @@ import AnimatedLoader from '@/components/common/AnimatedLoader';
 import { AlertCircle } from 'lucide-react';
 import { useBreadcrumbLabel } from '@/contexts/BreadcrumbLabelContext';
 import { useEffect } from 'react';
+import { config } from '@/lib/config';
 
 export function ApplicationDetailsPage() {
   const { appId } = useParams<{ appId: string }>();
@@ -93,7 +94,7 @@ export function ApplicationDetailsPage() {
     const baseDomain = window.location.origin;
     const urlPatterns: Record<string, string> = {
       affiliateConnect: `${baseDomain}/affiliate`,
-      crm: 'https://crm.zopkit.com',
+      crm: config.CRM_DOMAIN,
       hr: `${baseDomain}/hr`,
     };
     return urlPatterns[appCode] || `${baseDomain}/apps/${appCode}`;

@@ -1,5 +1,6 @@
 import { TenantService } from '../services/tenant-service.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
+import { PERMISSIONS } from '../constants/permissions.js';
 import { trackUsage } from '../middleware/usage.js';
 import { db } from '../db/index.js';
 import { tenants, tenantUsers, userRoleAssignments, customRoles, tenantInvitations, entities, organizationMemberships, subscriptions, creditPurchases } from '../db/schema/index.js';
@@ -933,7 +934,7 @@ export default async function tenantRoutes(fastify, options) {
 
   // Test Kinde organization assignment
   fastify.post('/test/kinde-organization', {
-    preHandler: [authenticateToken, requirePermission('users:read'), trackUsage]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.USERS_DATA_READ), trackUsage]
   }, async (request, reply) => {
     try {
       const tenantId = request.userContext.tenantId;
@@ -1037,61 +1038,89 @@ export default async function tenantRoutes(fastify, options) {
   });
 
   // Remove user from tenant
-  fastify.delete('/current/users/:userId', async (request, reply) => {
+  fastify.delete('/current/users/:userId', {
+    preHandler: [authenticateToken]
+  }, async (request, reply) => {
+    const { userId } = request.params;
+    console.log('🗑️ DELETE /current/users/:userId hit', {
+      userId,
+      tenantId: request.userContext?.tenantId,
+      isAuthenticated: !!request.userContext?.isAuthenticated,
+      isTenantAdmin: request.userContext?.isTenantAdmin,
+      internalUserId: request.userContext?.internalUserId
+    });
+
     if (!request.userContext?.isAuthenticated) {
-      return reply.code(401).send({ error: 'Unauthorized' });
+      return reply.code(401).send({ error: 'Unauthorized', message: 'Authentication required' });
     }
 
     try {
       const tenantId = request.userContext.tenantId;
-      const { userId } = request.params;
-      
+
+      if (!userId) {
+        return reply.code(400).send({
+          success: false,
+          error: 'Bad request',
+          message: 'User ID is required'
+        });
+      }
+
       if (!tenantId) {
         return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       }
 
-      // Check if user has permission to remove users
+      // Check if user has permission to remove users (tenant admin)
       if (!request.userContext.isTenantAdmin) {
-        return reply.code(403).send({ 
+        console.log('🗑️ Delete rejected: user is not tenant admin');
+        return reply.code(403).send({
+          success: false,
           error: 'Forbidden',
           message: 'Only tenant administrators can remove users'
         });
       }
 
+      console.log('🗑️ Calling TenantService.removeUser', { tenantId, userId });
       const result = await TenantService.removeUser(
-        tenantId, 
-        userId, 
+        tenantId,
+        userId,
         request.userContext.internalUserId
       );
-      
+
+      console.log('🗑️ User removed successfully', { userId, tenantId });
       return {
         success: true,
-        message: result.message
+        message: result?.message ?? 'User removed successfully'
       };
     } catch (error) {
       request.log.error('Error removing user:', error);
-      
-      if (error.message.includes('last admin')) {
-        return reply.code(400).send({ 
+
+      if (error.message?.includes('last admin')) {
+        return reply.code(400).send({
+          success: false,
           error: 'Cannot remove last admin',
           message: error.message
         });
       }
-      
-      if (error.message.includes('not found')) {
-        return reply.code(404).send({ 
+
+      if (error.message?.includes('not found') || error.message?.includes('User not found')) {
+        return reply.code(404).send({
+          success: false,
           error: 'User not found',
           message: error.message
         });
       }
-      
-      return reply.code(500).send({ error: 'Failed to remove user' });
+
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to remove user',
+        message: error.message || 'Failed to remove user'
+      });
     }
   });
 
   // Get tenant usage statistics
   fastify.get('/usage', {
-    preHandler: [authenticateToken, requirePermission('analytics:read'), trackUsage],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ANALYTICS_DATA_READ), trackUsage],
     schema: {
       querystring: {
         type: 'object',

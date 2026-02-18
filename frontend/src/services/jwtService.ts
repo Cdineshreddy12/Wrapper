@@ -33,9 +33,9 @@ class JWTService {
   private readonly WRAPPER_DOMAIN: string;
 
   constructor() {
-    // Get environment variables from config or use defaults
+    // Get environment variables from config
     this.JWT_SECRET = JWT_SECRET || this.generateFallbackSecret();
-    this.WRAPPER_DOMAIN = WRAPPER_DOMAIN || 'https://wrapper.zopkit.com';
+    this.WRAPPER_DOMAIN = WRAPPER_DOMAIN;
   }
 
   /**

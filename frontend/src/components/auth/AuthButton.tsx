@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger 
 } from '../ui/dropdown-menu';
 import { LogOut, User, Settings, Building, ChevronDown } from 'lucide-react';
+import { logger } from '@/lib/logger';
 
 interface AuthButtonProps {
   provider?: 'google' | 'github' | 'microsoft' | 'apple' | 'linkedin';
@@ -75,11 +76,11 @@ export const AuthButton: React.FC<AuthButtonProps> = ({
         // Try both camelCase and snake_case for compatibility
         loginOptions.connectionId = googleConnectionId;
         loginOptions.connection_id = googleConnectionId;
-        console.log('🔐 AuthButton: Using custom auth with Google connection ID:', googleConnectionId);
+        logger.debug('🔐 AuthButton: Using custom auth with Google connection ID:', googleConnectionId);
       } else {
         // Fallback to connection_id if connection ID not configured
         loginOptions.connection_id = provider;
-        console.log('🔐 AuthButton: Using standard auth with connection_id (custom auth not configured)');
+        logger.debug('🔐 AuthButton: Using standard auth with connection_id (custom auth not configured)');
       }
     } else {
       // For other providers, use connection_id
@@ -89,13 +90,13 @@ export const AuthButton: React.FC<AuthButtonProps> = ({
     // Add organization creation flag if specified
     if (isCreateOrg) {
       loginOptions.isCreateOrg = true;
-      console.log('🏢 AuthButton: Enabling organization creation during login');
+      logger.debug('🏢 AuthButton: Enabling organization creation during login');
     }
 
     // Add organization context if available
     if (finalOrgCode) {
       loginOptions.org_code = finalOrgCode;
-      console.log('🏢 AuthButton: Using organization code for login:', finalOrgCode);
+      logger.debug('🏢 AuthButton: Using organization code for login:', finalOrgCode);
     }
 
     // Add custom redirect URI if provided

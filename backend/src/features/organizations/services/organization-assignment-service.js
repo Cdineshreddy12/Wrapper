@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { amazonMQPublisher } from '../../../utils/amazon-mq-publisher.js';
+import { sql as dbSql } from '../../../db/index.js';
 
 /**
  * Organization Assignment Redis Streams Service
@@ -44,6 +45,22 @@ export class OrganizationAssignmentService {
   }
 
   /**
+   * Look up user's kindeUserId and email from the DB so consumers can resolve the user
+   * without needing a separate wrapper_user_id_mapping table.
+   */
+  static async lookupUserIdentifiers(userId) {
+    try {
+      const [row] = await dbSql`
+        SELECT kinde_user_id, email FROM tenant_users WHERE user_id = ${userId} LIMIT 1
+      `;
+      return row ? { userKindeId: row.kinde_user_id || null, userEmail: row.email || null } : {};
+    } catch (err) {
+      console.warn('⚠️ [ORG-ASSIGNMENT] Could not look up user identifiers:', err.message);
+      return {};
+    }
+  }
+
+  /**
    * Enrich event data with additional context
    */
   static enrichEventData(assignmentData) {
@@ -85,6 +102,9 @@ export class OrganizationAssignmentService {
       // Enrich event data
       const enrichedData = this.enrichEventData(assignmentData);
 
+      // Resolve user identifiers so consumers (CRM, Ops, Accounting) can match the user
+      const userIds = await this.lookupUserIdentifiers(enrichedData.userId);
+
       // Create event payload
       const event = {
         eventId: uuidv4(),
@@ -96,6 +116,8 @@ export class OrganizationAssignmentService {
         data: {
           assignmentId: enrichedData.assignmentId || `assignment-${Date.now()}`,
           userId: enrichedData.userId,
+          userKindeId: userIds.userKindeId || null,
+          userEmail: userIds.userEmail || null,
           organizationId: enrichedData.organizationId,
           organizationCode: enrichedData.organizationCode,
           assignmentType: enrichedData.assignmentType,
@@ -223,6 +245,9 @@ export class OrganizationAssignmentService {
       // Enrich event data
       const enrichedData = this.enrichEventData(assignmentData);
 
+      // Resolve user identifiers so consumers can match the user
+      const userIds = await this.lookupUserIdentifiers(enrichedData.userId);
+
       // Create event payload
       const event = {
         eventId: uuidv4(),
@@ -234,6 +259,8 @@ export class OrganizationAssignmentService {
         data: {
           assignmentId: enrichedData.assignmentId,
           userId: enrichedData.userId,
+          userKindeId: userIds.userKindeId || null,
+          userEmail: userIds.userEmail || null,
           organizationId: enrichedData.organizationId,
           organizationCode: enrichedData.organizationCode,
           assignmentType: enrichedData.assignmentType,

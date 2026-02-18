@@ -1,5 +1,6 @@
 import { externalAppService } from '../../../services/external-app-service.js';
 import { authenticateToken, requirePermission } from '../../../middleware/auth.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 
 /**
  * External Application Management Routes
@@ -11,7 +12,7 @@ export default async function externalAppRoutes(fastify, options) {
    * List all external applications
    */
   fastify.get('/', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.manage')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_MANAGE)]
   }, async (request, reply) => {
     try {
       const apps = await externalAppService.listApplications({
@@ -38,7 +39,7 @@ export default async function externalAppRoutes(fastify, options) {
    * Create external application
    */
   fastify.post('/', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.manage')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_MANAGE)],
     schema: {
       body: {
         type: 'object',
@@ -81,7 +82,7 @@ export default async function externalAppRoutes(fastify, options) {
    * Get external application by ID
    */
   fastify.get('/:appId', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.manage')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_MANAGE)]
   }, async (request, reply) => {
     try {
       const app = await externalAppService.getApplication(request.params.appId);
@@ -112,7 +113,7 @@ export default async function externalAppRoutes(fastify, options) {
    * Update external application
    */
   fastify.put('/:appId', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.manage')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_MANAGE)],
     schema: {
       body: {
         type: 'object',
@@ -159,7 +160,7 @@ export default async function externalAppRoutes(fastify, options) {
    * Revoke external application
    */
   fastify.delete('/:appId', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.manage')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_MANAGE)]
   }, async (request, reply) => {
     try {
       const app = await externalAppService.revokeApplication(request.params.appId);
@@ -191,7 +192,7 @@ export default async function externalAppRoutes(fastify, options) {
    * Rotate API key
    */
   fastify.post('/:appId/rotate-key', {
-    preHandler: [authenticateToken, requirePermission('admin.notifications.manage')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_NOTIFICATIONS_MANAGE)]
   }, async (request, reply) => {
     try {
       const result = await externalAppService.rotateApiKey(request.params.appId);

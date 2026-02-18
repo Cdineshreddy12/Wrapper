@@ -6,6 +6,7 @@ import { UseFormReturn } from 'react-hook-form';
 import { newBusinessData, existingBusinessData } from '../schemas';
 import { StepConfig } from '../config/flowConfigs';
 import { UserClassification } from './FlowSelector';
+import { config } from '@/lib/config';
 import {
   ShieldCheck,
   Loader2,
@@ -149,7 +150,7 @@ export const OnboardingLayoutOptimized = React.memo(({
               <div className="flex justify-center w-full">
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                   <img
-                    src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg"
+                    src={config.LOGO_URL}
                     alt="Zopkit Logo"
                     className="h-20 w-auto object-contain"
                   />
@@ -261,7 +262,7 @@ export const OnboardingLayoutOptimized = React.memo(({
         <div className="flex justify-between items-center mb-2">
            <div className="flex items-center gap-3">
              <img
-               src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Simple_Logo_glohfr.jpg"
+               src={config.LOGO_URL}
                alt="Zopkit Logo"
                className="h-8 w-auto object-contain"
              />

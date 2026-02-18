@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { kindeService } from '../../../features/auth/index.js';
 import EmailService from '../../../utils/email.js';
 import { authenticateToken, requirePermission } from '../../../middleware/auth.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 import { checkUserLimit } from '../../../middleware/planRestrictions.js';
 import { deleteTenantData, deleteTenantsByDomain, getTenantDataSummary } from '../../../utils/tenant-cleanup.js';
 import Logger from '../../../utils/logger.js';
@@ -778,7 +779,7 @@ export default async function adminRoutes(fastify, options) {
   
   // Get all users in tenant
   fastify.get('/users', {
-    preHandler: [authenticateToken, requirePermission('user.view')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.USERS_MANAGEMENT_VIEW)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('users-list');
     const tenantId = request.userContext?.tenantId;
@@ -840,7 +841,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Get specific user details
   fastify.get('/users/:userId', {
-    preHandler: [authenticateToken, requirePermission('user.view')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.USERS_MANAGEMENT_VIEW)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('user-details');
     const { userId } = request.params;
@@ -901,7 +902,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Update user role
   fastify.put('/users/:userId/role', {
-    preHandler: [authenticateToken, requirePermission('user.edit')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.USERS_MANAGEMENT_EDIT)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('user-role-update');
     const { userId } = request.params;
@@ -950,7 +951,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Assign role to user
   fastify.post('/users/assign-role', {
-    preHandler: [authenticateToken, requirePermission('roles:assign')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_ASSIGNMENT_ASSIGN)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('assign-role');
     const { userId, roleId, expiresAt } = request.body;
@@ -995,7 +996,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Deassign role from user
   fastify.delete('/users/:userId/roles/:roleId', {
-    preHandler: [authenticateToken, requirePermission('roles:assign')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_ASSIGNMENT_ASSIGN)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('deassign-role');
     const { userId, roleId } = request.params;
@@ -1038,7 +1039,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Remove user from tenant
   fastify.delete('/users/:userId', {
-    preHandler: [authenticateToken, requirePermission('user.delete')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.USERS_MANAGEMENT_DELETE)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('user-remove');
     const { userId } = request.params;
@@ -1245,7 +1246,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Update tenant settings
   fastify.put('/tenant', {
-    preHandler: [authenticateToken, requirePermission('tenant.edit')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.TENANT_SETTINGS_EDIT)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('tenant-update');
     const tenantId = request.userContext.tenantId;
@@ -1290,7 +1291,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Get user's roles
   fastify.get('/users/:userId/roles', {
-    preHandler: [authenticateToken, requirePermission('user.view')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.USERS_MANAGEMENT_VIEW)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('user-roles');
     const { userId } = request.params;
@@ -1339,7 +1340,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Get user's organization assignments
   fastify.get('/users/:userId/organizations', {
-    preHandler: [authenticateToken, requirePermission('user.view')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.USERS_MANAGEMENT_VIEW)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('user-organizations');
     const { userId } = request.params;
@@ -1347,6 +1348,89 @@ export default async function adminRoutes(fastify, options) {
 
     try {
       console.log(`🔍 [${requestId}] Getting organization assignments for user: ${userId}`);
+
+      // Pending invitation: userId is inv_<invitationId> — return assignments from invitation targetEntities
+      if (typeof userId === 'string' && userId.startsWith('inv_')) {
+        const invitationId = userId.replace(/^inv_/, '');
+        const [invitation] = await db
+          .select()
+          .from(tenantInvitations)
+          .where(and(
+            eq(tenantInvitations.invitationId, invitationId),
+            eq(tenantInvitations.tenantId, tenantId),
+            eq(tenantInvitations.status, 'pending')
+          ))
+          .limit(1);
+
+        if (!invitation) {
+          return {
+            success: true,
+            data: [],
+            count: 0,
+            requestId
+          };
+        }
+
+        const targetEntities = invitation.targetEntities && Array.isArray(invitation.targetEntities)
+          ? invitation.targetEntities
+          : (invitation.primaryEntityId && invitation.roleId
+            ? [{ entityId: invitation.primaryEntityId, roleId: invitation.roleId, entityType: 'organization', membershipType: 'direct' }]
+            : []);
+
+        const assignments = [];
+        for (const target of targetEntities) {
+          const [entity] = await db
+            .select({
+              entityId: entities.entityId,
+              entityName: entities.entityName,
+              entityType: entities.entityType
+            })
+            .from(entities)
+            .where(and(
+              eq(entities.entityId, target.entityId),
+              or(
+                eq(entities.entityType, 'organization'),
+                eq(entities.entityType, 'location')
+              )
+            ))
+            .limit(1);
+
+          if (!entity) continue;
+
+          const [role] = await db
+            .select({ roleId: customRoles.roleId, roleName: customRoles.roleName })
+            .from(customRoles)
+            .where(eq(customRoles.roleId, target.roleId))
+            .limit(1);
+
+          assignments.push({
+            membershipId: null,
+            assignmentId: null,
+            organizationId: entity.entityId,
+            entityId: entity.entityId,
+            organizationName: entity.entityName,
+            entityName: entity.entityName,
+            entityType: entity.entityType,
+            membershipType: target.membershipType || 'direct',
+            membershipStatus: 'pending',
+            accessLevel: null,
+            isPrimary: invitation.primaryEntityId === target.entityId,
+            assignmentType: target.membershipType || 'direct',
+            joinedAt: null,
+            invitedAt: invitation.createdAt,
+            roleName: role?.roleName || 'Member',
+            roleId: target.roleId
+          });
+        }
+
+        console.log(`✅ [${requestId}] Found ${assignments.length} organization assignments (pending invitation)`);
+        return {
+          success: true,
+          data: assignments,
+          count: assignments.length,
+          requestId
+        };
+      }
 
       const assignments = await db
         .select({
@@ -1402,7 +1486,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Assign organization to user
   fastify.post('/users/assign-organization', {
-    preHandler: [authenticateToken, requirePermission('user.edit')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.USERS_MANAGEMENT_EDIT)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('assign-organization');
     const { userId, organizationId, assignmentType = 'secondary', roleId } = request.body;
@@ -1483,7 +1567,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Assign organization to user
   fastify.post('/users/:userId/organizations', {
-    preHandler: [authenticateToken, requirePermission('user.edit')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.USERS_MANAGEMENT_EDIT)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('assign-organization');
     const { userId } = request.params;
@@ -1639,7 +1723,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Remove organization assignment from user
   fastify.delete('/users/:userId/organizations/:membershipId', {
-    preHandler: [authenticateToken, requirePermission('user.edit')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.USERS_MANAGEMENT_EDIT)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('remove-organization');
     const { userId, membershipId } = request.params;
@@ -1728,7 +1812,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Update user's organization role
   fastify.put('/users/:userId/organizations/:membershipId', {
-    preHandler: [authenticateToken, requirePermission('user.edit')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.USERS_MANAGEMENT_EDIT)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('update-organization-role');
     const { userId, membershipId } = request.params;
@@ -1841,7 +1925,7 @@ export default async function adminRoutes(fastify, options) {
   
   // Get all custom roles
   fastify.get('/roles', {
-    preHandler: [authenticateToken, requirePermission('role.view')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_READ)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('roles-list');
     const tenantId = request.userContext.tenantId;
@@ -1875,7 +1959,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Create custom role
   fastify.post('/roles', {
-    preHandler: [authenticateToken, requirePermission('role.create')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_CREATE)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('role-create');
     const tenantId = request.userContext.tenantId;
@@ -1921,7 +2005,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Update custom role
   fastify.put('/roles/:roleId', {
-    preHandler: [authenticateToken, requirePermission('role.edit')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_EDIT)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('role-update');
     const { roleId } = request.params;
@@ -1994,7 +2078,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Delete custom role
   fastify.delete('/roles/:roleId', {
-    preHandler: [authenticateToken, requirePermission('role.delete')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_DELETE)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('role-delete');
     const { roleId } = request.params;
@@ -2040,7 +2124,7 @@ export default async function adminRoutes(fastify, options) {
   
   // Get audit logs
   fastify.get('/audit-logs', {
-    preHandler: [authenticateToken, requirePermission('audit.view')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.AUDIT_LOG_VIEW)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('audit-logs');
     const tenantId = request.userContext.tenantId;
@@ -2094,7 +2178,7 @@ export default async function adminRoutes(fastify, options) {
   
   // Delete tenant and all associated data (DANGER!)
   fastify.delete('/tenant/complete-deletion/:tenantId', {
-    preHandler: [authenticateToken, requirePermission('tenant.delete')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.TENANT_SETTINGS_DELETE)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('tenant-deletion');
     const { tenantId } = request.params;
@@ -2147,7 +2231,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Get tenant data summary
   fastify.get('/tenant/:tenantId/data-summary', {
-    preHandler: [authenticateToken, requirePermission('tenant.view')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.TENANT_SETTINGS_VIEW)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('tenant-summary');
     const { tenantId } = request.params;
@@ -2178,7 +2262,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Get all organizations for tenant (flat list, no hierarchy filtering)
   fastify.get('/organizations/all', {
-    preHandler: [authenticateToken, requirePermission('user.view')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.USERS_MANAGEMENT_VIEW)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('all-organizations');
     const tenantId = request.userContext.tenantId;
@@ -2231,7 +2315,7 @@ export default async function adminRoutes(fastify, options) {
 
   // Get all roles for tenant (no pagination limit)
   fastify.get('/roles/all', {
-    preHandler: [authenticateToken, requirePermission('role.view')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ROLES_MANAGEMENT_READ)]
   }, async (request, reply) => {
     const requestId = Logger.generateRequestId('all-roles');
     const tenantId = request.userContext.tenantId;

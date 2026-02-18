@@ -8,7 +8,8 @@ import {
   customRoles,
   userRoleAssignments,
   organizationMemberships,
-  entities
+  entities,
+  auditLogs
 } from '../db/schema/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { kindeService as KindeService } from '../features/auth/index.js';
@@ -600,13 +601,19 @@ export class TenantService {
           isVerified: true,
         }).returning();
 
+        // Collect role assignments so we can publish role_assigned to other apps after commit
+        const roleAssignmentsToPublish = [];
+
         // Assign role if available
         if (invitation.roleId) {
-          await tx.insert(userRoleAssignments).values({
+          const [mainAssignment] = await tx.insert(userRoleAssignments).values({
             userId: user.userId,
             roleId: invitation.roleId,
             assignedBy: invitation.invitedBy,
-          });
+          }).returning();
+          if (mainAssignment) {
+            roleAssignmentsToPublish.push(mainAssignment);
+          }
         }
 
         // Handle multi-entity or scoped invitations
@@ -634,14 +641,17 @@ export class TenantService {
 
             // Assign scoped role if provided
             if (entity.roleId) {
-              await tx.insert(userRoleAssignments).values({
+              const [scopedAssignment] = await tx.insert(userRoleAssignments).values({
                 userId: user.userId,
                 roleId: entity.roleId,
                 assignedBy: invitation.invitedBy,
                 organizationId: entity.entityType === 'organization' ? entity.entityId : null,
                 locationId: entity.entityType === 'location' ? entity.entityId : null,
                 scope: entity.entityType === 'location' ? 'location' : 'organization'
-              });
+              }).returning();
+              if (scopedAssignment) {
+                roleAssignmentsToPublish.push(scopedAssignment);
+              }
             }
           }
         } else if (invitation.primaryEntityId) {
@@ -764,6 +774,30 @@ export class TenantService {
         } catch (streamError) {
           console.warn('⚠️ Failed to publish user creation event to Redis streams:', streamError.message);
           // Don't fail the user creation if stream publishing fails
+        }
+
+        // Publish role_assigned for each role so other apps get the role (after transaction commits)
+        if (roleAssignmentsToPublish.length > 0) {
+          const tenantId = invitation.tenantId;
+          const userId = user.userId;
+          const assignedBy = invitation.invitedBy;
+          const assignments = roleAssignmentsToPublish;
+          setImmediate(async () => {
+            try {
+              for (const a of assignments) {
+                await amazonMQPublisher.publishRoleEventToSuite('role_assigned', tenantId, a.roleId, {
+                  assignmentId: a.id,
+                  userId,
+                  roleId: a.roleId,
+                  assignedAt: a.assignedAt ? (typeof a.assignedAt === 'string' ? a.assignedAt : a.assignedAt.toISOString()) : new Date().toISOString(),
+                  assignedBy
+                });
+              }
+              console.log('📡 Published role_assigned events for invitation acceptance:', assignments.length);
+            } catch (publishError) {
+              console.warn('⚠️ Failed to publish role assignment events during invitation acceptance:', publishError.message);
+            }
+          });
         }
 
         return user;
@@ -1067,10 +1101,12 @@ export class TenantService {
         
         return {
           id: user.userId,
+          userId: user.userId,
           email: user.email,
           firstName: user.name?.split(' ')[0] || user.email.split('@')[0],
           lastName: user.name?.split(' ').slice(1).join(' ') || '',
           role: role?.roleName || 'No role assigned',
+          roleId: role?.roleId || null,
           isActive: user.isActive !== false, // Default to true if undefined
           invitationStatus: hasAcceptedInvitation ? 'accepted' : 'active',
           invitedAt: user.invitedAt || user.createdAt,
@@ -1124,6 +1160,7 @@ export class TenantService {
           firstName: invitation.email.split('@')[0],
           lastName: '',
           role: role?.roleName || 'No role assigned',
+          roleId: invitation.roleId || role?.roleId || null,
           isActive: false,
           invitationStatus: 'pending',
           invitedAt: invitation.createdAt,
@@ -1695,8 +1732,8 @@ export class TenantService {
           // Continue even if this fails
         }
 
-        // 5. Cancel any pending invitations for this user
-        await tx
+        // 5. Cancel all invitations for this user's email (pending and accepted) so tenant_invitations stays consistent
+        const cancelledInvitations = await tx
           .update(tenantInvitations)
           .set({
             status: 'cancelled',
@@ -1705,9 +1742,10 @@ export class TenantService {
           })
           .where(and(
             eq(tenantInvitations.tenantId, tenantId),
-            eq(tenantInvitations.email, user.email),
-            eq(tenantInvitations.status, 'pending')
-          ));
+            eq(tenantInvitations.email, user.email)
+          ))
+          .returning({ invitationId: tenantInvitations.invitationId });
+        console.log(`✅ Cancelled ${cancelledInvitations.length} tenant invitation(s) for email ${user.email}`);
 
         // 6. Publish user deletion event to Redis streams before deletion
         try {
@@ -1730,6 +1768,19 @@ export class TenantService {
         } catch (streamError) {
           console.warn('⚠️ Failed to publish user deletion event to Redis streams:', streamError.message);
           // Continue with user deletion even if stream publishing fails
+        }
+
+        // 6b. Clear audit_logs reference to this user so FK does not block delete (preserve logs, dissociate user)
+        try {
+          const auditResult = await tx
+            .update(auditLogs)
+            .set({ userId: null })
+            .where(eq(auditLogs.userId, userId))
+            .returning({ logId: auditLogs.logId });
+          console.log(`✅ Cleared user reference from ${auditResult.length} audit log(s)`);
+        } catch (auditErr) {
+          console.warn('⚠️ Error clearing audit_logs user reference:', auditErr.message);
+          // Continue so user can still be deleted
         }
 
         // 7. Remove the user from tenant_users

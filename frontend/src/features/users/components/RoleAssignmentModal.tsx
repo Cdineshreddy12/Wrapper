@@ -97,6 +97,16 @@ export function RoleAssignmentModal({
           </DialogDescription>
         </div>
 
+        {/* Summary: assigned vs not assigned */}
+        <div className="px-6 py-3 bg-slate-100 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{selectedRoles.length} assigned</span>
+            <span className="text-slate-400 mx-2">•</span>
+            <span className="text-slate-600 dark:text-slate-400">{roles.length - selectedRoles.length} not assigned</span>
+            <span className="text-slate-400 ml-1 text-xs">(of {roles.length} total). Click a role to toggle.</span>
+          </p>
+        </div>
+
         <div className="p-6 max-h-[60vh] overflow-y-auto bg-slate-50/50 dark:bg-slate-900/50">
           <div className="grid gap-3">
             {roles.map((role) => {
@@ -116,13 +126,17 @@ export function RoleAssignmentModal({
                   </div>
 
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h4 className={`font-semibold ${isSelected ? 'text-violet-900 dark:text-violet-100' : 'text-slate-900 dark:text-slate-200'}`}>
                         {role.roleName}
                       </h4>
-                      {isSelected && (
-                        <Badge variant="secondary" className="bg-violet-200 text-violet-800 dark:bg-violet-800 dark:text-violet-100 text-[10px] px-1.5 h-5">
-                          Active
+                      {isSelected ? (
+                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200 text-[10px] px-1.5 h-5 border border-emerald-200 dark:border-emerald-700">
+                          Assigned
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-slate-500 dark:text-slate-400 text-[10px] px-1.5 h-5 border-slate-300 dark:border-slate-600">
+                          Not assigned
                         </Badge>
                       )}
                     </div>
@@ -133,11 +147,11 @@ export function RoleAssignmentModal({
 
                   <div className="ml-4">
                     {isSelected ? (
-                      <div className="w-6 h-6 rounded-full bg-violet-600 flex items-center justify-center text-white shadow-md">
+                      <div className="w-6 h-6 rounded-full bg-violet-600 flex items-center justify-center text-white shadow-md" title="Assigned — click to remove">
                         <Check className="w-4 h-4" />
                       </div>
                     ) : (
-                      <div className="w-6 h-6 rounded-full border-2 border-slate-300 dark:border-slate-600 group-hover:border-violet-400 transition-colors" />
+                      <div className="w-6 h-6 rounded-full border-2 border-slate-300 dark:border-slate-600 group-hover:border-violet-400 transition-colors" title="Not assigned — click to assign" />
                     )}
                   </div>
                 </div>
@@ -148,7 +162,8 @@ export function RoleAssignmentModal({
 
         <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 flex justify-between items-center">
           <span className="text-sm text-slate-500 ml-2">
-            {selectedRoles.length} role{selectedRoles.length !== 1 ? 's' : ''} selected
+            <span className="font-medium text-slate-700 dark:text-slate-300">{selectedRoles.length} role{selectedRoles.length !== 1 ? 's' : ''} assigned</span>
+            {selectedRoles.length === 0 && <span className="text-amber-600 dark:text-amber-400 ml-1">— assign at least one to grant access</span>}
           </span>
           <div className="flex gap-3">
             <PearlButton variant="secondary" onClick={onClose} size="sm" disabled={isLoading || isDeassigning}>

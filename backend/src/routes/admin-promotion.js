@@ -1,5 +1,6 @@
 import { AdminPromotionService } from '../services/admin-promotion-service.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
+import { PERMISSIONS } from '../constants/permissions.js';
 import { db } from '../db/index.js';
 import { tenantUsers, customRoles, userRoleAssignments, auditLogs, tenants } from '../db/schema/index.js';
 import { eq, and, desc, or } from 'drizzle-orm';
@@ -11,7 +12,7 @@ export default async function adminPromotionRoutes(fastify, options) {
   
   // Get current System Administrator
   fastify.get('/current-admin', {
-    preHandler: [authenticateToken, requirePermission(['admin.users.view'])],
+    preHandler: [authenticateToken, requirePermission([PERMISSIONS.ADMIN_USERS_VIEW])],
     schema: {
       summary: 'Get current System Administrator',
       description: 'Returns the current System Administrator for the tenant',
@@ -68,7 +69,7 @@ export default async function adminPromotionRoutes(fastify, options) {
 
   // Get eligible users for System Administrator promotion
   fastify.get('/eligible-users', {
-    preHandler: [authenticateToken, requirePermission(['admin.users.view'])],
+    preHandler: [authenticateToken, requirePermission([PERMISSIONS.ADMIN_USERS_VIEW])],
     schema: {
       summary: 'Get eligible users for System Administrator promotion',
       description: 'Returns users who can be promoted to System Administrator',
@@ -151,7 +152,7 @@ export default async function adminPromotionRoutes(fastify, options) {
 
   // Preview System Administrator promotion impact
   fastify.post('/preview', {
-    preHandler: [authenticateToken, requirePermission(['admin.users.promote'])],
+    preHandler: [authenticateToken, requirePermission([PERMISSIONS.ADMIN_USERS_PROMOTE])],
     schema: {
       summary: 'Preview System Administrator promotion impact',
       description: 'Shows what will happen when promoting a user to System Administrator',
@@ -286,7 +287,7 @@ export default async function adminPromotionRoutes(fastify, options) {
 
   // Promote user to System Administrator (Enhanced Version)
   fastify.post('/promote-system-admin', {
-    preHandler: [authenticateToken, requirePermission(['admin.users.promote'])],
+    preHandler: [authenticateToken, requirePermission([PERMISSIONS.ADMIN_USERS_PROMOTE])],
     schema: {
       summary: 'Promote user to System Administrator (Enhanced)',
       description: 'Promotes a user to System Administrator with comprehensive validation and single-admin enforcement',
@@ -516,7 +517,7 @@ export default async function adminPromotionRoutes(fastify, options) {
 
   // Promote user to System Administrator (Original - for backward compatibility)
   fastify.post('/promote', {
-    preHandler: [authenticateToken, requirePermission(['admin.users.promote'])],
+    preHandler: [authenticateToken, requirePermission([PERMISSIONS.ADMIN_USERS_PROMOTE])],
     schema: {
       summary: 'Promote user to System Administrator (Legacy)',
       description: 'Legacy endpoint for System Administrator promotion with confirmation',
@@ -643,7 +644,7 @@ export default async function adminPromotionRoutes(fastify, options) {
 
   // Get System Administrator status and promotion options
   fastify.get('/admin-status', {
-    preHandler: [authenticateToken, requirePermission(['admin.users.view'])],
+    preHandler: [authenticateToken, requirePermission([PERMISSIONS.ADMIN_USERS_VIEW])],
     schema: {
       summary: 'Get System Administrator status and options',
       description: 'Returns current admin status and available promotion options',
@@ -732,7 +733,7 @@ export default async function adminPromotionRoutes(fastify, options) {
 
   // Get System Administrator promotion history
   fastify.get('/history', {
-    preHandler: [authenticateToken, requirePermission(['admin.audit.view'])],
+    preHandler: [authenticateToken, requirePermission([PERMISSIONS.ADMIN_AUDIT_VIEW])],
     schema: {
       summary: 'Get System Administrator promotion history',
       description: 'Returns history of System Administrator promotions and demotions',

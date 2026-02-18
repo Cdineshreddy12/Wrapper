@@ -42,6 +42,7 @@ export class UserService {
       const transformedUsers = await Promise.all(userData.map(async (item: any) => {
         const user = item.user || item;
         const roleString = item.role;
+        const roleIdFromApi = item.roleId ?? item.originalData?.role?.roleId;
         
         // Determine invitation status and type based on actual user state
         let invitationStatus = 'active';
@@ -78,7 +79,7 @@ export class UserService {
           lastLoginAt: user.lastActiveAt || user.lastLoginAt,
           avatar: user.avatar,
           roles: roleString ? [{ 
-            roleId: roleString,
+            roleId: roleIdFromApi || roleString,
             roleName: roleString,
             description: 'Role details not available',
             color: '#6b7280',

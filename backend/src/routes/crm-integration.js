@@ -36,8 +36,8 @@ export default async function crmIntegrationRoutes(fastify, options) {
       allHeaders: Object.keys(request.headers).filter(h => h.toLowerCase().includes('request-source'))
     });
 
-    // Accept both 'crm-backend' and 'crm-tenant-sync-v2' headers for compatibility
-    const validHeaders = ['crm-backend', 'crm-tenant-sync-v2'];
+    // Accept CRM, Operations, and tenant-sync headers
+    const validHeaders = ['crm-backend', 'crm-tenant-sync-v2', 'operations-backend', 'operations-tenant-sync'];
     if (!requestSource || !validHeaders.includes(requestSource.toLowerCase())) {
       return reply.code(403).send({
         success: false,
@@ -56,9 +56,10 @@ export default async function crmIntegrationRoutes(fastify, options) {
       });
     }
 
-    // For CRM backend, allow access to any tenant (service-level access)
+    // For CRM or Operations backend, allow access to any tenant (service-level access)
     // Regular users are restricted to their own tenant
-    if (!requestSource.includes('crm-backend')) {
+    const isServiceBackend = requestSource.includes('crm-backend') || requestSource.includes('operations-backend');
+    if (!isServiceBackend) {
       if (request.userContext.tenantId !== tenantId) {
         return reply.code(403).send({
           success: false,

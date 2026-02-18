@@ -4,6 +4,7 @@ import {
 } from '../../../db/schema/index.js';
 import { eq, sql, count, avg, min, max, desc, and } from 'drizzle-orm';
 import { authenticateToken, requirePermission } from '../../../middleware/auth.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 
 /**
  * Admin Operation Cost Management Routes
@@ -32,7 +33,7 @@ export default async function operationCostRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermission('admin.operations.view')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
   }, async (request, reply) => {
     try {
       const { search, category, isActive, includeUsage = false } = request.query;
@@ -138,7 +139,7 @@ export default async function operationCostRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermission('admin.operations.view')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
   }, async (request, reply) => {
     try {
       const { tenantId } = request.params;
@@ -250,7 +251,7 @@ export default async function operationCostRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermission('admin.operations.view')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
   }, async (request, reply) => {
     try {
       const { search, category, isGlobal, isActive, includeUsage = false } = request.query;
@@ -366,7 +367,7 @@ export default async function operationCostRoutes(fastify, options) {
       }
     }
     // Temporarily disable permission check for debugging
-    // preHandler: requirePermission('admin.operations.create')
+    // preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_CREATE)
   }, async (request, reply) => {
     try {
       const {
@@ -593,7 +594,7 @@ export default async function operationCostRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermission('admin.operations.edit')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_EDIT)
   }, async (request, reply) => {
     try {
       const { configId } = request.params;
@@ -681,7 +682,7 @@ export default async function operationCostRoutes(fastify, options) {
         required: ['configId']
       }
     },
-    preHandler: requirePermission('admin.operations.delete')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_DELETE)
   }, async (request, reply) => {
     try {
       const { configId } = request.params;
@@ -749,7 +750,7 @@ export default async function operationCostRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermission('admin.operations.view')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
   }, async (request, reply) => {
     try {
       // Get basic stats
@@ -848,7 +849,7 @@ export default async function operationCostRoutes(fastify, options) {
       description: 'Get cost configuration templates',
       tags: ['Admin', 'Operation Costs']
     },
-    preHandler: requirePermission('admin.operations.view')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
   }, async (request, reply) => {
     try {
       // Return predefined templates
@@ -934,7 +935,7 @@ export default async function operationCostRoutes(fastify, options) {
         required: ['templateId']
       }
     },
-    preHandler: requirePermission('admin.operations.create')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_CREATE)
   }, async (request, reply) => {
     try {
       const { templateId } = request.body;
@@ -1053,7 +1054,7 @@ export default async function operationCostRoutes(fastify, options) {
       description: 'Export operation costs as CSV',
       tags: ['Admin', 'Operation Costs']
     },
-    preHandler: requirePermission('admin.operations.view')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
   }, async (request, reply) => {
     try {
       const operations = await db

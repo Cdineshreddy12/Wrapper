@@ -2,6 +2,7 @@ import { ReactNode, useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import AnimatedLoader from '@/components/common/AnimatedLoader';
+import { logger } from '@/lib/logger';
 
 interface PermissionGuardProps {
     children: ReactNode;
@@ -42,7 +43,7 @@ export function PermissionGuard({
                 // getPermissions() returns a Promise, so we need to await it
                 const allPermissions = await getPermissions();
 
-                console.log('🔍 All Kinde Permissions:', allPermissions);
+                logger.debug('🔍 All Kinde Permissions:', allPermissions);
 
                 // Handle different permission formats from Kinde
                 let hasRequiredPermission = false;
@@ -62,7 +63,7 @@ export function PermissionGuard({
                     }
                 }
 
-                console.log('🔍 PermissionGuard Debug:', {
+                logger.debug('🔍 PermissionGuard Debug:', {
                     requiredPermission,
                     allPermissions: allPermissions?.permissions,
                     permissionFormat: typeof allPermissions?.permissions?.[0],
@@ -76,18 +77,18 @@ export function PermissionGuard({
                 setPermissionChecked(true);
 
                 if (!hasRequiredPermission) {
-                    console.warn(`❌ Access denied: Missing permission "${requiredPermission}"`);
-                    console.log('💡 Troubleshooting steps:');
-                    console.log('1. Verify permission exists in Kinde Dashboard: Settings > Permissions');
-                    console.log('2. Check permission key matches exactly:', requiredPermission);
-                    console.log('3. Ensure permission is assigned to user via role or directly');
-                    console.log('4. **IMPORTANT**: Log out and log back in to refresh permissions');
-                    console.log('5. Clear browser cache if issue persists');
+                    logger.warn(`❌ Access denied: Missing permission "${requiredPermission}"`);
+                    logger.debug('💡 Troubleshooting steps:');
+                    logger.debug('1. Verify permission exists in Kinde Dashboard: Settings > Permissions');
+                    logger.debug('2. Check permission key matches exactly:', requiredPermission);
+                    logger.debug('3. Ensure permission is assigned to user via role or directly');
+                    logger.debug('4. **IMPORTANT**: Log out and log back in to refresh permissions');
+                    logger.debug('5. Clear browser cache if issue persists');
                 } else {
-                    console.log('✅ Permission granted:', requiredPermission);
+                    logger.debug('✅ Permission granted:', requiredPermission);
                 }
             } catch (error) {
-                console.error('Error checking permission:', error);
+                logger.error('Error checking permission:', error);
                 setHasPermission(false);
                 setPermissionChecked(true);
             }
@@ -164,7 +165,7 @@ export function MultiPermissionGuard({
     );
 
     if (!hasAllPermissions) {
-        console.warn(`Access denied: Missing one or more permissions`, requiredPermissions);
+        logger.warn(`Access denied: Missing one or more permissions`, requiredPermissions);
         return <Navigate to={fallbackPath} replace />;
     }
 
@@ -211,7 +212,7 @@ export function AnyPermissionGuard({
     );
 
     if (!hasAnyPermission) {
-        console.warn(`Access denied: Missing all permissions`, requiredPermissions);
+        logger.warn(`Access denied: Missing all permissions`, requiredPermissions);
         return <Navigate to={fallbackPath} replace />;
     }
 

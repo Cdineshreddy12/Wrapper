@@ -7,6 +7,7 @@ import {
   entities
 } from '../../../db/schema/index.js';
 import { eq, and, sql, count, inArray } from 'drizzle-orm';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 import { authenticateToken, requirePermission } from '../../../middleware/auth.js';
 
 /**
@@ -192,7 +193,7 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermission('admin.applications.view')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_VIEW)
   }, async (request, reply) => {
     try {
       // Get total applications
@@ -274,7 +275,7 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermission('admin.applications.view')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_VIEW)
   }, async (request, reply) => {
     try {
       const { search, hasApps, appCode, limit = 50, offset = 0 } = request.query;
@@ -475,7 +476,7 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         required: ['tenantId']
       }
     },
-    preHandler: requirePermission('admin.applications.view')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_VIEW)
   }, async (request, reply) => {
     try {
       const { tenantId } = request.params;
@@ -627,7 +628,7 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         required: ['tenantId', 'appId']
       }
     },
-    preHandler: requirePermission('admin.applications.assign')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_ASSIGN)
   }, async (request, reply) => {
     try {
       const {
@@ -841,7 +842,7 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermission('admin.applications.edit')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_EDIT)
   }, async (request, reply) => {
     try {
       const { assignmentId } = request.params;
@@ -909,7 +910,7 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         required: ['assignmentId']
       }
     },
-    preHandler: requirePermission('admin.applications.delete')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_DELETE)
   }, async (request, reply) => {
     try {
       const { assignmentId } = request.params;
@@ -977,7 +978,7 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         required: ['tenantIds', 'appIds']
       }
     },
-    preHandler: requirePermission('admin.applications.bulk_assign')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_BULK_ASSIGN)
   }, async (request, reply) => {
     try {
       const { tenantIds, appIds, defaultConfig = {} } = request.body;
@@ -1117,7 +1118,7 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermission('admin.applications.view')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_VIEW)
   }, async (request, reply) => {
     try {
       const { includeModules = false } = request.query;
@@ -1205,7 +1206,7 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         required: ['tenantId', 'moduleId']
       }
     },
-    preHandler: requirePermission('admin.applications.assign')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_ASSIGN)
   }, async (request, reply) => {
     try {
       const { tenantId, moduleId } = request.body;
@@ -1425,7 +1426,7 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         required: ['tenantId', 'moduleId', 'permissions']
       }
     },
-    preHandler: requirePermission('admin.applications.assign')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_ASSIGN)
   }, async (request, reply) => {
     try {
       const { tenantId, moduleId, permissions } = request.body;
@@ -1522,7 +1523,7 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         required: ['tenantId', 'moduleId']
       }
     },
-    preHandler: requirePermission('admin.applications.assign')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_ASSIGN)
   }, async (request, reply) => {
     try {
       const { tenantId, moduleId } = request.body;
@@ -1614,7 +1615,7 @@ export default async function applicationAssignmentRoutes(fastify, options) {
         required: ['tenantId']
       }
     },
-    preHandler: requirePermission('admin.applications.view')
+    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_VIEW)
   }, async (request, reply) => {
     try {
       const { tenantId } = request.params;

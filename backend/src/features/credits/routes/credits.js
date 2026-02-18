@@ -1,6 +1,7 @@
 import { CreditService } from '../services/credit-service.js';
 // REMOVED: CreditAllocationService - Application-specific allocations removed completely
 import { authenticateToken, requirePermission } from '../../../middleware/auth.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 import { trackUsage } from '../../../middleware/usage.js';
 import { getPlanLimits } from '../../../middleware/planRestrictions.js';
 // REMOVED: credit-allocation-validation middleware - Applications manage their own credits
@@ -540,7 +541,7 @@ export default async function creditRoutes(fastify, options) {
 
   // Transfer credits between entities
   fastify.post('/transfer', {
-    preHandler: [authenticateToken, requirePermission('credits:transfer')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.CREDITS_BALANCE_TRANSFER)],
     schema: {
       body: {
         type: 'object',
@@ -776,7 +777,7 @@ export default async function creditRoutes(fastify, options) {
 
   // Set operation configuration (global or tenant-specific, company admin only)
   fastify.post('/config/operation/:operationCode', {
-    preHandler: [authenticateToken, requirePermission('admin:credits')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_MANAGE)],
     schema: {
       params: {
         type: 'object',
@@ -832,7 +833,7 @@ export default async function creditRoutes(fastify, options) {
 
   // Set module configuration (global or tenant-specific, company admin only)
   fastify.post('/config/module/:moduleCode', {
-    preHandler: [authenticateToken, requirePermission('admin:credits')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_MANAGE)],
     schema: {
       params: {
         type: 'object',
@@ -880,7 +881,7 @@ export default async function creditRoutes(fastify, options) {
 
   // Set application configuration (global or tenant-specific, company admin only)
   fastify.post('/config/app/:appCode', {
-    preHandler: [authenticateToken, requirePermission('admin:credits')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_MANAGE)],
     schema: {
       params: {
         type: 'object',
@@ -976,22 +977,79 @@ export default async function creditRoutes(fastify, options) {
   });
 
   // ===============================
-  // REMOVED: APPLICATION CREDIT ALLOCATION ROUTES
+  // APPLICATION CREDIT ALLOCATION ROUTE
   // ===============================
-  // Applications now manage their own credit consumption
-  // They consume directly from organization balance using CreditService.consumeCredits()
-  // All application allocation routes have been removed:
-  // - POST /allocate/application
-  // - GET /allocations/application
-  // - GET /balance/application/:application
-  // - POST /transfer/application
-  // - POST /consume/application
-  // - POST /sync-balance
-  // - POST /sync-balance-check
+  // Allocate credits from an entity's balance to a specific application.
+  // Deducts from entity pool and publishes credit.allocated event via Amazon MQ
+  // so the target application can sync the allocation locally.
+  fastify.post('/allocate/application', {
+    preHandler: authenticateToken
+  }, async (request, reply) => {
+    try {
+      const tenantId = request.userContext.tenantId;
+      const userId = request.userContext.userId;
+
+      if (!tenantId) {
+        return ErrorResponses.notFound(reply, 'Organization', 'User is not associated with any organization');
+      }
+
+      const { sourceEntityId, targetApplication, creditAmount, allocationPurpose } = request.body || {};
+
+      if (!sourceEntityId || !targetApplication || !creditAmount) {
+        return reply.code(400).send({
+          success: false,
+          message: 'Missing required fields: sourceEntityId, targetApplication, and creditAmount are required'
+        });
+      }
+
+      if (creditAmount <= 0) {
+        return reply.code(400).send({
+          success: false,
+          message: 'creditAmount must be a positive number'
+        });
+      }
+
+      const result = await CreditService.allocateCreditsToApplication({
+        tenantId,
+        sourceEntityId,
+        targetApplication,
+        creditAmount: parseFloat(creditAmount),
+        allocationPurpose: allocationPurpose || '',
+        initiatedBy: userId
+      });
+
+      return {
+        success: true,
+        message: `Successfully allocated ${creditAmount} credits to ${targetApplication}`,
+        data: result
+      };
+    } catch (error) {
+      request.log.error('Error allocating credits to application:', error);
+
+      if (error.message?.includes('Insufficient credits')) {
+        return reply.code(400).send({
+          success: false,
+          message: error.message
+        });
+      }
+
+      if (error.message?.includes('No credit record found')) {
+        return reply.code(404).send({
+          success: false,
+          message: error.message
+        });
+      }
+
+      return reply.code(500).send({
+        success: false,
+        message: error.message || 'Failed to allocate credits to application'
+      });
+    }
+  });
 
   // Get credit balance monitor status (admin only)
   fastify.get('/monitor-status', {
-    preHandler: [authenticateToken, requirePermission('admin:credits')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_MANAGE)]
   }, async (request, reply) => {
     try {
       const creditBalanceMonitor = (await import('../services/credit-balance-monitor.js')).default;
@@ -1009,17 +1067,6 @@ export default async function creditRoutes(fastify, options) {
       });
     }
   });
-
-  // REMOVED: All application allocation routes - Applications manage their own credits
-  // The following routes have been completely removed:
-  // - POST /allocate/application
-  // - GET /allocations/application  
-  // - GET /balance/application/:application
-  // - POST /transfer/application
-  // - POST /consume/application
-  // - POST /sync-balance
-  // - POST /sync-balance-check
-  // Applications now consume directly from organization balance using CreditService.consumeCredits()
 
   // Get credit statistics for dashboard
   fastify.get('/stats', {

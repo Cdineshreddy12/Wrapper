@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Twitter, Linkedin, Mail, MapPin, Phone, MessageSquare } from 'lucide-react';
+import { config } from '@/lib/config';
 
 export function LandingFooter() {
   return (
@@ -12,7 +13,7 @@ export function LandingFooter() {
           <div className="space-y-6">
             <Link to="/" className="flex items-center space-x-2 block w-fit">
               <img
-                src="https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Full_Logo_kezq1b.jpg"
+                src={config.FULL_LOGO_URL}
                 alt="Zopkit"
                 className="h-10 rounded-xl w-auto object-contain"
               />

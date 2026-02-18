@@ -4,6 +4,7 @@ import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import useSilentAuth from '@/hooks/useSilentAuth';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import api from '@/lib/api';
+import { logger } from '@/lib/logger';
 
 interface SilentAuthGuardProps {
   children: React.ReactNode;
@@ -62,7 +63,7 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
       if (authCheckComplete) return;
       initStartedRef.current = true;
 
-      console.log('🔄 SilentAuthGuard: Starting initialization...', {
+      logger.debug('🔄 SilentAuthGuard: Starting initialization...', {
         isLoading,
         isAuthenticated,
         hasChecked,
@@ -74,7 +75,7 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
       try {
         // If user is already authenticated, no need for silent auth
         if (isAuthenticated && userId) {
-          console.log('✅ SilentAuthGuard: User already authenticated');
+          logger.debug('✅ SilentAuthGuard: User already authenticated');
           setAuthCheckComplete(true);
           setInitializationComplete(true);
           return;
@@ -82,21 +83,21 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
 
         // If on a public path and not authenticated, no need for silent auth
         if (isPublicPath && !isAuthenticated) {
-          console.log('ℹ️ SilentAuthGuard: On public path, skipping silent auth');
+          logger.debug('ℹ️ SilentAuthGuard: On public path, skipping silent auth');
           setAuthCheckComplete(true);
           setInitializationComplete(true);
           return;
         }
 
         // Attempt silent authentication
-        console.log('🔍 SilentAuthGuard: Attempting silent authentication...');
+        logger.debug('🔍 SilentAuthGuard: Attempting silent authentication...');
         const silentAuthResult = await checkSilentAuth();
 
-        console.log('✅ SilentAuthGuard: Silent auth completed:', silentAuthResult);
+        logger.debug('✅ SilentAuthGuard: Silent auth completed:', silentAuthResult);
 
         // Get the final auth state
         const authState = await getAuthState();
-        console.log('📊 SilentAuthGuard: Final auth state:', authState);
+        logger.debug('📊 SilentAuthGuard: Final auth state:', authState);
 
         setAuthCheckComplete(true);
 
@@ -108,7 +109,7 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
         }
 
       } catch (error) {
-        console.error('❌ SilentAuthGuard: Error during initialization:', error);
+        logger.error('❌ SilentAuthGuard: Error during initialization:', error);
         setAuthCheckComplete(true);
         setInitializationComplete(true);
       }
@@ -131,11 +132,11 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
   // Handle authenticated user routing
   const handleAuthenticatedUser = async (authState: any) => {
     try {
-      console.log('🔄 SilentAuthGuard: Handling authenticated user...');
+      logger.debug('🔄 SilentAuthGuard: Handling authenticated user...');
 
       // If already on a protected route, stay there
       if (!isPublicPath) {
-        console.log('ℹ️ SilentAuthGuard: Already on protected route, staying');
+        logger.debug('ℹ️ SilentAuthGuard: Already on protected route, staying');
         setInitializationComplete(true);
         return;
       }
@@ -152,27 +153,27 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
         
         if (status.hasUser && status.hasTenant && status.isOnboarded) {
           // User is fully set up, redirect to dashboard
-          console.log('✅ SilentAuthGuard: User fully onboarded, redirecting to dashboard');
+          logger.debug('✅ SilentAuthGuard: User fully onboarded, redirecting to dashboard');
           navigate('/dashboard', { replace: true });
         } else if (status.authStatus?.onboardingCompleted === true || 
                    status.authStatus?.userType === 'INVITED_USER' ||
                    status.authStatus?.isInvitedUser === true) {
           // INVITED USERS: Always go to dashboard (they skip onboarding)
-          console.log('✅ SilentAuthGuard: Invited user detected, redirecting to dashboard (skipping onboarding)');
+          logger.debug('✅ SilentAuthGuard: Invited user detected, redirecting to dashboard (skipping onboarding)');
           navigate('/dashboard', { replace: true });
         } else {
           // User needs onboarding
-          console.log('ℹ️ SilentAuthGuard: User needs onboarding');
+          logger.debug('ℹ️ SilentAuthGuard: User needs onboarding');
           if (location.pathname === '/') {
             navigate('/landing', { replace: true });
           }
         }
       } else {
-        console.log('ℹ️ SilentAuthGuard: Could not check auth status, staying on current page');
+        logger.debug('ℹ️ SilentAuthGuard: Could not check auth status, staying on current page');
       }
 
     } catch (error) {
-      console.error('❌ SilentAuthGuard: Error handling authenticated user:', error);
+      logger.error('❌ SilentAuthGuard: Error handling authenticated user:', error);
     } finally {
       setInitializationComplete(true);
     }
@@ -180,11 +181,11 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
 
   // Handle unauthenticated user routing
   const handleUnauthenticatedUser = async () => {
-    console.log('ℹ️ SilentAuthGuard: Handling unauthenticated user...');
+    logger.debug('ℹ️ SilentAuthGuard: Handling unauthenticated user...');
 
     // If on a protected route, redirect to landing
     if (!isPublicPath) {
-      console.log('🔄 SilentAuthGuard: On protected route, redirecting to landing');
+      logger.debug('🔄 SilentAuthGuard: On protected route, redirecting to landing');
       navigate('/landing', { replace: true });
     }
 

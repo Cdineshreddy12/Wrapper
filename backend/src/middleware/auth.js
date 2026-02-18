@@ -1,9 +1,11 @@
+import jwt from 'jsonwebtoken';
 import { kindeService } from '../features/auth/index.js';
 import { db, dbManager } from '../db/index.js';
 import { tenants, tenantUsers, customRoles, userRoleAssignments } from '../db/schema/index.js';
 import { eq, and } from 'drizzle-orm';
 import { RequestAnalyzer } from './request-analyzer.js';
 import { shouldLogVerbose } from '../utils/verbose-log.js';
+import { getUserPermissions, checkPermissions } from './permission-middleware.js';
 
 // Public routes that don't require authentication
 const PUBLIC_ROUTES = [
@@ -55,6 +57,8 @@ const PUBLIC_ROUTES = [
   // Contact and demo form submissions (public landing page)
   '/api/contact',
   '/api/demo',
+  // Wrapper CRM/Ops sync routes use their own authenticateServiceOrToken preHandler
+  '/api/wrapper/',
 ];
 
 // Helper functions
@@ -359,6 +363,57 @@ export async function authMiddleware(request, reply) {
   try {
     if (shouldLogVerbose()) console.log('🔐 Authenticating user...');
 
+    // Optional: accept Operations-issued JWT when shared secret is configured (e.g. for user-context)
+    const sharedSecret = process.env.OPERATIONS_JWT_SECRET || process.env.SHARED_APP_JWT_SECRET;
+    if (sharedSecret) {
+      try {
+        const decoded = jwt.verify(token, sharedSecret);
+        if (decoded?.currentTenantId && decoded?.email) {
+          let [tenant] = await db.select().from(tenants).where(eq(tenants.tenantId, decoded.currentTenantId)).limit(1);
+          if (!tenant) {
+            [tenant] = await db.select().from(tenants).where(eq(tenants.kindeOrgId, decoded.currentTenantId)).limit(1);
+          }
+          if (tenant) {
+            const [u] = await db.select().from(tenantUsers).where(and(eq(tenantUsers.tenantId, tenant.tenantId), eq(tenantUsers.email, decoded.email))).limit(1);
+            if (u) {
+              request.userContext = {
+                userId: u.kindeUserId || u.userId,
+                kindeUserId: u.kindeUserId || u.userId,
+                internalUserId: u.userId,
+                tenantId: tenant.tenantId,
+                kindeOrgId: tenant.kindeOrgId,
+                email: u.email,
+                name: u.name,
+                isAuthenticated: true,
+                needsOnboarding: !u.onboardingCompleted,
+                onboardingCompleted: u.onboardingCompleted || false,
+                isActive: u.isActive ?? true,
+                isAdmin: u.isTenantAdmin || false,
+                isTenantAdmin: u.isTenantAdmin || false,
+                isSuperAdmin: false,
+              };
+              request.user = {
+                id: request.userContext.userId,
+                userId: request.userContext.userId,
+                internalUserId: u.userId,
+                tenantId: tenant.tenantId,
+                email: u.email,
+                name: u.name,
+                isAuthenticated: true,
+                isAdmin: request.userContext.isAdmin,
+                isTenantAdmin: request.userContext.isTenantAdmin,
+              };
+              await setupDatabaseConnection(request, tenant.tenantId, u.userId);
+              if (shouldLogVerbose()) console.log('✅ Authentication successful (Operations JWT)');
+              return;
+            }
+          }
+        }
+      } catch (_) {
+        // Not an Operations JWT or invalid; fall through to Kinde
+      }
+    }
+
     // Add timeout to prevent hanging requests
     const authPromise = kindeService.validateToken(token);
     const timeoutPromise = new Promise((_, reject) => 
@@ -418,9 +473,39 @@ export function requirePermission(permission) {
       });
     }
 
-    // Allow all authenticated users for now
-    // TODO: Implement actual permission checking logic when needed
-    return;
+    if (request.userContext.isAdmin || request.userContext.isTenantAdmin) {
+      return;
+    }
+
+    if (!request.userContext.internalUserId || !request.userContext.tenantId) {
+      return reply.code(403).send({
+        error: 'Forbidden',
+        message: 'User context incomplete for permission check'
+      });
+    }
+
+    try {
+      if (!request.userContext.permissions) {
+        request.userContext.permissions = await getUserPermissions(
+          request.userContext.internalUserId,
+          request.userContext.tenantId
+        );
+      }
+
+      const requiredPermissions = Array.isArray(permission) ? permission : [permission];
+      const hasPermission = checkPermissions(request.userContext.permissions, requiredPermissions);
+
+      if (!hasPermission) {
+        return reply.code(403).send({
+          error: 'Insufficient permissions',
+          message: `Required permission: ${requiredPermissions.join(', ')}`,
+          required: requiredPermissions
+        });
+      }
+    } catch (error) {
+      request.log.error('Permission check failed:', error);
+      return reply.code(500).send({ error: 'Permission check failed' });
+    }
   };
 }
 

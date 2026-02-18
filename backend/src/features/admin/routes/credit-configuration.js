@@ -1,4 +1,5 @@
 import { CreditService } from '../../../features/credits/index.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 import { requirePermissions } from '../../../middleware/permission-middleware.js';
 import { authenticateToken } from '../../../middleware/auth.js';
 import { requireTenantMatch } from '../../../middleware/tenant-validation.js';
@@ -52,7 +53,7 @@ export default async function creditConfigurationRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermissions(['credit_config.view'])
+    preHandler: requirePermissions([PERMISSIONS.CREDIT_CONFIG_VIEW])
   }, async (request, reply) => {
     try {
       const { tenantId } = request.params;
@@ -105,7 +106,7 @@ export default async function creditConfigurationRoutes(fastify, options) {
       }
     },
     // Temporarily disable permission check for debugging
-    // preHandler: requirePermissions(['credit_config.edit'])
+    // preHandler: requirePermissions([PERMISSIONS.CREDIT_CONFIG_EDIT])
   }, async (request, reply) => {
     try {
       const { tenantId, operationCode } = request.params;
@@ -154,7 +155,7 @@ export default async function creditConfigurationRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermissions(['credit_config.edit'])
+    preHandler: requirePermissions([PERMISSIONS.CREDIT_CONFIG_EDIT])
   }, async (request, reply) => {
     try {
       const { tenantId, moduleCode } = request.params;
@@ -205,7 +206,7 @@ export default async function creditConfigurationRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermissions(['credit_config.edit'])
+    preHandler: requirePermissions([PERMISSIONS.CREDIT_CONFIG_EDIT])
   }, async (request, reply) => {
     try {
       const { tenantId, appCode } = request.params;
@@ -243,7 +244,7 @@ export default async function creditConfigurationRoutes(fastify, options) {
         required: ['tenantId', 'configType', 'configCode']
       }
     },
-    preHandler: requirePermissions(['credit_config.reset'])
+    preHandler: requirePermissions([PERMISSIONS.CREDIT_CONFIG_RESET])
   }, async (request, reply) => {
     try {
       const { tenantId, configType, configCode } = request.params;
@@ -296,7 +297,7 @@ export default async function creditConfigurationRoutes(fastify, options) {
         required: ['updates']
       }
     },
-    preHandler: requirePermissions(['credit_config.bulk_update'])
+    preHandler: requirePermissions([PERMISSIONS.CREDIT_CONFIG_BULK_UPDATE])
   }, async (request, reply) => {
     try {
       const { tenantId } = request.params;
@@ -343,7 +344,7 @@ export default async function creditConfigurationRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermissions(['credit_config.view'])
+    preHandler: requirePermissions([PERMISSIONS.CREDIT_CONFIG_VIEW])
   }, async (request, reply) => {
     try {
       const templates = await CreditService.getConfigurationTemplates();
@@ -377,7 +378,7 @@ export default async function creditConfigurationRoutes(fastify, options) {
         required: ['templateId']
       }
     },
-    preHandler: requirePermissions(['credit_config.apply_templates'])
+    preHandler: requirePermissions([PERMISSIONS.CREDIT_CONFIG_APPLY_TEMPLATES])
   }, async (request, reply) => {
     try {
       const { tenantId } = request.params;
@@ -433,7 +434,7 @@ export default async function creditConfigurationRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermissions(['admin.applications.view'])
+    preHandler: requirePermissions([PERMISSIONS.ADMIN_APPS_VIEW])
   }, async (request, reply) => {
     try {
       const configurations = await CreditService.getApplicationCreditConfigurations();
@@ -479,7 +480,7 @@ export default async function creditConfigurationRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermissions(['admin.applications.edit'])
+    preHandler: requirePermissions([PERMISSIONS.ADMIN_APPS_EDIT])
   }, async (request, reply) => {
     try {
       const { appCode } = request.params;
@@ -525,7 +526,7 @@ export default async function creditConfigurationRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermissions(['admin.applications.edit'])
+    preHandler: requirePermissions([PERMISSIONS.ADMIN_APPS_EDIT])
   }, async (request, reply) => {
     try {
       const { appCode, moduleCode } = request.params;
@@ -579,7 +580,7 @@ export default async function creditConfigurationRoutes(fastify, options) {
       }
     }
     // Temporarily disable permission check for debugging
-    // preHandler: requirePermissions(['admin.applications.edit'])
+    // preHandler: requirePermissions([PERMISSIONS.ADMIN_APPS_EDIT])
   }, async (request, reply) => {
     try {
       const { tenantId } = request.params;
@@ -610,7 +611,7 @@ export default async function creditConfigurationRoutes(fastify, options) {
 
   // Initialize credits for a tenant (temporary route for testing)
   fastify.post('/initialize-credits/:tenantId', {
-    preHandler: [requirePermissions(['credit_config.manage']), requireTenantMatch()],
+    preHandler: [requirePermissions([PERMISSIONS.CREDIT_CONFIG_MANAGE]), requireTenantMatch()],
     schema: {
       params: {
         type: 'object',
@@ -708,7 +709,7 @@ export default async function creditConfigurationRoutes(fastify, options) {
         }
       }
     },
-    preHandler: requirePermissions(['credit_config.view'])
+    preHandler: requirePermissions([PERMISSIONS.CREDIT_CONFIG_VIEW])
   }, async (request, reply) => {
     try {
       const { app } = request.query;

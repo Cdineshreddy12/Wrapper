@@ -1,5 +1,6 @@
 import { SeasonalCreditService } from '../services/SeasonalCreditService.js';
 import { authenticateToken, requirePermission } from '../../../middleware/auth.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
 
 /**
  * Seasonal Credits Routes
@@ -12,7 +13,7 @@ export default async function seasonalCreditsRoutes(fastify, options) {
    * Get all seasonal credit campaigns
    */
   fastify.get('/campaigns', {
-    preHandler: [authenticateToken, requirePermission('admin:credits')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_MANAGE)]
   }, async (request, reply) => {
     try {
       const { isActive, distributionStatus } = request.query;
@@ -41,7 +42,7 @@ export default async function seasonalCreditsRoutes(fastify, options) {
    * Create a new seasonal credit campaign
    */
   fastify.post('/campaigns', {
-    preHandler: [authenticateToken, requirePermission('admin:credits')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_MANAGE)],
     schema: {
       body: {
         type: 'object',
@@ -111,7 +112,7 @@ export default async function seasonalCreditsRoutes(fastify, options) {
    * Get detailed information about a specific campaign
    */
   fastify.get('/campaigns/:campaignId', {
-    preHandler: [authenticateToken, requirePermission('admin:credits')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_MANAGE)]
   }, async (request, reply) => {
     try {
       const campaign = await SeasonalCreditService.getCampaign(request.params.campaignId);
@@ -135,7 +136,7 @@ export default async function seasonalCreditsRoutes(fastify, options) {
    * Distribute credits to tenants
    */
   fastify.post('/campaigns/:campaignId/distribute', {
-    preHandler: [authenticateToken, requirePermission('admin:credits')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_MANAGE)]
   }, async (request, reply) => {
     try {
       const result = await SeasonalCreditService.distributeCreditsToTenants(
@@ -162,7 +163,7 @@ export default async function seasonalCreditsRoutes(fastify, options) {
    * Get campaign distribution status
    */
   fastify.get('/campaigns/:campaignId/status', {
-    preHandler: [authenticateToken, requirePermission('admin:credits')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_MANAGE)]
   }, async (request, reply) => {
     try {
       const status = await SeasonalCreditService.getCampaignDistributionStatus(
@@ -188,7 +189,7 @@ export default async function seasonalCreditsRoutes(fastify, options) {
    * Extend expiry for a campaign
    */
   fastify.put('/campaigns/:campaignId/extend', {
-    preHandler: [authenticateToken, requirePermission('admin:credits')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_MANAGE)],
     schema: {
       body: {
         type: 'object',
@@ -225,7 +226,7 @@ export default async function seasonalCreditsRoutes(fastify, options) {
    * Send expiry warnings
    */
   fastify.post('/send-warnings', {
-    preHandler: [authenticateToken, requirePermission('admin:credits')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_MANAGE)],
     schema: {
       body: {
         type: 'object',
@@ -260,7 +261,7 @@ export default async function seasonalCreditsRoutes(fastify, options) {
    * Get credits expiring soon
    */
   fastify.get('/expiring-soon', {
-    preHandler: [authenticateToken, requirePermission('admin:credits')],
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_MANAGE)],
     schema: {
       querystring: {
         type: 'object',
@@ -327,7 +328,7 @@ export default async function seasonalCreditsRoutes(fastify, options) {
    * Process credit expiries (typically called by a cron job)
    */
   fastify.post('/process-expiries', {
-    preHandler: [authenticateToken, requirePermission('admin:credits')]
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.ADMIN_CREDITS_MANAGE)]
   }, async (request, reply) => {
     try {
       const result = await SeasonalCreditService.processExpiries();

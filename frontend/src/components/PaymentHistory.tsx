@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import api from '../lib/api'
+import { config } from '@/lib/config'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -52,7 +53,7 @@ export function PaymentHistory() {
     try {
       // Create a custom axios instance for the external payment API
       const paymentApi = api.create({
-        baseURL: 'https://wrapper.zopkit.com',
+        baseURL: config.WRAPPER_DOMAIN,
         withCredentials: true,
         headers: {
           'Content-Type': 'application/json'

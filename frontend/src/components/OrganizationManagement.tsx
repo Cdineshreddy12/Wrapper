@@ -1378,17 +1378,182 @@ export function OrganizationTreeManagement({
         </DialogContent>
       </Dialog>
 
-      {/* Transfer & Allocate Dialogs placeholders - logic preserved from original, simplified UI */}
+      {/* Credit Transfer Dialog */}
       <Dialog open={showCreditTransfer} onOpenChange={setShowCreditTransfer}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Transfer Credits</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5" />
+              Transfer Credits
+            </DialogTitle>
+            <DialogDescription>
+              Transfer credits from {selectedOrg?.entityName} to its child organizations or locations.
+            </DialogDescription>
+          </DialogHeader>
           <div className="grid gap-4 py-2">
-            <Label>Amount</Label>
-            <Input type="number" value={creditTransferForm.amount} onChange={e => setCreditTransferForm({ ...creditTransferForm, amount: e.target.value })} className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" />
-            <Label>Destination (ID)</Label>
-            <Input placeholder="Select ID via Logic" value={creditTransferForm.destinationEntityId} onChange={e => setCreditTransferForm({ ...creditTransferForm, destinationEntityId: e.target.value })} className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" />
+            {/* Source display */}
+            <div>
+              <Label>From (Source)</Label>
+              <div className="p-3 border rounded-lg bg-blue-50 border-blue-200 mt-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold text-sm">
+                    {selectedOrg?.entityName?.charAt(0)?.toUpperCase() || 'O'}
+                  </div>
+                  <div>
+                    <div className="font-medium text-sm">{selectedOrg?.entityName}</div>
+                    <div className="text-xs text-gray-500">Organization • Level {selectedOrg?.entityLevel}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Destination type */}
+            <div>
+              <Label>Transfer To</Label>
+              <Select
+                value={creditTransferForm.destinationEntityType}
+                onValueChange={(value) => setCreditTransferForm({ ...creditTransferForm, destinationEntityType: value, destinationEntityId: '' })}
+              >
+                <SelectTrigger className="mt-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                  <SelectValue placeholder="Select destination type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="organization">Child Organization</SelectItem>
+                  <SelectItem value="location">Location</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Destination entity dropdown */}
+            <div>
+              <Label>Select Destination</Label>
+              <Select
+                value={creditTransferForm.destinationEntityId}
+                onValueChange={(value) => setCreditTransferForm({ ...creditTransferForm, destinationEntityId: value })}
+              >
+                <SelectTrigger className="mt-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                  <SelectValue placeholder="Select destination" />
+                </SelectTrigger>
+                <SelectContent>
+                  {creditTransferForm.destinationEntityType === 'organization' ? (
+                    (() => {
+                      const getChildOrganizations = (org: Organization): Organization[] => {
+                        let children: Organization[] = [];
+                        if (org.children) {
+                          children = [...org.children];
+                          org.children.forEach(child => {
+                            children = [...children, ...getChildOrganizations(child as Organization)];
+                          });
+                        }
+                        return children;
+                      };
+                      const childOrgs = selectedOrg ? getChildOrganizations(selectedOrg as Organization) : [];
+                      return childOrgs.length > 0 ? childOrgs.map(org => (
+                        <SelectItem key={org.entityId} value={org.entityId}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{org.entityName}</span>
+                            <span className="text-xs text-gray-500">Level {org.entityLevel}</span>
+                          </div>
+                        </SelectItem>
+                      )) : (
+                        <SelectItem value="no-orgs" disabled>
+                          No child organizations available
+                        </SelectItem>
+                      );
+                    })()
+                  ) : (
+                    (() => {
+                      const getOrgAndChildIds = (org: Organization): string[] => {
+                        let ids = [org.entityId];
+                        if (org.children) {
+                          org.children.forEach(child => {
+                            ids = [...ids, ...getOrgAndChildIds(child as Organization)];
+                          });
+                        }
+                        return ids;
+                      };
+                      const allowedOrgIds = selectedOrg ? getOrgAndChildIds(selectedOrg as Organization) : [];
+                      const allowedLocations = locations.filter(loc => loc.parentEntityId && allowedOrgIds.includes(loc.parentEntityId));
+                      return allowedLocations.length > 0 ? allowedLocations.map(loc => (
+                        <SelectItem key={loc.entityId} value={loc.entityId}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{loc.entityName}</span>
+                            <span className="text-xs text-gray-500">{loc.locationType || 'location'}</span>
+                          </div>
+                        </SelectItem>
+                      )) : (
+                        <SelectItem value="no-locations" disabled>
+                          No locations available for transfer
+                        </SelectItem>
+                      );
+                    })()
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Amount */}
+            <div>
+              <Label>Amount to Transfer</Label>
+              <Input
+                type="number"
+                value={creditTransferForm.amount}
+                onChange={e => setCreditTransferForm({ ...creditTransferForm, amount: e.target.value })}
+                placeholder="Enter credit amount"
+                min="1"
+                step="1"
+                className="mt-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              />
+            </div>
+
+            {/* Description */}
+            <div>
+              <Label>Description (Optional)</Label>
+              <Textarea
+                value={creditTransferForm.description}
+                onChange={e => setCreditTransferForm({ ...creditTransferForm, description: e.target.value })}
+                placeholder="Reason for transfer..."
+                className="mt-1 resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                rows={2}
+              />
+            </div>
           </div>
-          <DialogFooter><PearlButton variant="outline" onClick={() => setShowCreditTransfer(false)}>Close (Demo)</PearlButton></DialogFooter>
+          <DialogFooter>
+            <PearlButton variant="outline" onClick={() => setShowCreditTransfer(false)}>Cancel</PearlButton>
+            <PearlButton
+              onClick={async () => {
+                try {
+                  const transferData = {
+                    fromEntityId: selectedOrg?.entityId || undefined,
+                    toEntityType: creditTransferForm.destinationEntityType,
+                    toEntityId: creditTransferForm.destinationEntityId,
+                    creditAmount: parseFloat(creditTransferForm.amount),
+                    reason: creditTransferForm.description || `Transfer from ${selectedOrg?.entityName}`
+                  };
+                  const response = await makeRequest('/credits/transfer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(transferData)
+                  });
+                  if (response.success) {
+                    toast.success(`Successfully transferred ${creditTransferForm.amount} credits!`);
+                    setShowCreditTransfer(false);
+                    setCreditTransferForm({ sourceEntityType: 'organization', sourceEntityId: '', destinationEntityType: 'organization', destinationEntityId: '', amount: '', transferType: 'direct', isTemporary: false, recallDeadline: '', description: '' });
+                    loadData();
+                  } else {
+                    toast.error(response.message || 'Credit transfer failed');
+                  }
+                } catch (error: any) {
+                  toast.error(error.message || 'Failed to transfer credits');
+                }
+              }}
+              disabled={!creditTransferForm.destinationEntityId || !creditTransferForm.amount || creditTransferForm.destinationEntityId === 'no-orgs' || creditTransferForm.destinationEntityId === 'no-locations'}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <ArrowRightLeft className="w-4 h-4 mr-2" />
+              Transfer Credits
+            </PearlButton>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1523,6 +1688,14 @@ export function OrganizationTreeManagement({
                   setSelectedOrg(org);
                   setLocationForm(prev => ({ ...prev, name: '' }));
                   setShowCreateLocation(true);
+                }
+              }}
+              onTransferCredits={(orgId) => {
+                const org = findOrganizationById(orgId, processedHierarchy);
+                if (org) {
+                  setSelectedOrg(org);
+                  setCreditTransferForm(prev => ({ ...prev, sourceEntityId: org.entityId, sourceEntityType: 'organization', destinationEntityId: '', amount: '', description: '' }));
+                  setShowCreditTransfer(true);
                 }
               }}
             />

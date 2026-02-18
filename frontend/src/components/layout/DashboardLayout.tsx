@@ -3,6 +3,7 @@ import { RouteBreadcrumb } from "@/components/route-breadcrumb"
 import { Separator } from "@/components/ui/separator"
 import { ThemeToggle } from "@/components/theme/ThemeToggle"
 import { BreadcrumbLabelProvider } from "@/contexts/BreadcrumbLabelContext"
+import { ErrorBoundary } from "@/errors/ErrorBoundary"
 import {
   SidebarInset,
   SidebarProvider,
@@ -770,12 +771,12 @@ export function DashboardLayout() {
       />
       <BreadcrumbLabelProvider>
         <SidebarInset className="md:peer-data-[variant=inset]:m-0 md:peer-data-[variant=inset]:rounded-none md:peer-data-[variant=inset]:shadow-none bg-white dark:bg-slate-950 rounded-tl-[30px] rounded-bl-[30px] flex flex-col h-screen overflow-hidden">
-          <header className="flex h-16 shrink-0 items-center gap-2 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 bg-transparent">
+          <header className="flex h-16 shrink-0 items-center gap-2 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-2">
-              <SidebarTrigger className="-ml-1 text-slate-600 hover:bg-slate-200" />
+              <SidebarTrigger className="-ml-1 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800" />
               <Separator
                 orientation="vertical"
-                className="mr-2 h-4 bg-slate-300"
+                className="mr-2 h-4 bg-slate-300 dark:bg-slate-600"
               />
               <RouteBreadcrumb className="mt-0" />
             </div>
@@ -785,8 +786,10 @@ export function DashboardLayout() {
               <ThemeToggle />
             </div>
           </header>
-          <main className="flex-1 relative overflow-y-auto bg-transparent p-6">
-            <Outlet key={location.pathname + location.search} />
+          <main className="flex-1 relative overflow-y-auto bg-slate-50 dark:bg-slate-900 p-6 min-h-0">
+            <ErrorBoundary>
+              <Outlet key={location.pathname + location.search} />
+            </ErrorBoundary>
           </main>
         </SidebarInset>
       </BreadcrumbLabelProvider>

@@ -36,6 +36,12 @@ dist/
 .DS_Store
 *.pem
 
+# Vite temporary files
+vite.config.ts.timestamp-*
+
+# Duplicate lock files
+package-lock 2.json
+
 # Debug
 .vscode/
 .idea/
