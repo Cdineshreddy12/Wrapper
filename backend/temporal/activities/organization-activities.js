@@ -15,9 +15,9 @@ export async function processOrganizationAssignment(eventData) {
 
   console.log(`[Organization Activity] Processing ${eventType}`);
 
-  // Import organization assignment consumer
-  const { OrganizationAssignmentConsumer } = await import('../../src/services/organization-assignment-consumer.js');
-  const consumer = new OrganizationAssignmentConsumer();
+  // NOTE: OrganizationAssignmentConsumer was removed during cleanup.
+  // This temporal activity needs reimplementation if organization assignment workflows are required.
+  throw new Error('OrganizationAssignmentConsumer has been removed. Reimplement this activity if needed.');
 
   // Create event object matching Redis stream format
   const event = {

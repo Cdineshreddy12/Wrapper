@@ -1,0 +1,61 @@
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { TenantService } from '../../../services/tenant-service.js';
+
+/**
+ * Subdomain Management Routes
+ * Handles subdomain availability checking and validation
+ */
+
+export default async function subdomainManagementRoutes(
+  fastify: FastifyInstance,
+  _options?: Record<string, unknown>
+): Promise<void> {
+  // Check subdomain availability (POST version)
+  fastify.post('/check-subdomain', {
+    schema: {}
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const body = request.body as Record<string, unknown>;
+      const { subdomain } = body;
+
+      // Check if subdomain is available
+      const available = await TenantService.checkSubdomainAvailability(subdomain as string);
+
+      return {
+        success: true,
+        available,
+        subdomain
+      };
+    } catch (err: unknown) {
+      request.log.error('Error checking subdomain availability:', err);
+      return reply.code(500).send({ error: 'Failed to check subdomain availability' });
+    }
+  });
+
+  // Check subdomain availability (GET version for frontend)
+  fastify.get('/check-subdomain', {
+    schema: {}
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const query = request.query as Record<string, string>;
+      const { subdomain } = query;
+
+      console.log('🔍 Checking subdomain availability:', subdomain);
+
+      // Check if subdomain is available
+      const available = await TenantService.checkSubdomainAvailability(subdomain);
+
+      console.log('✅ Subdomain availability result:', { subdomain, available });
+
+      return {
+        success: true,
+        available,
+        subdomain
+      };
+    } catch (err: unknown) {
+      console.error('❌ Error checking subdomain availability:', err);
+      request.log.error('Error checking subdomain availability:', err);
+      return reply.code(500).send({ error: 'Failed to check subdomain availability' });
+    }
+  });
+}

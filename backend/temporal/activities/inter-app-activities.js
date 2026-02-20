@@ -20,7 +20,7 @@ export async function routeInterAppEvent(eventData) {
   console.log(`[Inter-App Activity] Routing ${eventType} to ${targetApplication}`);
 
   // Import inter-app event service
-  const { InterAppEventService } = await import('../../src/services/inter-app-event-service.js');
+  const { InterAppEventService } = await import('../../src/features/messaging/services/inter-app-event-service.js');
 
   // Publish the event (routing happens via Redis streams)
   const result = await InterAppEventService.publishEvent({

@@ -42,7 +42,6 @@ import {
   
   // Other related tables
   tenantInvitations,
-  usageMetricsDaily,
   auditLogs,
   notifications,
   eventTracking,
@@ -56,12 +55,12 @@ import {
 import { 
   membershipInvitations, 
   membershipHistory 
-} from '../db/schema/organization_memberships.js';
+} from '../db/schema/organizations/organization_memberships.js';
 
 import { 
   responsibilityHistory, 
   responsibilityNotifications 
-} from '../db/schema/responsible_persons.js';
+} from '../db/schema/organizations/responsible_persons.js';
 import { eq, or, inArray, sql } from 'drizzle-orm';
 
 /**
@@ -341,16 +340,7 @@ async function deleteTenantData(tenantId) {
       deletionResults.deletedRecords.auditLogs = auditLogsResult.length;
       console.log(`   ✅ Deleted ${auditLogsResult.length} audit logs`);
 
-      // 4.2 Delete usage metrics
-      console.log('🔄 [4.2] Deleting usage metrics...');
-      const usageMetricsResult = await tx
-        .delete(usageMetricsDaily)
-        .where(eq(usageMetricsDaily.tenantId, tenantId))
-        .returning({ id: usageMetricsDaily.metricId });
-      deletionResults.deletedRecords.usageMetrics = usageMetricsResult.length;
-      console.log(`   ✅ Deleted ${usageMetricsResult.length} usage metrics`);
-
-      // 4.3 Delete notifications
+      // 4.2 Delete notifications
       console.log('🔄 [4.3] Deleting notifications...');
       const notificationsResult = await tx
         .delete(notifications)

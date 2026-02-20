@@ -1,0 +1,315 @@
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { db } from '../../../db/index.js';
+import { tenants, tenantUsers, subscriptions } from '../../../db/schema/index.js';
+import { eq, count as dbCount } from 'drizzle-orm';
+import { authenticateToken, requirePermission } from '../../../middleware/auth/auth.js';
+import { PERMISSIONS } from '../../../constants/permissions.js';
+import Logger from '../../../utils/logger.js';
+import ErrorResponses from '../../../utils/error-responses.js';
+import { deleteTenantData, getTenantDataSummary } from '../../../utils/tenant-cleanup.js';
+
+type ReqWithUser = FastifyRequest & { userContext?: Record<string, unknown> };
+
+export default async function adminTenantRoutes(fastify: FastifyInstance): Promise<void> {
+  // Get tenant information
+  fastify.get('/tenant', {
+    preHandler: [authenticateToken]
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as Record<string, unknown>;
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    const requestId = Logger.generateRequestId('tenant-info');
+    const tenantId = ((request as ReqWithUser).userContext?.tenantId ?? '') as string;
+
+    try {
+      console.log(`🔍 [${requestId}] Getting tenant info for: ${tenantId}`);
+
+      const tenant = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.tenantId, tenantId))
+        .limit(1);
+
+      if (tenant.length === 0) {
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found', {
+          requestId
+        });
+      }
+
+      console.log(`✅ [${requestId}] Tenant info retrieved`);
+
+      return {
+        success: true,
+        data: tenant[0],
+        requestId
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error(`❌ [${requestId}] Failed to get tenant info:`, error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to get tenant information',
+        message: error.message,
+        requestId
+      });
+    }
+  });
+
+  // Get comprehensive tenant onboarding status and tracking
+  fastify.get('/tenant/onboarding-status', {
+    preHandler: [authenticateToken]
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as Record<string, unknown>;
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    const requestId = Logger.generateRequestId('tenant-onboarding-status');
+    const tenantId = ((request as ReqWithUser).userContext?.tenantId ?? '') as string;
+
+    try {
+      console.log(`📊 [${requestId}] Getting comprehensive onboarding status for tenant: ${tenantId}`);
+
+      const [tenant] = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.tenantId, tenantId))
+        .limit(1);
+
+      if (!tenant) {
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found', {
+          requestId
+        });
+      }
+
+      // Get subscription info
+      const [subscription] = await db
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.tenantId, tenantId))
+        .limit(1);
+
+      // Get user count
+      const [userCount] = await db
+        .select({ count: dbCount() })
+        .from(tenantUsers)
+        .where(eq(tenantUsers.tenantId, tenantId));
+
+      // Calculate trial status
+      const now = new Date();
+      const tenantAny = tenant as Record<string, unknown>;
+      const subAny = subscription as Record<string, unknown> | undefined;
+      const trialEnd = tenant.trialEndsAt ?? subAny?.trialEnd;
+      const trialActive = trialEnd && new Date(trialEnd as Date) > now;
+      const trialExpired = trialEnd && new Date(trialEnd as Date) <= now;
+
+      let trialTimeRemaining: string | null = null;
+      if (trialEnd && trialActive) {
+        const timeLeft = new Date(trialEnd as Date).getTime() - now.getTime();
+        const daysLeft = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+        const hoursLeft = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        trialTimeRemaining = `${daysLeft} days, ${hoursLeft} hours`;
+      }
+
+      const onboardingStatus = {
+        // Basic tenant info
+        tenantId: tenant.tenantId,
+        companyName: tenant.companyName,
+        subdomain: tenant.subdomain,
+        adminEmail: tenant.adminEmail,
+        industry: tenant.industry,
+
+        // Onboarding tracking
+        onboardingCompleted: tenant.onboardingCompleted,
+        onboardingStep: (tenantAny.onboardingStep as string) ?? null,
+        onboardingProgress: (tenantAny.onboardingProgress as Record<string, unknown>) || {},
+        onboardedAt: tenant.onboardedAt,
+        onboardingStartedAt: tenant.onboardingStartedAt,
+        setupCompletionRate: (tenantAny.setupCompletionRate as number) ?? 0,
+
+        // Trial & subscription tracking
+        trialStartedAt: tenant.trialStartedAt,
+        trialEndsAt: trialEnd,
+        trialStatus: (tenantAny.trialStatus as string) ?? null,
+        trialActive,
+        trialExpired,
+        trialTimeRemaining,
+        subscriptionStatus: (tenantAny.subscriptionStatus as string) ?? null,
+
+        // Feature adoption
+        featuresEnabled: (tenantAny.featuresEnabled as Record<string, unknown>) || {},
+        firstLoginAt: tenant.firstLoginAt,
+        lastActivityAt: tenant.lastActivityAt,
+
+        // Setup data
+        initialSetupData: (tenantAny.initialSetupData as Record<string, unknown>) || {},
+
+        // Current status
+        userCount: userCount.count,
+        currentPlan: subscription?.plan || 'trial',
+        subscriptionId: subscription?.subscriptionId,
+
+        // Metadata
+        createdAt: tenant.createdAt,
+        updatedAt: tenant.updatedAt
+      };
+
+      console.log(`✅ [${requestId}] Comprehensive onboarding status retrieved`);
+      console.log(`📊 [${requestId}] Onboarding completed: ${onboardingStatus.onboardingCompleted}`);
+      console.log(`⏰ [${requestId}] Trial status: ${onboardingStatus.trialStatus} (Active: ${trialActive})`);
+
+      return {
+        success: true,
+        data: onboardingStatus,
+        requestId
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error(`❌ [${requestId}] Failed to get onboarding status:`, error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to get onboarding status',
+        message: error.message,
+        requestId
+      });
+    }
+  });
+
+  // Update tenant settings
+  fastify.put('/tenant', {
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.TENANT_SETTINGS_EDIT)]
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as Record<string, unknown>;
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    const requestId = Logger.generateRequestId('tenant-update');
+    const tenantId = ((request as ReqWithUser).userContext?.tenantId ?? '') as string;
+    const updateData = body as Record<string, unknown>;
+
+    try {
+      console.log(`✏️ [${requestId}] Updating tenant:`, { tenantId, updateData });
+
+      const result = await (db.update(tenants) as any)
+        .set({
+          ...(updateData && typeof updateData === 'object' ? updateData : {}),
+          updatedAt: new Date()
+        })
+        .where(eq(tenants.tenantId, tenantId))
+        .returning();
+
+      if (result.length === 0) {
+        return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found', {
+          requestId
+        });
+      }
+
+      console.log(`✅ [${requestId}] Tenant updated successfully`);
+
+      return {
+        success: true,
+        message: 'Tenant updated successfully',
+        data: result[0],
+        requestId
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error(`❌ [${requestId}] Failed to update tenant:`, error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to update tenant',
+        message: error.message,
+        requestId
+      });
+    }
+  });
+
+  // Delete tenant and all associated data (DANGER!)
+  fastify.delete('/tenant/complete-deletion/:tenantId', {
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.TENANT_SETTINGS_DELETE)]
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as Record<string, unknown>;
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    const requestId = Logger.generateRequestId('tenant-deletion');
+    const tenantId = params.tenantId ?? '';
+    const confirmDeletion = body.confirmDeletion;
+
+    try {
+      console.log(`🚨 [${requestId}] DANGER: Complete tenant deletion requested:`, { tenantId });
+
+      if (!confirmDeletion || confirmDeletion !== 'DELETE_ALL_DATA') {
+        return reply.code(400).send({
+          success: false,
+          error: 'Confirmation required',
+          message: 'You must confirm deletion by setting confirmDeletion to "DELETE_ALL_DATA"',
+          requestId
+        });
+      }
+
+      // Only allow in development/test environment
+      if (process.env.NODE_ENV === 'production') {
+        return reply.code(403).send({
+          success: false,
+          error: 'Operation not allowed in production',
+          message: 'Complete tenant deletion is only allowed in development/test environments',
+          requestId
+        });
+      }
+
+      console.log(`🗑️ [${requestId}] Proceeding with tenant deletion...`);
+
+      const summary = await deleteTenantData(tenantId as string);
+
+      console.log(`✅ [${requestId}] Tenant deletion completed:`, summary);
+
+      return {
+        success: true,
+        message: 'Tenant and all associated data deleted successfully',
+        data: summary,
+        requestId
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error(`❌ [${requestId}] Failed to delete tenant:`, error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to delete tenant',
+        message: error.message,
+        requestId
+      });
+    }
+  });
+
+  // Get tenant data summary
+  fastify.get('/tenant/:tenantId/data-summary', {
+    preHandler: [authenticateToken, requirePermission(PERMISSIONS.TENANT_SETTINGS_VIEW)]
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as Record<string, unknown>;
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    const requestId = Logger.generateRequestId('tenant-summary');
+    const tenantId = params.tenantId ?? '';
+
+    try {
+      console.log(`📊 [${requestId}] Getting data summary for tenant: ${tenantId}`);
+
+      const summary = await getTenantDataSummary(tenantId as string);
+
+      console.log(`✅ [${requestId}] Data summary retrieved`);
+
+      return {
+        success: true,
+        data: summary,
+        tenantId,
+        requestId
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error(`❌ [${requestId}] Failed to get tenant data summary:`, error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to get tenant data summary',
+        message: error.message,
+        requestId
+      });
+    }
+  });
+}

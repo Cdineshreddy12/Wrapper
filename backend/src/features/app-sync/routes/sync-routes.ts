@@ -1,0 +1,1376 @@
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { authenticateToken } from '../../../middleware/auth/auth.js';
+import { WrapperSyncService } from '../services/sync-service.js';
+
+// Combined authentication middleware that accepts both Kinde tokens and service tokens
+async function authenticateServiceOrToken(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  try {
+    // Try service token validation first
+    const authHeader = request.headers.authorization;
+    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      console.log('🔑 Token received - Length:', token.length);
+
+      try {
+        // Try to decode as service token
+        const { verify } = await import('jsonwebtoken');
+        const secret = process.env.JWT_SECRET || 'default-secret-change-in-production';
+        const decoded = verify(token, secret) as Record<string, unknown>;
+
+        if ((decoded as any).type === 'service_token' && (decoded as any).service === 'crm') {
+          console.log('✅ Service token validated for CRM');
+          (request as any).serviceAuth = decoded;
+          return; // Service token is valid
+        }
+      } catch (_serviceTokenError) {
+        // Not a valid service token, try regular Kinde authentication
+        console.log('🔄 Service token validation failed, trying Kinde auth');
+      }
+    }
+
+    // Fall back to regular Kinde authentication
+    await authenticateToken(request, reply);
+  } catch (err: unknown) {
+    const error = err as Error;
+    console.log('❌ All authentication methods failed');
+    throw error;
+  }
+}
+import { db } from '../../../db/index.js';
+import { tenants, tenantUsers, customRoles, userRoleAssignments, entities, credits, creditTransactions, creditUsage, creditConfigurations, organizationMemberships } from '../../../db/schema/index.js';
+// REMOVED: creditAllocations - Table removed, applications manage their own credits
+import { eq, and, or, sql } from 'drizzle-orm';
+import ErrorResponses from '../../../utils/error-responses.js';
+import { BUSINESS_SUITE_MATRIX } from '../../../data/permission-matrix.js';
+
+/** Resolve :tenantId param (UUID or kindeOrgId) to Wrapper tenant UUID, or null if not found */
+async function resolveTenantIdParam(tenantIdParam: string | undefined): Promise<string | null> {
+  if (!tenantIdParam) return null;
+  let [row] = await db.select({ tenantId: tenants.tenantId }).from(tenants).where(eq(tenants.tenantId, tenantIdParam)).limit(1) as any[];
+  if (row) return row.tenantId;
+  [row] = await db.select({ tenantId: tenants.tenantId }).from(tenants).where(eq(tenants.kindeOrgId, tenantIdParam)).limit(1) as any[];
+  return row ? row.tenantId : null;
+}
+
+/**
+ * Wrapper CRM Data Synchronization Routes
+ * Provides endpoints for CRM to sync tenant data from Wrapper
+ */
+export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _options?: Record<string, unknown>): Promise<void> {
+
+  // ===============================
+  // SYNC MANAGEMENT ENDPOINTS
+  // ===============================
+
+  // Trigger full tenant data synchronization
+  fastify.post('/tenants/:tenantId/sync', {
+    preHandler: [authenticateServiceOrToken],
+    schema: {
+      description: 'Trigger full tenant data synchronization for CRM'
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as Record<string, unknown>;
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    try {
+      const resolvedTenantId = await resolveTenantIdParam(params.tenantId);
+      if (!resolvedTenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+      const tenantId = resolvedTenantId;
+      const skipReferenceData = query.skipReferenceData === 'true';
+      const forceSync = query.forceSync === 'true';
+
+      const userContext = (request as any).userContext;
+      console.log(`🔄 Triggering tenant sync for ${tenantId}`, {
+        skipReferenceData,
+        forceSync,
+        requestedBy: userContext?.email ?? ''
+      });
+
+      const result = await (WrapperSyncService as any).triggerTenantSync(tenantId, {
+        skipReferenceData,
+        forceSync,
+        requestedBy: userContext?.internalUserId ?? ''
+      });
+
+      return {
+        success: true,
+        message: 'Tenant data sync completed successfully',
+        results: result
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error triggering tenant sync:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Sync failed',
+        message: error.message
+      });
+    }
+  });
+
+  // Get sync status for tenant
+  fastify.get('/tenants/:tenantId/sync/status', {
+    preHandler: [authenticateServiceOrToken],
+    schema: {
+      description: 'Get tenant sync status'
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    try {
+      const tenantId = await resolveTenantIdParam(params.tenantId);
+      if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+
+      const status = await (WrapperSyncService as any).getSyncStatus(tenantId);
+
+      return {
+        success: true,
+        tenantId,
+        status: status
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error getting sync status:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to get sync status',
+        message: error.message
+      });
+    }
+  });
+
+  // Get data requirements specification
+  fastify.get('/data-requirements', {
+    schema: {
+      description: 'Get complete data requirements specification for CRM integration'
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as Record<string, unknown>;
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    try {
+      const requirements = (WrapperSyncService as any).getDataRequirements();
+
+      return {
+        success: true,
+        data: requirements
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error getting data requirements:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to get data requirements',
+        message: error.message
+      });
+    }
+  });
+
+  // ===============================
+  // TENANT DATA ENDPOINTS
+  // ===============================
+
+  // Get basic tenant information
+  fastify.get('/tenants/:tenantId', {
+    preHandler: [authenticateServiceOrToken],
+    schema: {
+      description: 'Get basic tenant information for CRM'
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    try {
+      const resolvedTenantId = await resolveTenantIdParam(params.tenantId);
+      if (!resolvedTenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+
+      const [tenant] = await db
+        .select({
+          tenantId: tenants.tenantId,
+          companyName: tenants.companyName,
+          isActive: tenants.isActive
+        })
+        .from(tenants)
+        .where(eq(tenants.tenantId, resolvedTenantId))
+        .limit(1) as any[];
+
+      if (!tenant) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+
+      return {
+        success: true,
+        data: {
+          tenantId: tenant.tenantId,
+          tenantName: tenant.companyName,
+          status: tenant.isActive ? 'active' : 'inactive',
+          settings: {},
+          subscription: {},
+          organization: {
+            orgCode: tenant.tenantId,
+            orgName: tenant.companyName
+          }
+        }
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error fetching tenant:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch tenant',
+        message: error.message
+      });
+    }
+  });
+
+  // Get user profiles for tenant
+  fastify.get('/tenants/:tenantId/users', {
+    preHandler: [authenticateServiceOrToken],
+    schema: {
+      description: 'Get user profiles for tenant (CRM format)'
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    try {
+      const tenantId = await resolveTenantIdParam(params.tenantId);
+      if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+      const entityId = query.entityId ?? '';
+      const includeInactive = query.includeInactive === 'true';
+      const page = Number(query.page) || 1;
+      const limit = Number(query.limit) || 50;
+      const offset = (page - 1) * limit;
+
+      // Build query conditions
+      const conditions = [eq(tenantUsers.tenantId, tenantId)];
+      if (entityId && (tenantUsers as any).entityId) {
+        conditions.push(eq((tenantUsers as any).entityId, entityId));
+      }
+      if (!includeInactive) {
+        conditions.push(eq(tenantUsers.isActive, true));
+      }
+
+      // Get user profiles - only select fields that exist in database (include kindeUserId for Operations sync: UUID→kinde map for role assignments)
+      const users = await db
+        .select({
+          userId: tenantUsers.userId,
+          kindeUserId: tenantUsers.kindeUserId,
+          email: tenantUsers.email,
+          name: tenantUsers.name,
+          isActive: tenantUsers.isActive,
+          tenantId: tenantUsers.tenantId,
+          createdAt: tenantUsers.createdAt,
+          updatedAt: tenantUsers.updatedAt
+        })
+        .from(tenantUsers)
+        .where(and(...conditions))
+        .orderBy(tenantUsers.createdAt)
+        .limit(limit)
+        .offset(offset);
+
+      // Transform to CRM format
+      const transformedUsers = users.map(user => {
+        // Parse name if available
+        const nameParts = user.name ? user.name.split(' ') : ['', ''];
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        return {
+          userId: user.userId,
+          kindeId: user.kindeUserId ?? null,
+          employeeCode: user.userId, // Use userId as employee code for now
+          personalInfo: {
+            firstName: firstName,
+            lastName: lastName,
+            email: user.email || ''
+          },
+          organization: {
+            orgCode: tenantId, // Default to tenant ID
+            department: '', // Not available in current schema
+            designation: ''  // Not available in current schema
+          },
+          status: {
+            isActive: user.isActive !== null ? user.isActive : true,
+            lastActivityAt: null // Not available in current schema
+          },
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt
+        };
+      });
+
+      // Get total count
+      const countResult = await db
+        .select({ count: sql`count(*)` })
+        .from(tenantUsers)
+        .where(and(...conditions)) as any[];
+      const count = Number((countResult[0] as any)?.count ?? 0);
+
+      return {
+        success: true,
+        data: transformedUsers,
+        pagination: {
+          page,
+          limit,
+          total: count,
+          totalPages: Math.ceil(count / limit)
+        }
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error fetching tenant users:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch users',
+        message: error.message
+      });
+    }
+  });
+
+  // Get organizations for tenant
+  fastify.get('/tenants/:tenantId/organizations', {
+    preHandler: [authenticateServiceOrToken],
+    schema: {
+      description: 'Get organizations for tenant (CRM format)'
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    try {
+      const tenantId = await resolveTenantIdParam(params.tenantId);
+      if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+      const includeInactive = query.includeInactive === 'true';
+      const page = Number(query.page) || 1;
+      const limit = Number(query.limit) || 50;
+      const offset = (page - 1) * limit;
+
+      // Build query conditions
+      const conditions = [eq(entities.tenantId, tenantId)];
+      if (!includeInactive) {
+        conditions.push(eq(entities.isActive, true));
+      }
+
+      const organizations = await db
+        .select({
+          orgCode: entities.entityId,
+          orgName: entities.entityName,
+          parentId: entities.parentEntityId,
+          status: sql`CASE WHEN ${entities.isActive} THEN 'active' ELSE 'inactive' END`,
+          hierarchy: sql`json_build_object(
+            'level', ${entities.entityLevel},
+            'path', ${entities.hierarchyPath},
+            'children', '[]'::jsonb
+          )`,
+          metadata: sql`json_build_object(
+            'description', ${entities.description},
+            'type', ${entities.entityType},
+            'createdAt', ${entities.createdAt},
+            'updatedAt', ${entities.updatedAt}
+          )`,
+          createdAt: entities.createdAt,
+          updatedAt: entities.updatedAt
+        })
+        .from(entities)
+        .where(and(...conditions))
+        .orderBy(entities.entityLevel, entities.entityName)
+        .limit(limit)
+        .offset(offset);
+
+      // Get total count
+      const countResult = await db
+        .select({ count: sql`count(*)` })
+        .from(entities)
+        .where(and(...conditions)) as any[];
+      const count = Number((countResult[0] as any)?.count ?? 0);
+
+      return {
+        success: true,
+        data: organizations,
+        pagination: {
+          page,
+          limit,
+          total: count,
+          totalPages: Math.ceil(count / limit)
+        }
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error fetching tenant organizations:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch organizations',
+        message: error.message
+      });
+    }
+  });
+
+  // Get detailed tenant users information
+  fastify.get('/tenants/:tenantId/tenant-users', {
+    preHandler: [authenticateServiceOrToken],
+    schema: {
+      description: 'Get detailed tenant users information for CRM'
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    try {
+      const tenantId = await resolveTenantIdParam(params.tenantId);
+      if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+      const includeInactive = query.includeInactive === 'true';
+      const page = Number(query.page) || 1;
+      const limit = Number(query.limit) || 50;
+      const offset = (page - 1) * limit;
+
+      // Build query conditions
+      const conditions = [eq(tenantUsers.tenantId, tenantId)];
+      if (!includeInactive) {
+        conditions.push(eq(tenantUsers.isActive, true));
+      }
+
+      const tenantUsersData = await db
+        .select({
+          userId: tenantUsers.userId,
+          tenantId: tenantUsers.tenantId,
+          kindeId: tenantUsers.kindeUserId,
+          email: tenantUsers.email,
+          name: tenantUsers.name,
+          isResponsiblePerson: tenantUsers.isTenantAdmin,
+          isTenantAdmin: tenantUsers.isTenantAdmin,
+          onboardingCompleted: tenantUsers.onboardingCompleted,
+          lastLoginAt: tenantUsers.lastLoginAt,
+          isActive: tenantUsers.isActive,
+          avatar: tenantUsers.avatar,
+          createdAt: tenantUsers.createdAt,
+          updatedAt: tenantUsers.updatedAt
+        })
+        .from(tenantUsers)
+        .where(and(...conditions))
+        .orderBy(tenantUsers.createdAt)
+        .limit(limit)
+        .offset(offset);
+
+      // Transform to CRM format
+      const transformedTenantUsers = tenantUsersData.map(user => {
+        // Parse name if available
+        const nameParts = user.name ? user.name.split(' ') : ['', ''];
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        return {
+          userId: user.userId,
+          tenantId: user.tenantId,
+          kindeId: user.kindeId,
+          email: user.email || '',
+          firstName: firstName,
+          lastName: lastName,
+          primaryOrganizationId: tenantId, // Default to tenant ID
+          isResponsiblePerson: (user as any).isResponsiblePerson || false,
+          isTenantAdmin: user.isTenantAdmin || false,
+          isVerified: false,
+          onboardingCompleted: user.onboardingCompleted || false,
+          lastLoginAt: user.lastLoginAt,
+          loginCount: 0,
+          preferences: {},
+          profile: {
+            title: '',
+            department: '',
+            employeeCode: user.userId
+          },
+          security: {
+            isActive: user.isActive !== null ? user.isActive : true
+          },
+          metadata: {
+            avatar: (user as any).avatar || '',
+            name: user.name || ''
+          },
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt
+        };
+      });
+
+      // Get total count
+      const countResult = await db
+        .select({ count: sql`count(*)` })
+        .from(tenantUsers)
+        .where(and(...conditions)) as any[];
+      const count = Number((countResult[0] as any)?.count ?? 0);
+
+      return {
+        success: true,
+        data: transformedTenantUsers,
+        pagination: {
+          page,
+          limit,
+          total: count,
+          totalPages: Math.ceil(count / limit)
+        }
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error fetching detailed tenant users:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch tenant users',
+        message: error.message
+      });
+    }
+  });
+
+  // Get role definitions for tenant, optionally filtered by application
+  // Pass ?appCode=operations to get only roles with operations.* permissions
+  fastify.get('/tenants/:tenantId/roles', {
+    preHandler: [authenticateServiceOrToken],
+    schema: {
+      description: 'Get role definitions for tenant, optionally filtered to a specific application'
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    try {
+      const tenantId = await resolveTenantIdParam(params.tenantId);
+      if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+      const includeInactive = query.includeInactive === 'true';
+      const page = Number(query.page) || 1;
+      const limit = Number(query.limit) || 50;
+      const appCode = query.appCode ? String(query.appCode).trim() : null;
+      const offset = (page - 1) * limit;
+
+      const conditions = [eq(customRoles.tenantId, tenantId)];
+
+      const roles = await db
+        .select({
+          roleId: customRoles.roleId,
+          roleName: customRoles.roleName,
+          permissions: customRoles.permissions,
+          priority: customRoles.priority,
+          isActive: sql`true`,
+          description: customRoles.description,
+          tenantId: customRoles.tenantId,
+          createdAt: customRoles.createdAt,
+          updatedAt: customRoles.updatedAt
+        })
+        .from(customRoles)
+        .where(and(...conditions))
+        .orderBy(customRoles.priority, customRoles.roleName)
+        .limit(limit)
+        .offset(offset);
+
+      const transformedRoles = roles.map(role => {
+        const flatPermissions: string[] = [];
+
+        if (role.permissions) {
+          let permissionsObj: Record<string, unknown> = role.permissions as Record<string, unknown>;
+
+          if (typeof role.permissions === 'string') {
+            try {
+              permissionsObj = JSON.parse(role.permissions) as Record<string, unknown>;
+            } catch (_e) {
+              console.log('Failed to parse permissions JSON for role:', role.roleName, role.permissions);
+              permissionsObj = {};
+            }
+          }
+
+          if (permissionsObj && typeof permissionsObj === 'object') {
+            if (appCode) {
+              const appPerms = (permissionsObj as any)[appCode];
+              if (appPerms && typeof appPerms === 'object') {
+                Object.entries(appPerms).forEach(([resource, actions]) => {
+                  if (Array.isArray(actions)) {
+                    (actions as string[]).forEach(action => {
+                      flatPermissions.push(`${appCode}.${resource}.${action}`);
+                    });
+                  }
+                });
+              }
+            } else {
+              Object.entries(permissionsObj).forEach(([module, modulePermissions]) => {
+                if (modulePermissions && typeof modulePermissions === 'object') {
+                  Object.entries(modulePermissions as Record<string, unknown>).forEach(([resource, actions]) => {
+                    if (Array.isArray(actions)) {
+                      (actions as string[]).forEach(action => {
+                        flatPermissions.push(`${module}.${resource}.${action}`);
+                      });
+                    }
+                  });
+                }
+              });
+            }
+          }
+        }
+
+        return {
+          roleId: role.roleId,
+          roleName: role.roleName || '',
+          permissions: flatPermissions,
+          priority: role.priority || 0,
+          isActive: role.isActive,
+          description: role.description || '',
+          tenantId: role.tenantId,
+          createdAt: role.createdAt,
+          updatedAt: role.updatedAt
+        };
+      }).filter(role => appCode ? role.permissions.length > 0 : true);
+
+      const countResult = await db
+        .select({ count: sql`count(*)` })
+        .from(customRoles)
+        .where(and(...conditions)) as any[];
+      const count = Number((countResult[0] as any)?.count ?? 0);
+
+      return {
+        success: true,
+        data: transformedRoles,
+        pagination: {
+          page,
+          limit,
+          total: count,
+          totalPages: Math.ceil(count / limit)
+        }
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error fetching tenant roles:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch roles',
+        message: error.message
+      });
+    }
+  });
+
+  // Get credit configurations for tenant, scoped to a specific application
+  // Defaults to 'crm' for backward compat; pass ?appCode=operations for Ops-specific configs
+  fastify.get('/tenants/:tenantId/credit-configs', {
+    preHandler: [authenticateServiceOrToken],
+    schema: {
+      description: 'Get credit configurations for tenant scoped by application (tenant-specific takes precedence over global)'
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    try {
+      const tenantId = await resolveTenantIdParam(params.tenantId);
+      if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+
+      const appCode = (query.appCode ?? 'crm').toString().trim();
+
+      // Get existing configurations for this tenant scoped to the requested app
+      const existingConfigs = await db
+        .select({
+          configId: creditConfigurations.configId,
+          tenantId: creditConfigurations.tenantId,
+          operationCode: creditConfigurations.operationCode,
+          operationName: creditConfigurations.operationName,
+          creditCost: creditConfigurations.creditCost,
+          unit: creditConfigurations.unit,
+          isGlobal: creditConfigurations.isGlobal,
+          isActive: creditConfigurations.isActive
+        })
+        .from(creditConfigurations)
+        .where(and(
+          or(
+            eq(creditConfigurations.tenantId, tenantId),
+            eq(creditConfigurations.isGlobal, true)
+          ),
+          eq(creditConfigurations.isActive, true),
+          sql`${creditConfigurations.operationCode} LIKE ${appCode + '.%'}`
+        ));
+
+      const configMap = new Map<string, any>();
+
+      existingConfigs.forEach(config => {
+        if (config.isGlobal) {
+          configMap.set(config.operationCode, { ...config, source: 'global' });
+        }
+      });
+
+      existingConfigs.forEach(config => {
+        if (!config.isGlobal) {
+          configMap.set(config.operationCode, { ...config, source: 'tenant' });
+        }
+      });
+
+      const appMatrix = (BUSINESS_SUITE_MATRIX as any)[appCode];
+      const appConfigs: any[] = [];
+
+      if (appMatrix && appMatrix.modules) {
+        Object.entries(appMatrix.modules).forEach(([moduleKey, moduleDataUnknown]) => {
+          const moduleData = moduleDataUnknown as any;
+          if (moduleData.permissions && Array.isArray(moduleData.permissions)) {
+            moduleData.permissions.forEach((permission: any) => {
+              const operationCode = `${appCode}.${moduleKey}.${permission.code}`;
+
+              const existingConfig = configMap.get(operationCode);
+
+              if (existingConfig) {
+                appConfigs.push({
+                  configId: existingConfig.configId,
+                  tenantId: existingConfig.tenantId,
+                  entityId: existingConfig.isGlobal ? null : tenantId,
+                  configName: existingConfig.operationName || `${moduleData.moduleName} - ${permission.name}`,
+                  operationCode: operationCode,
+                  description: existingConfig.operationName || permission.description,
+                  creditCost: parseFloat(existingConfig.creditCost || 0),
+                  unit: existingConfig.unit || 'operation',
+                  isGlobal: existingConfig.isGlobal,
+                  source: existingConfig.source,
+                  moduleName: moduleData.moduleName,
+                  permissionName: permission.name
+                });
+              } else {
+                appConfigs.push({
+                  configId: null,
+                  tenantId: tenantId,
+                  entityId: null,
+                  configName: `${moduleData.moduleName} - ${permission.name}`,
+                  operationCode: operationCode,
+                  description: permission.description,
+                  creditCost: 0,
+                  unit: 'operation',
+                  isGlobal: true,
+                  source: 'default',
+                  moduleName: moduleData.moduleName,
+                  permissionName: permission.name
+                });
+              }
+            });
+          }
+        });
+      }
+
+      appConfigs.sort((a, b) => a.operationCode.localeCompare(b.operationCode));
+
+      return {
+        success: true,
+        data: appConfigs,
+        summary: {
+          totalOperations: appConfigs.length,
+          tenantSpecific: appConfigs.filter(c => c.source === 'tenant').length,
+          global: appConfigs.filter(c => c.source === 'global').length,
+          default: appConfigs.filter(c => c.source === 'default').length,
+          modules: Object.keys((appMatrix as any)?.modules || {}).length,
+          appCode
+        }
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error fetching credit configurations:', error);
+      const params = request.params as Record<string, string>;
+      const tenantId = params.tenantId ?? '';
+      return {
+        success: true,
+        data: [{
+          configId: `default_${tenantId}`,
+          tenantId: tenantId,
+          entityId: tenantId,
+          configName: 'Default Credit Configuration',
+          creditLimit: 1000,
+          resetPeriod: 'monthly',
+          resetDay: 1,
+          lastResetAt: null,
+          isActive: true,
+          metadata: {
+            description: 'Default credit configuration for tenant',
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }
+        }],
+        pagination: {
+          page: 1,
+          limit: 50,
+          total: 1,
+          totalPages: 1
+        }
+      };
+    }
+  });
+
+  // Global-only credit configurations for a specific application
+  // Returns the complete matrix of operations with DB overrides where they exist.
+  // appCode is required to prevent accidental cross-app data leaks.
+  fastify.get('/credit-configs/global', {
+    preHandler: [authenticateServiceOrToken],
+    schema: {
+      description: 'Get global credit configurations for a specific application (no tenant-specific overrides)'
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const query = request.query as Record<string, string>;
+    try {
+      const appCode = (query.appCode ?? '').toString().trim();
+      if (!appCode) {
+        return reply.code(400).send({ success: false, error: 'appCode query parameter is required' });
+      }
+
+      const appMatrix = (BUSINESS_SUITE_MATRIX as any)[appCode];
+      if (!appMatrix || !appMatrix.modules) {
+        return reply.code(400).send({ success: false, error: `Unknown appCode: ${appCode}` });
+      }
+
+      const globalConfigs = await db
+        .select({
+          configId: creditConfigurations.configId,
+          operationCode: creditConfigurations.operationCode,
+          operationName: creditConfigurations.operationName,
+          creditCost: creditConfigurations.creditCost,
+          unit: creditConfigurations.unit,
+          isActive: creditConfigurations.isActive
+        })
+        .from(creditConfigurations)
+        .where(and(
+          eq(creditConfigurations.isGlobal, true),
+          eq(creditConfigurations.isActive, true),
+          sql`${creditConfigurations.operationCode} LIKE ${appCode + '.%'}`
+        ));
+
+      const configMap = new Map<string, any>();
+      globalConfigs.forEach(config => {
+        configMap.set(config.operationCode, config);
+      });
+
+      const appConfigs: any[] = [];
+      Object.entries(appMatrix.modules).forEach(([moduleKey, moduleDataUnknown]) => {
+        const moduleData = moduleDataUnknown as any;
+        if (moduleData.permissions && Array.isArray(moduleData.permissions)) {
+          moduleData.permissions.forEach((permission: any) => {
+            const operationCode = `${appCode}.${moduleKey}.${permission.code}`;
+            const existing = configMap.get(operationCode);
+
+            if (existing) {
+              appConfigs.push({
+                configId: existing.configId,
+                tenantId: null,
+                entityId: null,
+                configName: existing.operationName || `${moduleData.moduleName} - ${permission.name}`,
+                operationCode,
+                description: existing.operationName || permission.description,
+                creditCost: parseFloat(existing.creditCost || 0),
+                unit: existing.unit || 'operation',
+                isGlobal: true,
+                source: 'global',
+                moduleName: moduleData.moduleName,
+                permissionName: permission.name
+              });
+            } else {
+              appConfigs.push({
+                configId: null,
+                tenantId: null,
+                entityId: null,
+                configName: `${moduleData.moduleName} - ${permission.name}`,
+                operationCode,
+                description: permission.description,
+                creditCost: 0,
+                unit: 'operation',
+                isGlobal: true,
+                source: 'default',
+                moduleName: moduleData.moduleName,
+                permissionName: permission.name
+              });
+            }
+          });
+        }
+      });
+
+      appConfigs.sort((a, b) => a.operationCode.localeCompare(b.operationCode));
+
+      return {
+        success: true,
+        data: appConfigs,
+        summary: {
+          totalOperations: appConfigs.length,
+          withDbConfig: appConfigs.filter(c => c.source === 'global').length,
+          defaults: appConfigs.filter(c => c.source === 'default').length,
+          modules: Object.keys(appMatrix.modules).length,
+          appCode
+        }
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error fetching global credit configurations:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch global credit configurations',
+        message: error.message
+      });
+    }
+  });
+
+  // Tenant-specific credit configurations for a specific application
+  // Returns ONLY configs that the tenant has explicitly overridden (no global defaults).
+  // If a tenant has no overrides, the response data is an empty array.
+  fastify.get('/tenants/:tenantId/credit-configs/tenant-specific', {
+    preHandler: [authenticateServiceOrToken],
+    schema: {
+      description: 'Get tenant-specific credit configuration overrides for a specific application (no global/default configs)'
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    try {
+      const tenantId = await resolveTenantIdParam(params.tenantId);
+      if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+
+      const appCode = (query.appCode ?? '').toString().trim();
+      if (!appCode) {
+        return reply.code(400).send({ success: false, error: 'appCode query parameter is required' });
+      }
+
+      const appMatrix = (BUSINESS_SUITE_MATRIX as any)[appCode];
+      const moduleMap = new Map<string, any>();
+      if (appMatrix && appMatrix.modules) {
+        Object.entries(appMatrix.modules).forEach(([moduleKey, moduleDataUnknown]) => {
+          const moduleData = moduleDataUnknown as any;
+          if (moduleData.permissions && Array.isArray(moduleData.permissions)) {
+            moduleData.permissions.forEach((permission: any) => {
+              moduleMap.set(`${appCode}.${moduleKey}.${permission.code}`, {
+                moduleName: moduleData.moduleName,
+                permissionName: permission.name,
+                description: permission.description
+              });
+            });
+          }
+        });
+      }
+
+      const tenantConfigs = await db
+        .select({
+          configId: creditConfigurations.configId,
+          tenantId: creditConfigurations.tenantId,
+          operationCode: creditConfigurations.operationCode,
+          operationName: creditConfigurations.operationName,
+          creditCost: creditConfigurations.creditCost,
+          unit: creditConfigurations.unit,
+          isActive: creditConfigurations.isActive
+        })
+        .from(creditConfigurations)
+        .where(and(
+          eq(creditConfigurations.tenantId, tenantId),
+          eq(creditConfigurations.isGlobal, false),
+          eq(creditConfigurations.isActive, true),
+          sql`${creditConfigurations.operationCode} LIKE ${appCode + '.%'}`
+        ));
+
+      const appConfigs = tenantConfigs.map(config => {
+        const matrixInfo = moduleMap.get(config.operationCode);
+        return {
+          configId: config.configId,
+          tenantId: config.tenantId,
+          entityId: tenantId,
+          configName: config.operationName || matrixInfo?.moduleName
+            ? `${matrixInfo?.moduleName || 'Unknown'} - ${matrixInfo?.permissionName || config.operationCode}`
+            : config.operationCode,
+          operationCode: config.operationCode,
+          description: config.operationName || matrixInfo?.description || '',
+          creditCost: parseFloat(String(config.creditCost ?? 0)),
+          unit: config.unit || 'operation',
+          isGlobal: false,
+          source: 'tenant',
+          moduleName: matrixInfo?.moduleName || null,
+          permissionName: matrixInfo?.permissionName || null
+        };
+      });
+
+      appConfigs.sort((a, b) => a.operationCode.localeCompare(b.operationCode));
+
+      return {
+        success: true,
+        data: appConfigs,
+        summary: {
+          totalOverrides: appConfigs.length,
+          appCode,
+          tenantId
+        }
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error fetching tenant-specific credit configurations:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch tenant-specific credit configurations',
+        message: error.message
+      });
+    }
+  });
+
+  // Get credit allocations for tenant entities, scoped by application
+  // Defaults to 'crm' for backward compat; pass ?appCode=operations for Ops
+  fastify.get('/tenants/:tenantId/entity-credits', {
+    preHandler: [authenticateServiceOrToken],
+    schema: {
+      description: 'Get credit allocations for tenant entities scoped by application'
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    try {
+      const tenantId = await resolveTenantIdParam(params.tenantId);
+      if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+      const entityId = query.entityId ?? '';
+      const page = Number(query.page) || 1;
+      const limit = Number(query.limit) || 50;
+      const appCode = (query.appCode ?? 'crm').toString().trim();
+      const offset = (page - 1) * limit;
+      const allocationOpCode = `application_allocation:${appCode}`;
+
+      const creditConditions = [eq(credits.tenantId, tenantId)];
+      if (entityId) creditConditions.push(eq(credits.entityId, entityId));
+
+      const entityCreditsData = await db
+        .select({
+          tenantId: credits.tenantId,
+          entityId: credits.entityId,
+          isActive: credits.isActive
+        })
+        .from(credits)
+        .where(and(...creditConditions))
+        .limit(limit)
+        .offset(offset);
+
+      const entityIds = entityCreditsData
+        .map(c => c.entityId)
+        .filter((id): id is string => Boolean(id));
+
+      const allocationMap: Record<string, number> = {};
+      const usageMap: Record<string, number> = {};
+
+      if (entityIds.length > 0) {
+        const allocations = await db
+          .select({
+            entityId: creditTransactions.entityId,
+            totalAllocated: sql`COALESCE(SUM(${creditTransactions.amount}), 0)`
+          })
+          .from(creditTransactions)
+          .where(and(
+            eq(creditTransactions.tenantId, tenantId),
+            eq(creditTransactions.operationCode, allocationOpCode),
+            sql`${creditTransactions.entityId} IN (${sql.join(entityIds.map(id => sql`${id}::uuid`), sql`, `)})`
+          ))
+          .groupBy(creditTransactions.entityId) as any[];
+
+        for (const row of allocations) {
+          const eid = (row as any).entityId ?? '';
+          if (eid) allocationMap[eid] = parseFloat(String((row as any).totalAllocated ?? 0));
+        }
+
+        const usagePrefix = `${appCode}.`;
+        const usages = await db
+          .select({
+            entityId: creditUsage.entityId,
+            totalUsed: sql`COALESCE(SUM(${creditUsage.creditsDebited}), 0)`
+          })
+          .from(creditUsage)
+          .where(and(
+            eq(creditUsage.tenantId, tenantId),
+            sql`${creditUsage.operationCode} LIKE ${usagePrefix + '%'}`,
+            eq(creditUsage.success, true),
+            sql`${creditUsage.entityId} IN (${sql.join(entityIds.map(id => sql`${id}::uuid`), sql`, `)})`
+          ))
+          .groupBy(creditUsage.entityId) as any[];
+
+        for (const row of usages) {
+          const eid = (row as any).entityId ?? '';
+          if (eid) usageMap[eid] = parseFloat(String((row as any).totalUsed ?? 0));
+        }
+      }
+
+      const entityCredits = entityCreditsData.map(credit => {
+        const allocated = allocationMap[credit.entityId ?? ''] ?? 0;
+        const used = usageMap[credit.entityId ?? ''] ?? 0;
+        return {
+          tenantId: credit.tenantId,
+          entityId: credit.entityId,
+          allocatedCredits: allocated,
+          targetApplication: appCode,
+          usedCredits: used,
+          availableCredits: allocated - used,
+          allocationType: 'organization',
+          allocationPurpose: 'Organization credit balance',
+          expiresAt: null,
+          isActive: credit.isActive,
+          allocationSource: 'system',
+          allocatedBy: 'system',
+          allocatedAt: new Date(),
+          metadata: {}
+        };
+      });
+
+      const countResult = await db
+        .select({ count: sql`count(*)` })
+        .from(credits)
+        .where(and(...creditConditions)) as any[];
+      const count = Number((countResult[0] as any)?.count ?? 0);
+
+      return {
+        success: true,
+        data: entityCredits,
+        pagination: {
+          page,
+          limit,
+          total: count,
+          totalPages: Math.ceil(count / limit)
+        }
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error fetching entity credits:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch entity credits',
+        message: error.message
+      });
+    }
+  });
+
+  // Get employee organization assignments for tenant
+  fastify.get('/tenants/:tenantId/employee-assignments', {
+    preHandler: [authenticateServiceOrToken],
+    schema: {
+      description: 'Get employee organization assignments for tenant (CRM format)'
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    try {
+      console.log('🔐 Received token:', request.headers.authorization);
+
+      const tenantId = await resolveTenantIdParam(params.tenantId);
+      if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+      const userId = query.userId ?? '';
+      const entityId = query.entityId ?? '';
+      const includeInactive = query.includeInactive === 'true';
+      const page = Number(query.page) || 1;
+      const limit = Number(query.limit) || 50;
+      const offset = (page - 1) * limit;
+
+      // Build conditions for organization memberships
+      let conditions = [
+        eq(organizationMemberships.tenantId, tenantId),
+        eq(organizationMemberships.membershipStatus, 'active')
+      ];
+
+      if (userId) {
+        conditions.push(eq(organizationMemberships.userId, userId));
+      }
+      if (entityId) {
+        conditions.push(eq(organizationMemberships.entityId, entityId));
+      }
+
+      // Get organization memberships with user and entity details
+      const memberships = await db
+        .select({
+          membershipId: organizationMemberships.membershipId,
+          userId: organizationMemberships.userId,
+          tenantId: organizationMemberships.tenantId,
+          entityId: organizationMemberships.entityId,
+          membershipType: organizationMemberships.membershipType,
+          membershipStatus: organizationMemberships.membershipStatus,
+          accessLevel: organizationMemberships.accessLevel,
+          isPrimary: organizationMemberships.isPrimary,
+          assignedAt: organizationMemberships.createdAt,
+          createdBy: organizationMemberships.createdBy,
+          // User details
+          userEmail: tenantUsers.email,
+          userName: tenantUsers.name,
+          userIsActive: tenantUsers.isActive,
+          // Entity details
+          entityName: entities.entityName,
+          entityCode: entities.entityCode
+        })
+        .from(organizationMemberships)
+        .innerJoin(tenantUsers, eq(organizationMemberships.userId, tenantUsers.userId))
+        .innerJoin(entities, eq(organizationMemberships.entityId, entities.entityId))
+        .where(and(...conditions))
+        .orderBy(organizationMemberships.createdAt)
+        .limit(limit)
+        .offset(offset);
+
+      // Get total count for pagination
+      const totalResult = await db
+        .select({ count: sql`count(*)` })
+        .from(organizationMemberships)
+        .where(and(...conditions)) as any[];
+
+      const total = Number((totalResult[0] as any)?.count ?? 0);
+      const totalPages = Math.ceil(total / limit);
+
+      // Transform to CRM format
+      const transformedAssignments = memberships.map(membership => ({
+        assignmentId: membership.membershipId, // Use actual membership UUID
+        tenantId: membership.tenantId,
+        userId: membership.userId,
+        entityId: membership.entityId,
+        assignmentType: membership.membershipType || 'primary',
+        isActive: membership.membershipStatus === 'active' && membership.userIsActive,
+        assignedAt: membership.assignedAt?.toISOString(),
+        expiresAt: null,
+        assignedBy: membership.createdBy,
+        deactivatedAt: null,
+        deactivatedBy: null,
+        priority: membership.isPrimary ? 1 : 2,
+        metadata: {
+          department: '',
+          designation: '',
+          employeeCode: membership.userId,
+          organizationName: membership.entityName,
+          organizationCode: membership.entityCode,
+          accessLevel: membership.accessLevel
+        }
+      }));
+
+      return {
+        success: true,
+        data: transformedAssignments,
+        pagination: {
+          page,
+          limit,
+          total: String(total),
+          totalPages
+        }
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error fetching employee assignments:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch employee assignments',
+        message: error.message
+      });
+    }
+  });
+
+  // Get role assignments for tenant
+  fastify.get('/tenants/:tenantId/role-assignments', {
+    preHandler: [authenticateServiceOrToken],
+    schema: {
+      description: 'Get role assignments for tenant (CRM format)'
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const query = request.query as Record<string, string>;
+    try {
+      const tenantId = await resolveTenantIdParam(params.tenantId);
+      if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
+      const userId = query.userId ?? '';
+      const roleId = query.roleId ?? '';
+      const includeInactive = query.includeInactive === 'true';
+      const page = Number(query.page) || 1;
+      const limit = Number(query.limit) || 50;
+      const offset = (page - 1) * limit;
+
+      const { userRoleAssignments } = await import('../../../db/schema/index.js');
+
+      // Build query conditions
+      const conditions = [
+        eq(tenantUsers.tenantId, tenantId), // Join condition and tenant filter
+        eq(customRoles.tenantId, tenantId)  // Ensure roles belong to tenant
+      ];
+
+      if (!includeInactive) {
+        conditions.push(eq(userRoleAssignments.isActive, true));
+      }
+
+      if (userId) {
+        conditions.push(eq(userRoleAssignments.userId, userId));
+      }
+
+      if (roleId) {
+        conditions.push(eq(userRoleAssignments.roleId, roleId));
+      }
+
+      // Get role assignments first, then enrich with organization data separately
+      const roleAssignmentsData = await db
+        .select({
+          assignmentId: userRoleAssignments.id,
+          tenantId: sql`${tenantId}` as any,
+          userId: userRoleAssignments.userId,
+          roleId: userRoleAssignments.roleId,
+          roleOrgId: (userRoleAssignments as any).organizationId,
+          assignedBy: userRoleAssignments.assignedBy,
+          assignedAt: userRoleAssignments.assignedAt,
+          expiresAt: userRoleAssignments.expiresAt,
+          isActive: userRoleAssignments.isActive,
+          isResponsiblePerson: userRoleAssignments.isResponsiblePerson,
+          scope: userRoleAssignments.scope,
+          isTemporary: userRoleAssignments.isTemporary,
+          // User details
+          userEmail: tenantUsers.email,
+          userName: tenantUsers.name,
+          userIsActive: tenantUsers.isActive,
+          // Role details
+          roleName: customRoles.roleName,
+          isSystemRole: customRoles.isSystemRole,
+          isDefault: customRoles.isDefault
+        })
+        .from(userRoleAssignments)
+        .innerJoin(tenantUsers, eq(userRoleAssignments.userId, tenantUsers.userId))
+        .innerJoin(customRoles, eq(userRoleAssignments.roleId, customRoles.roleId))
+        .where(and(...conditions))
+        .orderBy(userRoleAssignments.assignedAt)
+        .limit(limit)
+        .offset(offset);
+
+      // Enrich with organization data
+      const assignments = await Promise.all(roleAssignmentsData.map(async (assignment) => {
+        let orgCode = null;
+
+        if (assignment.roleOrgId) {
+          const org = await db
+            .select({
+              orgCode: entities.entityId
+            })
+            .from(entities)
+            .where(and(
+              eq(entities.tenantId, tenantId),
+              eq(entities.entityId, assignment.roleOrgId)
+            ))
+            .limit(1);
+
+          if (org.length > 0) {
+            orgCode = org[0].orgCode;
+          }
+        }
+
+        return {
+          ...assignment,
+          orgCode
+        };
+      }));
+
+      // Transform to CRM format
+      const roleAssignments = assignments.map(assignment => ({
+        assignmentId: assignment.assignmentId,
+        tenantId: assignment.tenantId,
+        userId: assignment.userId,
+        roleId: assignment.roleId,
+        entityId: assignment.orgCode || assignment.roleOrgId || tenantId, // Use actual orgCode from entities table, fallback to internal org ID, then tenantId
+        assignedBy: assignment.assignedBy,
+        assignedAt: assignment.assignedAt,
+        expiresAt: assignment.expiresAt,
+        isActive: assignment.isActive
+      }));
+
+      // Get total count
+      const countResult = await db
+        .select({ count: sql`count(*)` })
+        .from(userRoleAssignments)
+        .innerJoin(tenantUsers, eq(userRoleAssignments.userId, tenantUsers.userId))
+        .innerJoin(customRoles, eq(userRoleAssignments.roleId, customRoles.roleId))
+        .where(and(...conditions)) as any[];
+      const count = Number((countResult[0] as any)?.count ?? 0);
+
+      return {
+        success: true,
+        data: roleAssignments,
+        pagination: {
+          page,
+          limit,
+          total: count,
+          totalPages: Math.ceil(count / limit)
+        }
+      };
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error fetching role assignments:', error);
+      return reply.code(500).send({
+        success: false,
+        error: 'Failed to fetch role assignments',
+        message: error.message
+      });
+    }
+  });
+
+}
+

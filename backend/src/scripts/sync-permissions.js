@@ -13,7 +13,7 @@
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { applications, applicationModules } from '../db/schema/suite-schema.js';
+import { applications, applicationModules } from '../db/schema/core/suite-schema.js';
 import { BUSINESS_SUITE_MATRIX, PermissionMatrixUtils } from '../data/permission-matrix.js';
 import { eq, and } from 'drizzle-orm';
 import 'dotenv/config';

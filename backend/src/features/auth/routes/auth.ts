@@ -1,0 +1,468 @@
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import kindeService from '../services/kinde-service.js';
+import jwt from 'jsonwebtoken';
+import { db } from '../../../db/index.js';
+import { tenants, tenantUsers } from '../../../db/schema/index.js';
+import { eq, and } from 'drizzle-orm';
+import { shouldLogVerbose } from '../../../utils/verbose-log.js';
+
+const SUPPORTED_PROVIDERS = ['google', 'github', 'microsoft', 'apple', 'linkedin'] as const;
+
+function parseStateSafe(state: string | undefined): Record<string, unknown> {
+  if (!state) return {};
+  try {
+    return JSON.parse(state) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function buildAuthErrorRedirect(
+  parsedState: Record<string, unknown>,
+  errorCode: string,
+  errorDescription: string
+): string {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+  if (parsedState.app_code && parsedState.redirect_url) {
+    const url = new URL(`${frontendUrl}/auth/callback`);
+    url.searchParams.set('state', JSON.stringify({
+      app_code: parsedState.app_code,
+      redirect_url: parsedState.redirect_url,
+      error: errorCode,
+      error_description: errorDescription
+    }));
+    return url.toString();
+  }
+  const url = new URL(`${frontendUrl}/onboarding`);
+  url.searchParams.set('error', errorCode);
+  url.searchParams.set('error_description', errorDescription);
+  return url.toString();
+}
+
+function getDefaultRedirectUri(): string {
+  return `${process.env.FRONTEND_URL || 'http://localhost:3001'}/onboarding`;
+}
+
+function getAuthCookieOptions() {
+  return {
+    domain: process.env.COOKIE_DOMAIN || (process.env.NODE_ENV === 'production' ? '.zopkit.com' : undefined),
+    secure: process.env.COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production',
+    path: '/',
+  };
+}
+
+export default async function authRoutes(
+  fastify: FastifyInstance,
+  _options?: Record<string, unknown>
+): Promise<void> {
+
+  /**
+   * GET /oauth/login
+   * Generic Kinde OAuth2 entry point for onboarding (no org context).
+   * Optional ?provider= routes to a specific social connection if a
+   * connection_id mapping exists in env (KINDE_CONNECTION_<PROVIDER>).
+   */
+  fastify.get('/oauth/login', async (request: FastifyRequest, reply: FastifyReply) => {
+    const query = request.query as Record<string, string>;
+    const { state, redirect_uri, provider, prompt, login_hint } = query;
+
+    if (shouldLogVerbose()) console.log('🔍 OAuth login request:', { state, provider });
+
+    try {
+      const authUrl = kindeService.getSocialAuthUrl(provider || 'default', {
+        redirectUri: redirect_uri || getDefaultRedirectUri(),
+        state: state || 'onboarding',
+        prompt,
+        loginHint: login_hint,
+      });
+      return reply.redirect(authUrl);
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ OAuth login error:', error.message);
+      return reply.code(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to generate OAuth login URL',
+      });
+    }
+  });
+
+  /**
+   * GET /oauth/:provider
+   * Per-provider convenience routes (google, github, microsoft, apple, linkedin).
+   * All route to the same Kinde /oauth2/auth endpoint — the social connection
+   * the user sees is controlled by the Kinde dashboard config, not by a
+   * query parameter.  A connection_id env var (KINDE_CONNECTION_<PROVIDER>)
+   * is forwarded when present so custom sign-in pages can skip the selector.
+   */
+  fastify.get('/oauth/:provider', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { provider } = request.params as { provider: string };
+    const query = request.query as Record<string, string>;
+    const { state, redirect_uri, prompt } = query;
+
+    if (!SUPPORTED_PROVIDERS.includes(provider as typeof SUPPORTED_PROVIDERS[number])) {
+      return reply.code(400).send({
+        error: 'Bad Request',
+        message: `Unsupported provider: ${provider}. Supported: ${SUPPORTED_PROVIDERS.join(', ')}`,
+      });
+    }
+
+    try {
+      const authUrl = kindeService.getSocialAuthUrl(provider, {
+        redirectUri: redirect_uri || getDefaultRedirectUri(),
+        state: state || 'onboarding',
+        prompt: prompt || 'select_account',
+      });
+      return reply.redirect(authUrl);
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error(`❌ ${provider} OAuth error:`, error.message);
+      return reply.code(500).send({
+        error: 'Internal Server Error',
+        message: `Failed to generate ${provider} OAuth URL`,
+      });
+    }
+  });
+
+  /**
+   * GET /login/:subdomain
+   * Organization-specific login. Uses Kinde's org_code parameter so the
+   * user is scoped to the correct organisation during authentication.
+   */
+  fastify.get('/login/:subdomain', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { subdomain } = request.params as { subdomain: string };
+    const { prompt } = request.query as Record<string, string>;
+
+    if (!subdomain) {
+      return reply.code(400).send({
+        error: 'Bad Request',
+        message: 'Subdomain parameter is required',
+      });
+    }
+
+    try {
+      const redirectUri = `${process.env.BACKEND_URL}/api/auth/callback`;
+      const state = JSON.stringify({ subdomain, flow: 'login' });
+
+      const authUrl = kindeService.generateLoginUrl(subdomain, redirectUri, {
+        state,
+        prompt: prompt || 'select_account',
+      });
+
+      return reply.redirect(authUrl);
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Organization login error:', error.message);
+      return reply.code(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to generate organization login URL',
+      });
+    }
+  });
+
+  /**
+   * GET /callback
+   * OAuth2 callback — handles both onboarding and app (CRM) authentication.
+   * Kinde redirects here with ?code=...&state=... after the user authenticates.
+   */
+  fastify.get('/callback', async (request: FastifyRequest, reply: FastifyReply) => {
+    const query = request.query as Record<string, string>;
+    const { code, state, error: authError } = query;
+
+    if (shouldLogVerbose()) console.log('🔍 OAuth callback received:', { hasCode: !!code, state, error: authError });
+
+    if (authError) {
+      console.error('❌ OAuth error in callback:', authError);
+      return reply.redirect(buildAuthErrorRedirect(parseStateSafe(state), 'auth_failed', 'Authentication failed'));
+    }
+
+    if (!code) {
+      console.error('❌ No authorization code received');
+      return reply.redirect(buildAuthErrorRedirect(parseStateSafe(state), 'no_code', 'No authorization code provided'));
+    }
+
+    try {
+      let parsedState: Record<string, unknown> = { flow: 'onboarding' };
+      if (state) {
+        try {
+          parsedState = (typeof state === 'string' ? JSON.parse(state) : state) as Record<string, unknown>;
+        } catch {
+          if (state === 'onboarding') parsedState = { flow: 'onboarding' };
+        }
+      }
+
+      const redirectUri = `${process.env.BACKEND_URL}/api/auth/callback`;
+      const tokens = await kindeService.exchangeCodeForTokens(code, redirectUri);
+      const userInfo = await kindeService.getEnhancedUserInfo(tokens.access_token as string);
+
+      if (shouldLogVerbose()) console.log('✅ Authenticated user:', { id: userInfo.id, email: userInfo.email });
+
+      const base = getAuthCookieOptions();
+      const cookieOptions = {
+        httpOnly: true,
+        secure: base.secure,
+        sameSite: 'lax' as const,
+        domain: base.domain,
+        path: base.path,
+        maxAge: (Number(tokens.expires_in) || 3600) * 1000,
+      };
+
+      reply
+        .setCookie('kinde_token', tokens.access_token as string, cookieOptions)
+        .setCookie('kinde_refresh_token', tokens.refresh_token as string, {
+          ...cookieOptions,
+          maxAge: 30 * 24 * 60 * 60 * 1000,
+        });
+
+      // App authentication flow (CRM redirect)
+      if (parsedState.app_code && parsedState.redirect_url) {
+        if (shouldLogVerbose()) console.log('🔍 App auth flow:', parsedState.app_code);
+        const frontendCallbackUrl = new URL(`${process.env.FRONTEND_URL}/auth/callback`);
+        frontendCallbackUrl.searchParams.set('state', JSON.stringify({
+          app_code: parsedState.app_code,
+          redirect_url: parsedState.redirect_url,
+        }));
+        return reply.redirect(frontendCallbackUrl.toString());
+      }
+
+      // Organization login flow
+      if (parsedState.flow === 'login' && parsedState.subdomain) {
+        const orgDashboardUrl = `https://${parsedState.subdomain}.${process.env.FRONTEND_DOMAIN || 'localhost:3001'}/dashboard`;
+        return reply.redirect(orgDashboardUrl);
+      }
+
+      // Default: onboarding flow
+      const onboardingUrl = new URL(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/onboarding`);
+      onboardingUrl.searchParams.set('email', (userInfo.email as string) ?? '');
+      onboardingUrl.searchParams.set('name', `${userInfo.given_name ?? ''} ${userInfo.family_name ?? ''}`.trim());
+      onboardingUrl.searchParams.set('step', '2');
+      return reply.redirect(onboardingUrl.toString());
+
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ OAuth callback error:', error.message);
+      return reply.redirect(buildAuthErrorRedirect(parseStateSafe(state), 'callback_failed', error.message || 'Failed to process authentication'));
+    }
+  });
+
+  fastify.get('/me', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      if (!request.userContext || !request.userContext.isAuthenticated) {
+        return reply.code(401).send({
+          error: 'Unauthorized',
+          message: 'Authentication required',
+        });
+      }
+
+      const userContext = request.userContext as unknown as Record<string, unknown>;
+      return reply.send({
+        success: true,
+        data: {
+          user: userContext,
+          organization: userContext.organization,
+        },
+      });
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error getting user info:', error.message);
+      return reply.code(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to get user information',
+      });
+    }
+  });
+
+  /**
+   * POST /logout
+   * Clears httpOnly auth cookies and returns the Kinde logout URL.
+   * Kinde docs: https://<subdomain>.kinde.com/logout?redirect=<url>
+   */
+  fastify.post('/logout', async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = (request.body as Record<string, unknown>) || {};
+    const { redirect_uri } = body;
+
+    try {
+      const clearOpts = { path: '/', domain: getAuthCookieOptions().domain };
+      reply.clearCookie('kinde_token', clearOpts).clearCookie('kinde_refresh_token', clearOpts);
+
+      const redirectTarget = (redirect_uri as string) || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/login`;
+      const logoutUrl = `${kindeService.baseURL}/logout?redirect=${encodeURIComponent(redirectTarget)}`;
+
+      return reply.send({ success: true, data: { logoutUrl, message: 'Logged out successfully' } });
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Logout error:', error.message);
+      return reply.code(500).send({ error: 'Internal Server Error', message: 'Failed to logout' });
+    }
+  });
+
+  /**
+   * POST /refresh
+   * Exchange the httpOnly kinde_refresh_token cookie for a new access token.
+   * Kinde automatically rotates refresh tokens on each exchange.
+   */
+  fastify.post('/refresh', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const refreshToken = (request.cookies as Record<string, string | undefined>).kinde_refresh_token;
+      if (!refreshToken) {
+        return reply.code(401).send({ error: 'Unauthorized', message: 'Refresh token not found' });
+      }
+
+      const tokens = await kindeService.refreshToken(refreshToken);
+
+      const base = getAuthCookieOptions();
+      const opts = {
+        httpOnly: true,
+        secure: base.secure,
+        sameSite: 'lax' as const,
+        domain: base.domain,
+        path: base.path,
+        maxAge: (Number(tokens.expires_in) || 3600) * 1000,
+      };
+
+      reply.setCookie('kinde_token', tokens.access_token as string, opts);
+      if (tokens.refresh_token) {
+        reply.setCookie('kinde_refresh_token', tokens.refresh_token as string, {
+          ...opts,
+          maxAge: 30 * 24 * 60 * 60 * 1000,
+        });
+      }
+
+      return reply.send({ success: true, data: { message: 'Token refreshed successfully' } });
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Token refresh error:', error.message);
+      const clearOpts = { path: '/', domain: getAuthCookieOptions().domain };
+      reply.clearCookie('kinde_token', clearOpts).clearCookie('kinde_refresh_token', clearOpts);
+      return reply.code(401).send({ error: 'Unauthorized', message: 'Failed to refresh token' });
+    }
+  });
+
+  /**
+   * POST /validate-token
+   * Validate a Kinde RS256 JWT (or Operations-issued HS256 JWT) and return
+   * user + tenant context. Used by external apps (e.g. Operations backend).
+   */
+  fastify.post('/validate-token', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const body = request.body as Record<string, unknown> | undefined;
+      const token =
+        (body?.token as string) ||
+        (request.headers.authorization as string | undefined)?.replace(/^Bearer\s+/i, '');
+
+      if (!token) {
+        return reply.code(400).send({
+          success: false,
+          error: 'Missing token',
+          message: 'Provide token in body { "token": "..." } or Authorization: Bearer <token>',
+        });
+      }
+
+      // Try Operations-issued JWT first when shared secret is configured
+      const sharedSecret = process.env.OPERATIONS_JWT_SECRET || process.env.SHARED_APP_JWT_SECRET;
+      if (sharedSecret) {
+        try {
+          const decoded = jwt.verify(token, sharedSecret) as { currentTenantId?: string; email?: string };
+          if (decoded?.currentTenantId && decoded?.email) {
+            let [tenant] = await db.select().from(tenants).where(eq(tenants.tenantId, decoded.currentTenantId)).limit(1);
+            if (!tenant) {
+              [tenant] = await db.select().from(tenants).where(eq(tenants.kindeOrgId, decoded.currentTenantId)).limit(1);
+            }
+            if (tenant) {
+              const [u] = await db.select().from(tenantUsers)
+                .where(and(eq(tenantUsers.tenantId, tenant.tenantId), eq(tenantUsers.email, decoded.email)))
+                .limit(1);
+              if (u) {
+                return reply.send({
+                  success: true,
+                  user: { id: u.userId, email: u.email, firstName: u.firstName ?? undefined, lastName: u.lastName ?? undefined, name: u.name, kindeId: u.kindeUserId },
+                  tenant: { id: tenant.tenantId, name: tenant.companyName, kindeOrgId: tenant.kindeOrgId },
+                });
+              }
+            }
+          }
+        } catch (opsErr: unknown) {
+          if (shouldLogVerbose()) console.log('⚠️ Operations JWT verification failed, trying Kinde:', (opsErr as Error).message);
+        }
+      }
+
+      // Validate as Kinde RS256 token (JWKS -> API -> introspect)
+      const userInfo = (await kindeService.getUserInfo(token)) as Record<string, unknown> | undefined;
+      const kindeId = (userInfo?.id as string) || (userInfo?.sub as string);
+      const orgCode = (userInfo?.org_code as string) || (Array.isArray(userInfo?.org_codes) ? (userInfo?.org_codes as string[])[0] : undefined);
+
+      if (!kindeId) {
+        return reply.code(401).send({ success: false, error: 'Invalid token', message: 'Token did not contain a user identifier' });
+      }
+
+      const email = (userInfo?.email as string) || (userInfo?.preferred_email as string);
+
+      if (!orgCode) {
+        if (!email) {
+          return reply.code(403).send({ success: false, error: 'No organization', message: 'Token has no organization context and no email to resolve tenant' });
+        }
+        const byEmail = await db
+          .select({
+            tenantId: tenants.tenantId, companyName: tenants.companyName, kindeOrgId: tenants.kindeOrgId,
+            userId: tenantUsers.userId, userEmail: tenantUsers.email, firstName: tenantUsers.firstName,
+            lastName: tenantUsers.lastName, userName: tenantUsers.name, kindeUserId: tenantUsers.kindeUserId,
+          })
+          .from(tenantUsers)
+          .innerJoin(tenants, eq(tenants.tenantId, tenantUsers.tenantId))
+          .where(eq(tenantUsers.email, email))
+          .limit(2);
+
+        if (byEmail.length === 0) {
+          return reply.code(404).send({ success: false, error: 'User not found', message: `No tenant found for email: ${email}` });
+        }
+        if (byEmail.length > 1) {
+          return reply.code(403).send({ success: false, error: 'No organization', message: 'Token has no organization context; user has multiple tenants' });
+        }
+        const row = byEmail[0];
+        return reply.send({
+          success: true,
+          user: { id: row.userId, email: row.userEmail, firstName: row.firstName ?? undefined, lastName: row.lastName ?? undefined, name: row.userName, kindeId: row.kindeUserId },
+          tenant: { id: row.tenantId, name: row.companyName, kindeOrgId: row.kindeOrgId },
+        });
+      }
+
+      const [tenant] = await db.select().from(tenants).where(eq(tenants.kindeOrgId, orgCode)).limit(1);
+      if (!tenant) {
+        return reply.code(404).send({ success: false, error: 'Tenant not found', message: `No tenant for org_code: ${orgCode}` });
+      }
+
+      const [u] = await db.select().from(tenantUsers)
+        .where(and(eq(tenantUsers.tenantId, tenant.tenantId), eq(tenantUsers.kindeUserId, kindeId)))
+        .limit(1);
+      if (!u) {
+        return reply.code(404).send({ success: false, error: 'User not found', message: 'User not found in tenant' });
+      }
+
+      return reply.send({
+        success: true,
+        user: { id: u.userId, email: u.email, firstName: u.firstName ?? undefined, lastName: u.lastName ?? undefined, name: u.name, kindeId: u.kindeUserId },
+        tenant: { id: tenant.tenantId, name: tenant.companyName, kindeOrgId: tenant.kindeOrgId },
+      });
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ validate-token error:', error.message);
+      return reply.code(500).send({ success: false, error: 'Validation failed', message: error.message });
+    }
+  });
+
+  /**
+   * GET /providers
+   * Returns the list of social providers enabled for sign-in.
+   * The URLs point to the parameterized /oauth/:provider route.
+   */
+  fastify.get('/providers', async (_request: FastifyRequest, reply: FastifyReply) => {
+    const providers = SUPPORTED_PROVIDERS.map(id => ({
+      id,
+      name: id.charAt(0).toUpperCase() + id.slice(1),
+      icon: id,
+      url: `/api/auth/oauth/${id}`,
+      description: `Sign in with ${id.charAt(0).toUpperCase() + id.slice(1)}`,
+      ...(id === 'google' && { primary: true }),
+    }));
+    return reply.send({ success: true, data: { providers } });
+  });
+}
