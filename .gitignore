@@ -1,10 +1,20 @@
-# Elasticsearch data
-elasticsearch_data/
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
 
-# Environment files
+# Build output
+build/
+dist/
+
+# Environment (keep .env.example files)
 .env
 .env.local
 .env.*.local
+
+# Secrets & keys
+*.pem
+infra/deploy/
 
 # Logs
 *.log
@@ -13,32 +23,23 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Dependencies
-node_modules/
-.pnp
-.pnp.js
-
 # Testing
 coverage/
 
-# Production
-build/
-dist/
-
-# Misc
-.DS_Store
-*.pem
-pem_files/
-
-# Vite temporary files
+# Vite
 vite.config.ts.timestamp-*
 
-# Duplicate lock files
-package-lock 2.json
+# OS
+.DS_Store
+Thumbs.db
 
-# Debug
+# Editor
 .vscode/
 .idea/
 
-# Elasticsearch
+# Infrastructure
+elasticsearch_data/
 docker-compose.override.yml
+
+# Misc
+package-lock 2.json
