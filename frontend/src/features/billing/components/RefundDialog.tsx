@@ -4,7 +4,7 @@
 
 import React from 'react'
 import { Button } from '@/components/ui/button'
-import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader'
+import { ZopkitRoundLoader } from '@/components/common/feedback/ZopkitRoundLoader'
 
 export interface RefundDialogProps {
   paymentId: string | null

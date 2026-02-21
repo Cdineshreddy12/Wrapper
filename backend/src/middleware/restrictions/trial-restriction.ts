@@ -46,11 +46,9 @@ export async function trialRestrictionMiddleware(request: FastifyRequest, reply:
   );
 
   if (isAllowedPath) {
-    console.log(`✅ Path ${request.url} is allowed even if trial expired`);
-    return; // Allow these operations
+    return;
   }
 
-  // Additional check for critical endpoints that should always work
   const criticalEndpoints = [
     '/api/subscriptions/current',
     '/api/admin/auth-status',
@@ -58,7 +56,6 @@ export async function trialRestrictionMiddleware(request: FastifyRequest, reply:
   ];
   
   if (criticalEndpoints.some(endpoint => request.url === endpoint)) {
-    console.log(`🔓 Trial restriction: Critical endpoint ${request.url}, allowing access`);
     return;
   }
 
@@ -66,36 +63,16 @@ export async function trialRestrictionMiddleware(request: FastifyRequest, reply:
   const tenantId = request.userContext.tenantId;
 
   try {
-    console.log(`🔒 [${requestId}] Checking credit balance for tenant: ${tenantId}`);
-    console.log(`🌐 [${requestId}] Request URL: ${request.url}`);
-    console.log(`📝 [${requestId}] Method: ${request.method}`);
-
-    // Add more detailed logging for debugging
-    console.log(`🔍 [${requestId}] User context:`, {
-      userId: request.userContext?.userId,
-      email: request.userContext?.email,
-      tenantId: request.userContext?.tenantId,
-      isAuthenticated: request.userContext?.isAuthenticated
-    });
-
-    // Check credit balance instead of trial expiry
     const creditBalance = await CreditService.getCurrentBalance(tenantId);
 
     const balanceWithTotal = creditBalance as (typeof creditBalance & { totalCredits?: number }) | null;
-    console.log(`💰 [${requestId}] Credit balance:`, {
-      availableCredits: creditBalance?.availableCredits || 0,
-      totalCredits: balanceWithTotal?.totalCredits ?? 0,
-      criticalBalanceThreshold: creditBalance?.criticalBalanceThreshold || 10
-    });
 
-    // Check if credits are insufficient (below critical threshold)
     const isCreditInsufficient = !creditBalance || creditBalance.availableCredits <= (creditBalance.criticalBalanceThreshold || 10);
 
     if (isCreditInsufficient) {
-      console.log(`🚫 [${requestId}] INSUFFICIENT CREDITS - Access restricted!`);
-      console.log(`💰 [${requestId}] Available credits: ${creditBalance?.availableCredits || 0}`);
-      console.log(`🎯 [${requestId}] Critical threshold: ${creditBalance?.criticalBalanceThreshold || 10}`);
-      console.log(`💳 [${requestId}] Only payment/credit operations allowed`);
+      if (shouldLogVerbose()) {
+        console.log(`[${requestId}] Insufficient credits for tenant ${tenantId}: ${creditBalance?.availableCredits || 0} available`);
+      }
 
       // Calculate credit shortage
       const criticalThreshold = creditBalance?.criticalBalanceThreshold || 10;
@@ -126,8 +103,6 @@ export async function trialRestrictionMiddleware(request: FastifyRequest, reply:
       } else {
         operationType = 'feature access';
       }
-
-      console.log(`📊 [${requestId}] Blocking ${operationType} - Insufficient credits`);
 
       // Show immediate banner in response - return 200 to avoid HTTP errors
       return reply.code(200).send({
@@ -166,27 +141,17 @@ export async function trialRestrictionMiddleware(request: FastifyRequest, reply:
       });
     }
 
-    console.log(`✅ [${requestId}] Access granted - sufficient credits available`);
-    console.log(`💰 [${requestId}] Available credits: ${creditBalance?.availableCredits || 0}`);
-    console.log(`🎯 [${requestId}] Critical threshold: ${creditBalance?.criticalBalanceThreshold || 10}`);
+    if (shouldLogVerbose()) {
+      console.log(`[${requestId}] Credits OK: ${creditBalance?.availableCredits || 0} available`);
+    }
 
   } catch (err: unknown) {
     const error = err as NodeJS.ErrnoException;
-    console.error(`❌ [${requestId}] Error checking credit balance:`, error);
-    console.error(`❌ [${requestId}] Error details:`, {
-      message: error.message,
-      stack: error.stack,
-      tenantId,
-      url: request.url,
-      method: request.method
-    });
+    console.error(`❌ [${requestId}] Credit balance check failed:`, error.message);
     
-    // Don't block on check failure - log and continue
-    console.log(`⚠️ [${requestId}] Continuing request due to check failure`);
     
     // If it's a database connection error or critical error, we might want to block
     if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-      console.error(`🚨 [${requestId}] Critical database error - blocking request`);
       return reply.code(503).send({
         success: false,
         error: 'Service temporarily unavailable',

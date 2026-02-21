@@ -185,7 +185,6 @@ export function TreeNode({
               e.stopPropagation();
               if (isLocation) {
                 // Handle location edit
-                console.log('Edit location:', (org as any).entityId);
               } else {
                 onEditOrganization(org as Organization);
               }

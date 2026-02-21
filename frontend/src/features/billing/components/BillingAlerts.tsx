@@ -3,7 +3,7 @@
  */
 
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from '@tanstack/react-router'
 import { Zap, Settings, ArrowRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -50,7 +50,7 @@ export function BillingAlerts({
               variant="default"
               size="sm"
               className="bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-600"
-              onClick={() => navigate('/onboarding')}
+              onClick={() => navigate({ to: '/onboarding' })}
             >
               <ArrowRight className="h-4 w-4 mr-2" />
               Complete Setup

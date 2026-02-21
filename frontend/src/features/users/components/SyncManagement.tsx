@@ -2,9 +2,9 @@ import { RefreshCw, Eye, Activity, RotateCw, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useSyncAllUsers, useSyncApplication, useTestConnectivity } from '../../hooks/useUserApplicationQueries';
-import { getApplications } from '../../lib/utils/userApplication';
-import type { ClassificationData, SyncStatusData } from '../../types/userApplication';
+import { useSyncAllUsers, useSyncApplication, useTestConnectivity } from '@/hooks/useUserApplicationQueries';
+import { getApplications } from '@/lib/utils/userApplication';
+import type { ClassificationData, SyncStatusData } from '@/types/userApplication';
 
 interface SyncManagementProps {
   classificationData?: ClassificationData;

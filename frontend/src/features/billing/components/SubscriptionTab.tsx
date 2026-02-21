@@ -20,7 +20,7 @@ import { formatDate } from '@/lib/utils'
 import {
   CreditBalanceIcon,
   StatsIcon
-} from '@/components/common/BillingIcons'
+} from '@/components/common/billing/BillingIcons'
 import type { DisplaySubscription } from '../hooks/useBilling'
 import type { ApplicationPlan } from '@/types/pricing'
 

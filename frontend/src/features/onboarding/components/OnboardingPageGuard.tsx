@@ -1,8 +1,8 @@
 import React from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate } from '@tanstack/react-router'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { useAuthStatus, useOnboardingStatus } from '@/hooks/useSharedQueries'
-import AnimatedLoader from '@/components/common/AnimatedLoader'
+import AnimatedLoader from '@/components/common/feedback/AnimatedLoader'
 
 interface OnboardingPageGuardProps {
   children: React.ReactNode

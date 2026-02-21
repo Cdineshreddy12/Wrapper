@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '@tanstack/react-router';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, Users, DollarSign, Shield, Zap } from 'lucide-react';
@@ -39,7 +39,7 @@ export const OnboardingWelcomeSuccess: React.FC<OnboardingWelcomeSuccessProps> =
         params.set('onboarding', 'complete');
       }
       const url = params.toString() ? `${path}?${params.toString()}` : path;
-      navigate(url);
+      navigate({ to: url });
     }
   };
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api } from '../lib/api';
+import { api } from '@/lib/api';
 
 interface SyncResult {
   success: boolean;
@@ -25,8 +25,6 @@ export function useUserSync() {
         orgCode,
         forceUpdate: true
       };
-      
-      console.log(`🔄 Syncing to ${appCode} with payload:`, syncPayload);
       
       const response = await api.post(`/user-sync/sync/application/${appCode}`, syncPayload);
 

@@ -169,4 +169,5 @@ export const UserAvatarPresets = {
   ),
 };
 
+export { UserAvatar };
 export default UserAvatar;

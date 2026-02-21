@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import { ChevronRight } from 'lucide-react';
 import {
@@ -82,7 +82,7 @@ export function LegalPageLayout({ title, lastUpdated = '', children, wide = fals
               {showProductsDropdown && (
                 <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
                   {allProducts.map((product) => (
-                    <button key={product.id} onClick={() => navigate(`/products/${product.id}`)} className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                    <button key={product.id} onClick={() => navigate({ to: `/products/${product.id}` })} className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
                       {product.name}
                     </button>
                   ))}
@@ -97,7 +97,7 @@ export function LegalPageLayout({ title, lastUpdated = '', children, wide = fals
               {showIndustriesDropdown && (
                 <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
                   {allIndustries.map((industry) => (
-                    <button key={industry.slug} onClick={() => navigate(`/industries/${industry.slug}`)} className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                    <button key={industry.slug} onClick={() => navigate({ to: `/industries/${industry.slug}` })} className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
                       {industry.name}
                     </button>
                   ))}
@@ -114,7 +114,7 @@ export function LegalPageLayout({ title, lastUpdated = '', children, wide = fals
             <NavbarButton variant="outline" onClick={handleLogin} disabled={isLoading} as="button" className="rounded-xl px-6 py-2.5">
               {isLoading ? 'Loading...' : 'Sign In'}
             </NavbarButton>
-            <NavbarButton variant="gradient" onClick={() => navigate('/landing')} as="button" className="rounded-xl px-6 py-2.5">
+            <NavbarButton variant="gradient" onClick={() => navigate({ to: '/landing' })} as="button" className="rounded-xl px-6 py-2.5">
               Start Free Trial
             </NavbarButton>
           </div>

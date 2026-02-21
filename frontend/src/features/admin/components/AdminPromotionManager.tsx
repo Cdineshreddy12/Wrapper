@@ -151,8 +151,6 @@ export const AdminPromotionManager: React.FC = () => {
         requestData.confirmationCode = confirmationCode;
       }
 
-      console.log('🚀 Executing promotion with data:', requestData);
-
       const response = await api.post('/admin-promotion/promote-system-admin', requestData);
 
       if (response.data.success) {

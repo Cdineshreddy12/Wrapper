@@ -28,7 +28,7 @@ fi
 rm -rf "$DEST"
 mkdir -p "$DEST"
 
-echo "Copying wrapper (excluding node_modules, .git, dist, build, .env, playwright)..."
+echo "Copying wrapper (excluding node_modules, .git, dist, build, .env)..."
 echo "This may take 1-2 minutes. Progress:"
 rsync -a --progress \
   --exclude='node_modules' \
@@ -40,14 +40,6 @@ rsync -a --progress \
   --exclude='.cache' \
   --exclude='.turbo' \
   --exclude='.vite' \
-  --exclude='playwright-zopkit-profile' \
-  --exclude='playwright-report' \
-  --exclude='test-results' \
-  --exclude='playwright.config.*' \
-  --exclude='*playwright*' \
-  --exclude='*-e2e*.mjs' \
-  --exclude='*e2e*.mjs' \
-  --exclude='playwright-debug-screenshots' \
   --exclude='*.log' \
   --exclude='.env' \
   --exclude='.DS_Store' \
@@ -56,17 +48,6 @@ rsync -a --progress \
   --exclude='*.local' \
   --exclude='backend/logs' \
   --exclude='backend/uploads' \
-  --exclude='frontend/playwright-zopkit-profile' \
-  --exclude='frontend/playwright-oauth-profile' \
-  --exclude='frontend/playwright-report' \
-  --exclude='frontend/test-results' \
-  --exclude='frontend/playwright-debug-screenshots' \
-  --exclude='frontend/scripts/oauth-browser-test.mjs' \
-  --exclude='frontend/scripts/onboarding-test-with-profile.mjs' \
-  --exclude='frontend/scripts/trigger-event-and-verify.mjs' \
-  --exclude='frontend/scripts/contact-form-e2e-test.mjs' \
-  --exclude='frontend/scripts/payment-plan-upgrade-e2e.mjs' \
-  --exclude='frontend/scripts/settings-dashboard-e2e.mjs' \
   "$WRAPPER_SRC/" \
   "$DEST/"
 

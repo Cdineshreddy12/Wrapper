@@ -67,12 +67,6 @@ export function useDashboardData() {
   const { tenantId, isAuthenticated, loading: authLoading } = useOrganizationAuth();
 
   // Debug logging
-  console.log('🔍 useDashboardData debug:', {
-    tenantId,
-    isAuthenticated,
-    authLoading,
-    isTrialExpired
-  });
   
   // Check if we're in trial expiry state - if so, provide graceful degradation
   const isTrialExpiredWithData = useMemo(() => {
@@ -89,7 +83,6 @@ export function useDashboardData() {
       queryKey: [CACHE_KEYS.DASHBOARD_USERS],
       queryFn: async () => {
         if (isTrialExpiredWithData) {
-          console.log('🚫 Trial expired - returning empty users data');
           return [];
         }
         
@@ -118,7 +111,6 @@ export function useDashboardData() {
       queryKey: [CACHE_KEYS.PAYMENT_STATS],
       queryFn: async () => {
         if (isTrialExpiredWithData) {
-          console.log('🚫 Trial expired - returning empty payment stats');
           return {
             totalRevenue: 0,
             monthlyRevenue: 0,
@@ -196,8 +188,6 @@ export function useDashboardData() {
     }
 
     try {
-      console.log('🔄 Refreshing dashboard data...');
-      console.log('🔍 Current tenant info:', { tenantId, isAuthenticated, authLoading });
 
       // Invalidate dashboard-related cache
       cacheHelpers.invalidateDashboard();
@@ -223,7 +213,6 @@ export function useDashboardData() {
     }
     
     try {
-      console.log('🔄 Force refreshing all dashboard data...');
       
       // Clear all cache
       cacheHelpers.clearAll();
@@ -349,7 +338,6 @@ export function useUserData(filters?: {
     queryFn: async () => {
       // If trial is expired, return empty data instead of making API call
       if (isTrialExpiredWithData) {
-        console.log('🚫 Trial expired - returning empty users data');
         return [];
       }
       
@@ -375,7 +363,6 @@ export function useUserData(filters?: {
     onError: (error) => {
       // Don't show error toasts for trial expiry
       if (error?.response?.status === 200 && (error.response.data as any)?.subscriptionExpired) {
-        console.log('🚫 Trial expired error in useUserData - handled gracefully');
         return;
       }
       

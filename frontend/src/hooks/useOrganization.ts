@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams } from '@tanstack/react-router';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import { useAuthStore } from '../stores/authStore';
-import { api } from '../lib/api';
+import { api } from '@/lib/api';
 
 export function useOrganization() {
-  const { orgCode: orgCodeFromUrl } = useParams();
+  const { orgCode: orgCodeFromUrl } = useParams({ strict: false });
   const { getOrganization } = useKindeAuth();
   const authUser = useAuthStore(state => state.user);
   
@@ -65,14 +65,6 @@ export function useOrganization() {
     resolveOrg();
     return () => { mounted = false };
   }, [orgFromPath, orgCodeFromUrl, kindeOrgCode, authUser?.tenantId, getOrganization, effectiveOrgCode]);
-
-  console.log('🎯 Organization hook rendered!');
-  console.log('🏢 orgCode from URL params:', orgCodeFromUrl);
-  console.log('🛣️ orgCode from path:', orgFromPath);
-  console.log('🪪 orgCode from Kinde user:', kindeOrgCode);
-  console.log('🗂️ orgCode from auth store (tenantId):', authUser?.tenantId);
-  console.log('✅ effectiveOrgCode:', effectiveOrgCode);
-  console.log('🧭 resolvedOrgCode (final):', resolvedOrgCode);
 
   return {
     orgCode: resolvedOrgCode,

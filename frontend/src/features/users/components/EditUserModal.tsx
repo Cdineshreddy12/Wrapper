@@ -3,7 +3,7 @@ import { PearlButton } from '@/components/ui/pearl-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { User } from '@/types/user-management';
-import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader';
+import { ZopkitRoundLoader } from '@/components/common/feedback/ZopkitRoundLoader';
 
 interface EditForm {
   name: string;

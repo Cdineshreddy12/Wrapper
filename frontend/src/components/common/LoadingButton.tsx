@@ -1,7 +1,7 @@
 import { Button, ButtonProps } from '@/components/ui/button'
 import { LucideIcon, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ZopkitRoundLoader } from './ZopkitRoundLoader'
+import { ZopkitRoundLoader } from './feedback/ZopkitRoundLoader'
 
 interface IconButtonProps extends ButtonProps {
     startIcon?: LucideIcon

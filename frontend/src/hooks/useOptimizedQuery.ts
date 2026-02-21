@@ -20,7 +20,6 @@ const handleTrialAwareError = (error: any, onError?: (error: any) => void) => {
   if (error?.response?.status === 200 && (error.response.data as any)?.subscriptionExpired) {
     const responseData = error.response.data
     if (responseData?.code === 'TRIAL_EXPIRED' || responseData?.code === 'SUBSCRIPTION_EXPIRED') {
-      console.log('🚫 Trial expired error handled gracefully in query')
       // Don't call onError for trial expiry - let the banner handle it
       return
     }
@@ -58,7 +57,6 @@ export function useOptimizedQuery<T>(options: UseOptimizedQueryOptions<T>) {
     if (now - lastFetchTime.current < 1000) { // 1 second throttle
       const cachedData = cache.get<T>(cacheKey);
       if (cachedData) {
-        console.log(`🚀 Returning recently cached data for ${cacheKey}`);
         return cachedData;
       }
     }
@@ -66,11 +64,9 @@ export function useOptimizedQuery<T>(options: UseOptimizedQueryOptions<T>) {
     // Check local cache first
     const cachedData = cache.get<T>(cacheKey);
     if (cachedData && (now - cache.getTimestamp(cacheKey)!) < staleTime) {
-      console.log(`📦 Using cached data for ${cacheKey}`);
       return cachedData;
     }
 
-    console.log(`🌐 Fetching fresh data for ${cacheKey}`);
     lastFetchTime.current = now;
     
     try {
@@ -79,7 +75,6 @@ export function useOptimizedQuery<T>(options: UseOptimizedQueryOptions<T>) {
       // Cache the fresh data
       cache.set(cacheKey, data, cacheTime);
       
-      console.log(`✅ Fresh data cached for ${cacheKey}`);
       onSuccess?.(data);
       
       return data;
@@ -112,14 +107,12 @@ export function useOptimizedQuery<T>(options: UseOptimizedQueryOptions<T>) {
   const invalidate = useCallback(() => {
     cache.invalidate(cacheKey);
     queryClient.invalidateQueries({ queryKey });
-    console.log(`🗑️ Invalidated cache and query for ${cacheKey}`);
   }, [cacheKey, queryKey, queryClient]);
 
   // Force refetch function
   const refetch = useCallback(async () => {
     cache.invalidate(cacheKey);
     lastFetchTime.current = 0; // Reset throttle
-    console.log(`🔄 Force refetching ${cacheKey}`);
     return queryResult.refetch();
   }, [cacheKey, queryResult]);
 
@@ -132,7 +125,6 @@ export function useOptimizedQuery<T>(options: UseOptimizedQueryOptions<T>) {
         queryFn: prefetchQueryFn,
         staleTime: staleTime,
       });
-      console.log(`⚡ Prefetching data for ${prefetchCacheKey}`);
     }
   }, [queryClient, staleTime]);
 
@@ -176,11 +168,9 @@ export function useBatchedQueries<T>(
       cache.invalidate(cacheKey);
       queryClient.invalidateQueries({ queryKey: query.queryKey });
     });
-    console.log('🗑️ Invalidated all batched queries');
   }, [queries, queryClient]);
 
   const refetchAll = useCallback(async () => {
-    console.log('🔄 Refetching all batched queries');
     return Promise.all(results.map(result => result.refetch()));
   }, [results]);
 

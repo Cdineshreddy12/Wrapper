@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ArrowRightLeft, CreditCard } from 'lucide-react';
-import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader';
+import { ZopkitRoundLoader } from '@/components/common/feedback/ZopkitRoundLoader';
 import { Organization } from '@/types/organization';
 
 interface OrganizationDialogsProps {

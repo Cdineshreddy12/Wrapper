@@ -94,26 +94,13 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
   
   // Debug: Track inviteForm changes
   useEffect(() => {
-    console.log('📊 InviteUserModal: inviteForm changed:', {
-      email: inviteForm?.email,
-      name: inviteForm?.name,
-      entitiesCount: inviteForm?.entities?.length || 0,
-      entities: inviteForm?.entities,
-      primaryEntityId: inviteForm?.primaryEntityId
-    });
   }, [inviteForm]);
   
   // Convert hierarchy to flat list if needed - includes all entity types (organizations, locations, etc.)
   const hierarchyEntities = useMemo(() => {
     if (!hierarchy || hierarchy.length === 0) {
-      console.log('📋 InviteUserModal: No hierarchy data available');
       return [];
     }
-
-    console.log('📋 InviteUserModal: Processing hierarchy:', {
-      rootCount: hierarchy.length,
-      sample: hierarchy[0]
-    });
 
     const flatten = (entities: any[], level = 0, seenIds = new Set<string>()): any[] => {
       let result: any[] = [];
@@ -171,13 +158,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
       return acc;
     }, {});
 
-    console.log('📋 InviteUserModal: Flattened hierarchy:', {
-      flattened: flattened.length,
-      deduplicated: deduplicated.length,
-      byType: entityTypeCounts,
-      sample: deduplicated.slice(0, 3)
-    });
-
     return deduplicated;
   }, [hierarchy]);
 
@@ -186,24 +166,14 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
   const effectiveEntities = useMemo(() => {
     // If hierarchy hook data is available, use it (it includes locations)
     if (hierarchyEntities && hierarchyEntities.length > 0) {
-      console.log('📋 InviteUserModal: Using hierarchy entities from hook (includes locations):', {
-        total: hierarchyEntities.length,
-        types: hierarchyEntities.reduce((acc: any, e: any) => {
-          const type = e.entityType || 'unknown';
-          acc[type] = (acc[type] || 0) + 1;
-          return acc;
-        }, {})
-      });
       return hierarchyEntities;
     }
     
     // Fallback to provided entities if hierarchy hook not available
     if (availableEntitiesProp && availableEntitiesProp.length > 0) {
-      console.log('📋 InviteUserModal: Using provided entities (hierarchy hook not available):', availableEntitiesProp.length);
       return availableEntitiesProp;
     }
     
-    console.log('📋 InviteUserModal: No entities available');
     return [];
   }, [hierarchyEntities, availableEntitiesProp]);
   
@@ -218,7 +188,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
   // IMPORTANT: All hooks must be called before any early returns
   const flattenedEntities = useMemo(() => {
     if (!effectiveEntities || effectiveEntities.length === 0) {
-      console.log('📋 InviteUserModal: No effective entities to flatten');
       return [];
     }
 
@@ -275,16 +244,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
         return true;
       });
       
-      console.log('📋 InviteUserModal: Flattened hierarchical entities:', {
-        input: effectiveEntities.length,
-        flattened: flattened.length,
-        deduplicated: deduplicated.length,
-        types: deduplicated.reduce((acc: any, e: any) => {
-          const type = e.entityType || 'unknown';
-          acc[type] = (acc[type] || 0) + 1;
-          return acc;
-        }, {})
-      });
       return deduplicated;
     }
 
@@ -306,15 +265,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
         displayLevel: entity.hierarchyLevel || entity.displayLevel || 0,
         entityType: entity.entityType || 'organization'
       }));
-
-    console.log('📋 InviteUserModal: Processed flat entities:', {
-      count: processed.length,
-      types: processed.reduce((acc: any, e: any) => {
-        const type = e.entityType || 'unknown';
-        acc[type] = (acc[type] || 0) + 1;
-        return acc;
-      }, {})
-    });
 
     return processed;
   }, [effectiveEntities]);
@@ -347,17 +297,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
       return nameMatch || typeMatch || pathMatch;
     });
     
-    console.log('📋 InviteUserModal: Filtered entities:', {
-      searchTerm,
-      before: flattenedEntities.length,
-      after: filtered.length,
-      types: filtered.reduce((acc: any, e: any) => {
-        const type = e.entityType || 'unknown';
-        acc[type] = (acc[type] || 0) + 1;
-        return acc;
-      }, {})
-    });
-    
     return filtered;
   }, [flattenedEntities, searchTerm]);
 
@@ -366,15 +305,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
     const currentEntities = inviteForm?.entities || [];
     const isSelected = currentEntities.some((e: any) => e && e.entityId === entityId);
     
-    console.log('🔄 Entity toggle:', { 
-      entityId, 
-      entityType, 
-      isSelected, 
-      currentEntities: currentEntities.length,
-      inviteForm: inviteForm,
-      setInviteFormType: typeof setInviteForm
-    });
-
     if (!setInviteForm || typeof setInviteForm !== 'function') {
       console.error('❌ setInviteForm is not a function!', setInviteForm);
       return;
@@ -397,11 +327,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
         entities: currentEntities.filter((e: any) => e && e.entityId !== entityId),
         primaryEntityId: currentForm.primaryEntityId === entityId ? '' : (currentForm.primaryEntityId || '')
       };
-      console.log('✅ Entity removed:', { 
-        before: currentEntities.length, 
-        after: updated.entities.length,
-        updated 
-      });
       setInviteForm(updated);
     } else {
       // Add entity with default role if available, otherwise empty string (will show as "No role")
@@ -417,14 +342,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
         // Set as primary if it's the first one
         primaryEntityId: currentForm.primaryEntityId || entityId
       };
-      console.log('✅ Entity added:', { 
-        before: currentEntities.length, 
-        after: updated.entities.length,
-        entityId,
-        entityType,
-        defaultRole,
-        updated 
-      });
       setInviteForm(updated);
     }
   };
@@ -532,7 +449,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
                     type="email"
                     value={inviteForm?.email || ''}
                     onChange={(e) => {
-                      console.log('📝 Email changed:', e.target.value);
                       const currentForm = inviteForm || {
                         email: '',
                         name: '',
@@ -544,7 +460,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
                       setInviteForm({ ...currentForm, email: e.target.value });
                     }}
                     onFocus={(e) => {
-                      console.log('📝 Email focused');
                       e.stopPropagation();
                     }}
                     placeholder="user@example.com"
@@ -557,7 +472,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
                   <Input
                     value={inviteForm?.name || ''}
                     onChange={(e) => {
-                      console.log('📝 Name changed:', e.target.value);
                       const currentForm = inviteForm || {
                         email: '',
                         name: '',
@@ -569,7 +483,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
                       setInviteForm({ ...currentForm, name: e.target.value });
                     }}
                     onFocus={(e) => {
-                      console.log('📝 Name focused');
                       e.stopPropagation();
                     }}
                     placeholder="John Doe"
@@ -594,11 +507,9 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
                     placeholder="Search entities..."
                     value={searchTerm}
                     onChange={(e) => {
-                      console.log('🔍 Search changed:', e.target.value);
                       setSearchTerm(e.target.value);
                     }}
                     onFocus={(e) => {
-                      console.log('🔍 Search focused');
                       e.stopPropagation();
                     }}
                     className="pl-9 h-9 pointer-events-auto"
@@ -655,7 +566,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   e.preventDefault();
-                                  console.log('✅ Checkbox clicked for entity:', entity.entityId, entity.entityType);
                                   handleEntityToggle(entity.entityId, entity.entityType);
                                 }}
                                 onMouseDown={(e) => {
@@ -684,7 +594,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
                               if (target.closest('.flex-shrink-0.w-40') || target.closest('[role="combobox"]') || target.closest('[data-radix-popper-content-wrapper]')) {
                                 return;
                               }
-                              console.log('✅ Row clicked for entity:', entity.entityId, entity.entityType);
                               handleEntityToggle(entity.entityId, entity.entityType);
                             }}
                             onMouseDown={(e) => {
@@ -737,7 +646,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
                                <Select
                                  value={getSelectedEntityRole(entity.entityId) || 'none'}
                                  onValueChange={(value) => {
-                                   console.log('🔄 Role changed for entity:', entity.entityId, 'to role:', value);
                                    handleEntityRoleChange(entity.entityId, value);
                                  }}
                                  disabled={rolesLoading || effectiveRoles.length === 0}
@@ -839,7 +747,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
                   <Textarea
                     value={inviteForm?.message || ''}
                     onChange={(e) => {
-                      console.log('📝 Message changed:', e.target.value);
                       const currentForm = inviteForm || {
                         email: '',
                         name: '',
@@ -851,7 +758,6 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
                       setInviteForm({ ...currentForm, message: e.target.value });
                     }}
                     onFocus={(e) => {
-                      console.log('📝 Message focused');
                       e.stopPropagation();
                     }}
                     rows={4}

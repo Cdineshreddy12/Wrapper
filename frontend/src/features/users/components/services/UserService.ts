@@ -36,7 +36,6 @@ export class UserService {
       }
 
       const userData = response.data.data || [];
-      console.log('📊 Raw user data from API:', userData);
       
       // Transform the data structure to include invitation information
       const transformedUsers = await Promise.all(userData.map(async (item: any) => {
@@ -102,7 +101,6 @@ export class UserService {
         typeof user.email === 'string'
       );
       
-      console.log('✅ Valid users after filtering:', validUsers);
       return validUsers;
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -115,16 +113,13 @@ export class UserService {
    */
   static async fetchRoles(): Promise<Role[]> {
     try {
-      console.log('🔄 Loading roles...');
       const response = await api.get('/permissions/roles');
-      console.log('📊 Roles API response:', response.data);
       
       if (!response.data.success) {
         throw new Error('Failed to fetch roles');
       }
 
       const rolesData = response.data.data?.data || [];
-      console.log('✅ Roles loaded successfully:', rolesData);
       return rolesData;
     } catch (error) {
       console.error('Error fetching roles:', error);
@@ -148,7 +143,6 @@ export class UserService {
     }>;
     primaryEntityId?: string;
   }): Promise<any> {
-    console.log('Inviting user:', userData);
     try {
       const response = await api.post('/admin/organizations/current/invite-user', userData);
       if (!response.data.success) {

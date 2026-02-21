@@ -1,7 +1,7 @@
 import { ReactNode, useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate } from '@tanstack/react-router';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
-import AnimatedLoader from '@/components/common/AnimatedLoader';
+import AnimatedLoader from '@/components/common/feedback/AnimatedLoader';
 import { logger } from '@/lib/logger';
 
 interface PermissionGuardProps {

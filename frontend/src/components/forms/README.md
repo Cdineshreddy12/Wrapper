@@ -227,7 +227,7 @@ The form uses Tailwind CSS classes and can be customized by:
 
 ## Dependencies
 
-- React 18+
+- React 19+
 - TypeScript 4.5+
 - react-hook-form 7+
 - zod 3+

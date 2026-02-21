@@ -59,8 +59,6 @@ export const EditResponsiblePersonModal: React.FC<EditResponsiblePersonModalProp
   // Load users and current responsible person when modal opens
   useEffect(() => {
     if (isOpen && entity) {
-      console.log('🔄 Modal opened for entity:', entity);
-      console.log('📋 Entity responsiblePersonId:', entity.responsiblePersonId);
       loadUsers();
       loadCurrentResponsiblePerson();
       setSelectedUserId(entity.responsiblePersonId || 'none');
@@ -70,7 +68,6 @@ export const EditResponsiblePersonModal: React.FC<EditResponsiblePersonModalProp
   const loadUsers = async () => {
     try {
       setLoading(true);
-      console.log('🔄 Loading users for responsible person selection...');
 
       const endpoint = '/tenants/current/users';
       const options = {
@@ -82,14 +79,10 @@ export const EditResponsiblePersonModal: React.FC<EditResponsiblePersonModalProp
         ? await makeRequest(endpoint, options)
         : await api.get(endpoint, { headers: options.headers });
 
-      console.log('📋 Users API response:', response);
-
       if (response.success) {
         const userList = response.data || [];
-        console.log('✅ Loaded users:', userList.length);
         setUsers(userList);
       } else {
-        console.log('❌ Users API response not successful:', response);
         setUsers([]);
       }
     } catch (error) {
@@ -106,19 +99,14 @@ export const EditResponsiblePersonModal: React.FC<EditResponsiblePersonModalProp
 
     try {
       setLoadingResponsiblePerson(true);
-      console.log('🔄 Loading current responsible person for entity:', entity.entityId);
       const endpoint = `/admin/entities/${entity.entityId}/responsible-person`;
       const response = makeRequest
         ? await makeRequest(endpoint, { method: 'GET' })
         : await api.get(endpoint);
 
-      console.log('📋 Current responsible person response:', response);
-
       if (response.success && response.data) {
-        console.log('✅ Current responsible person loaded:', response.data);
         setCurrentResponsiblePerson(response.data);
       } else {
-        console.log('ℹ️ No current responsible person found');
         setCurrentResponsiblePerson(null);
       }
     } catch (error) {
@@ -135,11 +123,6 @@ export const EditResponsiblePersonModal: React.FC<EditResponsiblePersonModalProp
     try {
       setSaving(true);
       const payload = { userId: selectedUserId === 'none' ? null : selectedUserId };
-      console.log('🔄 Updating responsible person:', {
-        entityId: entity.entityId,
-        payload,
-        url: `/admin/entities/${entity.entityId}/responsible-person`
-      });
 
       const endpoint = `/admin/entities/${entity.entityId}/responsible-person`;
       const options = {
@@ -151,8 +134,6 @@ export const EditResponsiblePersonModal: React.FC<EditResponsiblePersonModalProp
         ? await makeRequest(endpoint, options)
         : await api.patch(endpoint, payload);
 
-      console.log('📤 API Response:', response);
-
       if (response.success) {
         toast.success('Responsible person updated successfully');
         // Reload current responsible person after update
@@ -161,7 +142,6 @@ export const EditResponsiblePersonModal: React.FC<EditResponsiblePersonModalProp
         // Close after a brief delay to show the updated info
         setTimeout(() => onClose(), 500);
       } else {
-        console.log('❌ API returned success=false:', response);
         toast.error(response.message || 'Failed to update responsible person');
       }
     } catch (error: any) {
@@ -298,4 +278,3 @@ export const EditResponsiblePersonModal: React.FC<EditResponsiblePersonModalProp
 };
 
 export default EditResponsiblePersonModal;
-

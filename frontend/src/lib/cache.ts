@@ -23,7 +23,6 @@ class EnhancedCache {
       ttl
     });
     
-    console.log(`💾 Cached data for key: ${key} (TTL: ${ttl}ms)`);
   }
 
   // Get data if not expired
@@ -39,11 +38,9 @@ class EnhancedCache {
 
     if (isExpired) {
       this.storage.delete(key);
-      console.log(`🗑️ Expired cache entry removed: ${key}`);
       return null;
     }
 
-    console.log(`📦 Cache hit for key: ${key}`);
     return entry.data;
   }
 
@@ -60,10 +57,7 @@ class EnhancedCache {
 
   // Invalidate specific key
   invalidate(key: string): void {
-    const deleted = this.storage.delete(key);
-    if (deleted) {
-      console.log(`🗑️ Invalidated cache for key: ${key}`);
-    }
+    this.storage.delete(key);
   }
 
   // Invalidate all keys matching pattern
@@ -80,14 +74,12 @@ class EnhancedCache {
       this.storage.delete(key);
     });
     
-    console.log(`🗑️ Invalidated ${keysToDelete.length} cache entries matching pattern: ${pattern}`);
   }
 
   // Clear all cache
   clear(): void {
     const size = this.storage.size;
     this.storage.clear();
-    console.log(`🗑️ Cleared all cache (${size} entries)`);
   }
 
   // Get cache statistics
@@ -128,10 +120,6 @@ class EnhancedCache {
     keysToDelete.forEach(key => {
       this.storage.delete(key);
     });
-    
-    if (keysToDelete.length > 0) {
-      console.log(`🧹 Cleaned up ${keysToDelete.length} expired cache entries`);
-    }
   }
 }
 
@@ -158,7 +146,6 @@ export const cacheHelpers = {
   invalidateRoles: () => {
     cache.invalidatePattern('roles');
     cache.invalidate(CACHE_KEYS.USER_PERMISSIONS);
-    console.log('🗑️ Invalidated all role-related cache');
   },
 
   // Invalidate all permission-related cache
@@ -166,21 +153,18 @@ export const cacheHelpers = {
     cache.invalidate(CACHE_KEYS.PERMISSIONS);
     cache.invalidate(CACHE_KEYS.USER_PERMISSIONS);
     cache.invalidatePattern('permissions');
-    console.log('🗑️ Invalidated all permission-related cache');
   },
 
   // Invalidate user-related cache
   invalidateUsers: () => {
     cache.invalidatePattern('users');
     cache.invalidate(CACHE_KEYS.USERS);
-    console.log('🗑️ Invalidated all user-related cache');
   },
 
   // Invalidate dashboard-related cache
   invalidateDashboard: () => {
     cache.invalidate(CACHE_KEYS.DASHBOARD_METRICS);
     cache.invalidatePattern('dashboard');
-    console.log('🗑️ Invalidated all dashboard-related cache');
   },
 
   // Invalidate activity-related cache
@@ -189,7 +173,6 @@ export const cacheHelpers = {
     cache.invalidate(CACHE_KEYS.AUDIT_LOGS);
     cache.invalidatePattern('activity');
     cache.invalidatePattern('audit');
-    console.log('🗑️ Invalidated all activity-related cache');
   },
 
   // Clear all cache

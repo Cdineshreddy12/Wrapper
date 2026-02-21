@@ -79,7 +79,6 @@ export function UserManagementModals() {
       console.error('Delete user: no userId found on user object', state.deletingUser);
       return;
     }
-    console.log('🗑️ Deleting user', { userId: userIdToDelete, email: state.deletingUser.email });
     userMutations.deleteUser.mutate(userIdToDelete, {
       onSuccess: () => {
         actions.closeModal('delete');

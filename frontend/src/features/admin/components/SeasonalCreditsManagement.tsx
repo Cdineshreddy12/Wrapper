@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '@tanstack/react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -444,7 +444,7 @@ const SeasonalCreditsManagement: React.FC = () => {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => navigate(`/company-admin/campaigns/${campaign.campaignId}`)}
+                            onClick={() => navigate({ to: `/company-admin/campaigns/${campaign.campaignId}` })}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>

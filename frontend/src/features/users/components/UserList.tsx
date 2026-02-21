@@ -2,9 +2,9 @@ import { RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useSyncUser } from '../../hooks/useUserApplicationQueries';
-import { getAccessMethodColor } from '../../lib/utils/userApplication';
-import type { UserClassification } from '../../types/userApplication';
+import { useSyncUser } from '@/hooks/useUserApplicationQueries';
+import { getAccessMethodColor } from '@/lib/utils/userApplication';
+import type { UserClassification } from '@/types/userApplication';
 
 interface UserListProps {
   users: UserClassification[];

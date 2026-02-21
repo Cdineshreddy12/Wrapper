@@ -2,7 +2,7 @@ import React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { api, subscriptionAPI } from '@/lib/api'
-import { useLocation } from 'react-router-dom'
+import { useLocation } from '@tanstack/react-router'
 
 // Query keys for consistent caching
 export const queryKeys = {
@@ -28,9 +28,7 @@ export function useAuthStatus() {
   return useQuery({
     queryKey: queryKeys.authStatus,
     queryFn: async () => {
-      console.log('🔍 useAuthStatus: Fetching auth status...')
       const response = await api.get('/admin/auth-status')
-      console.log('✅ useAuthStatus: Auth status received')
       return response.data
     },
     enabled: !!isAuthenticated && !!user,
@@ -54,11 +52,9 @@ export function useEntityScope() {
   return useQuery({
     queryKey: queryKeys.entityScope,
     queryFn: async () => {
-      console.log('🔍 useEntityScope: Fetching entity scope...')
       const response = await api.get('/admin/entity-scope')
       
       if (response.data.success) {
-        console.log('✅ useEntityScope: Entity scope received')
         return response.data.scope
       }
       
@@ -96,7 +92,6 @@ export function useTenant(tenantId?: string) {
         throw new Error('Tenant ID is required')
       }
       
-      console.log('🔍 useTenant: Fetching tenant details...')
       const response = await api.get('/admin/tenant', {
         headers: {
           'X-Tenant-ID': effectiveTenantId,
@@ -104,7 +99,6 @@ export function useTenant(tenantId?: string) {
       })
 
       if (response.data?.success && response.data?.data) {
-        console.log('✅ useTenant: Tenant details received')
         return response.data.data
       }
       
@@ -134,12 +128,10 @@ export function useTenantApplications(tenantId?: string) {
         throw new Error('Tenant ID is required')
       }
       
-      console.log('🔍 useTenantApplications: Fetching tenant applications...')
       const response = await api.get(`/admin/application-assignments/tenant-apps/${effectiveTenantId}`)
       
       if (response.data?.success) {
         const apps = response.data.data?.applications || response.data.applications || []
-        console.log('✅ useTenantApplications: Tenant applications received', apps.length)
         return apps
       }
       
@@ -165,21 +157,17 @@ export function useApplicationAllocations(entityId?: string) {
     queryKey: queryKeys.applicationAllocations(entityId),
     queryFn: async () => {
       if (entityId) {
-        console.log('🔍 useApplicationAllocations: Fetching allocations for entity', entityId)
         const response = await api.get(`/admin/credits/entity/${entityId}/application-allocations`)
         
         if (response.data?.success) {
           const allocations = response.data.data?.allocations || []
-          console.log('✅ useApplicationAllocations: Allocations received', allocations.length)
           return allocations
         }
       } else {
-        console.log('🔍 useApplicationAllocations: Fetching all allocations')
         const response = await api.get('/admin/credits/application-allocations')
         
         if (response.data?.success) {
           const allocations = response.data.data?.allocations || []
-          console.log('✅ useApplicationAllocations: All allocations received', allocations.length)
           return allocations
         }
       }
@@ -211,7 +199,6 @@ export function useNotifications(options: {
   return useQuery({
     queryKey: [...queryKeys.notifications, options],
     queryFn: async () => {
-      console.log('🔍 useNotifications: Fetching notifications...')
       const params = new URLSearchParams()
 
       if (options.limit) params.append('limit', options.limit.toString())
@@ -224,7 +211,6 @@ export function useNotifications(options: {
       const response = await api.get(`/notifications?${params.toString()}`)
 
       if (response.data.success) {
-        console.log('✅ useNotifications: Notifications received', response.data.data?.length || 0)
         return response.data.data || []
       }
 
@@ -249,12 +235,10 @@ export function useUnreadCount() {
   return useQuery({
     queryKey: queryKeys.unreadCount,
     queryFn: async () => {
-      console.log('🔍 useUnreadCount: Fetching unread count...')
       const response = await api.get('/notifications/unread-count')
 
       if (response.data.success) {
         const count = response.data.data?.count || 0
-        console.log('✅ useUnreadCount: Unread count received', count)
         return count
       }
 
@@ -279,9 +263,7 @@ export function useCreditStatusQuery(enabled: boolean = true) {
   return useQuery({
     queryKey: [...queryKeys.creditStatus, user?.id],
     queryFn: async () => {
-      console.log('🔍 useCreditStatusQuery: Fetching credit status...')
       const response = await api.get('/credits/current')
-      console.log('✅ useCreditStatusQuery: Credit status received')
       return response.data
     },
     enabled: enabled && !!isAuthenticated && !!user,
@@ -305,9 +287,7 @@ export function useCreditUsageSummary(params?: {
   return useQuery({
     queryKey: ['credit', 'usage-summary', params],
     queryFn: async () => {
-      console.log('🔍 useCreditUsageSummary: Fetching usage summary...')
       const response = await api.get('/credits/usage-summary', { params })
-      console.log('✅ useCreditUsageSummary: Usage summary received')
       return response.data
     },
     enabled: !!isAuthenticated && !!user,
@@ -327,9 +307,7 @@ export function useCreditStats() {
   return useQuery({
     queryKey: ['credit', 'stats'],
     queryFn: async () => {
-      console.log('🔍 useCreditStats: Fetching credit stats...')
       const response = await api.get('/credits/stats')
-      console.log('✅ useCreditStats: Credit stats received')
       return response.data
     },
     enabled: !!isAuthenticated && !!user,
@@ -355,9 +333,7 @@ export function useCreditTransactionHistory(params?: {
   return useQuery({
     queryKey: ['credit', 'transactions', params],
     queryFn: async () => {
-      console.log('🔍 useCreditTransactionHistory: Fetching transaction history...')
       const response = await api.get('/credits/transactions', { params })
-      console.log('✅ useCreditTransactionHistory: Transaction history received')
       return response.data
     },
     enabled: !!isAuthenticated && !!user,
@@ -377,15 +353,12 @@ export function useSubscriptionCurrent() {
   return useQuery({
     queryKey: queryKeys.subscriptionCurrent,
     queryFn: async () => {
-      console.log('🔍 useSubscriptionCurrent: Fetching subscription data...')
       try {
         const response = await subscriptionAPI.getCurrent()
-        console.log('✅ useSubscriptionCurrent: Subscription data received')
         return response.data.data
       } catch (error: any) {
         console.error('❌ useSubscriptionCurrent: Error fetching subscription:', error)
         if (error.response?.status === 404) {
-          console.log('⚠️ useSubscriptionCurrent: No subscription found, using free plan fallback')
           return {
             plan: 'free',
             status: 'active',
@@ -412,13 +385,11 @@ export function useUsers(entityId?: string | null) {
   return useQuery({
     queryKey: queryKeys.users(entityId),
     queryFn: async () => {
-      console.log('🔍 useUsers: Fetching users...')
       const params = entityId ? { entityId } : {}
       const response = await api.get('/tenants/current/users', { params })
       
       if (response.data.success) {
         const users = response.data.data || []
-        console.log('✅ useUsers: Users received', users.length)
         return users
       }
       
@@ -442,7 +413,6 @@ export function useRoles(filters?: { search?: string; type?: 'all' | 'custom' | 
   return useQuery({
     queryKey: queryKeys.roles(filters),
     queryFn: async () => {
-      console.log('🔍 useRoles: Fetching roles...')
       
       // Try the new all roles endpoint first, fallback to paginated endpoint
       try {
@@ -466,7 +436,6 @@ export function useRoles(filters?: { search?: string; type?: 'all' | 'custom' | 
             rolesData = rolesData.filter((role: any) => role.isSystemRole === false)
           }
           
-          console.log('✅ useRoles: Roles received from /admin/roles/all', rolesData.length)
           return rolesData
         }
       } catch (error: any) {
@@ -485,7 +454,6 @@ export function useRoles(filters?: { search?: string; type?: 'all' | 'custom' | 
       
       if (response.data.success) {
         const rolesData = response.data.data?.data || response.data.data || []
-        console.log('✅ useRoles: Roles received from fallback endpoint', rolesData.length)
         return rolesData
       }
       
@@ -508,7 +476,6 @@ export function useOnboardingStatus() {
   return useQuery({
     queryKey: queryKeys.onboardingStatus,
     queryFn: async () => {
-      console.log('🔍 useOnboardingStatus: Fetching onboarding status...')
       
       // Build query params with user info as fallback for token validation failures
       const params = new URLSearchParams()
@@ -523,7 +490,6 @@ export function useOnboardingStatus() {
       const url = `/onboarding/status${queryString ? `?${queryString}` : ''}`
       
       const response = await api.get(url)
-      console.log('✅ useOnboardingStatus: Onboarding status received')
       return response.data
     },
     enabled: !!isAuthenticated && !!user,

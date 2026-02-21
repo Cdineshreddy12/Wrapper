@@ -78,13 +78,8 @@ class KindeService {
       console.warn('⚠️ Failed to initialize JWKS, will fall back to API-based validation');
     }
     
-    if (!isProduction) {
-      console.log('🔧 KindeService initialized with:', {
-        baseURL: this.baseURL,
-        hasOAuthClient: !!this.oauthClientId,
-        hasM2MClient: !!this.m2mClientId,
-        hasJWKS: !!this.jwks
-      });
+    if (!isProduction && shouldLogVerbose()) {
+      console.log('KindeService init:', { baseURL: this.baseURL, oauth: !!this.oauthClientId, m2m: !!this.m2mClientId, jwks: !!this.jwks });
     }
   }
 
@@ -190,13 +185,13 @@ class KindeService {
    */
   async getUserInfo(accessToken: string): Promise<Record<string, unknown>> {
     try {
-      if (shouldLogVerbose()) console.log('🔍 getUserInfo - Starting with token validation...');
+      
 
       // Strategy 0 (preferred): Verify JWT signature via JWKS and extract claims
       try {
         const payload = await this.verifyJWTSignature(accessToken);
         if (payload) {
-          if (shouldLogVerbose()) console.log('✅ getUserInfo - Success via JWKS signature verification');
+          if (shouldLogVerbose()) console.log('getUserInfo: JWKS verified');
           return normalizeKindePayload(payload as unknown as Record<string, unknown>);
         }
       } catch (jwksErr: unknown) {
@@ -213,7 +208,7 @@ class KindeService {
           timeout: 5000
         });
 
-        if (shouldLogVerbose()) console.log('✅ getUserInfo - Success via user_profile endpoint');
+        if (shouldLogVerbose()) console.log('getUserInfo: user_profile OK');
         return response.data as Record<string, unknown>;
       } catch (profileErr: unknown) {
         const profileError = profileErr as Error & { response?: { status?: number; statusText?: string; data?: unknown } };
@@ -289,7 +284,7 @@ class KindeService {
    */
   async getEnhancedUserInfo(accessToken: string): Promise<UserInfoNormalized & { organizations: unknown[]; socialProvider: string; hasMultipleOrganizations: boolean }> {
     try {
-      if (shouldLogVerbose()) console.log('🔍 getEnhancedUserInfo - Starting...');
+      
       const userInfo = await this.getUserInfo(accessToken);
 
       const orgCodes = (userInfo.org_codes ?? []) as string[];
@@ -300,7 +295,7 @@ class KindeService {
         hasMultipleOrganizations: orgCodes.length > 1
       };
 
-      if (shouldLogVerbose()) console.log('✅ getEnhancedUserInfo - Success:', enhancedInfo);
+      if (shouldLogVerbose()) console.log('getEnhancedUserInfo OK:', enhancedInfo.id);
       return enhancedInfo;
     } catch (err: unknown) {
       const error = err as Error;
@@ -314,15 +309,8 @@ class KindeService {
    */
   async validateToken(token: string): Promise<Record<string, unknown>> {
     try {
-      if (shouldLogVerbose()) console.log('🔍 validateToken - Starting validation...');
-
       if (!token || token.trim() === '') {
         throw new Error('No token provided');
-      }
-
-      if (shouldLogVerbose()) {
-        console.log('🔑 Token validation - Token length:', token.length);
-        console.log('🔑 Token validation - Token format check:', token.includes('.') ? 'JWT format' : 'Unknown format');
       }
 
       // Get user info (this handles all the fallback strategies)

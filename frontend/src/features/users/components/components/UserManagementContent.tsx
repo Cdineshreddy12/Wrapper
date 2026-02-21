@@ -3,9 +3,9 @@ import { UserFilters } from '../UserFilters';
 import { BulkActions } from '../BulkActions';
 import { UserTable } from './UserTable';
 import { useUserManagement } from '../context/UserManagementContext';
-import { LoadingSpinner } from '@/components/common/LoadingSpinner';
-import { ErrorMessage } from '@/components/common/ErrorMessage';
-import { useNavigate } from 'react-router-dom';
+import { LoadingSpinner } from '@/components/common/feedback/LoadingSpinner';
+import { ErrorMessage } from '@/components/common/feedback/ErrorMessage';
+import { useNavigate } from '@tanstack/react-router';
 
 /**
  * Main content component for User Management Dashboard
@@ -97,7 +97,7 @@ export function UserManagementContent() {
               onUserAction={(action, user) => {
                 switch (action) {
                   case 'view':
-                    navigate(`/dashboard/users/${user.userId}`);
+                    navigate({ to: `/dashboard/users/${user.userId}` });
                     break;
                   case 'edit':
                     actions.openModal('edit', user);

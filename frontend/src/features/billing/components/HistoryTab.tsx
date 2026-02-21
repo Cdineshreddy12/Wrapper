@@ -3,7 +3,7 @@
  */
 
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from '@tanstack/react-router'
 import {
   Crown,
   CheckCircle,
@@ -20,8 +20,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { PaymentHistoryIcon } from '@/components/common/BillingIcons'
-import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader'
+import { PaymentHistoryIcon } from '@/components/common/billing/BillingIcons'
+import { ZopkitRoundLoader } from '@/components/common/feedback/ZopkitRoundLoader'
 import type { DisplaySubscription } from '../hooks/useBilling'
 
 /** Minimal payment record shape for history list */
@@ -366,7 +366,7 @@ export function HistoryTab({
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => navigate(`/dashboard/billing/payments/${payment.id}`)}
+                            onClick={() => navigate({ to: `/dashboard/billing/payments/${payment.id}` })}
                             className="border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"
                           >
                             <ExternalLink className="h-3 w-3 mr-1" />

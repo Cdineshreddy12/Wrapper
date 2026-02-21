@@ -85,22 +85,12 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
   // Handle field value changes
   const handleFieldChange = (fieldId: string, value: FormValue) => {
     methods.setValue(fieldId, value, { shouldValidate: false, shouldDirty: true });
-
-    // Debug logging for field changes
-    if (debug) {
-      console.log('Field changed:', { fieldId, value, errors: methods.formState.errors });
-    }
   };
 
   // Handle field blur
   const handleFieldBlur = (fieldId: string) => {
     // Trigger validation for this field when user blurs
     methods.trigger(fieldId);
-
-    // Debug logging for field blur
-    if (debug) {
-      console.log('Field blurred:', { fieldId, errors: methods.formState.errors });
-    }
   };
 
   // Validate current step
@@ -157,19 +147,6 @@ export const MultiStepForm: React.FC<MultiStepFormProps> = ({
 
     // Use react-hook-form's built-in validation state
     const isValid = methods.formState.isValid;
-
-    // Debug logging
-    if (debug) {
-      console.log('Validation Debug:', {
-        currentStep: currentStep + 1,
-        isValid,
-        isDirty,
-        isSubmitted,
-        touchedFields,
-        formErrors: methods.formState.errors,
-        values: methods.getValues()
-      });
-    }
 
     return isValid;
   }, [methods.formState.isValid, methods.formState.isDirty, methods.formState.isSubmitted, methods.formState.touchedFields, methods.formState.errors, currentStep, debug]);

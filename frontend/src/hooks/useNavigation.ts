@@ -1,4 +1,4 @@
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { NavigationService } from '../lib/navigation';
 

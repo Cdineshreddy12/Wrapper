@@ -85,7 +85,6 @@ export class EnhancedErrorBoundary extends Component<Props, State> {
     };
 
     // Simulate error reporting
-    console.log('Error reported:', errorReport);
     
     // In production, this would be:
     // this.errorReportingService?.captureException(error, {
@@ -407,4 +406,3 @@ export const defaultErrorReportingService: ErrorReportingService = {
   setUser: () => {},
   setTag: () => {}
 };
-

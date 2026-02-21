@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils"
-import { Link, useLocation } from "react-router-dom"
+import { Link, useLocation } from "@tanstack/react-router"
 import { useSidebar } from "@/components/ui/sidebar"
+import { useKindeAuth } from "@kinde-oss/kinde-auth-react"
 import { motion } from "framer-motion"
 import { useEffect, useState } from "react"
 import {
@@ -107,6 +108,7 @@ export function ModernSidebar({
     className?: string
 }) {
     const { state } = useSidebar()
+    const { logout } = useKindeAuth()
     const location = useLocation()
     const isCollapsed = state === "collapsed"
     const mainNavItems = navData?.navMain || [
@@ -212,7 +214,10 @@ export function ModernSidebar({
                     )}
 
                     {!isCollapsed && (
-                        <button className="p-2 text-white/40 hover:text-white transition-colors">
+                        <button
+                            onClick={() => logout()}
+                            className="p-2 text-white/40 hover:text-white transition-colors"
+                        >
                             <LogOut className="size-4" />
                         </button>
                     )}

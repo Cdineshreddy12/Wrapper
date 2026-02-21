@@ -28,7 +28,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import api from '@/lib/api';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { PearlButton } from '@/components/ui/pearl-button';
-import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader';
+import { ZopkitRoundLoader } from '@/components/common/feedback/ZopkitRoundLoader';
 import { cn } from '@/lib/utils';
 
 interface Application {
@@ -139,13 +139,10 @@ export function ApplicationModuleRoleBuilder({
         setLoading(true);
         setError(null);
 
-        console.log('🔍 Loading role builder options from applications/modules tables...');
-
         const response = await api.get('/api/custom-roles/builder-options');
 
         if (response.data.success) {
           const { applications: apps, totalApps, totalModules, totalPermissions } = response.data.data;
-          console.log(`✅ Loaded ${totalApps} applications, ${totalModules} modules, ${totalPermissions} permissions`);
           setApplications(apps);
 
           if (initialRole) {
@@ -178,8 +175,6 @@ export function ApplicationModuleRoleBuilder({
     const selectedApps: string[] = [];
     const selectedModules: Record<string, string[]> = {};
     const selectedPermissions: Record<string, string[]> = {};
-
-    console.log('🔍 Parsing existing permissions:', permissions);
 
     if (Array.isArray(permissions)) {
       permissions.forEach(permission => {

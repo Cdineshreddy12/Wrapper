@@ -94,12 +94,6 @@ export const usePermissions = () => {
         permissionsAPI.getTemplates()
       ])
 
-      console.log('🔍 API Responses:', {
-        appsResponse: appsResponse,
-        usersResponse: usersResponse,
-        templatesResponse: templatesResponse
-      })
-
       // Validate API response structure with better error handling
       const appsData = appsResponse?.data || appsResponse || []
       const usersData = usersResponse?.data || usersResponse || []

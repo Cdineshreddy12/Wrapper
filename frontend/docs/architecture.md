@@ -50,7 +50,7 @@ src/
 
 ## Technology Stack
 
-- **React 18** with TypeScript
+- **React 19** with TypeScript
 - **React Router 6** for client-side routing
 - **TanStack Query** for server state management
 - **Zustand** for client state management
@@ -71,5 +71,5 @@ src/
 1. **Feature Development**: Create feature in `src/features/`
 2. **Component Development**: Use ShadCN UI components as base
 3. **State Management**: Use appropriate state management solution
-4. **Testing**: Unit tests with Vitest, E2E with Playwright
+4. **Testing**: Unit tests with Vitest
 5. **Documentation**: Update component documentation in Storybook

@@ -304,8 +304,6 @@ export const OnboardingForm = () => {
         },
       };
 
-      console.log('🚀 Submitting onboarding data:', submissionData);
-      
       // Helper function to filter out empty/null/undefined values
       const filterEmpty = (value: any): any => {
         if (value === null || value === undefined || value === '') {
@@ -460,7 +458,6 @@ export const OnboardingForm = () => {
 
       // Helper function to navigate to field and highlight it
       const navigateToFieldAndHighlight = (fieldPath: string, stepNumber: number, fieldErrorMessage: string) => {
-        console.log('🔴 Navigating to field:', { fieldPath, stepNumber, fieldErrorMessage });
         
         // Navigate to the step first
         setCurrentStep(stepNumber);
@@ -469,8 +466,6 @@ export const OnboardingForm = () => {
         setTimeout(() => {
           const fieldName = fieldPath.split('.').pop() || fieldPath;
           const baseFieldName = fieldName.replace('businessDetails.', '');
-          
-          console.log('🔴 Searching for field:', { fieldName, baseFieldName });
           
           // Try multiple selectors to find the field (react-hook-form fields)
           const selectors = [
@@ -499,7 +494,6 @@ export const OnboardingForm = () => {
           for (const selector of selectors) {
             fieldElement = document.querySelector(selector) as HTMLElement;
             if (fieldElement) {
-              console.log('🔴 Found field with selector:', selector);
               break;
             }
           }
@@ -511,7 +505,6 @@ export const OnboardingForm = () => {
               (l) => l.textContent?.toLowerCase().includes(fieldName.toLowerCase())
             );
             if (matchingLabel) {
-              console.log('🔴 Found matching label:', matchingLabel.textContent);
               const inputId = matchingLabel.getAttribute('for');
               if (inputId) {
                 fieldElement = document.querySelector(`#${inputId}`) as HTMLElement;
@@ -538,7 +531,6 @@ export const OnboardingForm = () => {
           }
           
           if (fieldElement) {
-            console.log('🔴 Found field element, highlighting:', fieldElement);
             
             // Scroll to field with smooth animation
             fieldElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
@@ -597,12 +589,10 @@ export const OnboardingForm = () => {
       const errorData = error?.response?.data || error?.data;
       
       if (errorData) {
-        console.log('🔴 Processing error data:', errorData);
         
         // Check for details array FIRST (Fastify validation format from global error handler)
         if (errorData.details && Array.isArray(errorData.details) && errorData.details.length > 0) {
           const details = errorData.details;
-          console.log('🔴 Found validation details:', details);
           
           // Map backend field names to frontend field paths for navigation
           errorFields = details.map((d: any) => {
@@ -612,8 +602,6 @@ export const OnboardingForm = () => {
             const stepNumber = getStepNumberForField(cleanFieldPath);
             const displayName = getDisplayNameForField(cleanFieldPath);
             const fieldMessage = d.message || 'Invalid value';
-            
-            console.log('🔴 Mapped field:', { fieldPath, cleanFieldPath, frontendPath, stepNumber, displayName });
             
             return {
               fieldPath: frontendPath,
@@ -642,7 +630,6 @@ export const OnboardingForm = () => {
         else if (errorData.errors && Array.isArray(errorData.errors)) {
           // Backend sends errors in format: [{ field, message, code }]
           const validationErrors = errorData.errors;
-          console.log('🔴 Found validation errors:', validationErrors);
           
           if (validationErrors.length === 1) {
             // Single error - show the exact message
@@ -670,30 +657,23 @@ export const OnboardingForm = () => {
         // Check for error message (fallback)
         else if (errorData.message) {
           errorMessage = errorData.message;
-          console.log('🔴 Using error message:', errorMessage);
         }
         // Check for error field (legacy format)
         else if (errorData.error) {
           errorMessage = typeof errorData.error === 'string' 
             ? errorData.error 
             : errorData.error.message || errorMessage;
-          console.log('🔴 Using legacy error format:', errorMessage);
         }
       } 
       // Handle network errors
       else if (error?.message) {
         errorMessage = error.message;
-        console.log('🔴 Network error:', errorMessage);
       }
-      
-      console.log('🔴 Final error state:', { errorMessage, errorFields });
       
       // Show toast with error message and navigate to field
       if (errorFields.length > 0) {
         const firstField = errorFields[0];
         const fieldErrorMessage = firstField.errorMessage || errorMessage;
-        
-        console.log('🔴 Will navigate to field:', firstField);
         
         // Navigate to field and highlight it automatically
         navigateToFieldAndHighlight(
@@ -703,7 +683,6 @@ export const OnboardingForm = () => {
         );
         
         // Show toast with error message - using direct sonner import for reliability
-        console.log('🔴 Showing toast:', errorMessage);
         try {
           // Use direct sonner toast for reliability
           sonnerToast.error(errorMessage, {
@@ -726,7 +705,6 @@ export const OnboardingForm = () => {
         }
       } else {
         // No specific field errors, just show general error message
-        console.log('🔴 Showing general error toast:', errorMessage);
         try {
           sonnerToast.error(errorMessage, { duration: 6000 });
         } catch (toastError) {

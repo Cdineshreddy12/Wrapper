@@ -1,4 +1,4 @@
-import { EmptyState } from '@/components/common/EmptyState';
+import { EmptyState } from '@/components/common/feedback/EmptyState';
 import { Users, Plus } from 'lucide-react';
 
 interface EmptyUsersStateProps {

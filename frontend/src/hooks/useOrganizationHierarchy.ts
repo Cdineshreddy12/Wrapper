@@ -32,7 +32,6 @@ interface Entity {
   updatedAt?: string;
 }
 
-
 export function useOrganizationHierarchy(tenantId?: string) {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['organizations', 'hierarchy', tenantId],

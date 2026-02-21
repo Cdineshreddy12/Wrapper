@@ -1,5 +1,5 @@
 import React from 'react'
-import { useLocation, Link } from 'react-router-dom'
+import { useLocation, Link } from '@tanstack/react-router'
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -96,7 +96,7 @@ export function RouteBreadcrumb({
   maxItems = 5
 }: RouteBreadcrumbProps) {
   const location = useLocation()
-  const { pathname, search } = location
+  const { pathname, searchStr: search } = location
   const { lastSegmentLabel } = useBreadcrumbLabel()
 
   // Generate breadcrumb items

@@ -60,17 +60,10 @@ class JWTService {
         app: 'crm'
       };
 
-      console.log('🔑 Generating JWT payload for CRM:', {
-        user: user.email,
-        org: payload.org_code,
-        exp: new Date(payload.exp * 1000).toISOString()
-      });
-
       // For now, generate a secure placeholder token that looks like JWT
       // In production, this should call your backend JWT service
       const token = this.generateSecureToken(payload);
       
-      console.log('✅ JWT token generated successfully, length:', token.length);
       return token;
 
     } catch (error) {
@@ -78,7 +71,6 @@ class JWTService {
       
       // Fallback to secure random token if JWT fails
       const fallbackToken = `jwt_fallback_${Date.now()}_${this.generateRandomId()}`;
-      console.log('🔄 Using fallback token due to JWT error');
       return fallbackToken;
     }
   }
@@ -137,7 +129,6 @@ class JWTService {
       const parts = token.split('.');
       if (parts.length === 3) {
         const payload = JSON.parse(atob(parts[1]));
-        console.log('✅ JWT token decoded successfully');
         return payload;
       }
       return null;

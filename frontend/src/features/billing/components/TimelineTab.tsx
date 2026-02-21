@@ -17,7 +17,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatDate } from '@/lib/utils'
-import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader'
+import { ZopkitRoundLoader } from '@/components/common/feedback/ZopkitRoundLoader'
 
 export interface TimelineEvent {
   type: string

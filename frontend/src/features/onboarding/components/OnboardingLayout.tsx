@@ -231,7 +231,6 @@ export const OnboardingLayout = React.memo(({
                         e.preventDefault();
                         e.stopPropagation();
                         // Handle documentation action
-                        console.log('Read documentation clicked');
                       }}
                         className="w-full flex items-center justify-between p-3 rounded-lg bg-white/40 hover:bg-white/70 hover:shadow-lg hover:shadow-pink-500/5 border border-transparent hover:border-white/50 group/option text-left cursor-pointer transition-all duration-300"
                     >

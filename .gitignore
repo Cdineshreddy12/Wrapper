@@ -21,13 +21,6 @@ node_modules/
 # Testing
 coverage/
 
-# Playwright (OAuth/test profiles, reports, and local data - do not commit)
-frontend/playwright-oauth-profile/
-frontend/playwright-zopkit-profile/
-frontend/playwright-debug-screenshots/
-frontend/playwright-report/
-frontend/test-results/
-
 # Production
 build/
 dist/
@@ -35,6 +28,7 @@ dist/
 # Misc
 .DS_Store
 *.pem
+pem_files/
 
 # Vite temporary files
 vite.config.ts.timestamp-*

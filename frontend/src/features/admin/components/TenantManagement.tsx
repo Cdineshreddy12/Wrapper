@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '@tanstack/react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -125,7 +125,7 @@ export const TenantManagement: React.FC = () => {
 
       if (detailsResponse.data.success) {
         // Navigate to tenant details page
-        navigate(`/company-admin/tenants/${tenant.tenantId}`);
+        navigate({ to: `/company-admin/tenants/${tenant.tenantId}` });
       }
     } catch (error) {
       console.error('Failed to fetch tenant details:', error);
@@ -154,7 +154,6 @@ export const TenantManagement: React.FC = () => {
     try {
       const response = await api.get(`/admin/tenants/${tenantId}/credit-debug`);
       if (response.data.success) {
-        console.log('Credit Debug Info:', response.data.data);
         toast.success('Credit debug information logged to console');
       }
     } catch (error) {

@@ -1,34 +1,14 @@
 /**
  * Logging Service for User Management
  * 
- * Provides structured logging with different levels and contexts
+ * Provides structured logging with different levels and contexts.
+ * In production, integrate with an external logging/error-tracking service.
  */
 export class LoggingService {
-  private static isDevelopment = process.env.NODE_ENV === 'development';
-  
-  /**
-   * Log user management actions with context
-   */
-  static logUserAction(action: string, userId: string, details?: any): void {
-    const logData = {
-      timestamp: new Date().toISOString(),
-      action,
-      userId,
-      details,
-      context: 'user-management'
-    };
-    
-    if (this.isDevelopment) {
-      console.log(`🔧 User Action: ${action}`, logData);
-    }
-    
-    // In production, you might want to send this to a logging service
-    // this.sendToLoggingService(logData);
+  static logUserAction(_action: string, _userId: string, _details?: any): void {
+    // Placeholder for production logging service integration
   }
-  
-  /**
-   * Log errors with context
-   */
+
   static logError(error: Error, context: string, details?: any): void {
     const logData = {
       timestamp: new Date().toISOString(),
@@ -41,61 +21,18 @@ export class LoggingService {
       details
     };
     
-    console.error(`❌ Error in ${context}:`, logData);
-    
-    // In production, you might want to send this to an error tracking service
-    // this.sendToErrorTrackingService(logData);
+    console.error(`Error in ${context}:`, logData);
   }
-  
-  /**
-   * Log performance metrics
-   */
-  static logPerformance(operation: string, duration: number, details?: any): void {
-    const logData = {
-      timestamp: new Date().toISOString(),
-      operation,
-      duration,
-      details,
-      context: 'performance'
-    };
-    
-    if (this.isDevelopment) {
-      console.log(`⏱️ Performance: ${operation} took ${duration}ms`, logData);
-    }
+
+  static logPerformance(_operation: string, _duration: number, _details?: any): void {
+    // Placeholder for production performance monitoring integration
   }
-  
-  /**
-   * Log API calls
-   */
-  static logApiCall(method: string, endpoint: string, status: number, duration?: number): void {
-    const logData = {
-      timestamp: new Date().toISOString(),
-      method,
-      endpoint,
-      status,
-      duration,
-      context: 'api'
-    };
-    
-    if (this.isDevelopment) {
-      console.log(`🌐 API Call: ${method} ${endpoint} - ${status}`, logData);
-    }
+
+  static logApiCall(_method: string, _endpoint: string, _status: number, _duration?: number): void {
+    // Placeholder for production API monitoring integration
   }
-  
-  /**
-   * Log user interface interactions
-   */
-  static logUIInteraction(component: string, action: string, details?: any): void {
-    const logData = {
-      timestamp: new Date().toISOString(),
-      component,
-      action,
-      details,
-      context: 'ui'
-    };
-    
-    if (this.isDevelopment) {
-      console.log(`🖱️ UI Interaction: ${component} - ${action}`, logData);
-    }
+
+  static logUIInteraction(_component: string, _action: string, _details?: any): void {
+    // Placeholder for production analytics integration
   }
 }

@@ -1,5 +1,7 @@
 const isDev = import.meta.env.DEV;
 
+
+//common logger for the frontend
 export const logger = {
   debug: (...args: unknown[]) => {
     if (isDev) console.log(...args);

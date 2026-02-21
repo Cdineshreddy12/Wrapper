@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { PearlButton } from '@/components/ui/pearl-button';
 import { User } from '@/types/user-management';
-import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader';
+import { ZopkitRoundLoader } from '@/components/common/feedback/ZopkitRoundLoader';
 
 interface DeleteUserModalProps {
   isOpen: boolean;

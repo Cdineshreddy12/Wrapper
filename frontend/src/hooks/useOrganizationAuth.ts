@@ -1,10 +1,14 @@
 import { useMemo } from 'react';
-import { useUserContext } from '@/contexts/UserContextProvider';
+import { useUserContextSafe } from '@/contexts/UserContextProvider';
 import { useAuthStatus } from '@/hooks/useSharedQueries';
 import axios from 'axios';
 
 export function useOrganizationAuth() {
-  const { user, tenant, isAuthenticated, loading: contextLoading } = useUserContext();
+  const ctx = useUserContextSafe();
+  const user = ctx?.user ?? null;
+  const tenant = ctx?.tenant ?? null;
+  const isAuthenticated = ctx?.isAuthenticated ?? false;
+  const contextLoading = ctx?.loading ?? true;
   const { data: authData, isLoading: authLoading } = useAuthStatus();
 
   // Create user context from shared auth data
@@ -22,14 +26,6 @@ export function useOrganizationAuth() {
 
   // Get the current tenant ID - use the one from user context first
   const tenantId = userContext?.tenantId || user?.tenantId || tenant?.tenantId;
-
-  console.log('🔑 useOrganizationAuth tenant ID sources:', {
-    userContextTenantId: userContext?.tenantId,
-    userTenantId: user?.tenantId,
-    tenantTenantId: tenant?.tenantId,
-    finalTenantId: tenantId,
-    authStatusTenantId: authData?.authStatus?.tenantId
-  });
 
   // If no tenant ID is available, this is an error condition
   if (!tenantId) {
@@ -52,15 +48,7 @@ export function useOrganizationAuth() {
       ...(userContext?.internalUserId && { 'X-Internal-User-ID': userContext.internalUserId }),
     };
 
-    // Combine default headers with any additional headers
-    const allHeaders = { ...defaultHeaders, ...options.headers };
-
-    console.log('🔍 Making request:', {
-      endpoint: normalizedEndpoint,
-      method: options.method || 'GET',
-      headers: allHeaders,
-      tenantId
-    });
+    const fullURL = `${baseURL}${normalizedEndpoint}`;
 
     // Use axios for better CORS handling and consistency
     const response = await axios(fullURL, {
@@ -69,11 +57,6 @@ export function useOrganizationAuth() {
         ...options.headers,
       },
       withCredentials: true,
-    });
-
-    console.log('✅ Request successful:', {
-      url: fullURL,
-      result: response.data
     });
 
     return response.data;

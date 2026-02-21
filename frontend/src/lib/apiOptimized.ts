@@ -4,24 +4,20 @@ import axios, { AxiosError } from 'axios'
 import toast from 'react-hot-toast'
 import { logger } from '@/lib/logger'
 import { config } from '@/lib/config'
+import { setKindeTokenGetter as _setKindeTokenGetter, getKindeToken as sharedGetKindeToken } from './api'
 
-// Point directly to backend since all routes are registered under /api/*
 const API_BASE_URL = config.API_URL
 
-// Store for Kinde token getter function
-let kindeTokenGetter: (() => Promise<string | null>) | null = null;
+/**
+ * Re-export for backward compatibility. Callers that import from apiOptimized
+ * will set the getter on the canonical api.ts module.
+ */
+export const setKindeTokenGetter = _setKindeTokenGetter;
 
-// CACHE for token to avoid repeated expensive searches
 let cachedToken: string | null = null;
 let tokenCacheTime: number = 0;
 const TOKEN_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-// Function to set the Kinde token getter (called from components that have access to useKindeAuth)
-export const setKindeTokenGetter = (getter: () => Promise<string | null>) => {
-  kindeTokenGetter = getter;
-};
-
-// Enhanced JWT token validation - simplified
 const isValidJWT = (token: string): boolean => {
   if (!token || typeof token !== 'string' || token.length < 20) return false;
   const parts = token.split('.');
@@ -34,59 +30,30 @@ const isValidJWT = (token: string): boolean => {
   }
 };
 
-// OPTIMIZED: Simplified token retrieval with caching
+/**
+ * Wraps the shared getKindeToken from api.ts with a short-lived cache to
+ * avoid repeated async calls on rapid sequential requests.
+ */
 const getKindeToken = async (): Promise<string | null> => {
-  // Check cache first
   const now = Date.now();
   if (cachedToken && (now - tokenCacheTime) < TOKEN_CACHE_DURATION) {
     return cachedToken;
   }
 
   try {
-    // Method 1: Try Kinde SDK if available (fastest)
-    if (kindeTokenGetter) {
-      try {
-        const token = await kindeTokenGetter();
-        if (token && isValidJWT(token)) {
-          cachedToken = token;
-          tokenCacheTime = now;
-          return token;
-        }
-      } catch (error) {
-        // Continue to fallback methods
-      }
-    }
-
-    // Method 2: Check backup token (fast localStorage check)
-    const backupToken = localStorage.getItem('kinde_backup_token');
-    if (backupToken && isValidJWT(backupToken)) {
-      cachedToken = backupToken;
+    const token = await sharedGetKindeToken();
+    if (token && isValidJWT(token)) {
+      cachedToken = token;
       tokenCacheTime = now;
-      return backupToken;
+      return token;
     }
-
-    // Method 3: Quick search for common token keys (limited to avoid performance issues)
-    const commonKeys = ['kinde.access_token', 'access_token', 'id_token'];
-    for (const key of commonKeys) {
-      const token = localStorage.getItem(key);
-      if (token && isValidJWT(token)) {
-        cachedToken = token;
-        tokenCacheTime = now;
-        return token;
-      }
-    }
-
-    // If no token found, clear cache
-    cachedToken = null;
-    tokenCacheTime = 0;
-    return null;
-
-  } catch (error) {
-    logger.error('Error getting authentication token:', error);
-    cachedToken = null;
-    tokenCacheTime = 0;
-    return null;
+  } catch (_) {
+    // shared getter unavailable — fall through
   }
+
+  cachedToken = null;
+  tokenCacheTime = 0;
+  return null;
 };
 
 // Create axios instance
@@ -124,10 +91,7 @@ apiOptimized.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     if (error.response?.status === 401) {
-      logger.debug('Authentication required')
-      localStorage.removeItem('kinde_token')
-      localStorage.removeItem('authToken')
-      // Clear our cache too
+      logger.debug('Authentication required — session may have expired')
       cachedToken = null;
       tokenCacheTime = 0;
     }

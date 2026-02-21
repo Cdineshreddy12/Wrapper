@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '@tanstack/react-router';
 import { ShieldPlus, MoreVertical, Eye, Edit, Copy, Trash2, Search, Download, Archive, RefreshCw, Shield, Plus, Crown, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -35,14 +35,14 @@ import {
 
 import { ApplicationModuleRoleBuilder } from './ApplicationModuleRoleBuilder';
 import api, { Role } from '@/lib/api';
-import { usePermissionRefreshTrigger } from '@/components/PermissionRefreshNotification';
+import { usePermissionRefreshTrigger } from '@/features/roles/PermissionRefreshNotification';
 import { useQueryClient } from '@tanstack/react-query';
 import { EnhancedPermissionSummary } from './EnhancedPermissionSummary';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { useRoles, useInvalidateQueries } from '@/hooks/useSharedQueries';
 import { getPermissionSummary as getPermissionSummaryUtil } from './utils/permissionUtils';
 import { cn } from '@/lib/utils';
-import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader';
+import { ZopkitRoundLoader } from '@/components/common/feedback/ZopkitRoundLoader';
 
 // Use the enhanced Role interface from api.ts - no need for separate DashboardRole
 type DashboardRole = Role;
@@ -170,7 +170,7 @@ export function RoleManagementDashboard() {
   };
 
   const handleCreateRole = () => {
-    navigate('/dashboard/roles/new');
+    navigate({ to: '/dashboard/roles/new' });
   };
 
   const handleEditRole = useCallback(async (role: DashboardRole) => {
@@ -185,17 +185,17 @@ export function RoleManagementDashboard() {
       return;
     }
 
-    navigate(`/dashboard/roles/${role.roleId}/edit`);
+    navigate({ to: `/dashboard/roles/${role.roleId}/edit` });
   }, []);
 
   const handleViewRole = useCallback((role: DashboardRole) => {
-    navigate(`/dashboard/roles/${role.roleId}`);
+    navigate({ to: `/dashboard/roles/${role.roleId}` });
   }, [navigate]);
 
   const handleCloneRole = useCallback(async (role: DashboardRole) => {
     // Navigate to create page with cloned role data in state
     // The RoleBuilderPage will handle loading the role if needed
-    navigate(`/dashboard/roles/new?clone=${role.roleId}`);
+    navigate({ to: `/dashboard/roles/new?clone=${role.roleId}` });
   }, [navigate]);
 
   const handleDeleteRole = useCallback((role: DashboardRole) => {
@@ -268,12 +268,10 @@ export function RoleManagementDashboard() {
           break;
         case 'export':
           // Implementation for export functionality
-          console.log('Export feature coming soon!');
           toast.info('Export feature coming soon!');
           break;
         case 'deactivate':
           // Implementation for deactivate functionality
-          console.log('Deactivate feature coming soon!');
           toast.info('Deactivate feature coming soon!');
           break;
         default:
@@ -292,12 +290,10 @@ export function RoleManagementDashboard() {
 
     if (isSuccessCallback) {
       // The role has already been created/updated, refresh the list and close
-      console.log('✅ Role operation completed, refreshing list...');
 
       try {
         invalidateRoles({ search: searchQuery, type: typeFilter !== 'all' ? typeFilter : undefined });
         await refetchRoles(); // Force immediate refetch
-        console.log('🔄 Roles data refreshed');
       } catch (error) {
         console.error('⚠️ Failed to refresh roles:', error);
       }
@@ -334,11 +330,9 @@ export function RoleManagementDashboard() {
 
         if (payload.roleId || editingRole?.roleId) {
           const roleId = payload.roleId || editingRole?.roleId;
-          console.log('🔄 Updating existing advanced role:', roleId);
           delete payload.roleId; // Remove roleId from payload as it's in the URL
           response = await api.put(`/permissions/roles/${roleId}`, payload);
         } else {
-          console.log('➕ Creating new advanced role');
           delete payload.roleId;
           response = await api.post('/permissions/roles', payload);
         }
@@ -349,11 +343,9 @@ export function RoleManagementDashboard() {
 
         if (payload.roleId || editingRole?.roleId) {
           const roleId = payload.roleId || editingRole?.roleId;
-          console.log('🔄 Updating existing custom role:', roleId);
           delete payload.roleId;
           response = await api.put(`/custom-roles/update-from-builder/${roleId}`, payload);
         } else {
-          console.log('➕ Creating new custom role from builder');
           delete payload.roleId;
           response = await api.post('/custom-roles/create-from-builder', payload);
         }
@@ -364,26 +356,20 @@ export function RoleManagementDashboard() {
 
         if (payload.roleId || editingRole?.roleId) {
           const roleId = payload.roleId || editingRole?.roleId;
-          console.log('🔄 Updating existing role (general):', roleId);
           delete payload.roleId;
           response = await api.put(`/permissions/roles/${roleId}`, payload);
         } else {
-          console.log('➕ Creating new role (general)');
           delete payload.roleId;
           response = await api.post('/permissions/roles', payload);
         }
       }
 
-      console.log('📡 API Response:', response);
-
       if (response.data.success) {
-        console.log('✅ Role saved successfully');
 
         // Invalidate and refetch roles data to show updated list
         try {
           invalidateRoles({ search: searchQuery, type: typeFilter !== 'all' ? typeFilter : undefined });
           await refetchRoles(); // Force immediate refetch
-          console.log('🔄 Roles data refreshed');
         } catch (error) {
           console.error('⚠️ Failed to refresh roles:', error);
           // Fallback: Force page reload if cache invalidation fails
@@ -433,10 +419,6 @@ export function RoleManagementDashboard() {
   }, []);
 
   const filteredRoles = useMemo(() => {
-    console.log('🔍 filteredRoles - Raw roles:', roles);
-    console.log('🔍 filteredRoles - Roles length:', roles?.length || 0);
-    console.log('🔍 filteredRoles - Search query:', searchQuery);
-    console.log('🔍 filteredRoles - Type filter:', typeFilter);
 
     return (roles || []).filter(role => {
       // Search filter
@@ -459,8 +441,6 @@ export function RoleManagementDashboard() {
       return true;
     });
   }, [roles, searchQuery, typeFilter]);
-
-  console.log('🔍 RoleManagementDashboard - Filtered roles length:', filteredRoles.length);
 
   // Enhanced Role Row Component with single-line robustness
   const RoleRow = ({

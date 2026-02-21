@@ -229,7 +229,7 @@ The modular architecture makes it easy to add:
 
 ## 📚 Dependencies Used
 
-- **React 18** - UI framework
+- **React 19** - UI framework
 - **TypeScript** - Type safety
 - **TanStack Query** - Server state management
 - **React Hook Form** - Form management

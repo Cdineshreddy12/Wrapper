@@ -310,12 +310,6 @@ function OrganizationHierarchyFlowInner({
     type: 'organization' | 'location';
     availableCredits: number;
   } | null>(null);
-  console.log('🎨 OrganizationHierarchyFlowInner rendered:', {
-    hasHierarchy: !!hierarchy,
-    hierarchyLength: hierarchy?.hierarchy?.length || 0,
-    loading,
-    hierarchyData: hierarchy
-  });
 
   const { fitView, zoomIn, zoomOut } = useReactFlow();
 
@@ -348,7 +342,6 @@ function OrganizationHierarchyFlowInner({
 
   // Convert hierarchy to React Flow format
   const { nodes, edges } = useMemo(() => {
-    console.log('🔄 Converting hierarchy to flow:', hierarchy);
     const result = convertHierarchyToFlow(
       hierarchy,
       tenantId,
@@ -361,7 +354,6 @@ function OrganizationHierarchyFlowInner({
       handleAllocateCredits,
       onTransferCredits
     );
-    console.log('✅ Converted to flow:', result.nodes.length, 'nodes', result.edges.length, 'edges');
     return result;
   }, [hierarchy, tenantId, tenantName, onNodeClick, onEditOrganization, onDeleteOrganization, onAddSubOrganization, onAddLocation, handleAllocateCredits, onTransferCredits]);
 
@@ -504,12 +496,6 @@ function OrganizationHierarchyFlowInner({
 
 // Outer component that provides ReactFlowProvider
 export function OrganizationHierarchyFlow(props: OrganizationHierarchyFlowProps) {
-  console.log('🎨 OrganizationHierarchyFlow rendered with props:', {
-    hasHierarchy: !!props.hierarchy,
-    hierarchyLength: props.hierarchy?.hierarchy?.length || 0,
-    loading: props.loading,
-    totalOrganizations: props.hierarchy?.totalOrganizations || 0
-  });
 
   return (
     <div
@@ -523,4 +509,3 @@ export function OrganizationHierarchyFlow(props: OrganizationHierarchyFlowProps)
     </div>
   );
 }
-

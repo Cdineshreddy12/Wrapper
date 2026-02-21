@@ -7,6 +7,7 @@ import {
   LogOut,
   Sparkles,
 } from "lucide-react"
+import { useKindeAuth } from "@kinde-oss/kinde-auth-react"
 
 import {
   Avatar,
@@ -97,6 +98,7 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
+  const { logout } = useKindeAuth()
   const [gravatarUrl, setGravatarUrl] = React.useState<string>('')
 
   // Generate initials from user name
@@ -185,7 +187,7 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => logout()}>
               <LogOut />
               Log out
             </DropdownMenuItem>

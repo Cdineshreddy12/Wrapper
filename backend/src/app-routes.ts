@@ -162,7 +162,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   await fastify.register(appSyncRoutes, { prefix: '/api/api/wrapper' });
   await fastify.register(userVerificationRoutes, { prefix: '/api' });
   await fastify.register(healthRoutes, { prefix: '/api' });
-  console.log('✅ Entity-scope routes registered successfully');
+  await fastify.register(entityScopeRoutes, { prefix: '/api/admin' });
 
   fastify.get('/api/applications', async (request: FastifyRequest, reply: FastifyReply) => {
     try {

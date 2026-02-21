@@ -68,10 +68,7 @@ export const useSeasonalCreditsCongratulatory = () => {
       n => n.type === 'seasonal_credits' && !n.isDismissed
     );
 
-    console.log('🎉 [CONGRATULATORY] Found seasonal notifications:', seasonalNotifications.length);
-
     if (seasonalNotifications.length === 0) {
-      console.log('🎉 [CONGRATULATORY] No seasonal notifications found');
       return;
     }
 
@@ -135,7 +132,6 @@ export const useSeasonalCreditsCongratulatory = () => {
 
     // Check every 10 seconds for new seasonal credit notifications
     const interval = setInterval(async () => {
-      console.log('🎉 [CONGRATULATORY] Periodic check for new seasonal notifications');
       try {
         await loadNotifications();
       } catch (error) {
@@ -178,7 +174,6 @@ export const useSeasonalCreditsCongratulatory = () => {
 
   const resetCongratulatory = () => {
     localStorage.removeItem('seasonal-credits-congratulatory-shown');
-    console.log('🎉 [CONGRATULATORY] Reset - all campaigns can show congratulations again');
   };
 
   return {

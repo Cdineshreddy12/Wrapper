@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from '@tanstack/react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Shield, Lock, AlertCircle } from 'lucide-react';
 import AuthButton from './AuthButton';
 import { useAuthStatus } from '@/hooks/useSharedQueries';
-import AnimatedLoader from '@/components/common/AnimatedLoader';
+import AnimatedLoader from '@/components/common/feedback/AnimatedLoader';
 import { logger } from '@/lib/logger';
 
 interface ProtectedRouteProps {
@@ -135,88 +135,74 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = React.memo(({
     user
   } = useKindeAuth();
   const location = useLocation();
-  const { data: authData, isLoading: authStatusLoading, error: authError } = useAuthStatus();
+  const navigate = useNavigate();
+  const { data: authData, isLoading: authStatusLoading } = useAuthStatus();
+  const redirectingRef = useRef(false);
 
   const backendAuthStatus = authData?.authStatus || null;
 
-  logger.debug('🔒 ProtectedRoute: Called for path:', location.pathname, {
-    isAuthenticated,
-    isLoading,
-    hasUser: !!user,
-    userId: user?.id,
-    skipOnboardingCheck,
-    authStatusLoading,
-    hasAuthData: !!backendAuthStatus
-  });
+  const isReady = !isLoading && !authStatusLoading;
+  const needsKindeLogin = isReady && (!isAuthenticated || !user);
+  const needsBackendLogin = isReady && !needsKindeLogin && !backendAuthStatus?.isAuthenticated;
 
-  // Show loading spinner while checking authentication
-  if (isLoading || authStatusLoading) {
-    logger.debug('🔄 ProtectedRoute: Still loading for:', location.pathname);
-    if (FallbackComponent) {
-      return <FallbackComponent />;
-    }
-    return <LoadingSpinner />;
-  }
-
-  // Handle unauthenticated users
-  // Only redirect if Kinde is not still loading (prevents redirect loops)
-  if ((!isAuthenticated || !user) && !isLoading) {
-    logger.debug('🚫 ProtectedRoute: Not authenticated (Kinde loaded), redirecting to login', {
-      isAuthenticated,
-      hasUser: !!user,
-      isLoading,
-      pathname: location.pathname
-    });
-
-    if (redirectTo) {
-      return <Navigate to={redirectTo} state={{ from: location }} replace />;
-    }
-
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  // Check backend authentication status
-  if (!backendAuthStatus?.isAuthenticated) {
-    logger.debug('🚫 ProtectedRoute: Backend says user not authenticated');
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  // Check onboarding status (skip for certain routes and for already-onboarded/invited users to prevent redirect loop)
   const isInvitedOrOnboarded =
     backendAuthStatus?.onboardingCompleted === true ||
     backendAuthStatus?.userType === 'INVITED_USER' ||
     backendAuthStatus?.isInvitedUser === true;
 
-  if (
+  const needsOnboarding =
+    isReady &&
+    !needsKindeLogin &&
+    !needsBackendLogin &&
     !skipOnboardingCheck &&
     location.pathname !== '/onboarding' &&
     backendAuthStatus?.needsOnboarding &&
-    !isInvitedOrOnboarded
-  ) {
-    logger.debug('🔄 ProtectedRoute: User needs onboarding, redirecting...', {
-      needsOnboarding: backendAuthStatus.needsOnboarding,
-      onboardingCompleted: backendAuthStatus.onboardingCompleted,
-      pathname: location.pathname
-    });
+    !isInvitedOrOnboarded;
 
-    const params = new URLSearchParams();
-    params.set('from', 'protected_route');
-    if (user?.email) params.set('email', user.email);
+  const shouldRedirect = needsKindeLogin || needsBackendLogin || needsOnboarding;
 
-    return <Navigate to={`/onboarding?${params.toString()}`} replace />;
+  // Perform all redirects via useEffect to avoid synchronous router state
+  // updates during render, which cause "Maximum update depth exceeded" loops.
+  useEffect(() => {
+    if (!shouldRedirect || redirectingRef.current) return;
+    redirectingRef.current = true;
+
+    if (needsKindeLogin || needsBackendLogin) {
+      logger.debug('🚫 ProtectedRoute: Not authenticated, redirecting to login', {
+        kindeAuth: !needsKindeLogin,
+        backendAuth: !needsBackendLogin,
+        pathname: location.pathname,
+      });
+      navigate({ to: redirectTo || '/login', replace: true });
+      return;
+    }
+
+    if (needsOnboarding) {
+      logger.debug('🔄 ProtectedRoute: User needs onboarding, redirecting...', {
+        needsOnboarding: backendAuthStatus?.needsOnboarding,
+        onboardingCompleted: backendAuthStatus?.onboardingCompleted,
+        pathname: location.pathname,
+      });
+      const searchParams: Record<string, string> = { from: 'protected_route' };
+      if (user?.email) searchParams.email = user.email;
+      navigate({ to: '/onboarding', search: searchParams, replace: true });
+    }
+  }, [shouldRedirect, needsKindeLogin, needsBackendLogin, needsOnboarding, redirectTo, navigate, location.pathname, backendAuthStatus, user?.email]);
+
+  // Reset the redirect guard when auth state changes (e.g. user logs back in)
+  useEffect(() => {
+    if (!shouldRedirect) {
+      redirectingRef.current = false;
+    }
+  }, [shouldRedirect]);
+
+  if (!isReady || shouldRedirect) {
+    logger.debug('🔄 ProtectedRoute: Loading/redirecting for:', location.pathname);
+    if (FallbackComponent) return <FallbackComponent />;
+    return <LoadingSpinner />;
   }
 
-  // Log successful authentication for debugging
-  logger.debug('✅ ProtectedRoute: Access granted for:', location.pathname, {
-    isAuthenticated,
-    hasUser: !!user,
-    userId: user.id,
-    needsOnboarding: backendAuthStatus?.needsOnboarding,
-    onboardingCompleted: backendAuthStatus?.onboardingCompleted,
-    skipOnboardingCheck
-  });
-
-  // User is authenticated and authorized
+  logger.debug('✅ ProtectedRoute: Access granted for:', location.pathname);
   return <>{children}</>;
 });
 

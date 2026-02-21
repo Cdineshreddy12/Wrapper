@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import toast from 'react-hot-toast'
@@ -57,7 +57,7 @@ const defaultDisplaySubscription: DisplaySubscription = {
 
 export function useBilling() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const search = useSearch({ strict: false }) as Record<string, string>
   const queryClient = useQueryClient()
 
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
@@ -73,10 +73,10 @@ export function useBilling() {
 
   const { isAuthenticated, isLoading, user, getToken, login } = useKindeAuth()
 
-  const upgradeMode = searchParams.get('upgrade') === 'true'
-  const paymentCancelled = searchParams.get('payment') === 'cancelled'
-  const paymentSuccess = searchParams.get('payment') === 'success'
-  const mockMode = searchParams.get('mock') === 'true'
+  const upgradeMode = search['upgrade'] === 'true'
+  const paymentCancelled = search['payment'] === 'cancelled'
+  const paymentSuccess = search['payment'] === 'success'
+  const mockMode = search['mock'] === 'true'
 
   useEffect(() => {
     if (isAuthenticated && !isLoading) {
@@ -88,7 +88,7 @@ export function useBilling() {
   useEffect(() => {
     if (paymentCancelled) {
       const params = new URLSearchParams(window.location.search)
-      navigate(`/payment-cancelled?${params.toString()}`)
+      navigate({ to: `/payment-cancelled?${params.toString()}` })
     }
   }, [paymentCancelled, navigate])
 
@@ -120,7 +120,7 @@ export function useBilling() {
       window.dispatchEvent(new CustomEvent('subscriptionUpgraded'))
       window.dispatchEvent(new CustomEvent('profileCompleted'))
       const params = new URLSearchParams(window.location.search)
-      navigate(`/payment-success?${params.toString()}`)
+      navigate({ to: `/payment-success?${params.toString()}` })
     }
   }, [paymentSuccess, queryClient, navigate])
 
@@ -415,7 +415,7 @@ export function useBilling() {
         toast.error('Payment failed. Please try again.')
       }
     } else {
-      navigate(`/dashboard/billing/upgrade?plan=${planId}&cycle=${billingCycle}`)
+      navigate({ to: `/dashboard/billing/upgrade?plan=${planId}&cycle=${billingCycle}` })
     }
   }
 

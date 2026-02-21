@@ -27,7 +27,6 @@
 - **MSW**: API mocking
 
 ### 2. E2E Testing
-- **Playwright**: Cross-browser E2E testing
 - **Visual Testing**: Screenshot comparisons
 - **Accessibility Testing**: Automated a11y testing
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { api } from '../lib/api';
+import { api } from '@/lib/api';
 import { config } from '@/lib/config';
 
 interface User {
@@ -73,19 +73,15 @@ export function useUserApplicationData() {
       setLoading(true);
       setError(null);
       
-      console.log('🔄 Loading user application data...');
-      
       // Try classification endpoint first
       let classificationResponse;
       try {
         classificationResponse = await api.get('/user-sync/classification');
-        console.log('✅ Classification endpoint response received');
       } catch (error) {
         console.error('❌ Classification endpoint failed, trying alternative...');
         // Fallback to user-applications endpoint
         try {
           const fallbackResponse = await api.get('/user-applications/users');
-          console.log('✅ Fallback endpoint response received');
           
           if (fallbackResponse.status === 200 && fallbackResponse.data.success) {
             const fallbackData = fallbackResponse.data.data;
@@ -212,13 +208,11 @@ const getAppUrl = (appCode: string): string => {
 };
 
 const transformClassificationToUsers = (classificationData: any): User[] => {
-  console.log('🔄 Transforming classification data to users...');
   
   const byUser = classificationData.byUser || {};
   const byApplication = classificationData.byApplication || {};
   
   if (Object.keys(byUser).length > 0) {
-    console.log('✅ Using byUser data directly');
     const users = Object.entries(byUser).map(([userId, userData]: [string, any]) => {
       const allowedApps = userData.allowedApps || [];
       
@@ -251,12 +245,10 @@ const transformClassificationToUsers = (classificationData: any): User[] => {
       };
     });
     
-    console.log('✅ Transformed users from byUser:', users.length);
     return users;
   }
   
   if (Object.keys(byApplication).length > 0) {
-    console.log('⚠️ byUser is empty, creating users from application data...');
     
     const allUsers = new Set();
     Object.values(byApplication).forEach((appData: any) => {
@@ -316,16 +308,13 @@ const transformClassificationToUsers = (classificationData: any): User[] => {
       });
     });
     
-    console.log('✅ Created users from application data:', users.length);
     return users;
   }
   
-  console.log('⚠️ No user data found in either byUser or byApplication');
   return [];
 };
 
 const transformClassificationToSummary = (classificationData: any): AccessSummary => {
-  console.log('🔄 Transforming classification data to summary...');
   
   const byApplication = classificationData.byApplication || {};
   const summary = classificationData.summary || {};
@@ -366,6 +355,5 @@ const transformClassificationToSummary = (classificationData: any): AccessSummar
     applicationUsage
   };
   
-  console.log('✅ Transformed summary:', result);
   return result;
 };

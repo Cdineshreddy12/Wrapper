@@ -1,6 +1,6 @@
 import { Users, Activity, Clock, Crown } from 'lucide-react';
 import { User } from '@/types/user-management';
-import { MetricCard } from '@/components/common/MetricCard';
+import { MetricCard } from '@/components/common/data-display/MetricCard';
 
 interface UserStatsProps {
   users: User[];

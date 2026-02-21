@@ -4,7 +4,7 @@
 
 import React from 'react'
 import { Calendar } from 'lucide-react'
-import PricingCard from '@/components/common/PricingCard'
+import PricingCard from '@/components/common/data-display/PricingCard'
 import type { ApplicationPlan, CreditTopup } from '@/types/pricing'
 
 export interface PlansTabProps {

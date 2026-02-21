@@ -3,12 +3,12 @@ import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useUserApplicationData, useSyncApplication } from '../../hooks/useUserApplicationQueries';
-import { getApplications, getFilteredUsers, getSummaryStats } from '../../lib/utils/userApplication';
+import { useUserApplicationData, useSyncApplication } from '@/hooks/useUserApplicationQueries';
+import { getApplications, getFilteredUsers, getSummaryStats } from '@/lib/utils/userApplication';
 import { SummaryCards } from './SummaryCards';
 import { SyncManagement } from './SyncManagement';
 import { UserList } from './UserList';
-import { UnifiedLoading } from '@/components/common/UnifiedLoading';
+import { UnifiedLoading } from '@/components/common/feedback/UnifiedLoading';
 
 export function UserApplicationAccess() {
   const [selectedApp, setSelectedApp] = useState<string>('all');

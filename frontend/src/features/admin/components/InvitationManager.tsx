@@ -43,7 +43,6 @@ interface InvitationManagerProps {
 }
 
 export function InvitationManager({ orgCode }: InvitationManagerProps) {
-  console.log('🚀 InvitationManager component rendered with orgCode:', orgCode);
   
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [organization, setOrganization] = useState<Organization | null>(null);
@@ -55,51 +54,32 @@ export function InvitationManager({ orgCode }: InvitationManagerProps) {
     roleName: 'Member'
   });
 
-  console.log('📊 InvitationManager state initialized:', {
-    orgCode,
-    loading,
-    invitationsCount: invitations.length,
-    hasOrganization: !!organization,
-    hasSummary: !!summary
-  });
-
   // Debug: Log invitations state changes
   useEffect(() => {
-    console.log('📊 Invitations state updated:', {
-      count: invitations.length,
-      invitations: invitations.map(inv => ({ id: inv.invitationId, email: inv.email, status: inv.status }))
-    });
   }, [invitations]);
 
   // Load invitations for the organization
   const loadInvitations = async () => {
-    console.log('🔄 loadInvitations called for orgCode:', orgCode);
     
     if (!orgCode) {
-      console.log('❌ No orgCode provided, skipping loadInvitations');
       return;
     }
 
     try {
       setLoading(true);
-      console.log('🔍 Loading invitations for org:', orgCode);
       
       const response = await invitationAPI.getAdminInvitations(orgCode);
-      console.log('📡 API Response status:', response.status);
       
       if (response.status !== 200) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const data = response.data;
-      console.log('📊 API Response data:', data);
       
       if (data.success) {
-        console.log('✅ Setting invitations state with:', data.invitations.length, 'invitations');
         setInvitations(data.invitations);
         setOrganization(data.organization);
         setSummary(data.summary);
-        console.log('✅ Invitations loaded successfully:', data.invitations.length);
       } else {
         console.error('❌ API returned success: false:', data);
         toast.error('Failed to load invitations: ' + (data.message || 'Unknown error'));
@@ -108,25 +88,16 @@ export function InvitationManager({ orgCode }: InvitationManagerProps) {
       console.error('❌ Error loading invitations:', error);
       toast.error('Failed to load invitations: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
-      console.log('🏁 Setting loading to false');
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    console.log('🔄 InvitationManager useEffect triggered with orgCode:', orgCode);
-    console.log('🔄 About to call loadInvitations...');
     loadInvitations();
-    console.log('🔄 loadInvitations called, returning from useEffect');
   }, [orgCode]);
 
   // Create new invitation
   const createInvitation = async () => {
-    console.log('🚀 createInvitation called with:', { 
-      email: newInvitation.email, 
-      roleName: newInvitation.roleName,
-      orgCode 
-    });
     
     if (!newInvitation.email.trim()) {
       toast.error('Please enter an email address');
@@ -134,25 +105,20 @@ export function InvitationManager({ orgCode }: InvitationManagerProps) {
     }
 
     try {
-      console.log('📝 Setting creatingInvitation to true...');
       setCreatingInvitation(true);
       
-      console.log('📡 Calling invitationAPI.createTestInvitation...');
       const response = await invitationAPI.createTestInvitation({
         orgCode,
         email: newInvitation.email,
         roleName: newInvitation.roleName
       });
 
-      console.log('📊 API Response received:', response);
       const data = response.data;
       
       if (data.success) {
-        console.log('✅ Invitation created successfully, data:', data);
         toast.success('Invitation created successfully');
         setNewInvitation({ email: '', roleName: 'Member' });
         
-        console.log('🔄 Calling loadInvitations to refresh the list...');
         loadInvitations(); // Reload the list
       } else {
         console.error('❌ API returned success: false:', data);
@@ -162,7 +128,6 @@ export function InvitationManager({ orgCode }: InvitationManagerProps) {
       console.error('❌ Error creating invitation:', error);
       toast.error('Failed to create invitation');
     } finally {
-      console.log('🏁 Setting creatingInvitation to false...');
       setCreatingInvitation(false);
     }
   };
@@ -261,12 +226,6 @@ export function InvitationManager({ orgCode }: InvitationManagerProps) {
   }
 
   // Debug information
-  console.log('🎨 Rendering InvitationManager with:', {
-    invitationsCount: invitations.length,
-    organization: organization,
-    summary: summary,
-    orgCode: orgCode
-  });
 
   // Show error state if no organization data
   if (!organization) {

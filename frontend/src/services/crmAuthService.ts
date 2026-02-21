@@ -62,20 +62,12 @@ class CRMAuthService {
       callbackUrl.searchParams.set('source', 'wrapper');
       callbackUrl.searchParams.set('app', 'crm');
       
-      console.log('🎯 CRM Callback URL generated:', {
-        user: user.email,
-        intendedPath,
-        callbackUrl: callbackUrl.toString(),
-        hasJWTToken: !!token
-      });
-      
       return callbackUrl.toString();
       
     } catch (error) {
       console.error('❌ Error generating CRM callback URL:', error);
       
       // Safe fallback: redirect to CRM root without callback
-      console.log('🔄 Fallback: Redirecting to CRM root due to callback generation failure');
       return `${this.CRM_DOMAIN}/`;
     }
   }
@@ -112,7 +104,6 @@ class CRMAuthService {
         intendedPath = '/';
       }
       
-      console.log('🎯 Extracted intended path:', intendedPath);
       return intendedPath;
       
     } catch (error) {
@@ -135,7 +126,6 @@ class CRMAuthService {
       
       // Allow localhost URLs in development mode
       if (isDevelopment && returnUrl.hostname === 'localhost') {
-        console.log('✅ Development mode: Allowing localhost URL:', returnUrl.hostname);
         return true;
       }
       

@@ -52,11 +52,9 @@ export const useSilentAuth = (): SilentAuthResult => {
     setState(prev => ({ ...prev, isChecking: true, error: null }));
 
     try {
-      console.log('🔍 Silent Auth: Starting silent authentication check...');
 
       // First check if user is already authenticated locally
       if (kindeIsAuthenticated && user) {
-        console.log('✅ Silent Auth: User already authenticated locally');
         setState(prev => ({ 
           ...prev, 
           isAuthenticated: true, 
@@ -87,17 +85,8 @@ export const useSilentAuth = (): SilentAuthResult => {
         name && (name.includes('kinde') || name.includes('kbte') || name.includes('enduser'))
       );
 
-      console.log('🍪 Silent Auth: Domain cookies check:', { 
-        hasKindeCookie, 
-        hasZopkitDomainCookie,
-        allCookies,
-        currentDomain: window.location.hostname,
-        isProduction: window.location.hostname.includes('zopkit.com')
-      });
-
       // Don't attempt silent auth without cookies - it will cause redirect loops
       if (!hasKindeCookie) {
-        console.log('ℹ️ Silent Auth: No domain cookies found, user needs to login manually');
         setState(prev => ({ 
           ...prev, 
           isAuthenticated: false, 
@@ -108,14 +97,12 @@ export const useSilentAuth = (): SilentAuthResult => {
       }
 
       // Only attempt silent authentication if we have domain cookies
-      console.log('🔄 Silent Auth: Found domain cookies, attempting silent login...');
       
       try {
         // Try to get current authentication state first
         const currentToken = await getToken();
         
         if (user && currentToken) {
-          console.log('✅ Silent Auth: User already authenticated with valid token');
           setState(prev => ({ 
             ...prev, 
             isAuthenticated: true, 
@@ -126,12 +113,10 @@ export const useSilentAuth = (): SilentAuthResult => {
         }
         
         // If no current user/token but we have cookies, try silent login
-        console.log('🔄 Silent Auth: Attempting silent login with prompt=none...');
         await performSilentLogin();
         
         // After silent login, check if we're now authenticated
         const isNowAuthenticated = kindeIsAuthenticated;
-        console.log('✅ Silent Auth: Authentication result:', isNowAuthenticated);
         
         setState(prev => ({ 
           ...prev, 
@@ -142,7 +127,6 @@ export const useSilentAuth = (): SilentAuthResult => {
         
         return isNowAuthenticated;
       } catch (silentError) {
-        console.log('ℹ️ Silent Auth: Silent login failed (expected if no valid session):', silentError);
         setState(prev => ({ 
           ...prev, 
           isAuthenticated: false, 
@@ -226,7 +210,6 @@ export const useSilentAuth = (): SilentAuthResult => {
     connection_id?: string;
   } = {}): Promise<void> => {
     try {
-      console.log('🔑 Silent Auth: Starting login...', options);
       
       const loginOptions: any = {
         ...options,
@@ -253,7 +236,6 @@ export const useSilentAuth = (): SilentAuthResult => {
    */
   const handleLogout = useCallback(async (): Promise<void> => {
     try {
-      console.log('🚪 Silent Auth: Starting logout...');
       
       // Clear local state
       setState({
@@ -266,7 +248,6 @@ export const useSilentAuth = (): SilentAuthResult => {
       // Perform Kinde logout - this will clear the HttpOnly cookie across all subdomains
       await logout();
       
-      console.log('✅ Silent Auth: Logout completed');
     } catch (error) {
       console.error('❌ Silent Auth: Logout failed:', error);
       setState(prev => ({ 

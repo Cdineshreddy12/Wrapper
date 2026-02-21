@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Notification } from '@/components/notifications/types';
+import { Notification } from '@/features/notifications/types';
 import { NotificationService } from '@/services/notificationService';
 import { useNotifications as useNotificationsQuery, useUnreadCount as useUnreadCountQuery, useInvalidateQueries } from '@/hooks/useSharedQueries';
 import toast from 'react-hot-toast';

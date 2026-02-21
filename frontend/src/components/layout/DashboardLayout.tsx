@@ -10,22 +10,22 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { FloatingDock } from "@/components/ui/floating-dock"
-import { BillingStatusNavbar } from "@/components/common/BillingStatusNavbar"
-import { NotificationManager } from "@/components/notifications"
-import { SeasonalCreditsCongratulatoryModal } from "@/components/notifications/SeasonalCreditsCongratulatoryModal"
+import { BillingStatusNavbar } from "@/components/common/billing/BillingStatusNavbar"
+import { NotificationManager } from "@/features/notifications"
+import { SeasonalCreditsCongratulatoryModal } from "@/features/notifications/SeasonalCreditsCongratulatoryModal"
 import { useSeasonalCreditsCongratulatory } from "@/hooks/useSeasonalCreditsCongratulatory"
 import { Home, Building2, Users, Crown, Shield, Activity, CreditCard, Clock, X, Zap, ChevronRight, Settings, BookOpen } from "lucide-react"
 import { useState, useEffect, useRef, useMemo, useCallback } from "react"
-import { useNavigate, useLocation, useSearchParams, useParams, Outlet, Link } from "react-router-dom"
+import { useNavigate, useLocation, useSearch, useParams, Outlet, Link } from "@tanstack/react-router"
 import { useOrganizationHierarchy } from "@/hooks/useOrganizationHierarchy"
 import { Button } from "../ui"
 import { PearlButton } from "@/components/ui/pearl-button"
 import Pattern from "@/components/ui/pattern-background"
 import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/theme/ThemeProvider"
-import { useUserContext } from "@/contexts/UserContextProvider"
+import { useUserContextSafe } from "@/contexts/UserContextProvider"
 import { useKindeAuth } from "@kinde-oss/kinde-auth-react"
-import { DashboardFeatureTour } from "@/components/dashboard/DashboardFeatureTour"
+import { DashboardFeatureTour } from "@/features/dashboard/DashboardFeatureTour"
 
 interface TrialInfo {
   plan: string
@@ -288,8 +288,8 @@ export function DashboardLayout() {
   const { glassmorphismEnabled } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
-  const [searchParams] = useSearchParams()
-  const params = useParams()
+  const searchParams = useSearch({ strict: false }) as Record<string, string>
+  const params = useParams({ strict: false })
 
   // Compute initial step from pathname for contextual start
   const getInitialStep = useCallback(() => {
@@ -303,8 +303,8 @@ export function DashboardLayout() {
   // Show dashboard feature tour after onboarding (user guide) or replay
   useEffect(() => {
     const tourCompleted = localStorage.getItem('dashboard-tour-completed');
-    const onboardingComplete = searchParams.get('onboarding') === 'complete';
-    const tourReplay = searchParams.get('tour') === 'replay';
+    const onboardingComplete = searchParams['onboarding'] === 'complete';
+    const tourReplay = searchParams['tour'] === 'replay';
     
     if (tourReplay) {
       // Clear completion flag and show tour
@@ -313,10 +313,10 @@ export function DashboardLayout() {
       localStorage.removeItem('dashboard-tour-step');
       setShowTour(true);
       // Remove tour param from URL
-      const next = new URLSearchParams(location.search);
-      next.delete('tour');
-      const search = next.toString();
-      navigate(`${location.pathname}${search ? `?${search}` : ''}`, { replace: true });
+      const prev = (location.search || {}) as Record<string, string>;
+      const next = { ...prev };
+      delete next.tour;
+      navigate({ to: location.pathname, search: next, replace: true });
     } else if (!tourCompleted && onboardingComplete) {
       setShowTour(true);
     }
@@ -326,8 +326,8 @@ export function DashboardLayout() {
   useEffect(() => {
     const tourCompleted = localStorage.getItem('dashboard-tour-completed');
     const tourDismissed = localStorage.getItem('dashboard-tour-dismissed');
-    const onboardingComplete = searchParams.get('onboarding') === 'complete';
-    const tourReplay = searchParams.get('tour') === 'replay';
+    const onboardingComplete = searchParams['onboarding'] === 'complete';
+    const tourReplay = searchParams['tour'] === 'replay';
     
     if (!tourCompleted && tourDismissed && !onboardingComplete && !tourReplay && !showTour) {
       setShowResumePrompt(true);
@@ -336,18 +336,18 @@ export function DashboardLayout() {
 
   const handleTourComplete = useCallback(() => {
     setShowTour(false);
-    const next = new URLSearchParams(location.search);
-    next.delete('onboarding');
-    const search = next.toString();
-    navigate(`${location.pathname}${search ? `?${search}` : ''}`, { replace: true });
+    const prev = (location.search || {}) as Record<string, string>;
+    const next = { ...prev };
+    delete next.onboarding;
+    navigate({ to: location.pathname, search: next, replace: true });
   }, [location, navigate]);
 
   const handleTourSkip = useCallback(() => {
     setShowTour(false);
-    const next = new URLSearchParams(location.search);
-    next.delete('onboarding');
-    const search = next.toString();
-    navigate(`${location.pathname}${search ? `?${search}` : ''}`, { replace: true });
+    const prev = (location.search || {}) as Record<string, string>;
+    const next = { ...prev };
+    delete next.onboarding;
+    navigate({ to: location.pathname, search: next, replace: true });
   }, [location, navigate]);
 
   const handleTourDismiss = useCallback((stepIndex: number) => {
@@ -374,8 +374,10 @@ export function DashboardLayout() {
     }
   }, []);
 
-  // Fetch user and tenant data from context
-  const { user, tenant } = useUserContext()
+  // Fetch user and tenant data from context (safe: returns null during HMR/init)
+  const ctx = useUserContextSafe()
+  const user = ctx?.user ?? null
+  const tenant = ctx?.tenant ?? null
   const { user: kindeUser } = useKindeAuth()
 
   // Seasonal credits congratulatory popup
@@ -387,22 +389,15 @@ export function DashboardLayout() {
 
   // Handle organization switching for tenant admins
   const handleOrganizationSwitch = (organizationId: string) => {
-    console.log('Organization switch requested:', organizationId);
     // TODO: Implement organization switching logic
     // This would typically involve updating the user context or redirecting to the new organization
   };
 
   // Debug user context
-  console.log('👤 User Context:', {
-    userId: user?.userId,
-    isTenantAdmin: user?.isTenantAdmin,
-    tenantId: user?.tenantId,
-    email: user?.email
-  });
 
   // Handle navigation for dock/sidebar modes to avoid full page reloads
   const handleDockNavigation = (href: string) => {
-    navigate(href)
+    navigate({ to: href })
   }
 
   // Determine which navigation to use based on current route
@@ -442,8 +437,8 @@ export function DashboardLayout() {
 
   // Check for trial information from URL params or localStorage
   useEffect(() => {
-    const isTrial = searchParams.get('trial') === 'true'
-    const plan = searchParams.get('plan')
+    const isTrial = searchParams['trial'] === 'true'
+    const plan = searchParams['plan']
     const trialEndDate = localStorage.getItem('trialEndDate')
     const pendingCheckoutUrl = localStorage.getItem('pendingCheckoutUrl')
 
@@ -471,21 +466,20 @@ export function DashboardLayout() {
     if (window.gc && typeof window.gc === 'function') {
       window.gc()
     }
-  }, [location.pathname, location.search])
+  }, [location.pathname, location.searchStr])
 
   const handleUpgradeNow = () => {
     const checkoutUrl = localStorage.getItem('pendingCheckoutUrl')
     if (checkoutUrl) {
       window.location.href = checkoutUrl
     } else {
-      navigate('/dashboard/billing')
+      navigate({ to: '/dashboard/billing' })
     }
   }
 
   const dismissTrialBanner = () => {
     setShowTrialBanner(false)
   }
-
 
   const toggleExpanded = (itemName: string) => {
     setExpandedItems(prev =>
@@ -662,7 +656,7 @@ export function DashboardLayout() {
                 )}
                 <div className={`${glassmorphismEnabled ? 'backdrop-blur-3xl bg-purple-100/4 dark:bg-purple-900/6 border border-purple-300/60 dark:border-purple-600/50 rounded-3xl shadow-2xl ring-1 ring-purple-300/35 dark:ring-purple-600/25' : 'bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-3xl shadow-lg'}`}>
                   <div className="p-8 sm:p-10 lg:p-12">
-                    <Outlet key={location.pathname + location.search} />
+                    <Outlet key={location.pathname + location.searchStr} />
                   </div>
                 </div>
               </div>
@@ -788,7 +782,7 @@ export function DashboardLayout() {
           </header>
           <main className="flex-1 relative overflow-y-auto bg-slate-50 dark:bg-slate-900 p-6 min-h-0">
             <ErrorBoundary>
-              <Outlet key={location.pathname + location.search} />
+              <Outlet key={location.pathname + location.searchStr} />
             </ErrorBoundary>
           </main>
         </SidebarInset>

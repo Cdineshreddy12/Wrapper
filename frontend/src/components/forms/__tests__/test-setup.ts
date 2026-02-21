@@ -108,16 +108,12 @@ export function runTests() {
   for (const test of tests) {
     try {
       test.fn();
-      console.log(`✅ ${test.describe ? `${test.describe} - ` : ''}${test.name}`);
       passed++;
     } catch (error) {
-      console.log(`❌ ${test.describe ? `${test.describe} - ` : ''}${test.name}`);
-      console.log(`   Error: ${error instanceof Error ? error.message : error}`);
       failed++;
     }
   }
   
-  console.log(`\nTest Results: ${passed} passed, ${failed} failed`);
   return { passed, failed };
 }
 

@@ -208,7 +208,6 @@ export const OnboardingLayoutOptimized = React.memo(({
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        console.log('Read documentation clicked');
                       }}
                       className="w-full flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-left cursor-pointer transition-colors duration-200"
                     >

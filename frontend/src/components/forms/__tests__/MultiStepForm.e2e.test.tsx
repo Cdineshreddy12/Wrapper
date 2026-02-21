@@ -97,17 +97,13 @@ const e2eTestConfig: FormConfig = {
 
 // Simple test runner for E2E tests
 function describe(name: string, fn: () => void) {
-  console.log(`\n📋 ${name}`);
   fn();
 }
 
 function it(name: string, fn: () => void) {
   try {
-    console.log(`  ✅ ${name}`);
     fn();
   } catch (error) {
-    console.log(`  ❌ ${name}`);
-    console.log(`     Error: ${error instanceof Error ? error.message : error}`);
   }
 }
 
@@ -293,9 +289,4 @@ describe('MultiStepForm E2E Tests', () => {
     expect(fieldTypes.has('checkbox')).toBe(true);
   });
 });
-
-// Run tests if this file is executed directly
-if (typeof window === 'undefined' && require.main === module) {
-  console.log('🧪 Running MultiStepForm E2E Tests...\n');
-}
 

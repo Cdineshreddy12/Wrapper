@@ -27,7 +27,6 @@ export const BulkUpdateDialog: React.FC<BulkUpdateDialogProps> = ({
 
   const handleConfirm = () => {
     // Here you would typically process the bulk data
-    console.log('Bulk update data:', bulkData);
     onConfirm();
     // Reset form
     setBulkData({

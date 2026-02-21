@@ -1,25 +1,23 @@
-import { NavigateOptions } from 'react-router-dom';
-
 /**
  * Navigation utility to replace window.location usage
  * Provides consistent client-side navigation across the app
  */
 export class NavigationService {
-  private static navigate: ((to: string, options?: NavigateOptions) => void) | null = null;
+  private static navigate: ((opts: { to: string; replace?: boolean }) => void) | null = null;
 
   /**
-   * Initialize the navigation service with React Router's navigate function
+   * Initialize the navigation service with TanStack Router's navigate function
    */
-  static initialize(navigate: (to: string, options?: NavigateOptions) => void) {
+  static initialize(navigate: (opts: { to: string; replace?: boolean }) => void) {
     this.navigate = navigate;
   }
 
   /**
    * Navigate to a route (replaces window.location.href)
    */
-  static goTo(path: string, options?: NavigateOptions) {
+  static goTo(path: string, options?: { replace?: boolean }) {
     if (this.navigate) {
-      this.navigate(path, options);
+      this.navigate({ to: path, replace: options?.replace });
     } else {
       // Fallback to window.location if navigate is not initialized
       window.location.href = path;

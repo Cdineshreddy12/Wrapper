@@ -9,7 +9,7 @@ import {
   CreditBalanceIcon,
   CreditPackagesIcon,
   PaymentHistoryIcon
-} from '@/components/common/BillingIcons'
+} from '@/components/common/billing/BillingIcons'
 import { ListOrdered } from 'lucide-react'
 import { useBilling } from '../hooks/useBilling'
 import {

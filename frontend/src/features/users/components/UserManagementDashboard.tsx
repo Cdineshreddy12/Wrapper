@@ -1,11 +1,11 @@
 import { UserManagementProvider, useUserManagement } from './context/UserManagementContext';
 import { UserManagementContent } from './components/UserManagementContent';
 import { UserManagementModals } from './components/UserManagementModals';
-import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { ErrorBoundary } from '@/components/common/feedback/ErrorBoundary';
 import { UserPlus, AlertCircle, RefreshCcw } from 'lucide-react';
 import { PearlButton } from '@/components/ui/pearl-button';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '@tanstack/react-router';
 
 /**
  * Main User Management Dashboard Component
@@ -55,7 +55,7 @@ function UserManagementDashboardContent() {
             </p>
           </div>
           <PearlButton
-            onClick={() => navigate('/dashboard/users/invite')}
+            onClick={() => navigate({ to: '/dashboard/users/invite' })}
             className="gap-2"
             data-tour-feature="invite-user"
           >

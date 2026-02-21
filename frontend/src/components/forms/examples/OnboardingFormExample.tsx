@@ -12,7 +12,6 @@ export const OnboardingFormExample: React.FC = () => {
   const handleSubmit = async (values: CompleteOnboardingData) => {
     try {
       // Simulate API call
-      console.log('Form submitted with values:', values);
       
       // Simulate network delay
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -50,7 +49,6 @@ export const OnboardingFormExample: React.FC = () => {
  */
 export const CustomStyledOnboardingForm: React.FC = () => {
   const handleSubmit = async (values: CompleteOnboardingData) => {
-    console.log('Custom form submitted:', values);
     toast.success('Custom form submitted successfully!');
   };
 
@@ -79,7 +77,6 @@ export const CustomStyledOnboardingForm: React.FC = () => {
  */
 export const CustomFieldComponentsExample: React.FC = () => {
   const handleSubmit = async (values: CompleteOnboardingData) => {
-    console.log('Custom field components form submitted:', values);
     toast.success('Form with custom components submitted!');
   };
 

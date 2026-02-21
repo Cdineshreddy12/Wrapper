@@ -173,7 +173,6 @@ const ApplicationCreditAllocations: React.FC = () => {
           queryClient.invalidateQueries({ queryKey: ['creditStatus'], exact: false });
           queryClient.invalidateQueries({ queryKey: ['admin', 'entities'] });
 
-          console.log('✅ Credit queries invalidated, UI should update automatically');
         } catch (invalidateError) {
           console.warn('Failed to invalidate queries:', invalidateError);
           // Don't show error to user as this is not critical

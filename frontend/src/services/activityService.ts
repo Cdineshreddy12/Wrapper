@@ -2,7 +2,7 @@
  * Activity Service - API calls for activity logs and audit trails
  */
 
-import { api } from '../lib/api';
+import { api } from '@/lib/api';
 
 export interface ActivityLog {
   logId: string;
@@ -38,7 +38,6 @@ export interface AuditLog {
   ipAddress: string;
   createdAt: string;
 }
-
 
 export interface PaginationInfo {
   limit: number;
@@ -90,7 +89,6 @@ class ActivityService {
     });
 
     const response = await api.get(`/activity/user?${queryParams}`);
-    console.log('API response:', response.data);
 
     // Backend now handles filtering, just return the response
     return response.data;
@@ -120,7 +118,6 @@ class ActivityService {
     // Backend now handles filtering, just return the response
     return response.data;
   }
-
 
   /**
    * Get user activity summary (admin only)

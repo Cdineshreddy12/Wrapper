@@ -57,7 +57,6 @@ export const OnboardingTour = ({ onComplete, onSkip }: OnboardingTourProps) => {
       const checkAndShow = () => {
         const firstElement = document.querySelector(tourSteps[0].target);
         if (firstElement) {
-          console.log('Tour: Element found, showing tour');
           setIsVisible(true);
         } else {
           retries++;
@@ -75,7 +74,6 @@ export const OnboardingTour = ({ onComplete, onSkip }: OnboardingTourProps) => {
       // Start checking after initial render delay
       setTimeout(checkAndShow, 1500);
     } else {
-      console.log('Tour: Already completed, skipping');
     }
   }, []);
 
@@ -92,7 +90,6 @@ export const OnboardingTour = ({ onComplete, onSkip }: OnboardingTourProps) => {
     const timer = setTimeout(() => {
       const element = document.querySelector(currentStepData.target);
       if (element) {
-        console.log(`Tour: Found element for step ${currentStep + 1}:`, currentStepData.target);
         setElementFound(true);
         
         // Scroll to element
@@ -400,8 +397,6 @@ export const OnboardingTour = ({ onComplete, onSkip }: OnboardingTourProps) => {
     maxWidth: 'calc(100vw - 40px)',
     maxHeight: 'calc(100vh - 40px)',
   };
-
-  console.log('Tour: Rendering tooltip at step', currentStep + 1, 'with style:', safeTooltipStyle);
 
   return (
     <>

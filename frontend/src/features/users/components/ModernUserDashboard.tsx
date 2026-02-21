@@ -26,7 +26,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { useTrialStatus } from '@/hooks/useTrialStatus';
-import { GracefulErrorBoundary } from '@/components/common/GracefulErrorBoundary';
+import { GracefulErrorBoundary } from '@/components/common/feedback/GracefulErrorBoundary';
 
 interface User {
   userId: string;
@@ -80,7 +80,6 @@ export function ModernUserDashboard() {
   const loadUsers = async () => {
     // If trial is expired, don't try to load users
     if (isTrialExpired || expiredData?.expired || localStorage.getItem('trialExpired')) {
-      console.log('🚫 Trial expired - not loading users');
       setLoading(false);
       setUsers([]);
       return;
@@ -113,7 +112,6 @@ export function ModernUserDashboard() {
     } catch (error: any) {
       // Don't show error toasts for trial expiry
       if (error?.response?.status === 200 && (error.response.data as any)?.subscriptionExpired) {
-        console.log('🚫 Trial expired error in ModernUserDashboard - handled gracefully');
         return;
       }
 

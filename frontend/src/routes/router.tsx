@@ -1,0 +1,309 @@
+import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useNavigate } from '@tanstack/react-router'
+import { Suspense, useMemo } from 'react'
+import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
+
+import { ZopkitRoundLoader } from '@/components/common/feedback/ZopkitRoundLoader'
+import { NewVersionBanner } from '@/components/NewVersionBanner'
+import { DashboardLayout } from '@/components/layout/DashboardLayout'
+import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import { PermissionGuard } from '@/components/auth/PermissionGuard'
+import { OnboardingGuard, OnboardingPageGuard } from '@/features/onboarding/indexOptimized'
+import { UserManagementProvider } from '@/features/users/components/context/UserManagementContext'
+import { ErrorBoundary } from '@/errors/ErrorBoundary'
+import SilentAuthGuard from '@/components/auth/SilentAuthGuard'
+import { UserContextProvider } from '@/contexts/UserContextProvider'
+import { EntityScopeProvider } from '@/contexts/EntityScopeContext'
+
+import { RootRedirect } from './RootRedirect'
+import {
+  Landing, ProductPage, IndustryPage, PrivacyPolicy, TermsOfService,
+  CookiePolicy, Security, Pricing, Login, AuthCallback, InviteAccept,
+  OnboardingPage, PaymentSuccess, PaymentCancelled, PaymentDetailsPage,
+  BillingUpgradePage, Billing, SuiteDashboard, ActivityDashboard,
+  ApplicationPage, ApplicationDetailsPage, UserManagementDashboard,
+  InviteUserPage, UserDetailsPage, UserApplicationAccessPage,
+  RolesPage, RoleDetailsPage, RoleBuilderPage, OrganizationPage,
+  Permissions, Settings, AdminDashboardPage, TenantDetailsPage,
+  CampaignDetailsPage, NotFound,
+} from './lazyPages'
+
+function LoadingScreen() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="text-center flex flex-col items-center">
+        <ZopkitRoundLoader size="page" className="mb-6" />
+        <p className="text-gray-600 dark:text-gray-300 text-base font-medium">
+          Your data is loading...
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function PaymentSuccessErrorFallback() {
+  const navigate = useNavigate()
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className="max-w-md w-full rounded-xl border border-slate-200 bg-white p-6 shadow-xl text-center">
+        <p className="text-slate-900 font-bold mb-2">Something went wrong</p>
+        <p className="text-slate-600 text-sm mb-6">
+          The payment success page could not load. Your payment may still have gone through.
+        </p>
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => navigate({ to: '/dashboard/billing' })}
+            className="w-full rounded-lg bg-blue-600 py-3 px-4 text-white font-semibold hover:bg-blue-700"
+          >
+            Return to Billing
+          </button>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="w-full rounded-lg border border-slate-300 py-3 px-4 text-slate-700 font-medium hover:bg-slate-50"
+          >
+            Refresh page
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RootLayout() {
+  const { isAuthenticated, isLoading } = useKindeAuth()
+
+  const authState = useMemo(
+    () => ({ isAuthenticated: !!isAuthenticated, isLoading: !!isLoading }),
+    [isAuthenticated, isLoading],
+  )
+
+  if (authState.isLoading) {
+    return <LoadingScreen />
+  }
+
+  return (
+    <SilentAuthGuard>
+      <UserContextProvider>
+        <EntityScopeProvider>
+          <div className="App">
+            <NewVersionBanner />
+            <Suspense fallback={<LoadingScreen />}>
+              <Outlet />
+            </Suspense>
+          </div>
+        </EntityScopeProvider>
+      </UserContextProvider>
+    </SilentAuthGuard>
+  )
+}
+
+function AuthRedirectLanding() {
+  const { isAuthenticated } = useKindeAuth()
+  if (isAuthenticated) return <Navigate to="/" />
+  return <Landing />
+}
+
+// ---------------------------------------------------------------------------
+// Route Tree
+// ---------------------------------------------------------------------------
+
+const rootRoute = createRootRoute({
+  validateSearch: (search: Record<string, unknown>) => search,
+  component: RootLayout,
+})
+
+// Public
+const landingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/landing', component: AuthRedirectLanding })
+const productRoute = createRoute({ getParentRoute: () => rootRoute, path: '/products/$productId', component: ProductPage })
+const industryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/industries/$industrySlug', component: IndustryPage })
+const privacyRoute = createRoute({ getParentRoute: () => rootRoute, path: '/privacy', component: PrivacyPolicy })
+const termsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/terms', component: TermsOfService })
+const cookiesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/cookies', component: CookiePolicy })
+const securityRoute = createRoute({ getParentRoute: () => rootRoute, path: '/security', component: Security })
+const pricingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/pricing', component: Pricing })
+
+// Auth
+const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: RootRedirect })
+const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/login', component: Login })
+const authCallbackRoute = createRoute({ getParentRoute: () => rootRoute, path: '/auth/callback', component: AuthCallback })
+const inviteAcceptRoute = createRoute({ getParentRoute: () => rootRoute, path: '/invite/accept', component: InviteAccept })
+const onboardingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/onboarding',
+  component: () => (
+    <OnboardingPageGuard>
+      <OnboardingPage />
+    </OnboardingPageGuard>
+  ),
+})
+
+// Payment
+const paymentSuccessRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/payment-success',
+  component: () => (
+    <ProtectedRoute>
+      <ErrorBoundary fallback={<PaymentSuccessErrorFallback />}>
+        <PaymentSuccess />
+      </ErrorBoundary>
+    </ProtectedRoute>
+  ),
+})
+const paymentCancelledRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/payment-cancelled',
+  component: () => (
+    <ProtectedRoute>
+      <PaymentCancelled />
+    </ProtectedRoute>
+  ),
+})
+
+// Suite
+const suiteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/suite',
+  component: () => (
+    <ProtectedRoute>
+      <SuiteDashboard />
+    </ProtectedRoute>
+  ),
+})
+
+// Dashboard layout
+const dashboardLayoutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/dashboard',
+  component: () => (
+    <ProtectedRoute>
+      <OnboardingGuard>
+        <DashboardLayout />
+      </OnboardingGuard>
+    </ProtectedRoute>
+  ),
+})
+
+const dashboardIndexRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/', component: ApplicationPage })
+const dashboardApplicationsRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/applications', component: ApplicationPage })
+const dashboardAppDetailRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/applications/$appId', component: ApplicationDetailsPage })
+const dashboardUsersInviteRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: '/users/invite',
+  component: () => <UserManagementProvider><InviteUserPage /></UserManagementProvider>,
+})
+const dashboardUserDetailRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/users/$userId', component: UserDetailsPage })
+const dashboardUsersRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/users', component: UserManagementDashboard })
+const dashboardOrganizationRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/organization', component: OrganizationPage })
+const dashboardRolesNewRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/roles/new', component: RoleBuilderPage })
+const dashboardRolesEditRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/roles/$roleId/edit', component: RoleBuilderPage })
+const dashboardRoleDetailRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/roles/$roleId', component: RoleDetailsPage })
+const dashboardRolesRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/roles', component: RolesPage })
+const dashboardUserAppsRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/user-apps', component: UserApplicationAccessPage })
+const dashboardBillingPaymentRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/billing/payments/$paymentId', component: PaymentDetailsPage })
+const dashboardBillingUpgradeRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/billing/upgrade', component: BillingUpgradePage })
+const dashboardBillingRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/billing', component: Billing })
+const dashboardPermissionsRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/permissions', component: Permissions })
+const dashboardSettingsRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/settings', component: Settings })
+const dashboardActivityRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/activity', component: ActivityDashboard })
+
+// Company Admin
+const companyAdminTenantRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/company-admin/tenants/$tenantId',
+  component: () => (
+    <ProtectedRoute skipOnboardingCheck>
+      <PermissionGuard requiredPermission="company:admin:access">
+        <TenantDetailsPage />
+      </PermissionGuard>
+    </ProtectedRoute>
+  ),
+})
+const companyAdminCampaignRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/company-admin/campaigns/$campaignId',
+  component: () => (
+    <ProtectedRoute skipOnboardingCheck>
+      <PermissionGuard requiredPermission="company:admin:access">
+        <CampaignDetailsPage />
+      </PermissionGuard>
+    </ProtectedRoute>
+  ),
+})
+const companyAdminRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/company-admin',
+  component: () => (
+    <ProtectedRoute skipOnboardingCheck>
+      <PermissionGuard requiredPermission="company:admin:access">
+        <AdminDashboardPage />
+      </PermissionGuard>
+    </ProtectedRoute>
+  ),
+})
+
+// ---------------------------------------------------------------------------
+// Route tree assembly
+// ---------------------------------------------------------------------------
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  landingRoute,
+  productRoute,
+  industryRoute,
+  privacyRoute,
+  termsRoute,
+  cookiesRoute,
+  securityRoute,
+  pricingRoute,
+  loginRoute,
+  authCallbackRoute,
+  inviteAcceptRoute,
+  onboardingRoute,
+  paymentSuccessRoute,
+  paymentCancelledRoute,
+  suiteRoute,
+  dashboardLayoutRoute.addChildren([
+    dashboardIndexRoute,
+    dashboardApplicationsRoute,
+    dashboardAppDetailRoute,
+    dashboardUsersInviteRoute,
+    dashboardUserDetailRoute,
+    dashboardUsersRoute,
+    dashboardOrganizationRoute,
+    dashboardRolesNewRoute,
+    dashboardRolesEditRoute,
+    dashboardRoleDetailRoute,
+    dashboardRolesRoute,
+    dashboardUserAppsRoute,
+    dashboardBillingPaymentRoute,
+    dashboardBillingUpgradeRoute,
+    dashboardBillingRoute,
+    dashboardPermissionsRoute,
+    dashboardSettingsRoute,
+    dashboardActivityRoute,
+  ]),
+  companyAdminTenantRoute,
+  companyAdminCampaignRoute,
+  companyAdminRoute,
+])
+
+// ---------------------------------------------------------------------------
+// Router
+// ---------------------------------------------------------------------------
+
+export const router = createRouter({
+  routeTree,
+  defaultNotFoundComponent: () => (
+    <Suspense fallback={<LoadingScreen />}>
+      <NotFound />
+    </Suspense>
+  ),
+  defaultPendingComponent: LoadingScreen,
+})
+
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: typeof router
+  }
+}

@@ -1,4 +1,4 @@
-import { ZopkitRoundLoader } from '@/components/common/ZopkitRoundLoader'
+import { ZopkitRoundLoader } from '@/components/common/feedback/ZopkitRoundLoader'
 
 interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg'

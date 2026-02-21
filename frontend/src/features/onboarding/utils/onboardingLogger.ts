@@ -64,8 +64,6 @@ function append(level: LogLevel, message: string, data?: unknown): void {
     console.error(prefix, message, data ?? '');
   } else if (level === 'warn') {
     console.warn(prefix, message, data ?? '');
-  } else {
-    console.log(prefix, message, data ?? '');
   }
 }
 

@@ -1,5 +1,5 @@
 import api from '@/lib/api';
-import { Notification } from '@/components/notifications/types';
+import { Notification } from '@/features/notifications/types';
 
 export class NotificationService {
   /**

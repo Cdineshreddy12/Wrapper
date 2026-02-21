@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { useLocation } from 'react-router-dom'
+import { useLocation } from '@tanstack/react-router'
 import { api, subscriptionAPI, creditAPI } from '@/lib/api'
 import { useCreditStatusQuery } from '@/hooks/useSharedQueries'
 import toast from 'react-hot-toast'
@@ -86,7 +86,6 @@ export function useCreditStatus() {
       try {
         const parsedExpiry = JSON.parse(storedExpiry)
         setExpiredData(parsedExpiry)
-        console.log('🚫 useCreditStatus: Found stored credit expiry data:', parsedExpiry)
       } catch {
         localStorage.removeItem('creditExpired')
       }
@@ -95,31 +94,17 @@ export function useCreditStatus() {
 
   const checkCreditStatus = useCallback(async () => {
     if (!isAuthenticated || !user) {
-      console.log('⚠️ useCreditStatus: User not authenticated, skipping credit check')
       setIsLoading(false)
       return
     }
 
     if (isOnboardingPage) {
-      console.log('⚠️ useCreditStatus: On onboarding page, skipping credit check')
       setIsLoading(false)
       return
     }
 
     try {
       setError(null)
-      console.log('🔍 useCreditStatus: Processing credit status from shared hook...')
-
-      if (creditData) {
-        console.log('💰 useCreditStatus: Credit balance:', {
-          available: creditData.availableCredits,
-          total: creditData.totalCredits,
-          reserved: creditData.reservedCredits,
-          status: creditData.status
-        })
-      } else {
-        console.log('⚠️ useCreditStatus: No credit data received')
-      }
 
       if (creditData) {
         const availableCredits = parseFloat(creditData.availableCredits || 0)
@@ -206,7 +191,6 @@ export function useCreditStatus() {
 
         // Handle critical balance scenarios
         if (isCriticalBalance) {
-          console.log('🚫 useCreditStatus: Critical credit balance')
 
           const newExpiredData: CreditExpiredData = {
             expired: true,
@@ -236,7 +220,6 @@ export function useCreditStatus() {
 
       } else {
         // No credit data found - this might be a new user
-        console.log('⚠️ useCreditStatus: No credit data found')
         setCreditStatus({
           hasCredits: false,
           isLowBalance: false,
@@ -262,14 +245,12 @@ export function useCreditStatus() {
 
       // Handle different types of errors
       if (error.response?.status === 401) {
-        console.log('🔐 useCreditStatus: Authentication error - clearing stored data')
         setError('Authentication required')
         setCreditStatus(null)
         setExpiredData(null)
         // Clear any stored credit data on auth errors
         localStorage.removeItem('creditExpired')
       } else {
-        console.log('⚠️ useCreditStatus: Unexpected error - treating as no credits')
         setError(error.message || 'Failed to check credit status')
         // For unexpected errors, assume no credits rather than blocking the app
         setCreditStatus(null)
@@ -288,7 +269,6 @@ export function useCreditStatus() {
   // Listen for credit purchase events to refresh status
   useEffect(() => {
     const handleCreditPurchaseSuccess = () => {
-      console.log('🎉 useCreditStatus: Credit purchase event received, refreshing status')
       localStorage.removeItem('creditExpired')
       setExpiredData(null)
       setCreditStatus(null)

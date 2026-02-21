@@ -106,7 +106,6 @@ export class ErrorTracker {
   }
 
   static captureMessage(message: string, level: 'info' | 'warning' | 'error' = 'info'): void {
-    console.log(`[${level.toUpperCase()}] ${message}`)
     
     // In production, send to monitoring service
     if (import.meta.env.PROD) {
@@ -115,11 +114,9 @@ export class ErrorTracker {
   }
 }
 
-// Bundle size monitoring
+// Bundle size monitoring (no-op; enable in dev as needed)
 export function getBundleSize(): void {
-  if (import.meta.env.DEV) {
-    console.log('Bundle size monitoring available in production build')
-  }
+  // placeholder
 }
 
 // Debounce utility

@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 import { Typography } from "@/components/common/Typography";
 import type { Table } from "@tanstack/react-table";
 

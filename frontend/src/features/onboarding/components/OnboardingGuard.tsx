@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Navigate, useLocation } from '@tanstack/react-router'
 import { Loader2 } from 'lucide-react'
 import { useAuthStatus, useOnboardingStatus } from '@/hooks/useSharedQueries'
-import AnimatedLoader from '@/components/common/AnimatedLoader'
+import AnimatedLoader from '@/components/common/feedback/AnimatedLoader'
 import { logger } from '@/lib/logger'
 
 interface OnboardingGuardProps {
@@ -39,7 +39,7 @@ export const OnboardingGuard = React.memo(({ children, redirectTo = '/login' }: 
   const authReady = !authLoading && !!authData
   const onboardingReady = !!onboardingResponse && !!onboardingData
   const pathname = location.pathname
-  const search = location.search
+  const search = location.searchStr
 
   useEffect(() => {
     const backendAuthStatus = authStatusRef.current

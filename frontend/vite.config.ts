@@ -8,10 +8,7 @@ import tailwindcss from "@tailwindcss/vite"
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const plugins: any[] = [
-    react({
-      // Enable JSX runtime
-      jsxRuntime: 'automatic',
-    }),
+    react(),
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
@@ -71,12 +68,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins,
     resolve: {
-      // Ensure a single copy of React so hooks work (fixes "Invalid hook call")
-      dedupe: ['react', 'react-dom'],
       alias: {
-        // Force one React instance for app and all deps (sonner, kinde, radix, etc.)
-        react: path.resolve(__dirname, 'node_modules/react'),
-        'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
         '@': path.resolve(__dirname, './src'),
         '@components': path.resolve(__dirname, './src/components'),
         '@features': path.resolve(__dirname, './src/features'),
@@ -122,13 +114,11 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: true,
-      // Optimize chunks for better caching
       rollupOptions: {
         output: {
-          // Split vendors to improve caching; heavy libs in separate chunks when used by lazy routes
           manualChunks: {
             vendor: ['react', 'react-dom'],
-            router: ['react-router-dom'],
+            router: ['@tanstack/react-router'],
             query: ['@tanstack/react-query'],
             'radix-ui': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-select', '@radix-ui/react-tabs'],
             auth: ['@kinde-oss/kinde-auth-react'],
@@ -139,24 +129,17 @@ export default defineConfig(({ mode }) => {
           },
         },
       },
-      // Enable minification
-      minify: 'terser',
-      terserOptions: {
-        compress: {
-          drop_console: mode === 'production',
-          drop_debugger: mode === 'production',
-        },
-      },
+      minify: 'esbuild',
     },
-    // Optimize dependencies. Pre-bundle deps that use React so they share the same React instance.
-    // force: true in dev avoids stale pre-bundle chunks (stops "file does not exist at chunk-*.js" errors).
+    esbuild: mode === 'production' ? {
+      drop: ['console', 'debugger'],
+    } : {},
     optimizeDeps: {
-      force: mode === 'development',
       include: [
         'react',
         'react-dom',
-        'react-router-dom',
         '@tanstack/react-query',
+        '@tanstack/react-router',
         'zustand',
         'zod',
         'react-hook-form',
@@ -167,11 +150,7 @@ export default defineConfig(({ mode }) => {
       ],
     },
     define: {
-      // Make process.env available in the browser
-      'process.env': process.env,
-      // Provide fallback for process.env.NODE_ENV
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
-      // Define app version
       __APP_VERSION__: JSON.stringify(process.env.npm_package_version),
     },
   }

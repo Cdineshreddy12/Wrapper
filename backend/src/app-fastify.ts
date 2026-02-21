@@ -9,6 +9,7 @@ import multipart from '@fastify/multipart';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
+import { swaggerOptions, swaggerUiOptions } from './config/swagger.js';
 import 'dotenv/config';
 import { shouldLogVerbose } from './utils/verbose-log.js';
 import './startup/run-after-core.js';
@@ -152,12 +153,7 @@ global.logToES = (level, message, data = {}) => {
 fastify.addContentTypeParser(['application/json'], { parseAs: 'buffer' }, function (req: any, body: Buffer, done: (err: Error | null, body?: unknown) => void) {
   req.rawBody = body;
 
-  console.log('🔍 CONTENT PARSER - URL:', req.url, 'Method:', req.method);
-
-  // For webhook endpoints, keep raw body and don't parse JSON
   if (req.url.includes('/webhook')) {
-    console.log('🎣 GLOBAL WEBHOOK DETECTED:', req.url, '- preserving raw body for signature verification');
-    console.log('🎣 WEBHOOK BODY LENGTH:', (body as Buffer).length);
     done(null, body);
     return;
   }
@@ -170,10 +166,8 @@ fastify.addContentTypeParser(['application/json'], { parseAs: 'buffer' }, functi
     if (json.restrictions && typeof json.restrictions === 'string') {
       try {
         json.restrictions = JSON.parse(json.restrictions);
-        console.log('🔧 Fixed double-stringified restrictions field');
       } catch (e) {
-        // If parsing fails, keep as string for validation to catch it
-        console.log('⚠️ Could not parse restrictions string, keeping as is for validation');
+        // Keep as string for validation to catch it
       }
     }
 
@@ -339,56 +333,10 @@ async function registerPlugins() {
     },
   });
 
-  // Swagger documentation
-  if (process.env.NODE_ENV === 'development') {
-    await fastify.register(swagger, {
-      routePrefix: '/docs',
-      swagger: {
-        info: {
-          title: 'Wrapper API',
-          description: 'Multi-tenant SaaS wrapper platform API',
-          version: '1.0.0',
-        },
-        host: `localhost:${process.env.PORT || 3000}`,
-        schemes: ['http'],
-        consumes: ['application/json'],
-        produces: ['application/json'],
-        tags: [
-          { name: 'Auth', description: 'Authentication endpoints' },
-          { name: 'Tenants', description: 'Tenant management' },
-          { name: 'Users', description: 'User management' },
-          { name: 'Subscriptions', description: 'Billing and subscriptions' },
-          { name: 'Permissions', description: 'Role and permission management' },
-          { name: 'Usage', description: 'Usage tracking and analytics' },
-          { name: 'Activity', description: 'Activity logs and audit trails' },
-          { name: 'Organization', description: 'Organization resolution and validation' },
-          { name: 'Internal', description: 'Internal API for tools' },
-          { name: 'Webhooks', description: 'Webhook handlers' },
-        ],
-        securityDefinitions: {
-          Bearer: {
-            type: 'apiKey',
-            name: 'Authorization',
-            in: 'header',
-          },
-        },
-      },
-      uiConfig: {
-        docExpansion: 'full',
-        deepLinking: false,
-      },
-      staticCSP: true,
-      transformStaticCSP: (header: string) => header,
-      exposeRoute: true,
-    } as any);
-
-    await fastify.register(swaggerUi, {
-      routePrefix: '/docs',
-      uiConfig: {
-        docExpansion: 'list',
-        deepLinking: false,
-      },
-    });
+  // Swagger API documentation (disable with DISABLE_SWAGGER=true)
+  if (process.env.DISABLE_SWAGGER !== 'true') {
+    await fastify.register(swagger, swaggerOptions);
+    await fastify.register(swaggerUi, swaggerUiOptions);
   }
 
   const { fastifyCacheMetrics } = await import('./middleware/cache/cache-metrics.js');

@@ -25,41 +25,26 @@ const testFormData = {
 };
 
 export const testSecureStorage = () => {
-  console.log('🧪 Testing Secure Storage Functionality');
 
   try {
     // Test 1: Sanitization
-    console.log('1. Testing data sanitization...');
     const sanitized = sanitizeFormData(testFormData);
-    console.log('✅ Sanitization successful:', sanitized);
 
     // Test 2: Security validation
-    console.log('2. Testing security validation...');
     const validation = validateFormDataSecurity(sanitized);
-    console.log('✅ Security validation result:', validation);
 
     // Test 3: Secure storage
-    console.log('3. Testing secure storage...');
     secureStore('test_onboarding_data', sanitized);
-    console.log('✅ Data stored securely');
 
     // Test 4: Secure retrieval
-    console.log('4. Testing secure retrieval...');
     const retrieved = secureRetrieve('test_onboarding_data');
-    console.log('✅ Data retrieved securely:', retrieved);
 
     // Test 5: Data integrity
-    console.log('5. Testing data integrity...');
     const isDataIntact = JSON.stringify(sanitized) === JSON.stringify(retrieved);
-    console.log('✅ Data integrity check:', isDataIntact ? 'PASSED' : 'FAILED');
 
     // Test 6: Secure clear
-    console.log('6. Testing secure clear...');
     secureClear('test_onboarding_data');
     const cleared = secureRetrieve('test_onboarding_data');
-    console.log('✅ Data cleared successfully:', cleared === null ? 'CLEARED' : 'NOT CLEARED');
-
-    console.log('🎉 All tests passed! Secure storage is working correctly.');
 
   } catch (error) {
     console.error('❌ Test failed:', error);

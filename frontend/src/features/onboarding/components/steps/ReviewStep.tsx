@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from '@tanstack/react-router';
 import { UseFormReturn, useWatch } from 'react-hook-form';
 import { motion, Variants } from 'framer-motion';
 import { Button } from '@/components/ui/button';

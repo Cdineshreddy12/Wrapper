@@ -21,7 +21,6 @@ const OnboardingPage: React.FC = () => {
         
         // Only set theme if it's not already light
         if (theme !== 'light') {
-            console.log('🔅 Forcing light theme for onboarding page');
             setTheme('light');
         }
 
@@ -29,7 +28,6 @@ const OnboardingPage: React.FC = () => {
         return () => {
             const originalTheme = originalThemeRef.current;
             if (originalTheme && originalTheme !== 'light') {
-                console.log('🔄 Restoring original theme:', originalTheme);
                 setTheme(originalTheme);
             }
         };

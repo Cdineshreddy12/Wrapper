@@ -184,59 +184,30 @@ export default async function statusManagementRoutes(
   // Get onboarding status (handles both authenticated and unauthenticated users)
   fastify.get('/status', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      console.log('🔍 === ONBOARDING STATUS CHECK START ===');
-
-      // Try to get authenticated user first
       let userId = null;
       let email = null;
       let kindeUserId = null;
 
-      // Extract token and check if user is authenticated
       try {
         const token = extractToken(request);
-        console.log('🔍 Token extraction result:', token ? 'Token found' : 'No token');
-
         if (token) {
-          console.log('🔍 Validating token with Kinde service...');
           const kindeUser = await kindeService.validateToken(token);
-          kindeUserId = kindeUser.kindeUserId || kindeUser.userId; // Try both fields
+          kindeUserId = kindeUser.kindeUserId || kindeUser.userId;
           userId = kindeUser.userId;
           email = kindeUser.email;
-
-          console.log('🔍 Kinde validation successful:', {
-            kindeUserId,
-            userId,
-            email,
-            hasTenant: !!kindeUser.organization
-          });
         }
       } catch (authErr: unknown) {
-        console.log('📝 Token validation failed, trying fallback methods:', (authErr as Error).message);
+        if (shouldLogVerbose()) console.log('Token validation failed, using query params:', (authErr as Error).message);
         const q = request.query as Record<string, string | undefined>;
-        // Fallback 1: Check if kindeUserId is provided in query (from frontend)
-        if (q?.kindeUserId) {
-          kindeUserId = q.kindeUserId;
-          console.log('🔍 Using kindeUserId from query parameter:', kindeUserId);
-        }
-        // Fallback 2: Check if email is provided in query
-        if (q?.email) {
-          email = q.email;
-          console.log('🔍 Using email from query parameter:', email);
-        }
+        if (q?.kindeUserId) kindeUserId = q.kindeUserId;
+        if (q?.email) email = q.email;
       }
 
       const q2 = request.query as Record<string, string | undefined>;
-      if (!kindeUserId && !userId && q2?.kindeUserId) {
-        kindeUserId = q2.kindeUserId;
-        console.log('🔍 Using kindeUserId from query parameter (fallback):', kindeUserId);
-      }
-      if (!email && q2?.email) {
-        email = q2.email;
-        console.log('🔍 Using email from query parameter (fallback):', email);
-      }
+      if (!kindeUserId && !userId && q2?.kindeUserId) kindeUserId = q2.kindeUserId;
+      if (!email && q2?.email) email = q2.email;
 
       if (!userId && !email) {
-        console.log('❌ No user information available - returning needs onboarding');
         return {
           success: true,
           data: {
@@ -248,33 +219,26 @@ export default async function statusManagementRoutes(
         };
       }
 
-      // Look up user by kindeUserId (preferred) or email
       let userQuery = db.select().from(tenantUsers);
       let lookupType = '';
 
       if (kindeUserId) {
         userQuery = userQuery.where(eq(tenantUsers.kindeUserId, kindeUserId as string)) as any;
-        lookupType = `Kinde ID: ${kindeUserId}`;
-        console.log('🔍 Looking up user by Kinde ID:', kindeUserId);
+        lookupType = 'kindeId';
       } else if (userId) {
         userQuery = userQuery.where(eq(tenantUsers.userId, userId as string)) as any;
-        lookupType = `User ID: ${userId}`;
-        console.log('🔍 Looking up user by user ID:', userId);
+        lookupType = 'userId';
       } else if (email) {
         userQuery = userQuery.where(eq(tenantUsers.email, email as string)) as any;
-        lookupType = `Email: ${email}`;
-        console.log('🔍 Looking up user by email:', email);
+        lookupType = 'email';
       }
 
-      console.log('🔍 Executing database query...');
       const [user] = await userQuery.limit(1);
 
       if (!user) {
-        console.log('❌ User not found in database for lookup:', lookupType);
+        if (shouldLogVerbose()) console.log(`Onboarding status: no user found (${lookupType})`);
 
-        // If we have Kinde user info but no DB record, this means they need to complete onboarding
         if (kindeUserId && email) {
-          console.log('🆕 Kinde user exists but no DB record - needs onboarding');
           return {
             success: true,
             data: {
@@ -291,7 +255,6 @@ export default async function statusManagementRoutes(
           };
         }
 
-        console.log('📝 No user record found - returning needs onboarding');
         return {
           success: true,
           data: {
@@ -304,51 +267,24 @@ export default async function statusManagementRoutes(
         };
       }
 
-      console.log('✅ User found in database:', {
-        userId: user.userId,
-        email: user.email,
-        kindeUserId: user.kindeUserId,
-        onboardingCompleted: user.onboardingCompleted,
-        tenantId: user.tenantId,
-        isActive: user.isActive
-      });
-
-      // IMPORTANT: Existing users with onboardingCompleted=true should NOT be forced to onboard again
-      // They will be redirected directly to dashboard
-      if (user.onboardingCompleted) {
-        console.log('✅ Existing user detected - onboarding already completed, will skip onboarding flow');
-      } else {
-        console.log('🔄 New user or incomplete onboarding - user needs to complete onboarding');
+      if (shouldLogVerbose()) {
+        console.log('Onboarding status: user found', {
+          userId: user.userId,
+          onboardingCompleted: user.onboardingCompleted,
+          tenantId: user.tenantId
+        });
       }
 
-      // Get tenant information if user exists
-      console.log('🔍 Looking up tenant for user...');
       const [tenant] = await db
         .select()
         .from(tenants)
         .where(eq(tenants.tenantId, user.tenantId))
         .limit(1);
 
-      if (tenant) {
-        console.log('✅ Tenant found:', {
-          tenantId: tenant.tenantId,
-          companyName: tenant.companyName,
-          subdomain: tenant.subdomain,
-          hasInitialSetupData: !!(tenant as { initialSetupData?: Record<string, unknown> }).initialSetupData,
-          initialSetupDataKeys: (tenant as { initialSetupData?: Record<string, unknown> }).initialSetupData ? Object.keys((tenant as { initialSetupData?: Record<string, unknown> }).initialSetupData!) : []
-        });
-      } else {
-        console.log('⚠️ No tenant found for user');
-      }
-
-      // Extract onboarding data from preferences
       const onboardingData = (user.preferences as { onboarding?: { formData?: unknown } })?.onboarding || {};
       let formData: Record<string, unknown> = (onboardingData.formData || {}) as Record<string, unknown>;
 
-      // If no form data exists, try to populate from tenant initial setup data
       if (Object.keys(formData).length === 0 && (tenant as { initialSetupData?: Record<string, unknown> } | null)?.initialSetupData) {
-        console.log('🔄 No form data found, populating from tenant initial setup data');
-        console.log('📋 Initial setup data:', (tenant as { initialSetupData?: Record<string, unknown> }).initialSetupData);
         const setupData = (tenant as { initialSetupData?: Record<string, unknown> }).initialSetupData!;
         formData = {
           businessType: setupData.businessType || undefined,
@@ -363,34 +299,21 @@ export default async function statusManagementRoutes(
           maxUsers: setupData.maxUsers || undefined,
           maxProjects: setupData.maxProjects || undefined
         };
-        // Remove undefined values
         Object.keys(formData).forEach(key => {
           if ((formData as Record<string, unknown>)[key] === undefined) {
             delete (formData as Record<string, unknown>)[key];
           }
         });
-        console.log('📋 Populated form data:', formData);
-      } else if (Object.keys(formData).length === 0) {
-        if (shouldLogVerbose()) console.log('⚠️ No form data found and no initial setup data available');
       }
 
-
-
-      // Determine if user is invited (invited users have onboardingCompleted=true)
-      // CRITICAL: Invited users should NEVER be sent to onboarding
+      // Invited users should never be sent to onboarding
       const isInvitedUser = user.onboardingCompleted === true && 
                            ((user.preferences as { userType?: string })?.userType === 'INVITED_USER' || 
                             (user.preferences as { isInvitedUser?: boolean })?.isInvitedUser === true ||
-                            (user as { invitedBy?: string | null }).invitedBy !== null || // User was invited if invitedBy is set
-                            user.invitedAt !== null); // User was invited if invitedAt is set
+                            (user as { invitedBy?: string | null }).invitedBy !== null ||
+                            user.invitedAt !== null);
 
-      // CRITICAL: Respect existing users' onboarding status
-      // - If onboardingCompleted=true → isOnboarded=true, needsOnboarding=false → redirect to dashboard
-      // - If onboardingCompleted=false → isOnboarded=false, needsOnboarding=true → show onboarding
-      // This ensures existing users NEVER have to onboard again
-      // CRITICAL FIX: If onboardingCompleted=true, user should NEVER need onboarding (applies to invited users)
       const isOnboarded = user.onboardingCompleted === true;
-      // CRITICAL: If onboardingCompleted is true, needsOnboarding MUST be false (invited users always have this set to true)
       const needsOnboarding = user.onboardingCompleted !== true;
 
       const result = {
@@ -413,7 +336,6 @@ export default async function statusManagementRoutes(
             kindeUserId: user.kindeUserId
           }
         },
-        // Add authStatus object for frontend compatibility
         authStatus: {
           isAuthenticated: true,
           userId: kindeUserId || userId,
@@ -428,24 +350,19 @@ export default async function statusManagementRoutes(
         }
       };
 
-      console.log('✅ Final onboarding status result:', {
-        isOnboarded: result.data.isOnboarded,
-        needsOnboarding: result.data.needsOnboarding,
-        hasTenant: !!result.data.tenant,
-        userExists: !!result.data.user,
-        userType: result.authStatus.userType,
-        message: isOnboarded 
-          ? '✅ Existing user - will redirect to dashboard (no onboarding required)' 
-          : '🔄 User needs to complete onboarding'
-      });
+      if (shouldLogVerbose()) {
+        console.log('Onboarding status result:', {
+          isOnboarded,
+          needsOnboarding,
+          userType: result.authStatus.userType
+        });
+      }
 
-      console.log('🔍 === ONBOARDING STATUS CHECK END ===');
       return result;
 
     } catch (err: unknown) {
       const error = err as Error;
-      console.error('❌ Error getting onboarding status:', error);
-      console.error('❌ Stack trace:', error.stack);
+      console.error('❌ Onboarding status error:', error.message);
       request.log.error('Error getting onboarding status:', error);
       return reply.code(500).send({ error: 'Failed to get onboarding status' });
     }

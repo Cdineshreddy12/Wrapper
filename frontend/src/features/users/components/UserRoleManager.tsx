@@ -96,9 +96,7 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
   const loadUserRoles = async (selectedUserId: string) => {
     try {
       setRolesLoading(true);
-      console.log(`📥 Loading roles for user ${selectedUserId}...`);
       const response = await api.get(`/admin/users/${selectedUserId}/roles`);
-      console.log(`📥 Roles API response:`, response.data);
       
       if (response.data.success) {
         const rolesData = response.data.data || response.data.roles || [];
@@ -112,7 +110,6 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({
           permissions: role.permissions || {},
           isSystemRole: role.isSystemRole || false
         })) : [];
-        console.log(`✅ Loaded ${rolesList.length} roles for user`);
         setUserRoles(rolesList);
       } else {
         console.warn('⚠️ Roles API returned success: false', response.data.message);

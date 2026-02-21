@@ -77,11 +77,6 @@ export function useUserActions() {
       if (invitationToken) {
         const baseUrl = window.location.origin;
         const invitationUrl = `${baseUrl}/invite/accept?token=${invitationToken}`;
-        console.log(`🔗 Generated invitation URL for ${user.email}:`, {
-          invitationUrl,
-          tokenSource,
-          invitationToken
-        });
         return invitationUrl;
       } else {
         console.warn(`⚠️ Could not find invitation token for user ${user.email}:`, {

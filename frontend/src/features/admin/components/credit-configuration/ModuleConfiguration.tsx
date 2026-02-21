@@ -202,40 +202,32 @@ export const ModuleConfiguration: React.FC<ModuleConfigurationProps> = ({
                       const tenantApp = selectedTenant.applications?.find(ta => ta.appCode === app.appCode);
 
                       if (tenantApp) {
-                        console.log(`🏢 Tenant ${selectedTenant.companyName} has access to module ${module.moduleCode} in app ${app.appCode}`);
 
                         // First, check if tenant has custom permissions defined in the assignment
                         if (tenantApp.customPermissions && typeof tenantApp.customPermissions === 'object') {
-                          console.log(`🎯 Tenant has custom permissions for ${app.appCode}:`, tenantApp.customPermissions);
 
                           // Check if there are custom permissions for this specific module
                           if (tenantApp.customPermissions[module.moduleCode]) {
                             const customModulePermissions = tenantApp.customPermissions[module.moduleCode];
-                            console.log(`✅ Using custom permissions for module ${module.moduleCode}:`, customModulePermissions);
 
                             // Filter module permissions to only show custom ones
                             permissionsToShow = module.permissions.filter(permission =>
                               customModulePermissions.includes(permission.code)
                             );
 
-                            console.log(`🎯 Showing ${permissionsToShow.length} custom permissions for module ${module.moduleCode}`);
                           } else {
                             // No custom permissions for this module, fall back to default behavior
-                            console.log(`📋 No custom permissions for module ${module.moduleCode}, using default permissions`);
                             permissionsToShow = module.permissions;
                           }
                         } else {
                           // Check if tenant configurations are loaded (existing logic)
                           if (!tenantConfigurations) {
-                            console.log(`⏳ Tenant configurations not loaded yet for ${selectedTenant.companyName}`);
                             permissionsToShow = module.permissions; // Show all permissions while loading
                           } else {
                             // Check if there are any tenant-specific operation costs configured
                             const tenantOperationsForModule = tenantConfigurations?.configurations?.operations?.filter(
                               (op: any) => op.operationCode.startsWith(`${app.appCode}.${module.moduleCode}.`)
                             ) || [];
-
-                            console.log(`🔍 Found ${tenantOperationsForModule.length} tenant operations for module ${module.moduleCode}`);
 
                             if (tenantOperationsForModule.length > 0) {
                               // Tenant has specific operation configurations, filter permissions accordingly
@@ -247,23 +239,17 @@ export const ModuleConfiguration: React.FC<ModuleConfigurationProps> = ({
                                 configuredPermissionCodes.includes(permission.code)
                               );
 
-                              console.log(`🎯 Tenant has ${tenantOperationsForModule.length} configured operations for module ${module.moduleCode}`);
-                              console.log(`✅ Showing ${permissionsToShow.length} permissions based on tenant configuration:`, configuredPermissionCodes);
                             } else {
                               // No tenant-specific configurations found, show all permissions for enabled modules
                               permissionsToShow = module.permissions;
-                              console.log(`📋 No tenant-specific configurations found, showing all ${permissionsToShow.length} permissions for enabled module ${module.moduleCode}`);
                             }
                           }
                         }
                       } else {
                         // If no tenant app found, show no permissions
                         permissionsToShow = [];
-                        console.log(`❌ No tenant application found for ${app.appCode}, showing no permissions`);
                       }
                     }
-
-                    console.log(`🎯 Showing ${permissionsToShow.length} permissions for module ${module.moduleCode} in tenant mode`);
 
                     return permissionsToShow.map((permission) => {
                     const operationCode = permission.code;
@@ -273,7 +259,6 @@ export const ModuleConfiguration: React.FC<ModuleConfigurationProps> = ({
 
                     // Check if credit cost is configured for this operation
                     const configuredCost = globalOperationCosts?.find(op => op.operationCode === fullOperationCode);
-
 
                     return (
                       <div

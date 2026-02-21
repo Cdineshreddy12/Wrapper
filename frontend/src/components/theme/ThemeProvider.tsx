@@ -80,12 +80,9 @@ export function ThemeProvider({
 
       if (resolvedTheme === 'dark') {
         root.classList.add('dark')
-        console.log('🌙 Theme set to dark mode')
       } else if (resolvedTheme === 'monochrome') {
         root.classList.add('monochrome')
-        console.log('⚫ Theme set to monochrome mode')
       } else {
-        console.log('☀️ Theme set to light mode')
       }
     }
 
@@ -104,13 +101,11 @@ export function ThemeProvider({
   }, [theme])
 
   const setThemeCallback = useCallback((newTheme: Theme) => {
-    console.log('🎨 Theme change requested:', newTheme)
     setTheme(newTheme)
     localStorage.setItem(storageKey, newTheme)
   }, [storageKey])
 
   const setGlassmorphismEnabledCallback = useCallback((enabled: boolean) => {
-    console.log('✨ Glassmorphism change requested:', enabled)
     setGlassmorphismEnabled(enabled)
     localStorage.setItem('glassmorphism-enabled', enabled.toString())
     const body = document.body

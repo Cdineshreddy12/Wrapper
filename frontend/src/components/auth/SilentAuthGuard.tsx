@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from '@tanstack/react-router';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import useSilentAuth from '@/hooks/useSilentAuth';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -154,18 +154,18 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
         if (status.hasUser && status.hasTenant && status.isOnboarded) {
           // User is fully set up, redirect to dashboard
           logger.debug('✅ SilentAuthGuard: User fully onboarded, redirecting to dashboard');
-          navigate('/dashboard', { replace: true });
+          navigate({ to: '/dashboard', replace: true });
         } else if (status.authStatus?.onboardingCompleted === true || 
                    status.authStatus?.userType === 'INVITED_USER' ||
                    status.authStatus?.isInvitedUser === true) {
           // INVITED USERS: Always go to dashboard (they skip onboarding)
           logger.debug('✅ SilentAuthGuard: Invited user detected, redirecting to dashboard (skipping onboarding)');
-          navigate('/dashboard', { replace: true });
+          navigate({ to: '/dashboard', replace: true });
         } else {
           // User needs onboarding
           logger.debug('ℹ️ SilentAuthGuard: User needs onboarding');
           if (location.pathname === '/') {
-            navigate('/landing', { replace: true });
+            navigate({ to: '/landing', replace: true });
           }
         }
       } else {
@@ -186,7 +186,7 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
     // If on a protected route, redirect to landing
     if (!isPublicPath) {
       logger.debug('🔄 SilentAuthGuard: On protected route, redirecting to landing');
-      navigate('/landing', { replace: true });
+      navigate({ to: '/landing', replace: true });
     }
 
     setInitializationComplete(true);

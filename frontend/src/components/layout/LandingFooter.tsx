@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from '@tanstack/react-router';
 import { Twitter, Linkedin, Mail, MapPin, Phone, MessageSquare } from 'lucide-react';
 import { config } from '@/lib/config';
 

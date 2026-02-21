@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, ReactNode } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation } from '@tanstack/react-router';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import { useAuthStatus, useTenant } from '@/hooks/useSharedQueries';
 import toast from 'react-hot-toast';
@@ -102,7 +102,6 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
     const tenantData = tenantDataRef.current;
     const kindeUser = kindeUserRef.current;
     try {
-      console.log('🔄 Refreshing user context...');
 
       if (authData?.success && authData.authStatus) {
         const authStatus = authData.authStatus;
@@ -148,15 +147,6 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
         setRoles(authStatus.userRoles || []);
         setLastRefreshTime(new Date());
 
-        console.log('✅ User context refreshed:', {
-          userId: userData.userId,
-          email: userData.email,
-          tenantId: authStatus.tenantId,
-          tenantName: tenantData?.companyName || 'Organization',
-          permissions: (authStatus.userPermissions || authStatus.legacyPermissions || []).length,
-          roles: (authStatus.userRoles || []).length
-        });
-
         if (showToast) {
           toast.success('Permissions refreshed successfully');
         }
@@ -167,7 +157,6 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
         setPermissions([]);
         setRoles([]);
         setLastRefreshTime(null);
-        console.log('ℹ️ User not authenticated');
       }
     } catch (error: any) {
       console.error('❌ Failed to fetch user context:', error);
@@ -261,7 +250,6 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
     if (!autoRefresh || !user) return;
 
     const interval = setInterval(() => {
-      console.log('🔄 Auto-refreshing user context...');
       fetchUserContext(false);
     }, refreshInterval);
 
@@ -272,7 +260,6 @@ export const UserContextProvider: React.FC<UserContextProviderProps> = React.mem
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
       if (event.key === 'user_permissions_changed') {
-        console.log('🔄 Permission change detected in another tab, refreshing...');
         fetchUserContext(false);
         // Remove the flag
         localStorage.removeItem('user_permissions_changed');
@@ -319,6 +306,14 @@ export const useUserContext = (): UserContextType => {
   return context;
 };
 
+/**
+ * Safe variant that returns null instead of throwing when the provider is missing.
+ * Useful in hooks/components that may render before the provider mounts (e.g. during HMR).
+ */
+export const useUserContextSafe = (): UserContextType | null => {
+  return useContext(UserContext);
+};
+
 // Hook for checking permissions with better TypeScript support
 export const usePermissionCheck = () => {
   // Guard against context not being available
@@ -326,7 +321,6 @@ export const usePermissionCheck = () => {
   try {
     contextValue = useUserContext();
   } catch (error) {
-    console.log('🔧 usePermissionCheck: Context not available yet');
     return {
       hasPermission: () => false,
       hasRole: () => false,

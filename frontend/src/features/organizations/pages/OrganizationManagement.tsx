@@ -17,8 +17,7 @@ import {
   Plus
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { OrganizationTreeManagement, OrganizationUserManagement } from '@/components/organization';
-import LocationManagement from '@/components/LocationManagement';
+import { OrganizationTreeManagement, OrganizationUserManagement } from '@/features/organizations/components';
 import { useOrganizationAuth } from '@/hooks/useOrganizationAuth';
 import toast from 'react-hot-toast';
 // OrganizationPermissionManagement component temporarily removed during refactoring
@@ -111,12 +110,9 @@ export function OrganizationManagementPage() {
         tenantInfo: tenantResponse.data
       });
 
-      console.log('🔍 Auth status response:', authStatusResp);
       const serverTenantId = (authStatusResp as any)?.authStatus?.tenantId;
-      console.log('🔍 Extracted server tenant ID:', serverTenantId);
       if (serverTenantId) {
         setAuthTenantId(serverTenantId);
-        console.log('🔄 Set auth tenant ID:', serverTenantId);
       } else {
         console.warn('⚠️ No tenant ID found in auth status response');
       }
@@ -313,20 +309,12 @@ export function OrganizationManagementPage() {
           </TabsContent>
 
           <TabsContent value="locations">
-            {effectiveTenantId ? (
-              <LocationManagement
-                tenantId={effectiveTenantId}
-                isAdmin={isAdmin}
-                makeRequest={makeRequest}
-              />
-            ) : (
-              <Alert>
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  Unable to load location management. Please ensure you're logged in and have proper tenant access.
-                </AlertDescription>
-              </Alert>
-            )}
+            <Alert>
+              <MapPin className="h-4 w-4" />
+              <AlertDescription>
+                Location management is coming soon.
+              </AlertDescription>
+            </Alert>
           </TabsContent>
 
           <TabsContent value="users">

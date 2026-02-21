@@ -88,7 +88,7 @@ async function findUserInDatabase(kindeUserId: string): Promise<UserRecord | nul
     }
 
     const selectedUser = userRecords.find(u => u.onboardingCompleted) || userRecords[0];
-    if (shouldLogVerbose()) console.log('✅ Found user:', selectedUser.userId);
+    if (shouldLogVerbose()) console.log('Auth: user found', selectedUser.userId);
     return selectedUser;
 
   } catch (error: unknown) {

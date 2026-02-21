@@ -1,5 +1,5 @@
 import { Container } from '@/components/common/Page';
-import { OrganizationManagement } from '@/components/OrganizationManagement';
+import { OrganizationManagement } from '@/features/organizations/components/OrganizationManagement';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useOrganizationAuth } from '@/hooks/useOrganizationAuth';
 import api from '@/lib/api';

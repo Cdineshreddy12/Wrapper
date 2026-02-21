@@ -1,0 +1,34 @@
+import { api } from './client'
+import type { Tenant, ApiResponse, UnifiedUser } from './types'
+
+export const tenantAPI = {
+  getCurrentTenant: () => api.get<Tenant>('/tenants/current'),
+
+  getUsers: () => api.get<ApiResponse<UnifiedUser[]>>('/tenants/current/users'),
+
+  inviteUser: (data: { email: string; roleId: string; message?: string }) =>
+    api.post<ApiResponse<any>>('/tenants/current/users/invite', data),
+
+  removeUser: (userId: string) =>
+    api.delete<ApiResponse<any>>(`/tenants/current/users/${userId}`),
+
+  updateUserRole: (userId: string, roleId: string) =>
+    api.put<ApiResponse<any>>(`/tenants/current/users/${userId}/role`, { roleId }),
+
+  getUsage: (params?: { period?: string; startDate?: string; endDate?: string }) =>
+    api.get<ApiResponse<any>>('/tenants/current/usage', { params }),
+
+  exportUsers: () => api.get('/tenants/current/users/export'),
+
+  getOrganizationAssignments: () => api.get<ApiResponse<any>>('/tenants/current/organization-assignments'),
+
+  getTimeline: (params?: { limit?: number; includeActivity?: boolean }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.includeActivity !== undefined) queryParams.append('includeActivity', params.includeActivity.toString());
+    const queryString = queryParams.toString();
+    return api.get<ApiResponse<{ events: Array<{ type: string; label: string; date: string; metadata?: Record<string, unknown> }> }>>(
+      `/tenants/current/timeline${queryString ? `?${queryString}` : ''}`
+    );
+  },
+}

@@ -79,5 +79,4 @@ git push -u origin main --force
 
 - **`.env`** is not copied. Copy `backend/.env` into `WrapperStandalone/backend/` manually (or use a `.env.example`).
 - **`node_modules`** are not copied. Run `npm install` in `backend/` and `frontend/` inside `WrapperStandalone` after copying.
-- **Playwright-related files** are not copied: profiles (`playwright-zopkit-profile`, `playwright-oauth-profile`), reports, test-results, debug screenshots, and the E2E scripts in `frontend/scripts/` that use Playwright (e.g. `oauth-browser-test.mjs`, `*-e2e*.mjs`). The standalone repo will not contain Playwright tests or profiles.
 - After the first push, you can keep the two repos in sync by re-running the script (with a new destination or the same one, then committing and pushing from `WrapperStandalone`).

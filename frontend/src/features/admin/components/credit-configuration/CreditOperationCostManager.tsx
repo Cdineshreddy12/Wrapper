@@ -128,26 +128,21 @@ const CreditOperationCostManager: React.FC = () => {
 
   // Event handlers
   const handleTenantSelect = useCallback(async (tenant: Tenant) => {
-    console.log('🏢 Tenant selected:', tenant);
     setSelectedTenant(tenant);
 
     if (tenant) {
-      console.log(`🔄 Loading configurations for tenant: ${tenant.companyName} (${tenant.tenantId})`);
       try {
         await loadTenantConfigurations(tenant.tenantId);
-        console.log(`✅ Tenant configurations loaded successfully for ${tenant.companyName}`);
     } catch (error) {
         console.error(`❌ Failed to load tenant configurations for ${tenant.companyName}:`, error);
         toast.error(`Failed to load configurations for ${tenant.companyName}`);
       }
     } else {
-      console.log('🧹 Clearing tenant configurations');
       setTenantConfigurations(null);
     }
   }, [loadTenantConfigurations]);
 
   const handleCostChange = useCallback((appCode: string, moduleCode: string, operationCode: string, cost: number) => {
-    console.log(`💰 Cost change: ${appCode}.${moduleCode}.${operationCode} = ${cost}`);
     setCostChanges(prev => ({
       ...prev,
       [appCode]: {
@@ -212,22 +207,15 @@ const CreditOperationCostManager: React.FC = () => {
     if (!changeImpact) return;
 
     try {
-      console.log('🔄 Starting save operation...');
-      console.log('📊 Cost changes to save:', costChanges);
-      console.log('📋 Active tab:', activeTab);
-      console.log('🏢 Selected tenant:', selectedTenant);
 
       const savePromises = [];
 
       for (const [appCode, appChanges] of Object.entries(costChanges)) {
-        console.log(`📱 Processing app: ${appCode}`, appChanges);
 
         if (appChanges.operationCosts) {
           for (const [operationCode, cost] of Object.entries(appChanges.operationCosts)) {
-            console.log(`⚙️ Processing operation: ${operationCode} with cost: ${cost}`);
 
             if (activeTab === 'global') {
-              console.log('🌍 Creating global operation cost...');
               savePromises.push(
                 operationCostAPI.createOperationCost({
                   operationCode,
@@ -239,7 +227,6 @@ const CreditOperationCostManager: React.FC = () => {
                   isActive: true,
                   priority: 100
                 }).then(result => {
-                  console.log(`✅ Global operation created: ${operationCode}`, result);
                   return result;
                 }).catch(error => {
                   console.error(`❌ Failed to create global operation: ${operationCode}`, error);
@@ -247,7 +234,6 @@ const CreditOperationCostManager: React.FC = () => {
                 })
               );
             } else if (selectedTenant) {
-              console.log(`🏢 Updating tenant operation cost for tenant: ${selectedTenant.tenantId}`);
               savePromises.push(
                 creditConfigurationAPI.updateTenantOperationConfig(selectedTenant.tenantId, operationCode, {
                   creditCost: cost,
@@ -256,7 +242,6 @@ const CreditOperationCostManager: React.FC = () => {
         scope: 'tenant',
         isActive: true
                 }).then(result => {
-                  console.log(`✅ Tenant operation updated: ${operationCode}`, result);
                   return result;
                 }).catch(error => {
                   console.error(`❌ Failed to update tenant operation: ${operationCode}`, error);
@@ -270,21 +255,17 @@ const CreditOperationCostManager: React.FC = () => {
         // Handle module costs - create operation costs for all operations in the module
         if (appChanges.moduleCosts) {
           for (const [moduleCode, cost] of Object.entries(appChanges.moduleCosts)) {
-            console.log(`📂 Processing module: ${moduleCode} with cost: ${cost}`);
 
             // Find the module in the applications data to get its permissions
             const app = applications.find(a => a.appCode === appCode);
             const module = app?.modules?.find(m => m.moduleCode === moduleCode);
 
             if (module?.permissions && module.permissions.length > 0) {
-              console.log(`🔄 Found ${module.permissions.length} permissions in module ${moduleCode}`);
 
               // Create operation cost for each permission in the module
               for (const permission of module.permissions) {
                 const operationCode = `${appCode}.${moduleCode}.${permission.code}`;
                 const operationName = permission.name;
-
-                console.log(`⚙️ Creating operation cost for: ${operationCode}`);
 
                 if (activeTab === 'global') {
                   savePromises.push(
@@ -298,7 +279,6 @@ const CreditOperationCostManager: React.FC = () => {
                       isActive: true,
                       priority: 100
                     }).then(result => {
-                      console.log(`✅ Module operation cost created: ${operationCode}`, result);
                       return result;
                     }).catch(error => {
                       console.error(`❌ Failed to create module operation cost: ${operationCode}`, error);
@@ -314,7 +294,6 @@ const CreditOperationCostManager: React.FC = () => {
       scope: 'tenant',
       isActive: true
                     }).then(result => {
-                      console.log(`✅ Tenant module operation cost updated: ${operationCode}`, result);
                       return result;
                     }).catch(error => {
                       console.error(`❌ Failed to update tenant module operation cost: ${operationCode}`, error);
@@ -324,32 +303,26 @@ const CreditOperationCostManager: React.FC = () => {
                 }
               }
     } else {
-              console.log(`⚠️ No permissions found for module ${moduleCode}`);
             }
           }
         }
 
         // Handle app costs - create operation costs for all operations in all modules of the app
         if (appChanges.appCost !== undefined) {
-          console.log(`🏗️ Processing app cost: ${appCode} with cost: ${appChanges.appCost}`);
 
           // Find the application in the applications data to get its modules
           const app = applications.find(a => a.appCode === appCode);
 
           if (app?.modules && app.modules.length > 0) {
-            console.log(`🔄 Found ${app.modules.length} modules in application ${appCode}`);
 
             // Loop through each module in the application
             for (const module of app.modules) {
               if (module.permissions && module.permissions.length > 0) {
-                console.log(`📂 Processing module ${module.moduleCode} with ${module.permissions.length} permissions`);
 
                 // Create operation cost for each permission in each module
                 for (const permission of module.permissions) {
                   const operationCode = `${appCode}.${module.moduleCode}.${permission.code}`;
                   const operationName = permission.name;
-
-                  console.log(`⚙️ Creating app operation cost for: ${operationCode}`);
 
                   if (activeTab === 'global') {
                     savePromises.push(
@@ -363,7 +336,6 @@ const CreditOperationCostManager: React.FC = () => {
                         isActive: true,
                         priority: 100
                       }).then(result => {
-                        console.log(`✅ App operation cost created: ${operationCode}`, result);
                         return result;
                       }).catch(error => {
                         console.error(`❌ Failed to create app operation cost: ${operationCode}`, error);
@@ -379,7 +351,6 @@ const CreditOperationCostManager: React.FC = () => {
       scope: 'tenant',
       isActive: true
                       }).then(result => {
-                        console.log(`✅ Tenant app operation cost updated: ${operationCode}`, result);
                         return result;
                       }).catch(error => {
                         console.error(`❌ Failed to update tenant app operation cost: ${operationCode}`, error);
@@ -391,14 +362,11 @@ const CreditOperationCostManager: React.FC = () => {
               }
             }
       } else {
-            console.log(`⚠️ No modules found for application ${appCode}`);
           }
         }
       }
 
-      console.log(`🚀 Executing ${savePromises.length} save operations...`);
       await Promise.all(savePromises);
-      console.log('🎉 All save operations completed successfully!');
 
       toast.success(`Configuration changes applied successfully!`);
       setShowWarningModal(false);
@@ -434,21 +402,12 @@ const CreditOperationCostManager: React.FC = () => {
 
   // Test API function for debugging
   const testAPI = useCallback(async () => {
-    console.log('🧪 Testing API calls...');
-    console.log('🔍 Current state:', {
-      activeTab,
-      selectedTenant: selectedTenant?.tenantId,
-      costChanges,
-      operationCostsLength: operationCosts.length,
-      applicationsCount: applications.length
-    });
 
     try {
       // Find the first application with modules and permissions to test with
       const testApp = applications.find(app => app.modules && app.modules.length > 0 && app.modules[0].permissions && app.modules[0].permissions.length > 0);
 
       if (!testApp) {
-        console.log('⚠️ No suitable test application found with modules and permissions');
         toast.error('No test data available');
         return;
       }
@@ -457,10 +416,7 @@ const CreditOperationCostManager: React.FC = () => {
       const testPermission = testModule.permissions[0];
       const testOperationCode = `${testApp.appCode}.${testModule.moduleCode}.${testPermission.code}`;
 
-      console.log('🧪 Testing with operation:', testOperationCode);
-
       // Test global operation creation
-      console.log('🧪 Testing global operation creation...');
       const testResult = await operationCostAPI.createOperationCost({
         operationCode: testOperationCode,
         operationName: testPermission.name,
@@ -471,11 +427,9 @@ const CreditOperationCostManager: React.FC = () => {
       isActive: true,
         priority: 100
       });
-      console.log('✅ Global operation test successful:', testResult);
 
       // Test tenant operation update (if tenant selected)
       if (selectedTenant) {
-        console.log('🧪 Testing tenant operation update...');
         const tenantTestResult = await creditConfigurationAPI.updateTenantOperationConfig(
           selectedTenant.tenantId,
           testOperationCode,
@@ -487,7 +441,6 @@ const CreditOperationCostManager: React.FC = () => {
             isActive: true
           }
         );
-        console.log('✅ Tenant operation test successful:', tenantTestResult);
       }
 
       toast.success('API tests completed successfully!');
