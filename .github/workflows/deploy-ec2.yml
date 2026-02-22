@@ -70,7 +70,7 @@ jobs:
             cd ${APP_DIR}
 
             # Install pnpm if not present
-            command -v pnpm >/dev/null 2>&1 || npm install -g pnpm
+            command -v pnpm >/dev/null 2>&1 || sudo npm install -g pnpm
 
             pnpm install --frozen-lockfile
 
