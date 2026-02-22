@@ -64,7 +64,7 @@ fi
 echo ""
 echo "Done. Next steps:"
 echo "  cd $DEST"
-echo "  npm install   # in backend/ and frontend/"
+echo "  pnpm install   # installs all workspace packages"
 echo "  git fetch origin"
 echo "  git branch -M main   # or 'working' if that's your branch"
 echo "  git reset --soft origin/main   # keep your files, align to remote history"

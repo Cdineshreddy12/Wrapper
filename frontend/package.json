@@ -22,15 +22,12 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "test:watch": "vitest --watch",
-    "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build",
     "prepare": "[ -d .git ] && husky install || true",
     "clean": "rm -rf dist node_modules/.vite",
     "clean:vite": "rm -rf node_modules/.vite",
     "postinstall": "[ -d .git ] && husky install || true"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^5.2.2",
     "@kinde-oss/kinde-auth-react": "^5.4.1",
     "@radix-ui/react-accordion": "^1.2.12",
@@ -77,8 +74,6 @@
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.15.0",
     "lucide-react": "^0.474.0",
-    "motion": "^12.23.22",
-    "next-themes": "^0.4.6",
     "nuqs": "^2.6.0",
     "react": "^19.1.0",
     "react-day-picker": "^9.11.0",
@@ -106,12 +101,8 @@
     ]
   },
   "devDependencies": {
-    "@storybook/react-vite": "^10.2.10",
     "@tailwindcss/postcss": "^4.1.18",
-    "@tanstack/react-query-devtools": "^5.90.2",
-    "@testing-library/jest-dom": "^6.1.0",
     "@testing-library/react": "^16.3.0",
-    "@testing-library/user-event": "^14.5.0",
     "@types/node": "^24.5.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -124,15 +115,12 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
     "husky": "^8.0.3",
-    "jsdom": "^22.1.0",
     "lint-staged": "^15.0.0",
     "prettier": "^3.0.0",
     "prettier-plugin-tailwindcss": "^0.6.0",
     "rollup-plugin-visualizer": "^5.9.0",
-    "storybook": "^10.2.10",
     "typescript": "^5.2.2",
     "vite": "^7.0.0",
-    "vite-bundle-analyzer": "^0.15.0",
     "vite-plugin-pwa": "^1.2.0",
     "vitest": "^3.1.0"
   }

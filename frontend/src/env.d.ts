@@ -30,9 +30,6 @@ interface ImportMetaEnv {
   // Secrets
   readonly VITE_JWT_SECRET: string
 
-  // AI
-  readonly VITE_GEMINI_API_KEY: string
-
   // Environment
   readonly VITE_ENV: string
 }

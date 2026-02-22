@@ -34,7 +34,6 @@ import type {
   notificationTemplates,
   tenantTemplateCustomizations,
   adminNotificationHistory,
-  externalApplications,
   seasonalCreditCampaigns,
   seasonalCreditAllocations,
   changeLog,
@@ -87,7 +86,6 @@ export type NotificationTemplate = InferSelectModel<typeof notificationTemplates
 export type TenantTemplateCustomization = InferSelectModel<typeof tenantTemplateCustomizations>;
 export type AdminNotificationHistoryRecord = InferSelectModel<typeof adminNotificationHistory>;
 
-export type ExternalApplication = InferSelectModel<typeof externalApplications>;
 export type SeasonalCreditCampaign = InferSelectModel<typeof seasonalCreditCampaigns>;
 export type SeasonalCreditAllocation = InferSelectModel<typeof seasonalCreditAllocations>;
 export type ChangeLogRecord = InferSelectModel<typeof changeLog>;
@@ -125,7 +123,6 @@ export type NewCreditConfiguration = InferInsertModel<typeof creditConfiguration
 export type NewNotification = InferInsertModel<typeof notifications>;
 export type NewNotificationTemplate = InferInsertModel<typeof notificationTemplates>;
 
-export type NewExternalApplication = InferInsertModel<typeof externalApplications>;
 export type NewSeasonalCreditCampaign = InferInsertModel<typeof seasonalCreditCampaigns>;
 export type NewSeasonalCreditAllocation = InferInsertModel<typeof seasonalCreditAllocations>;
 export type NewChangeLog = InferInsertModel<typeof changeLog>;

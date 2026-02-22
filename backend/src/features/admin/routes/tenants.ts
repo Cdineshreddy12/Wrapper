@@ -873,7 +873,7 @@ export default async function tenantRoutes(
       // Test M2M token
       let m2mTokenTest: { success: boolean; error: string; tokenLength?: number } = { success: false, error: 'Not tested' };
       try {
-        const kindeServiceModule = await import('../features/auth/services/kinde-service.js');
+        const kindeServiceModule = await import('../../auth/services/kinde-service.js');
         const kindeService = kindeServiceModule.default ?? kindeServiceModule;
         const token = await (kindeService as { getM2MToken: () => Promise<string> }).getM2MToken();
         m2mTokenTest = { success: true, error: '', tokenLength: token.length };
@@ -885,7 +885,7 @@ export default async function tenantRoutes(
       // Test organization assignment
       let orgAssignmentTest: Record<string, unknown> = { success: false, error: 'Not tested' };
       try {
-        const kindeServiceModule = await import('../features/auth/services/kinde-service.js');
+        const kindeServiceModule = await import('../../auth/services/kinde-service.js');
         const kindeService = kindeServiceModule.default ?? kindeServiceModule;
         const result = await (kindeService as { addUserToOrganization: (userId: string, orgId: string, opts: { exclusive: boolean }) => Promise<Record<string, unknown>> }).addUserToOrganization(
           testUser.kindeUserId ?? testUser.userId,
@@ -1309,7 +1309,7 @@ export default async function tenantRoutes(
       }
 
       // Import EmailService
-      const { default: EmailService } = await import('../utils/email.js');
+      const { default: EmailService } = await import('../../../utils/email.js');
       
       // Get tenant details for email
       const tenantDetails = await TenantService.getTenantDetails(tenantId ?? '');

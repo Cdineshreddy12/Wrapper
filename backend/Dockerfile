@@ -4,59 +4,51 @@
 # Development stage (includes dev dependencies for hot reload)
 FROM node:20-alpine AS development
 
-# Set working directory
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+
 WORKDIR /app
 
-# Copy package files first (for layer caching)
-COPY package*.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY backend/package.json backend/
 
-# Install all dependencies (including dev dependencies)
-# Note: No build tools needed - all packages are pure JavaScript
-# If installation fails, uncomment the line below to add build tools
-# RUN apk add --no-cache python3 make g++
-RUN npm ci && npm cache clean --force
+RUN pnpm install --frozen-lockfile --filter wrapper-backend
 
-# Copy application source code
-COPY . .
+COPY backend/ backend/
 
-# Expose port
+WORKDIR /app/backend
+
 EXPOSE 3000
 
-# Use nodemon for development hot reload
-CMD ["npm", "run", "dev"]
+CMD ["pnpm", "run", "dev"]
 
 # Production stage
 FROM node:20-alpine AS production
 
-# Create non-root user for security
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files first (for layer caching)
-COPY package*.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY backend/package.json backend/
 
-# Install production dependencies only
-# Note: No build tools needed - all packages are pure JavaScript (bcryptjs, not bcrypt)
-RUN npm ci --omit=dev && npm cache clean --force
+RUN pnpm install --frozen-lockfile --prod --filter wrapper-backend
 
-# Copy application source code
-COPY . .
+COPY backend/ backend/
 
-# Change ownership to non-root user
+RUN cd backend && pnpm run build
+
 RUN chown -R nodejs:nodejs /app
 
-# Switch to non-root user
 USER nodejs
 
-# Expose port (default 3000, configurable via PORT env var)
+WORKDIR /app/backend
+
 EXPOSE 3000
 
-# Health check endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Start the application
-CMD ["node", "src/app.js"]
+CMD ["node", "dist/bootstrap.js"]

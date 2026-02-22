@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { animate, stagger, timeline } from 'motion';
+import { animate, stagger } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 interface MotionAnimatedTransitionProps {

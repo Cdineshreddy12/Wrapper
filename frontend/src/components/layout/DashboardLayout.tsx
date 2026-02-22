@@ -1,3 +1,4 @@
+import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense } from "react"
 import { ModernSidebar } from "@/components/layout/ModernSidebar"
 import { RouteBreadcrumb } from "@/components/route-breadcrumb"
 import { Separator } from "@/components/ui/separator"
@@ -9,23 +10,31 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { FloatingDock } from "@/components/ui/floating-dock"
 import { BillingStatusNavbar } from "@/components/common/billing/BillingStatusNavbar"
-import { NotificationManager } from "@/features/notifications"
-import { SeasonalCreditsCongratulatoryModal } from "@/features/notifications/SeasonalCreditsCongratulatoryModal"
 import { useSeasonalCreditsCongratulatory } from "@/hooks/useSeasonalCreditsCongratulatory"
 import { Home, Building2, Users, Crown, Shield, Activity, CreditCard, Clock, X, Zap, ChevronRight, Settings, BookOpen } from "lucide-react"
-import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useNavigate, useLocation, useSearch, useParams, Outlet, Link } from "@tanstack/react-router"
 import { useOrganizationHierarchy } from "@/hooks/useOrganizationHierarchy"
-import { Button } from "../ui"
+import { Button } from "@/components/ui/button"
 import { PearlButton } from "@/components/ui/pearl-button"
 import Pattern from "@/components/ui/pattern-background"
 import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/theme/ThemeProvider"
 import { useUserContextSafe } from "@/contexts/UserContextProvider"
 import { useKindeAuth } from "@kinde-oss/kinde-auth-react"
-import { DashboardFeatureTour } from "@/features/dashboard/DashboardFeatureTour"
+
+const DashboardFeatureTour = React.lazy(() =>
+  import("@/features/dashboard/DashboardFeatureTour").then(m => ({ default: m.DashboardFeatureTour }))
+)
+const NotificationManager = React.lazy(() =>
+  import("@/features/notifications/NotificationManager").then(m => ({ default: m.NotificationManager }))
+)
+const SeasonalCreditsCongratulatoryModal = React.lazy(() =>
+  import("@/features/notifications/SeasonalCreditsCongratulatoryModal").then(m => ({ default: m.SeasonalCreditsCongratulatoryModal }))
+)
+const FloatingDock = React.lazy(() =>
+  import("@/components/ui/floating-dock").then(m => ({ default: m.FloatingDock }))
+)
 
 interface TrialInfo {
   plan: string
@@ -552,12 +561,14 @@ export function DashboardLayout() {
     return (
       <div className="min-h-screen relative overflow-hidden">
         {showTour && (
-          <DashboardFeatureTour
-            onComplete={handleTourComplete}
-            onSkip={handleTourSkip}
-            onDismiss={handleTourDismiss}
-            initialStep={getInitialStep()}
-          />
+          <Suspense fallback={null}>
+            <DashboardFeatureTour
+              onComplete={handleTourComplete}
+              onSkip={handleTourSkip}
+              onDismiss={handleTourDismiss}
+              initialStep={getInitialStep()}
+            />
+          </Suspense>
         )}
         {/* Beautiful gradient background for dock mode */}
         <div className={`absolute inset-0 ${glassmorphismEnabled ? 'bg-gradient-to-br from-violet-100/30 via-purple-100/15 to-indigo-100/10 dark:from-slate-950/40 dark:via-slate-900/25 dark:to-slate-950/40 backdrop-blur-3xl' : 'bg-white dark:bg-black'}`}></div>
@@ -663,12 +674,14 @@ export function DashboardLayout() {
             </div>
           </div>
           <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40">
-            <FloatingDock
-              items={floatingDockItems}
-              mode="dock"
-              glassy={glassmorphismEnabled}
-              desktopClassName="mx-auto"
-            />
+            <Suspense fallback={null}>
+              <FloatingDock
+                items={floatingDockItems}
+                mode="dock"
+                glassy={glassmorphismEnabled}
+                desktopClassName="mx-auto"
+              />
+            </Suspense>
           </div>
         </div>
       </div>
@@ -698,12 +711,14 @@ export function DashboardLayout() {
   return (
     <SidebarProvider className="bg-[#2563EB]">
       {showTour && (
-        <DashboardFeatureTour
-          onComplete={handleTourComplete}
-          onSkip={handleTourSkip}
-          onDismiss={handleTourDismiss}
-          initialStep={getInitialStep()}
-        />
+        <Suspense fallback={null}>
+          <DashboardFeatureTour
+            onComplete={handleTourComplete}
+            onSkip={handleTourSkip}
+            onDismiss={handleTourDismiss}
+            initialStep={getInitialStep()}
+          />
+        </Suspense>
       )}
 
       {/* Resume prompt */}
@@ -775,7 +790,9 @@ export function DashboardLayout() {
               <RouteBreadcrumb className="mt-0" />
             </div>
             <div className="ml-auto flex items-center gap-2">
-              <NotificationManager />
+              <Suspense fallback={null}>
+                <NotificationManager />
+              </Suspense>
               <BillingStatusNavbar />
               <ThemeToggle />
             </div>
@@ -788,13 +805,16 @@ export function DashboardLayout() {
         </SidebarInset>
       </BreadcrumbLabelProvider>
 
-      {/* Seasonal Credits Congratulatory Modal */}
-      <SeasonalCreditsCongratulatoryModal
-        isOpen={shouldShowCongratulatory}
-        onClose={dismissCongratulatory}
-        creditsAmount={seasonalCreditsData.totalCredits}
-        campaignName={seasonalCreditsData.campaignName}
-      />
+      {shouldShowCongratulatory && (
+        <Suspense fallback={null}>
+          <SeasonalCreditsCongratulatoryModal
+            isOpen={shouldShowCongratulatory}
+            onClose={dismissCongratulatory}
+            creditsAmount={seasonalCreditsData.totalCredits}
+            campaignName={seasonalCreditsData.campaignName}
+          />
+        </Suspense>
+      )}
     </SidebarProvider>
   )
 }

@@ -1,5 +1,5 @@
 import { useMemo, Suspense } from 'react'
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { Routes, Route, useNavigate } from 'react-router-dom'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 
 // UI
@@ -10,7 +10,8 @@ import { NewVersionBanner } from '@/components/NewVersionBanner'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import { PermissionGuard } from '@/components/auth/PermissionGuard'
-import { OnboardingGuard, OnboardingPageGuard } from '@/features/onboarding/indexOptimized'
+import { OnboardingGuard } from '@/features/onboarding/components/OnboardingGuard'
+import { OnboardingPageGuard } from '@/features/onboarding/components/OnboardingPageGuard'
 import { UserManagementProvider } from '@/features/users/components/context/UserManagementContext'
 import { ErrorBoundary } from '@/errors/ErrorBoundary'
 
@@ -118,11 +119,9 @@ export function AppRoutes() {
 
       <Suspense fallback={<LoadingScreen />}>
         <Routes>
-          {/* Public */}
-          <Route
-            path="/landing"
-            element={authState.isAuthenticated ? <Navigate to="/" replace /> : <Landing />}
-          />
+          {/* Public — Landing is the home page */}
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="/landing" element={<Landing />} />
           <Route path="/products/:productId" element={<ProductPage />} />
           <Route path="/industries/:industrySlug" element={<IndustryPage />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
@@ -132,7 +131,6 @@ export function AppRoutes() {
           <Route path="/pricing" element={<Pricing />} />
 
           {/* Auth */}
-          <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<Login />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/invite/accept" element={<InviteAccept />} />

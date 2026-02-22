@@ -1,29 +1,29 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 
 import { Product } from '../../types';
 import { DynamicIcon } from './Icons';
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
-import { generateDashboardInsight } from '@/services/geminiService';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
+
+const prefersReducedMotion =
+    typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 interface VisualHubProps {
     product: Product;
 }
 
-// Generate deterministic random data based on product ID
 const generateData = (id: number | string) => {
     let seed = 0;
     if (typeof id === 'number') {
         seed = id;
     } else {
-        // Simple hash for string
         for (let i = 0; i < id.length; i++) {
             seed = ((seed << 5) - seed) + id.charCodeAt(i);
-            seed |= 0; // Convert to 32bit integer
+            seed |= 0;
         }
     }
-    const base = Math.abs(seed) % 1000; // Ensure positive and reasonable base
+    const base = Math.abs(seed) % 1000;
     return [
         { name: 'Mon', value: base + Math.random() * 200 },
         { name: 'Tue', value: base + Math.random() * 300 + 100 },
@@ -37,10 +37,10 @@ const generateData = (id: number | string) => {
 
 export const VisualHub: React.FC<VisualHubProps> = ({ product }) => {
     const [insight, setInsight] = useState<string>("");
-    const [loadingInsight, setLoadingInsight] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const [chartData, setChartData] = useState(generateData(product.id));
     const [isMobile, setIsMobile] = useState(false);
+    const rafRef = useRef<number>(0);
 
     useEffect(() => {
         const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -49,53 +49,49 @@ export const VisualHub: React.FC<VisualHubProps> = ({ product }) => {
         return () => window.removeEventListener('resize', checkMobile);
     }, []);
 
-    // Mouse tilt effect logic
+    const disableTilt = isMobile || prefersReducedMotion;
+
     const x = useMotionValue(0);
     const y = useMotionValue(0);
-    const mouseX = useSpring(x, { stiffness: 100, damping: 30 }); // Softer spring
+    const mouseX = useSpring(x, { stiffness: 100, damping: 30 });
     const mouseY = useSpring(y, { stiffness: 100, damping: 30 });
-    // Refined tilt angles for better containment
-    const rotateX = useTransform(mouseY, [-0.5, 0.5], [50, 40]); // Less extreme vertical tilt
-    const rotateZ = useTransform(mouseX, [-0.5, 0.5], [-15, -5]); // Slight rotation
+    const rotateX = useTransform(mouseY, [-0.5, 0.5], [50, 40]);
+    const rotateZ = useTransform(mouseX, [-0.5, 0.5], [-15, -5]);
     const shadowX = useTransform(mouseX, [-0.5, 0.5], [30, -30]);
     const shadowY = useTransform(mouseY, [-0.5, 0.5], [30, -30]);
 
-    const handleMouseMove = (e: React.MouseEvent) => {
-        if (!containerRef.current) return;
-        const rect = containerRef.current.getBoundingClientRect();
-        const width = rect.width;
-        const height = rect.height;
+    const handleMouseMove = useCallback((e: React.MouseEvent) => {
+        if (disableTilt || !containerRef.current) return;
+        if (rafRef.current) return;
+        rafRef.current = requestAnimationFrame(() => {
+            rafRef.current = 0;
+            const rect = containerRef.current!.getBoundingClientRect();
+            x.set((e.clientX - rect.left) / rect.width - 0.5);
+            y.set((e.clientY - rect.top) / rect.height - 0.5);
+        });
+    }, [disableTilt, x, y]);
 
-        // Normalize mouse position from -0.5 to 0.5
-        const mouseXVal = (e.clientX - rect.left) / width - 0.5;
-        const mouseYVal = (e.clientY - rect.top) / height - 0.5;
-        x.set(mouseXVal);
-        y.set(mouseYVal);
-    };
-
-    const handleMouseLeave = () => {
+    const handleMouseLeave = useCallback(() => {
+        if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = 0; }
         x.set(0);
         y.set(0);
-    };
+    }, [x, y]);
+
+    useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
+
+    const insightFallbacks = [
+        "System parameters optimized.",
+        "Real-time data synchronization complete.",
+        "Workflow efficiency increased by 14%.",
+        "Predictive analytics module active.",
+        "Latency reduced by 40%. Velocity nominal.",
+        "Resource allocation optimized. Efficiency at 98%.",
+    ];
 
     useEffect(() => {
         setChartData(generateData(product.id));
-
-        let isMounted = true;
-        const fetchInsight = async () => {
-            setLoadingInsight(true);
-            setInsight("");
-            try {
-                const text = await generateDashboardInsight(product);
-                if (isMounted) setInsight(text);
-            } catch (e) {
-                console.error(e);
-            } finally {
-                if (isMounted) setLoadingInsight(false);
-            }
-        };
-        fetchInsight();
-        return () => { isMounted = false; };
+        const hash = typeof product.id === 'number' ? product.id : product.id.length;
+        setInsight(insightFallbacks[Math.abs(hash) % insightFallbacks.length]);
     }, [product]);
 
     const getFeaturePosition = (index: number, total: number, radius: number) => {
@@ -131,18 +127,19 @@ export const VisualHub: React.FC<VisualHubProps> = ({ product }) => {
             {/* Isometric Plane Wrapper */}
             <motion.div
                 style={{
-                    rotateX,
-                    rotateZ,
+                    ...(disableTilt ? {} : { rotateX, rotateZ }),
                     transformStyle: 'preserve-3d'
                 }}
-                className="relative w-[300px] h-[300px] md:w-[500px] md:h-[500px] lg:w-[600px] lg:h-[600px]" // Increased base size for better impact
+                className="relative w-[300px] h-[300px] md:w-[500px] md:h-[500px] lg:w-[600px] lg:h-[600px] will-change-transform"
             >
 
                 {/* Dynamic Shadow */}
-                <motion.div
-                    style={{ x: shadowX, y: shadowY }}
-                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] h-[90%] bg-indigo-900/10 blur-2xl transform translate-z-[-60px] rounded-[40px]"
-                />
+                {!disableTilt && (
+                    <motion.div
+                        style={{ x: shadowX, y: shadowY }}
+                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] h-[90%] bg-indigo-900/10 blur-2xl transform translate-z-[-60px] rounded-[40px]"
+                    />
+                )}
 
                 {/* Central Dashboard Card */}
                 <motion.div
@@ -243,16 +240,12 @@ export const VisualHub: React.FC<VisualHubProps> = ({ product }) => {
                             className="bg-white rounded-lg p-2.5 border border-slate-100 shadow-sm relative overflow-hidden flex gap-3 items-center"
                         >
                             <div className={`p-1.5 rounded-md bg-${product.color}-50`}>
-                                {loadingInsight ? (
-                                    <Loader2 className={`w-3.5 h-3.5 text-${product.color}-500 animate-spin`} />
-                                ) : (
-                                    <Sparkles className={`w-3.5 h-3.5 text-${product.color}-500`} />
-                                )}
+                                <Sparkles className={`w-3.5 h-3.5 text-${product.color}-500`} />
                             </div>
                             <div className="min-w-0 flex-1">
                                 <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">System Insight</p>
                                 <p className="text-xs text-slate-700 truncate font-medium">
-                                    {loadingInsight ? "Analyzing..." : (insight || "System metrics nominal.")}
+                                    {insight || "System metrics nominal."}
                                 </p>
                             </div>
                         </motion.div>
@@ -290,13 +283,13 @@ export const VisualHub: React.FC<VisualHubProps> = ({ product }) => {
                                 {/* Connecting Line */}
                                 <div className="absolute top-1/2 left-1/2 w-0 h-0 overflow-visible" style={{ transform: 'translateZ(-20px)' }}>
                                     <svg
-                                        width="500"
-                                        height="500"
-                                        viewBox="0 0 500 500"
+                                        width={Math.abs(pos.x) * 2 + 20}
+                                        height={Math.abs(pos.y) * 2 + 20}
+                                        viewBox={`0 0 ${Math.abs(pos.x) * 2 + 20} ${Math.abs(pos.y) * 2 + 20}`}
                                         style={{ transform: 'translate(-50%, -50%)' }}
                                     >
                                         <motion.path
-                                            d={`M 250 250 L ${250 + pos.x} ${250 + pos.y}`}
+                                            d={`M ${Math.abs(pos.x) + 10} ${Math.abs(pos.y) + 10} L ${Math.abs(pos.x) + 10 + pos.x} ${Math.abs(pos.y) + 10 + pos.y}`}
                                             stroke={colorHex}
                                             strokeOpacity="0.15"
                                             strokeWidth="1.5"

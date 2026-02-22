@@ -1,16 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { Suspense, useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from '@tanstack/react-router'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { StackedCardsSection, DemoSection, TrustIndicators } from '@/features/landing/components'
-import { VisualHub } from '@/features/landing/components/VisualHub'
 import { DynamicIcon } from '@/features/landing/components/Icons'
-import { ArrowRight, Play, ChevronRight, FileText, GraduationCap, Users, Zap, Mail, Phone, MapPin, Menu, X } from 'lucide-react'
+import { ArrowRight, Play, ChevronRight, FileText, GraduationCap, Users, Zap, Mail, Phone, MapPin, Menu, X, LayoutDashboard, Rocket } from 'lucide-react'
 import api from '@/lib/api'
 import { Product } from '@/types'
 import toast from 'react-hot-toast'
 
-import { WorkflowVisualizer } from '@/features/landing/components/WorkflowVisualizer'
+const StackedCardsSection = React.lazy(() =>
+  import('@/features/landing/components/StackedCardsSection').then(m => ({ default: m.StackedCardsSection }))
+)
+const WorkflowVisualizer = React.lazy(() =>
+  import('@/features/landing/components/WorkflowVisualizer').then(m => ({ default: m.WorkflowVisualizer }))
+)
+const VisualHub = React.lazy(() =>
+  import('@/features/landing/components/VisualHub').then(m => ({ default: m.VisualHub }))
+)
 import { products } from '@/data/content'
 import { getAllIndustries } from '@/data/industryPages'
 
@@ -18,7 +24,6 @@ import { getAllIndustries } from '@/data/industryPages'
 import {
   Navbar,
   NavBody,
-  NavItems,
   MobileNav,
   NavbarLogo,
   NavbarButton,
@@ -27,16 +32,15 @@ import {
 } from "@/components/ui/resizable-navbar"
 import { LandingFooter } from "@/components/layout/LandingFooter"
 
-// Removed local products definition
-
 const Landing: React.FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const { login, isAuthenticated } = useKindeAuth()
   const [isLoading, setIsLoading] = useState(false)
-  const [showDemo, setShowDemo] = useState(false)
   const [activeProduct, setActiveProduct] = useState<Product>(products[0])
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
   const [showProductsDropdown, setShowProductsDropdown] = useState(false)
   const [showIndustriesDropdown, setShowIndustriesDropdown] = useState(false)
   const productsDropdownTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -69,27 +73,31 @@ const Landing: React.FC = () => {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
 
-  // Check authentication status quietly in background
+  // Check authentication and onboarding status in background
   useEffect(() => {
     const checkAuthenticatedUser = async () => {
       if (isAuthenticated) {
         try {
-          // Quietly check if user is already fully onboarded
-          const response = await api.get('/api/admin/auth-status')
-          const status = response.data
+          const response = await api.get('/admin/auth-status')
+          const auth = response.data?.authStatus
 
-          if (status.hasUser && status.hasTenant) {
-            // User is fully onboarded - redirect to dashboard silently
-            navigate({ to: '/dashboard', replace: true })
+          if (
+            auth?.onboardingCompleted === true ||
+            auth?.needsOnboarding === false ||
+            (auth?.tenantId && auth?.internalUserId)
+          ) {
+            setOnboardingCompleted(true)
           }
-        } catch (error) {
+        } catch {
+          // Silently ignore — buttons will stay in default state
         }
       }
+      setAuthChecked(true)
     }
 
     const timer = setTimeout(checkAuthenticatedUser, 100)
     return () => clearTimeout(timer)
-  }, [isAuthenticated, navigate])
+  }, [isAuthenticated])
 
   // Auto-rotate products every 4 seconds
   useEffect(() => {
@@ -223,13 +231,23 @@ const Landing: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 selection:bg-blue-100 selection:text-blue-900 font-sans overflow-x-hidden relative">
+    <div className="min-h-screen bg-slate-50 text-slate-900 selection:bg-blue-100 selection:text-blue-900 font-sans overflow-x-clip relative">
 
       {/* Ambient Background Effects */}
-      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-        <div className="absolute inset-0 bg-grid opacity-100" />
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden" style={{ contain: 'strict' }}>
+        {/* Crosshair grid — fades out at edges */}
+        <div className="absolute inset-0 bg-grid opacity-40" />
 
-        {/* Dynamic Spotlight - Shifted Left to match content */}
+        {/* Subtle noise texture for premium depth */}
+        <div className="absolute inset-0 bg-noise opacity-[0.018]" />
+
+        {/* Perspective grid floor — receding depth illusion */}
+        <div className="absolute inset-0 bg-grid-perspective opacity-30" />
+
+        {/* Secondary angled grid layer — offset for parallax depth */}
+        <div className="absolute inset-0 bg-grid-fine opacity-20" />
+
+        {/* Dynamic color spotlight (reactive to active product) */}
         <motion.div
           animate={{
             background: `radial-gradient(circle at 60% 40%, ${activeProduct.color === 'blue' ? '#3b82f6' :
@@ -237,9 +255,24 @@ const Landing: React.FC = () => {
                 activeProduct.color === 'purple' ? '#a855f7' :
                   activeProduct.color === 'orange' ? '#f97316' :
                     activeProduct.color === 'indigo' ? '#6366f1' : '#14b8a6'
-              }15 0%, transparent 60%)`
+              }18 0%, transparent 55%)`
           }}
-          className="absolute top-[-20%] right-[-10%] w-[100vw] h-[100vh] blur-[120px] transition-colors duration-1000 ease-in-out"
+          transition={{ duration: 1.2, ease: 'easeInOut' }}
+          className="absolute top-[-20%] right-[-10%] w-[100vw] h-[100vh] blur-[100px] will-change-[background]"
+        />
+
+        {/* Secondary spotlight — bottom left */}
+        <motion.div
+          animate={{
+            background: `radial-gradient(circle at 30% 80%, ${activeProduct.color === 'blue' ? '#6366f1' :
+              activeProduct.color === 'green' ? '#06b6d4' :
+                activeProduct.color === 'purple' ? '#ec4899' :
+                  activeProduct.color === 'orange' ? '#f59e0b' :
+                    activeProduct.color === 'indigo' ? '#8b5cf6' : '#10b981'
+              }10 0%, transparent 50%)`
+          }}
+          transition={{ duration: 1.5, ease: 'easeInOut' }}
+          className="absolute bottom-[-10%] left-[-5%] w-[80vw] h-[70vh] blur-[120px] will-change-[background]"
         />
       </div>
 
@@ -313,23 +346,47 @@ const Landing: React.FC = () => {
             ))}
           </div>
           <div className="flex items-center gap-3 shrink-0 ml-4">
-            <NavbarButton
-              variant="outline"
-              onClick={handleLogin}
-              disabled={isLoading}
-              as="button"
-              className="rounded-xl px-6 py-2.5 cursor-pointer"
-            >
-              {isLoading ? 'Loading...' : 'Sign In'}
-            </NavbarButton>
-            <NavbarButton
-              variant="gradient"
-              onClick={scrollToContactForm}
-              as="button"
-              className="rounded-xl px-6 py-2.5 cursor-pointer"
-            >
-              Schedule the Demo
-            </NavbarButton>
+            {isAuthenticated && onboardingCompleted ? (
+              <NavbarButton
+                variant="gradient"
+                onClick={() => navigate({ to: '/dashboard' })}
+                as="button"
+                className="rounded-xl px-6 py-2.5 cursor-pointer"
+              >
+                <LayoutDashboard className="w-4 h-4 mr-2 inline" />
+                Go to Dashboard
+              </NavbarButton>
+            ) : isAuthenticated && authChecked ? (
+              <NavbarButton
+                variant="gradient"
+                onClick={() => navigate({ to: '/onboarding' })}
+                as="button"
+                className="rounded-xl px-6 py-2.5 cursor-pointer"
+              >
+                <Rocket className="w-4 h-4 mr-2 inline" />
+                Complete Onboarding
+              </NavbarButton>
+            ) : (
+              <>
+                <NavbarButton
+                  variant="outline"
+                  onClick={handleLogin}
+                  disabled={isLoading}
+                  as="button"
+                  className="rounded-xl px-6 py-2.5 cursor-pointer"
+                >
+                  {isLoading ? 'Loading...' : 'Sign In'}
+                </NavbarButton>
+                <NavbarButton
+                  variant="gradient"
+                  onClick={scrollToContactForm}
+                  as="button"
+                  className="rounded-xl px-6 py-2.5 cursor-pointer"
+                >
+                  Schedule the Demo
+                </NavbarButton>
+              </>
+            )}
           </div>
         </NavBody>
 
@@ -394,29 +451,59 @@ const Landing: React.FC = () => {
               </a>
             ))}
             <div className="flex w-full flex-col gap-3">
-              <NavbarButton
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  handleLogin();
-                }}
-                variant="outline"
-                className="w-full rounded-xl cursor-pointer"
-                as="button"
-                disabled={isLoading}
-              >
-                {isLoading ? 'Loading...' : 'Sign In'}
-              </NavbarButton>
-              <NavbarButton
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  scrollToContactForm();
-                }}
-                variant="gradient"
-                className="w-full rounded-xl cursor-pointer"
-                as="button"
-              >
-                Schedule the Demo
-              </NavbarButton>
+              {isAuthenticated && onboardingCompleted ? (
+                <NavbarButton
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    navigate({ to: '/dashboard' });
+                  }}
+                  variant="gradient"
+                  className="w-full rounded-xl cursor-pointer"
+                  as="button"
+                >
+                  <LayoutDashboard className="w-4 h-4 mr-2 inline" />
+                  Go to Dashboard
+                </NavbarButton>
+              ) : isAuthenticated && authChecked ? (
+                <NavbarButton
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    navigate({ to: '/onboarding' });
+                  }}
+                  variant="gradient"
+                  className="w-full rounded-xl cursor-pointer"
+                  as="button"
+                >
+                  <Rocket className="w-4 h-4 mr-2 inline" />
+                  Complete Onboarding
+                </NavbarButton>
+              ) : (
+                <>
+                  <NavbarButton
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      handleLogin();
+                    }}
+                    variant="outline"
+                    className="w-full rounded-xl cursor-pointer"
+                    as="button"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Loading...' : 'Sign In'}
+                  </NavbarButton>
+                  <NavbarButton
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      scrollToContactForm();
+                    }}
+                    variant="gradient"
+                    className="w-full rounded-xl cursor-pointer"
+                    as="button"
+                  >
+                    Schedule the Demo
+                  </NavbarButton>
+                </>
+              )}
             </div>
           </MobileNavMenu>
         </MobileNav>
@@ -430,15 +517,12 @@ const Landing: React.FC = () => {
           <div className="lg:col-span-5 flex flex-col gap-8 lg:pr-6 relative z-20">
 
             <div className="space-y-6 relative">
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 w-fit shadow-sm"
+              <div
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 w-fit shadow-sm animate-[fadeInUp_0.5s_ease-out]"
               >
                 <span className={`w-2 h-2 rounded-full bg-gradient-to-r ${activeProduct.gradient} animate-pulse`}></span>
                 <span className="text-[10px] sm:text-xs font-bold text-slate-600 tracking-wide uppercase">Complete Business Operations Suite</span>
-              </motion.div>
+              </div>
 
               <div className="relative h-[160px] lg:h-[200px] w-full z-20">
                 <AnimatePresence mode="wait">
@@ -464,32 +548,63 @@ const Landing: React.FC = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row items-center mt-24 gap-4 z-20">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={scrollToContactForm}
-                className={`
+              {isAuthenticated && onboardingCompleted ? (
+                <button
+                  onClick={() => navigate({ to: '/dashboard' })}
+                  className={`
                     w-full sm:w-auto relative px-8 py-4 rounded-xl font-bold text-white transition-all duration-300 cursor-pointer
                     bg-gradient-to-r ${activeProduct.gradient} shadow-lg shadow-blue-500/20
-                    overflow-hidden group
+                    overflow-hidden group hover:scale-105 active:scale-95
                   `}
-              >
-                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                <span className="relative flex items-center justify-center gap-2">
-                  Schedule the Demo → <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </span>
-              </motion.button>
+                >
+                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                  <span className="relative flex items-center justify-center gap-2">
+                    <LayoutDashboard className="w-5 h-5" />
+                    Go to Dashboard
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </span>
+                </button>
+              ) : isAuthenticated && authChecked ? (
+                <button
+                  onClick={() => navigate({ to: '/onboarding' })}
+                  className={`
+                    w-full sm:w-auto relative px-8 py-4 rounded-xl font-bold text-white transition-all duration-300 cursor-pointer
+                    bg-gradient-to-r ${activeProduct.gradient} shadow-lg shadow-blue-500/20
+                    overflow-hidden group hover:scale-105 active:scale-95
+                  `}
+                >
+                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                  <span className="relative flex items-center justify-center gap-2">
+                    <Rocket className="w-5 h-5" />
+                    Complete Onboarding
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </span>
+                </button>
+              ) : (
+                <button
+                  onClick={scrollToContactForm}
+                  className={`
+                    w-full sm:w-auto relative px-8 py-4 rounded-xl font-bold text-white transition-all duration-300 cursor-pointer
+                    bg-gradient-to-r ${activeProduct.gradient} shadow-lg shadow-blue-500/20
+                    overflow-hidden group hover:scale-105 active:scale-95
+                  `}
+                >
+                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                  <span className="relative flex items-center justify-center gap-2">
+                    Schedule the Demo
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </span>
+                </button>
+              )}
 
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="w-full sm:w-auto flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 transition-all group shadow-sm"
+              <button
+                className="w-full sm:w-auto flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 transition-all group shadow-sm hover:scale-105 active:scale-95"
               >
                 <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-slate-200 group-hover:text-slate-900 transition-colors">
                   <Play className="w-3 h-3 fill-current ml-0.5 text-slate-700" />
                 </div>
                 <span>Watch 2-Min Demo</span>
-              </motion.button>
+              </button>
             </div>
 
             {/* Product "Launchpad" Selector */}
@@ -498,23 +613,6 @@ const Landing: React.FC = () => {
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Application</p>
                 <span className="text-xs text-slate-400">0{activeProduct.id} / {products.length}</span>
               </div>
-
-              <style>{`
-                .gradient-scrollbar::-webkit-scrollbar {
-                  height: 6px;
-                }
-                .gradient-scrollbar::-webkit-scrollbar-track {
-                  background: rgba(241, 245, 249, 0.5);
-                  border-radius: 4px;
-                }
-                .gradient-scrollbar::-webkit-scrollbar-thumb {
-                  background: linear-gradient(to right, #8bade2ff, #bba0f8ff, #e9a1c5ff);
-                  border-radius: 4px;
-                }
-                .gradient-scrollbar::-webkit-scrollbar-thumb:hover {
-                  background: linear-gradient(to right, #9fbdffff, #bc98faff, rgba(236, 160, 194, 1));
-                }
-              `}</style>
 
               <div ref={scrollContainerRef} className="flex flex-row gap-3 overflow-x-auto gradient-scrollbar pb-4">
                 {products.map((product) => (
@@ -567,7 +665,9 @@ const Landing: React.FC = () => {
           <div className="lg:col-span-7 relative z-10 flex justify-center lg:justify-start items-center h-full min-h-[350px] sm:min-h-[500px]">
             {/* The w-[90%] constrains the width, and lg:-ml-6 pulls the center point to the left */}
             <div className="w-full lg:w-[100%] flex justify-center lg:-ml-6">
-              <VisualHub product={activeProduct} />
+              <Suspense fallback={<div className="min-h-[350px] sm:min-h-[500px]" />}>
+                <VisualHub product={activeProduct} />
+              </Suspense>
             </div>
           </div>
         </div>
@@ -575,21 +675,25 @@ const Landing: React.FC = () => {
 
       {/* Solutions by product — vertical scrolling cards */}
       <section id="solutions">
-        <StackedCardsSection
-          businessApps={products.map(p => ({
-            ...p,
-            icon: (props: any) => <DynamicIcon name={p.iconName} {...props} />
-          }))}
-          activeProduct={activeProduct}
-          onProductChange={setActiveProduct}
-        />
+        <Suspense fallback={<div className="min-h-[500px]" />}>
+          <StackedCardsSection
+            businessApps={products.map(p => ({
+              ...p,
+              icon: (props: any) => <DynamicIcon name={p.iconName} {...props} />
+            }))}
+            activeProduct={activeProduct}
+            onProductChange={setActiveProduct}
+          />
+        </Suspense>
       </section>
-      <section id="workflows" className="py-10 bg-white">
-        <WorkflowVisualizer />
+      <section id="workflows" className="py-10 bg-white" style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 800px' }}>
+        <Suspense fallback={<div className="min-h-[400px]" />}>
+          <WorkflowVisualizer />
+        </Suspense>
       </section>
 
       {/* Industries Section */}
-      <section id="industries" className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-white to-slate-50">
+      <section id="industries" className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-white to-slate-50" style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 900px' }}>
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">
@@ -614,10 +718,9 @@ const Landing: React.FC = () => {
               const topStats = industry.hero.stats.slice(0, 2);
               
               return (
-                <motion.div
+                <div
                   key={industry.slug}
-                  whileHover={{ y: -8, scale: 1.02 }}
-                  className="bg-white rounded-2xl border border-slate-200 shadow-lg hover:shadow-xl transition-all overflow-hidden group cursor-pointer"
+                  className="bg-white rounded-2xl border border-slate-200 shadow-lg hover:shadow-xl hover:-translate-y-2 hover:scale-[1.02] transition-all duration-300 overflow-hidden group cursor-pointer"
                   onClick={() => navigate({ to: `/industries/${industry.slug}` })}
                 >
                   <div className={`h-2 bg-gradient-to-r ${config.gradient}`} />
@@ -644,17 +747,15 @@ const Landing: React.FC = () => {
                       <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                     </button>
                   </div>
-                </motion.div>
+                </div>
               );
             })}
           </div>
         </div>
       </section>
 
-      {/* <TrustIndicators /> */}
-
       {/* Contact Us Section */}
-      <section id="contact" className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+      <section id="contact" className="py-20 px-4 sm:px-6 lg:px-8 bg-white" style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 1000px' }}>
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">
@@ -912,7 +1013,7 @@ const Landing: React.FC = () => {
       </section>
 
       {/* Resources Section */}
-      <section id="resources" className="py-20 px-4 sm:px-6 lg:px-8 bg-slate-50">
+      <section id="resources" className="py-20 px-4 sm:px-6 lg:px-8 bg-slate-50" style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 600px' }}>
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">
@@ -955,176 +1056,6 @@ const Landing: React.FC = () => {
         </div>
       </section>
 
-      {/* Demo Modal - Outside Aurora Background */}
-      <AnimatePresence>
-        {showDemo && (
-          <motion.div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            >
-              <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
-                      <span className="text-white text-lg">📅</span>
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-gray-900">Schedule a Demo</h3>
-                      <p className="text-sm text-gray-600">See Zopkit in action with a personalized demo</p>
-                    </div>
-                  </div>
-                  <motion.button
-                    onClick={() => setShowDemo(false)}
-                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                  >
-                    <span className="text-gray-500">✕</span>
-                  </motion.button>
-                </div>
-              </div>
-
-              <div className="p-6">
-                <form className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Full Name *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        placeholder="John Smith"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Email Address *
-                      </label>
-                      <input
-                        type="email"
-                        required
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        placeholder="john@company.com"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Company Name *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        placeholder="Acme Corporation"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Phone Number
-                      </label>
-                      <input
-                        type="tel"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        placeholder="+1 (555) 123-4567"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Job Title *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        placeholder="CEO, CTO, Manager..."
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Company Size
-                      </label>
-                      <select className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white">
-                        <option value="">Select company size</option>
-                        <option value="1-10">1-10 employees</option>
-                        <option value="11-50">11-50 employees</option>
-                        <option value="51-200">51-200 employees</option>
-                        <option value="201-1000">201-1000 employees</option>
-                        <option value="1000+">1000+ employees</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Preferred Demo Time
-                    </label>
-                    <select className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white">
-                      <option value="">Select preferred time</option>
-                      <option value="morning">Morning (9 AM - 12 PM)</option>
-                      <option value="afternoon">Afternoon (12 PM - 5 PM)</option>
-                      <option value="evening">Evening (5 PM - 8 PM)</option>
-                      <option value="flexible">Flexible</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Additional Comments
-                    </label>
-                    <textarea
-                      rows={3}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-none"
-                      placeholder="Tell us about your specific needs or questions..."
-                    />
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row gap-3 sm:space-x-4 pt-4">
-                    <button
-                      type="button"
-                      onClick={() => setShowDemo(false)}
-                      className="flex-1 px-6 py-3 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
-                    >
-                      Cancel
-                    </button>
-
-                    <button
-                      type="submit"
-                      className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-                    >
-                      Schedule Demo
-                    </button>
-                  </div>
-
-                  <p className="text-xs text-gray-500 text-center mt-4">
-                    By submitting this form, you agree to receive communication about Zopkit's services.
-                    We respect your privacy and will never share your information.
-                  </p>
-                </form>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
       <LandingFooter />
     </div>
   )

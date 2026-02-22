@@ -8,7 +8,7 @@
     "dev": "tsx watch src/bootstrap.ts",
     "start": "node dist/bootstrap.js",
     "start:dev": "tsx src/bootstrap.ts",
-    "install:full": "rm -rf node_modules && npm install",
+    "install:full": "rm -rf node_modules && pnpm install",
     "start:check": "node src/scripts/check-startup.mjs",
     "dev:check": "node src/scripts/check-startup.mjs",
     "test:db": "node src/scripts/test-db.mjs",
@@ -89,9 +89,6 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^1.0.0"
-  },
-  "overrides": {
-    "ajv": "^8.12.0"
   },
   "engines": {
     "node": ">=18"

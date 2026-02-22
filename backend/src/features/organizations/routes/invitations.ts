@@ -881,7 +881,7 @@ export default async function invitationRoutes(
       // Resend invitation email
       try {
         // Import EmailService dynamically to avoid circular dependencies
-        const EmailService = (await import('../utils/email.js')).default;
+        const EmailService = (await import('../../../utils/email.js')).default;
         
         // Regenerate invitation URL to ensure it uses the correct subdomain
         const invitationUrl = await generateInvitationUrl(invitation.invitation.invitationToken, request, tenant.tenantId);
@@ -1350,7 +1350,7 @@ export default async function invitationRoutes(
       // Send invitation email
       try {
         // Import EmailService dynamically to avoid circular dependencies
-        const EmailService = (await import('../utils/email.js')).default;
+        const EmailService = (await import('../../../utils/email.js')).default;
         
         await EmailService.sendUserInvitation({
           email: newInvitation.email,
@@ -1720,7 +1720,7 @@ export default async function invitationRoutes(
       console.log(`📧 Preparing to send multi-entity invitation email to ${newInvitation.email}`);
       try {
         // Import EmailService dynamically to avoid circular dependencies
-        const EmailService = (await import('../utils/email.js')).default;
+        const EmailService = (await import('../../../utils/email.js')).default;
 
         // Extract organization names, locations, and role names from validated entities
         const organizations = [];
@@ -1937,7 +1937,7 @@ export default async function invitationRoutes(
       }
 
       // Import EmailService
-      const EmailService = (await import('../utils/email.js')).default;
+      const EmailService = (await import('../../../utils/email.js')).default;
 
       console.log('📧 Testing email service with:', {
         provider: EmailService.emailProvider,

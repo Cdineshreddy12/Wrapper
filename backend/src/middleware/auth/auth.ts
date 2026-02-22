@@ -7,7 +7,7 @@ import { RequestAnalyzer } from './request-analyzer.js';
 import { shouldLogVerbose } from '../../utils/verbose-log.js';
 import { getUserPermissions, checkPermissions } from './permission-middleware.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import type { UserContext, LegacyUser, OnboardingStatus } from '../types/common.js';
+import type { UserContext, LegacyUser, OnboardingStatus } from '../../types/common.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 

@@ -1,16 +1,11 @@
-import React, { useRef } from 'react';
-import { motion, useScroll, useTransform, MotionValue, useMotionValue, useSpring, AnimatePresence } from 'framer-motion';
+import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Check, ArrowRight, Activity, TrendingUp, Calendar, DollarSign, Users, Award, Layers, BarChart3, PieChart, List, FileText, MapPin, UserPlus, Share2, Code, Layout, Globe, Zap, Box } from 'lucide-react';
 import { BusinessApp, Product } from '../../types';
 
 interface CardProps {
   app: BusinessApp;
   index: number;
-  total: number;
-  scrollYProgress: MotionValue<number>;
-  positionRange: number[];
-  targetScale: number;
-  isLast: boolean;
   isActive: boolean;
   onClick: () => void;
 }
@@ -192,15 +187,14 @@ const KanbanVisual = ({ color = 'blue' }: { color?: string }) => {
         <div key={i} className="flex-1 bg-slate-50/80 rounded-xl border border-slate-100 p-2 flex flex-col gap-2" style={{ transform: `translateZ(${10 + i * 5}px)` }}>
           <div className="text-[10px] font-bold text-slate-400 uppercase px-1">{col}</div>
           {[1, 2].map((card) => (
-            <motion.div
+            <div
               key={card}
-              whileHover={{ scale: 1.05, y: -2 }}
-              className="bg-white p-2 rounded-lg shadow-sm border border-slate-100"
+              className="bg-white p-2 rounded-lg shadow-sm border border-slate-100 hover:scale-105 hover:-translate-y-0.5 transition-transform"
             >
               <div className={`w-8 h-1 rounded-full ${theme.bgDark} mb-2 opacity-50`}></div>
               <div className="h-1.5 w-full bg-slate-200 rounded-full mb-1"></div>
               <div className="h-1.5 w-2/3 bg-slate-100 rounded-full"></div>
-            </motion.div>
+            </div>
           ))}
         </div>
       ))}
@@ -243,10 +237,9 @@ const DocumentVisual = ({ color = 'blue' }: { color?: string }) => {
   const theme = THEMES[color] || THEMES['blue'];
   return (
     <div className="w-full h-full p-8 flex items-center justify-center preserve-3d">
-      <motion.div
-        className="w-48 bg-white rounded-xl shadow-xl border border-slate-100 p-6 relative"
+      <div
+        className="w-48 bg-white rounded-xl shadow-xl border border-slate-100 p-6 relative hover:scale-105 hover:-rotate-2 transition-transform"
         style={{ transform: 'translateZ(20px)' }}
-        whileHover={{ scale: 1.05, rotate: -2 }}
       >
         <div className={`w-10 h-10 rounded-lg ${theme.bgLight} flex items-center justify-center mb-4`}>
           <FileText className={`w-5 h-5 ${theme.textDark}`} />
@@ -262,7 +255,7 @@ const DocumentVisual = ({ color = 'blue' }: { color?: string }) => {
             <Check size={12} />
           </div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 };
@@ -621,71 +614,21 @@ const getModuleVisual = (productName: string, moduleName: string, color: string)
 
 // --- MAIN CARD COMPONENT ---
 
-export const StackedCard: React.FC<CardProps> = ({
+const StackedCard: React.FC<CardProps> = ({
   app,
   index,
-  total,
-  scrollYProgress,
-  positionRange,
-  targetScale,
-  isLast,
   isActive,
   onClick
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const [activeModule, setActiveModule] = React.useState<string | null>(null);
-
-  // -- TINT / OVERLAY LOGIC --
-  const nextCardStart = isLast ? 1 : (index + 1) * (1 / total);
-  const overlayStart = Math.max(0, nextCardStart - 0.05);
-  const overlayEnd = Math.min(1, nextCardStart + 0.1);
-  const overlayOpacity = useTransform(
-    scrollYProgress,
-    [overlayStart, overlayEnd],
-    [0, isLast ? 0 : 0.6]
-  );
-  const scale = useTransform(
-    scrollYProgress,
-    positionRange,
-    [1, isLast ? 1 : targetScale]
-  );
-
-  const parallaxRange = [index * (1 / total), (index + 1) * (1 / total)];
-  const textParallax = useTransform(scrollYProgress, parallaxRange, [0, -20]);
-  const visualParallax = useTransform(scrollYProgress, parallaxRange, [0, -40]);
 
   const Icon = app.icon;
   const theme = THEMES[app.color] || THEMES['blue'];
-
-  // Mouse tilt effect logic
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-  const mouseX = useSpring(x, { stiffness: 150, damping: 20 });
-  const mouseY = useSpring(y, { stiffness: 150, damping: 20 });
-
-  const rotateX = useTransform(mouseY, [-0.5, 0.5], [15, -15]);
-  const rotateY = useTransform(mouseX, [-0.5, 0.5], [-15, 15]);
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const width = rect.width;
-    const height = rect.height;
-    const mouseXVal = (e.clientX - rect.left) / width - 0.5;
-    const mouseYVal = (e.clientY - rect.top) / height - 0.5;
-    x.set(mouseXVal);
-    y.set(mouseYVal);
-  };
-
-  const handleMouseLeave = () => {
-    x.set(0);
-    y.set(0);
-  };
 
   const renderVisual = () => {
     if (activeModule) {
       return getModuleVisual(app.name, activeModule, app.color);
     }
-    // Default fallback to first feature or specific visual
     const firstFeature = app.features[0];
     const firstFeatureName = typeof firstFeature === 'string' ? firstFeature : firstFeature.title;
     return getModuleVisual(app.name, firstFeatureName, app.color);
@@ -693,33 +636,16 @@ export const StackedCard: React.FC<CardProps> = ({
 
   return (
     <div
-      ref={containerRef}
-      className="h-screen flex items-center justify-center sticky top-0 py-6"
+      className="h-screen sticky top-0 flex items-center justify-center px-4"
+      style={{ zIndex: index + 1 }}
     >
-      <motion.div
-        style={{
-          scale,
-          zIndex: index,
-          transformOrigin: "top center",
-        }}
-        className="relative w-full max-w-[95vw] lg:max-w-[1400px] h-[90vh] sm:h-[85vh] min-h-[600px] flex flex-col will-change-transform"
-      >
-
-        <div className={`relative w-full h-full bg-white rounded-[2rem] shadow-2xl overflow-hidden border border-slate-200 flex flex-col lg:flex-row isolate ${isLast ? 'shadow-none' : ''} cursor-pointer transition-all duration-300 ${isActive ? 'ring-2 ring-blue-500 shadow-blue-500/20' : 'hover:shadow-xl hover:shadow-slate-500/10'}`} onClick={onClick}>
-
-          {/* Dimming Overlay */}
-          <motion.div
-            style={{ opacity: overlayOpacity }}
-            className="absolute inset-0 bg-slate-950 pointer-events-none z-50 rounded-[2rem]"
-            aria-hidden="true"
-          />
-
+      <div className="w-full max-w-[95vw] lg:max-w-[1400px]">
+        <div
+          className={`relative bg-white rounded-[2rem] shadow-[0_-8px_30px_rgba(0,0,0,0.08)] overflow-hidden border border-slate-200 flex flex-col lg:flex-row cursor-pointer transition-shadow duration-300 ${isActive ? 'ring-2 ring-blue-500 shadow-blue-500/20' : 'hover:shadow-xl hover:shadow-slate-500/10'}`}
+          onClick={onClick}
+        >
           {/* --- LEFT SIDE: Content --- */}
-          <motion.div
-            style={{ y: textParallax }}
-            className="w-full lg:w-[40%] p-6 md:p-8 lg:p-10 flex flex-col relative z-20 bg-white border-r border-slate-100"
-          >
-            {/* Header Pill */}
+          <div className="w-full lg:w-[40%] p-6 md:p-8 lg:p-10 flex flex-col relative bg-white border-r border-slate-100">
             <div className="flex items-center space-x-3 mb-4">
               <div className={`w-10 h-10 rounded-xl ${theme.bgMedium} flex items-center justify-center`}>
                 <Icon className={`w-5 h-5 ${theme.textDark}`} />
@@ -737,9 +663,7 @@ export const StackedCard: React.FC<CardProps> = ({
               {app.tagline}
             </p>
 
-            {/* Clickable Modules List */}
-            <div className="flex-1 overflow-y-auto pr-2 space-y-2 no-scrollbar">
-              <style>{`.no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }`}</style>
+            <div className="max-h-[280px] overflow-y-auto pr-2 space-y-2 no-scrollbar">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Available Modules</p>
               {app.features.map((feature: string | { title: string }, i: number) => {
                 const featureName = typeof feature === 'string' ? feature : feature.title;
@@ -782,73 +706,29 @@ export const StackedCard: React.FC<CardProps> = ({
                 Know More <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
             </div>
-          </motion.div>
+          </div>
 
           {/* --- RIGHT SIDE: Dynamic Visuals --- */}
-          <div
-            className={`w-full lg:w-[60%] relative overflow-hidden bg-white flex items-center justify-center p-6 md:p-12 perspective-1000`}
-            onMouseMove={handleMouseMove}
-            onMouseLeave={handleMouseLeave}
-          >
-            {/* Background Glows */}
-            <div className="absolute inset-0 pointer-events-none">
-              <motion.div
-                style={{ x: useTransform(mouseX, [-0.5, 0.5], [-20, 20]), y: useTransform(mouseY, [-0.5, 0.5], [-20, 20]) }}
-                className="absolute top-0 right-0 w-[500px] h-[500px] bg-white/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2"
-              />
-              <motion.div
-                style={{ x: useTransform(mouseX, [-0.5, 0.5], [20, -20]), y: useTransform(mouseY, [-0.5, 0.5], [20, -20]) }}
-                className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-black/5 rounded-full blur-[80px] translate-y-1/2 -translate-x-1/2"
-              />
-            </div>
-
-            {/* Visual Container with Parallax & Tilt */}
-            <motion.div
-              style={{
-                y: visualParallax,
-                rotateX,
-                rotateY,
-                transformStyle: 'preserve-3d'
-              }}
-              className="relative w-full max-w-2xl aspect-[16/10] z-10"
-            >
-              {/* Glass Card Container */}
-              <div
-                className="w-full h-full bg-white/40 backdrop-blur-xl rounded-2xl border border-white/40 shadow-2xl overflow-hidden relative preserve-3d"
-                style={{ transform: 'translateZ(0)' }}
-              >
-                {/* Inner Highlight Border */}
-                <div className="absolute inset-0 border border-white/50 rounded-2xl pointer-events-none z-50"></div>
-
-                {/* Render Specific App Visual */}
+          <div className="w-full lg:w-[60%] relative overflow-hidden bg-white flex items-center justify-center p-6 md:p-12">
+            <div className="relative w-full max-w-2xl aspect-[16/10]">
+              <div className="w-full h-full bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden relative">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={activeModule || 'default'}
-                    initial={{ opacity: 0, scale: 0.95 }}
+                    initial={{ opacity: 0, scale: 0.97 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 1.05 }}
-                    transition={{ duration: 0.3 }}
+                    exit={{ opacity: 0, scale: 1.03 }}
+                    transition={{ duration: 0.25 }}
                     className="w-full h-full"
                   >
                     {renderVisual()}
                   </motion.div>
                 </AnimatePresence>
-
               </div>
-
-              {/* Decorative Back Layer for depth */}
-              <motion.div
-                style={{
-                  rotateX: useTransform(rotateX, v => -v * 0.5),
-                  rotateY: useTransform(rotateY, v => -v * 0.5),
-                  z: -50
-                }}
-                className="absolute -inset-3 bg-white/10 rounded-[2rem] -z-10 blur-md transform translate-y-4 scale-95"
-              ></motion.div>
-            </motion.div>
+            </div>
           </div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 };
@@ -864,41 +744,16 @@ export const StackedCardsSection: React.FC<StackedCardsSectionProps> = ({
   activeProduct,
   onProductChange
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const { scrollYProgress } = useScroll({
-    target: containerRef,
-    offset: ['start start', 'end end']
-  });
-
   const totalCards = businessApps.length;
-
-  // Increase height slightly to ensure smooth scrolling
-  const totalHeight = `${totalCards * 100}vh`;
 
   return (
     <div className="bg-slate-50 relative z-10">
+      {/* Each card is 100vh sticky. Container height = cards * 100vh gives scroll distance. */}
       <div
-        ref={containerRef}
-        className="relative px-4"
-        style={{ height: totalHeight }}
+        className="relative"
+        style={{ height: `${totalCards * 100}vh` }}
       >
         {businessApps.map((app, index) => {
-          // Logic for stacking scale:
-          // Last card (top of stack) stays at scale 1.
-          // Bottom card scales down the most.
-          const targetScale = 1 - ((totalCards - 1 - index) * 0.05);
-
-          // Logic for animation timing:
-          // Card i animates (recedes) while Card i+1 is scrolling up to cover it.
-          // Card i+1 covers Card i during the scroll interval [i/total, (i+1)/total].
-          const rangeStart = index * (1 / totalCards);
-          const rangeEnd = (index + 1) * (1 / totalCards);
-
-          // The last card should not recede/dim, so we pass a dummy range or handle in component
-          const isLast = index === totalCards - 1;
-
-          // Convert BusinessApp to Product for comparison
           const product: Product = {
             id: app.id,
             name: app.name,
@@ -915,20 +770,12 @@ export const StackedCardsSection: React.FC<StackedCardsSectionProps> = ({
               key={app.id}
               app={app}
               index={index}
-              total={totalCards}
-              scrollYProgress={scrollYProgress}
-              positionRange={[rangeStart, rangeEnd]}
-              targetScale={targetScale}
-              isLast={isLast}
               isActive={activeProduct ? activeProduct.id === app.id : false}
               onClick={() => onProductChange?.(product)}
             />
           );
         })}
       </div>
-
-      {/* Spacer to allow the final card to be viewed comfortably */}
-      <div className="h-[20vh]" />
     </div>
   );
 };

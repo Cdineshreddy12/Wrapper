@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from '@tanstack/react-router';
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react';
 import useSilentAuth from '@/hooks/useSilentAuth';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import api from '@/lib/api';
 import { logger } from '@/lib/logger';
 
 interface SilentAuthGuardProps {
@@ -40,7 +39,14 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
     '/onboarding',
     '/organization-setup',
     '/simple-onboarding',
-    '/invite-accept',
+    '/invite/accept',
+    '/pricing',
+    '/privacy',
+    '/terms',
+    '/cookies',
+    '/security',
+    '/products',
+    '/industries',
   ];
 
   const isPublicPath = publicPaths.some(path => 
@@ -130,51 +136,23 @@ export const SilentAuthGuard: React.FC<SilentAuthGuardProps> = ({ children }) =>
   ]);
 
   // Handle authenticated user routing
-  const handleAuthenticatedUser = async (authState: any) => {
+  const handleAuthenticatedUser = async (_authState: any) => {
     try {
       logger.debug('🔄 SilentAuthGuard: Handling authenticated user...');
 
-      // If already on a protected route, stay there
-      if (!isPublicPath) {
-        logger.debug('ℹ️ SilentAuthGuard: Already on protected route, staying');
+      // Never auto-redirect from public paths — the landing page handles
+      // showing the correct CTA (Dashboard / Onboarding / Sign In).
+      if (isPublicPath) {
+        logger.debug('ℹ️ SilentAuthGuard: On public path, staying put (landing handles CTA)');
         setInitializationComplete(true);
         return;
       }
 
-      // Check if user needs onboarding using enhanced api.ts
-      const response = await api('/api/admin/auth-status', {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.status === 200) {
-        const status = response.data;
-        
-        if (status.hasUser && status.hasTenant && status.isOnboarded) {
-          // User is fully set up, redirect to dashboard
-          logger.debug('✅ SilentAuthGuard: User fully onboarded, redirecting to dashboard');
-          navigate({ to: '/dashboard', replace: true });
-        } else if (status.authStatus?.onboardingCompleted === true || 
-                   status.authStatus?.userType === 'INVITED_USER' ||
-                   status.authStatus?.isInvitedUser === true) {
-          // INVITED USERS: Always go to dashboard (they skip onboarding)
-          logger.debug('✅ SilentAuthGuard: Invited user detected, redirecting to dashboard (skipping onboarding)');
-          navigate({ to: '/dashboard', replace: true });
-        } else {
-          // User needs onboarding
-          logger.debug('ℹ️ SilentAuthGuard: User needs onboarding');
-          if (location.pathname === '/') {
-            navigate({ to: '/landing', replace: true });
-          }
-        }
-      } else {
-        logger.debug('ℹ️ SilentAuthGuard: Could not check auth status, staying on current page');
-      }
-
+      // If already on a protected route, stay there
+      logger.debug('ℹ️ SilentAuthGuard: Already on protected route, staying');
+      setInitializationComplete(true);
     } catch (error) {
       logger.error('❌ SilentAuthGuard: Error handling authenticated user:', error);
-    } finally {
       setInitializationComplete(true);
     }
   };

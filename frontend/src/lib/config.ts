@@ -54,7 +54,7 @@ export const config: Config = {
   ),
   FULL_LOGO_URL: getEnvVar(
     'VITE_FULL_LOGO_URL',
-    'https://res.cloudinary.com/dr9vzaa7u/image/upload/v1765126845/Zopkit_Full_Logo_kezq1b.jpg',
+    'https://res.cloudinary.com/dr9vzaa7u/image/upload/v1771698937/Zopkit-full_n7lm0f.png',
   ),
 };
 

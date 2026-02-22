@@ -113,7 +113,7 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
-      sourcemap: true,
+      sourcemap: mode !== 'production',
       rollupOptions: {
         output: {
           manualChunks: {
@@ -124,8 +124,9 @@ export default defineConfig(({ mode }) => {
             auth: ['@kinde-oss/kinde-auth-react'],
             forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
             recharts: ['recharts'],
-            motion: ['framer-motion', 'motion'],
+            motion: ['framer-motion'],
             tsparticles: ['@tsparticles/engine', '@tsparticles/react', '@tsparticles/slim'],
+            reactflow: ['reactflow'],
           },
         },
       },
@@ -146,7 +147,6 @@ export default defineConfig(({ mode }) => {
         '@kinde-oss/kinde-auth-react',
         'canvas-confetti',
         'sonner',
-        'next-themes',
       ],
     },
     define: {

@@ -360,7 +360,7 @@ export class ApplicationIsolationMiddleware {
       internalUserId: userContext.internalUserId ?? null,
       tenantId: userContext.tenantId ?? null
     };
-    return await applicationDataIsolationService.getUserCompleteAccessProfile(ctx as import('../services/application-data-isolation-service.js').UserContext);
+    return await applicationDataIsolationService.getUserCompleteAccessProfile(ctx as import('../../services/application-data-isolation-service.js').UserContext);
   }
 }
 
