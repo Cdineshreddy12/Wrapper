@@ -105,7 +105,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching global operation costs:', error);
+      request.log.error(error, 'Error fetching global operation costs:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to fetch global operation costs'
@@ -213,7 +213,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching tenant operation costs:', error);
+      request.log.error(error, 'Error fetching tenant operation costs:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to fetch tenant operation costs'
@@ -316,7 +316,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching operation costs:', error);
+      request.log.error(error, 'Error fetching operation costs:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to fetch operation costs'
@@ -512,7 +512,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
     } catch (err: unknown) {
       const error = err as Error & { code?: string };
       console.error('❌ Error creating operation cost:', err);
-      request.log.error('Error creating operation cost:', error);
+      request.log.error(error, 'Error creating operation cost:');
       
       let errorMessage = 'Failed to create operation cost';
       if (error.code === '23505') {
@@ -605,7 +605,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error updating operation cost:', error);
+      request.log.error(error, 'Error updating operation cost:');
       return reply.code(500).send({ 
         success: false, 
         error: 'Failed to update operation cost' 
@@ -656,7 +656,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error deleting operation cost:', error);
+      request.log.error(error, 'Error deleting operation cost:');
       return reply.code(500).send({ 
         success: false, 
         error: 'Failed to delete operation cost' 
@@ -758,7 +758,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching operation cost analytics:', error);
+      request.log.error(error, 'Error fetching operation cost analytics:');
       return reply.code(500).send({ 
         success: false, 
         error: 'Failed to fetch operation cost analytics' 
@@ -840,7 +840,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching templates:', error);
+      request.log.error(error, 'Error fetching templates:');
       return reply.code(500).send({ 
         success: false, 
         error: 'Failed to fetch templates' 
@@ -963,7 +963,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error applying template:', error);
+      request.log.error(error, 'Error applying template:');
       return reply.code(500).send({ 
         success: false, 
         error: 'Failed to apply template' 
@@ -1003,7 +1003,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       return csv;
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error exporting operation costs:', error);
+      request.log.error(error, 'Error exporting operation costs:');
       return reply.code(500).send({ 
         success: false, 
         error: 'Failed to export operation costs' 

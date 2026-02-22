@@ -59,7 +59,7 @@ export default async function statusManagementRoutes(
       return reply.redirect(redirectUrl);
 
     } catch (err: unknown) {
-      request.log.error('Error handling success callback:', err);
+      request.log.error(err, 'Error handling success callback:');
       const errorUrl = `${process.env.FRONTEND_URL}/onboarding/error?message=payment_failed`;
       return reply.redirect(errorUrl);
     }
@@ -151,7 +151,7 @@ export default async function statusManagementRoutes(
       };
 
     } catch (err: unknown) {
-      request.log.error('Error sending team invitations:', err);
+      request.log.error(err, 'Error sending team invitations:');
       return reply.code(500).send({ error: 'Failed to send invitations' });
     }
   });
@@ -176,7 +176,7 @@ export default async function statusManagementRoutes(
       };
 
     } catch (err: unknown) {
-      request.log.error('Error completing onboarding:', err);
+      request.log.error(err, 'Error completing onboarding:');
       return reply.code(500).send({ error: 'Failed to complete onboarding' });
     }
   });
@@ -363,7 +363,7 @@ export default async function statusManagementRoutes(
     } catch (err: unknown) {
       const error = err as Error;
       console.error('❌ Onboarding status error:', error.message);
-      request.log.error('Error getting onboarding status:', error);
+      request.log.error(error, 'Error getting onboarding status:');
       return reply.code(500).send({ error: 'Failed to get onboarding status' });
     }
   });
@@ -477,7 +477,7 @@ export default async function statusManagementRoutes(
       });
 
     } catch (err: unknown) {
-      request.log.error('Error getting onboarding data by email:', err);
+      request.log.error(err, 'Error getting onboarding data by email:');
       return reply.code(500).send({ error: 'Failed to get onboarding data' });
     }
   });

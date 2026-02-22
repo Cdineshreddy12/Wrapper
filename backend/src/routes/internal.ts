@@ -63,7 +63,7 @@ export default async function internalRoutes(fastify: FastifyInstance, _options?
         };
       } catch (err: unknown) {
         const error = err as Error;
-        fastify.log.error('Error fetching tenant config:', error);
+        fastify.log.error(error, 'Error fetching tenant config:');
         return reply.code(500).send({ error: 'Failed to fetch tenant config' });
       }
     });
@@ -131,7 +131,7 @@ export default async function internalRoutes(fastify: FastifyInstance, _options?
         };
       } catch (err: unknown) {
         const error = err as Error;
-        fastify.log.error('Error validating access:', error);
+        fastify.log.error(error, 'Error validating access:');
         return reply.code(500).send({ error: 'Failed to validate access' });
       }
     });
@@ -177,7 +177,7 @@ export default async function internalRoutes(fastify: FastifyInstance, _options?
         };
       } catch (err: unknown) {
         const error = err as Error;
-        fastify.log.error('Error fetching feature flags:', error);
+        fastify.log.error(error, 'Error fetching feature flags:');
         return reply.code(500).send({ error: 'Failed to fetch feature flags' });
       }
     });
@@ -216,7 +216,7 @@ export default async function internalRoutes(fastify: FastifyInstance, _options?
         };
       } catch (err: unknown) {
         const error = err as Error;
-        fastify.log.error('Error syncing data:', error);
+        fastify.log.error(error, 'Error syncing data:');
         return reply.code(500).send({ error: 'Failed to sync data' });
       }
     });
@@ -436,7 +436,7 @@ export default async function internalRoutes(fastify: FastifyInstance, _options?
 
       } catch (err: unknown) {
         const error = err as Error;
-        fastify.log.error('Error fetching user permissions:', error);
+        fastify.log.error(error, 'Error fetching user permissions:');
         return reply.code(500).send({ 
           error: 'Failed to fetch user permissions',
           message: error.message
@@ -497,7 +497,7 @@ export default async function internalRoutes(fastify: FastifyInstance, _options?
 
       } catch (err: unknown) {
         const error = err as Error;
-        fastify.log.error('Error validating session:', error);
+        fastify.log.error(error, 'Error validating session:');
         return { valid: false, error: 'Validation failed' };
       }
     });
@@ -553,7 +553,7 @@ export default async function internalRoutes(fastify: FastifyInstance, _options?
 
       } catch (err: unknown) {
         const error = err as Error;
-        fastify.log.error('Error validating SSO token:', error);
+        fastify.log.error(error, 'Error validating SSO token:');
         return reply.code(500).send({ 
           error: 'Failed to validate SSO token',
           message: error.message
@@ -573,7 +573,7 @@ export default async function internalRoutes(fastify: FastifyInstance, _options?
         };
       } catch (err: unknown) {
         const error = err as Error;
-        fastify.log.error('Error getting cache stats:', error);
+        fastify.log.error(error, 'Error getting cache stats:');
         return reply.code(500).send({ error: 'Failed to get cache stats' });
       }
     });
@@ -607,7 +607,7 @@ export default async function internalRoutes(fastify: FastifyInstance, _options?
         };
       } catch (err: unknown) {
         const error = err as Error;
-        fastify.log.error('Error invalidating cache:', error);
+        fastify.log.error(error, 'Error invalidating cache:');
         return reply.code(500).send({ error: 'Failed to invalidate cache' });
       }
     });
@@ -645,7 +645,7 @@ export default async function internalRoutes(fastify: FastifyInstance, _options?
         };
       } catch (err: unknown) {
         const error = err as Error;
-        fastify.log.error('Error warming up cache:', error);
+        fastify.log.error(error, 'Error warming up cache:');
         return reply.code(500).send({ error: 'Failed to warm up cache' });
       }
     });
@@ -702,7 +702,7 @@ export default async function internalRoutes(fastify: FastifyInstance, _options?
 
       } catch (err: unknown) {
         const error = err as Error;
-        fastify.log.error('Error fetching user tools:', error);
+        fastify.log.error(error, 'Error fetching user tools:');
         return reply.code(500).send({ error: 'Failed to fetch user tools' });
       }
     });
@@ -757,7 +757,7 @@ export default async function internalRoutes(fastify: FastifyInstance, _options?
       } catch (err: unknown) {
         const error = err as Error;
         console.error('❌ Service authentication error:', error);
-        fastify.log.error('Service authentication error:', error);
+        fastify.log.error(error, 'Service authentication error:');
         return reply.code(500).send({ error: 'Failed to authenticate service' });
       }
     });

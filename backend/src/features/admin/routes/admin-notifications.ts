@@ -84,7 +84,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       try {
         broadcastToTenant(tenantIdStr, notification);
       } catch (wsError) {
-        request.log.warn('WebSocket broadcast failed:', wsError);
+        request.log.warn(wsError, 'WebSocket broadcast failed:');
         // Don't fail the request if WebSocket fails
       }
 
@@ -95,7 +95,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error sending notification:', error);
+      request.log.error(error, 'Error sending notification:');
       reply.code(500).send({
         success: false,
         error: 'Failed to send notification',
@@ -136,7 +136,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
             actionLabel: baseNotificationData.actionLabel || template.actionLabel
           };
         } catch (err: unknown) {
-          request.log.warn('Failed to load template, using provided data:', err);
+          request.log.warn(err, 'Failed to load template, using provided data:');
         }
       }
 
@@ -306,11 +306,11 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
             try {
             broadcastToTenant(notification.tenantId, notification);
           } catch (wsError) {
-            request.log.warn(`WebSocket broadcast failed for tenant ${notification.tenantId}:`, wsError);
+            request.log.warn(wsError, `WebSocket broadcast failed for tenant ${notification.tenantId}:`);
           }
         });
       } catch (wsError) {
-        request.log.warn('WebSocket broadcasting failed:', wsError);
+        request.log.warn(wsError, 'WebSocket broadcasting failed:');
         // Don't fail the request if WebSocket fails
       }
 
@@ -325,7 +325,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error bulk sending notifications:', error);
+      request.log.error(error, 'Error bulk sending notifications:');
       reply.code(500).send({
         success: false,
         error: 'Failed to bulk send notifications',
@@ -417,7 +417,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching sent notifications:', error);
+      request.log.error(error, 'Error fetching sent notifications:');
       reply.code(500).send({
         success: false,
         error: 'Failed to fetch sent notifications',
@@ -455,7 +455,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching notification stats:', error);
+      request.log.error(error, 'Error fetching notification stats:');
       reply.code(500).send({
         success: false,
         error: 'Failed to fetch notification stats',
@@ -496,7 +496,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error generating preview:', error);
+      request.log.error(error, 'Error generating preview:');
       reply.code(500).send({
         success: false,
         error: 'Failed to generate preview',
@@ -556,7 +556,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching templates:', error);
+      request.log.error(error, 'Error fetching templates:');
       reply.code(500).send({
         success: false,
         error: 'Failed to fetch templates',
@@ -591,7 +591,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error creating template:', error);
+      request.log.error(error, 'Error creating template:');
       reply.code(500).send({
         success: false,
         error: 'Failed to create template',
@@ -626,7 +626,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error updating template:', error);
+      request.log.error(error, 'Error updating template:');
       reply.code(400).send({
         success: false,
         error: 'Failed to update template',
@@ -657,7 +657,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error deleting template:', error);
+      request.log.error(error, 'Error deleting template:');
       reply.code(400).send({
         success: false,
         error: 'Failed to delete template',
@@ -684,7 +684,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching template categories:', error);
+      request.log.error(error, 'Error fetching template categories:');
       reply.code(500).send({
         success: false,
         error: 'Failed to fetch template categories',
@@ -715,7 +715,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching template:', error);
+      request.log.error(error, 'Error fetching template:');
       reply.code(404).send({
         success: false,
         error: 'Template not found',
@@ -750,7 +750,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error rendering template:', error);
+      request.log.error(error, 'Error rendering template:');
       reply.code(500).send({
         success: false,
         error: 'Failed to render template',
@@ -790,7 +790,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       }
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error generating AI content:', error);
+      request.log.error(error, 'Error generating AI content:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to generate content',
@@ -821,7 +821,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error personalizing content:', error);
+      request.log.error(error, 'Error personalizing content:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to personalize content',
@@ -852,7 +852,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error suggesting targets:', error);
+      request.log.error(error, 'Error suggesting targets:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to suggest targets',
@@ -883,7 +883,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error analyzing sentiment:', error);
+      request.log.error(error, 'Error analyzing sentiment:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to analyze sentiment',
@@ -934,7 +934,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error generating template with AI:', error);
+      request.log.error(error, 'Error generating template with AI:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to generate template',
@@ -971,7 +971,7 @@ export default async function adminNotificationRoutes(fastify: FastifyInstance, 
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching analytics:', error);
+      request.log.error(error, 'Error fetching analytics:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to fetch analytics',

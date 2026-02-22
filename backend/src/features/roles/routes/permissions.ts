@@ -113,7 +113,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error fetching applications:', error);
+      fastify.log.error(error, 'Error fetching applications:');
       return reply.code(500).send({ error: 'Failed to fetch applications' });
     }
   });
@@ -143,7 +143,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error fetching users:', error);
+      fastify.log.error(error, 'Error fetching users:');
       return reply.code(500).send({ error: 'Failed to fetch users' });
     }
   });
@@ -182,7 +182,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error fetching user permissions:', error);
+      fastify.log.error(error, 'Error fetching user permissions:');
       return reply.code(500).send({ error: 'Failed to fetch user permissions' });
     }
   });
@@ -261,7 +261,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error in bulk permission assignment:', error);
+      fastify.log.error(error, 'Error in bulk permission assignment:');
       return reply.code(500).send({ error: 'Failed to assign permissions' });
     }
   });
@@ -350,7 +350,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error applying template:', error);
+      fastify.log.error(error, 'Error applying template:');
       return reply.code(500).send({ error: 'Failed to apply template' });
     }
   });
@@ -394,7 +394,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error removing permissions:', error);
+      fastify.log.error(error, 'Error removing permissions:');
       return reply.code(500).send({ error: 'Failed to remove permissions' });
     }
   });
@@ -412,7 +412,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error fetching templates:', error);
+      fastify.log.error(error, 'Error fetching templates:');
       return reply.code(500).send({ error: 'Failed to fetch templates' });
     }
   });
@@ -459,7 +459,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error fetching tenant roles:', error);
+      fastify.log.error(error, 'Error fetching tenant roles:');
       return reply.code(500).send({ error: 'Failed to fetch roles' });
     }
   });
@@ -494,7 +494,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error updating role:', error);
+      fastify.log.error(error, 'Error updating role:');
       if (error.message.includes('not found')) {
         return reply.code(404).send({ error: error.message });
       }
@@ -667,7 +667,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       const error = err as Error;
       console.error('Error deleting role:', error.message);
       console.error('Full error:', error);
-      fastify.log.error('Error deleting role:', error);
+      fastify.log.error(error, 'Error deleting role:');
       if (error.message.includes('not found')) {
         return reply.code(404).send({ error: error.message });
       }
@@ -705,7 +705,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error fetching role assignments:', error);
+      fastify.log.error(error, 'Error fetching role assignments:');
       return reply.code(500).send({ error: 'Failed to fetch role assignments' });
     }
   });
@@ -759,7 +759,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error assigning role:', error);
+      fastify.log.error(error, 'Error assigning role:');
       if (error.message.includes('already assigned')) {
         return reply.code(409).send({ error: error.message });
       }
@@ -804,7 +804,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error removing role assignment:', error);
+      fastify.log.error(error, 'Error removing role assignment:');
       if (error.message === 'Role assignment not found') {
         return reply.code(404).send({ error: error.message });
       }
@@ -852,7 +852,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error removing role assignment:', error);
+      fastify.log.error(error, 'Error removing role assignment:');
       if (error.message === 'Role assignment not found') {
         return reply.code(404).send({ error: error.message });
       }
@@ -878,7 +878,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error fetching audit log:', error);
+      fastify.log.error(error, 'Error fetching audit log:');
       return reply.code(500).send({ error: 'Failed to fetch audit log' });
     }
   });
@@ -909,7 +909,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error checking permissions:', error);
+      fastify.log.error(error, 'Error checking permissions:');
       return reply.code(500).send({ error: 'Failed to check permissions' });
     }
   });
@@ -934,7 +934,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error fetching user permissions:', error);
+      fastify.log.error(error, 'Error fetching user permissions:');
       return reply.code(500).send({ error: 'Failed to fetch user permissions' });
     }
   });
@@ -961,7 +961,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error in bulk role assignment:', error);
+      fastify.log.error(error, 'Error in bulk role assignment:');
       return reply.code(500).send({ error: 'Failed to complete bulk assignment' });
     }
   });
@@ -1142,7 +1142,7 @@ export default async function permissionRoutes(fastify: FastifyInstance, _option
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error fetching permission summary:', error);
+      fastify.log.error(error, 'Error fetching permission summary:');
       return reply.code(500).send({
         success: false,
         message: 'Failed to fetch permission summary',

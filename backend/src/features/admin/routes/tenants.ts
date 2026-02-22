@@ -40,7 +40,7 @@ export default async function tenantRoutes(
         tenants: tenantsList
       };
     } catch (error) {
-      request.log.error('Error fetching tenants:', error);
+      request.log.error(error, 'Error fetching tenants:');
       return reply.code(500).send({ error: 'Failed to fetch tenants' });
     }
   });
@@ -66,7 +66,7 @@ export default async function tenantRoutes(
         data: details
       };
     } catch (error) {
-      request.log.error('Error fetching current tenant:', error);
+      request.log.error(error, 'Error fetching current tenant:');
       return reply.code(500).send({ error: 'Internal server error' });
     }
   });
@@ -311,7 +311,7 @@ export default async function tenantRoutes(
           }
         } catch (err) {
           const activityError = err as Error;
-          request.log.warn('Failed to fetch activity logs for timeline:', activityError.message);
+          request.log.warn(`Failed to fetch activity logs for timeline: ${activityError.message}`);
         }
       }
 
@@ -356,7 +356,7 @@ export default async function tenantRoutes(
         }
       };
     } catch (error) {
-      request.log.error('Error fetching timeline:', error);
+      request.log.error(error, 'Error fetching timeline:');
       return reply.code(500).send({ error: 'Failed to fetch timeline' });
     }
   });
@@ -402,7 +402,7 @@ export default async function tenantRoutes(
         message: 'Tenant settings updated successfully'
       };
     } catch (error) {
-      request.log.error('Error updating tenant settings:', error);
+      request.log.error(error, 'Error updating tenant settings:');
       return reply.code(500).send({ error: 'Failed to update tenant settings' });
     }
   });
@@ -489,7 +489,7 @@ export default async function tenantRoutes(
       };
     } catch (err) {
       const error = err as Error;
-      request.log.error('Error updating account settings:', error);
+      request.log.error(error, 'Error updating account settings:');
       return reply.code(500).send({ 
         error: 'Failed to update account settings',
         message: error.message 
@@ -525,7 +525,7 @@ export default async function tenantRoutes(
         entityId: entityId || null
       };
     } catch (error) {
-      request.log.error('Error fetching tenant users:', error);
+      request.log.error(error, 'Error fetching tenant users:');
       return reply.code(500).send({ error: 'Failed to fetch users' });
     }
   });
@@ -601,7 +601,7 @@ export default async function tenantRoutes(
       };
     } catch (err) {
       const error = err as Error;
-      request.log.error('Error inviting user:', error);
+      request.log.error(error, 'Error inviting user:');
       if (error.message?.includes('already exists')) {
         return reply.code(409).send({ error: error.message });
       }
@@ -638,7 +638,7 @@ export default async function tenantRoutes(
       };
     } catch (err) {
       const error = err as Error;
-      request.log.error('Error accepting invitation:', error);
+      request.log.error(error, 'Error accepting invitation:');
       if (error.message?.includes('Invalid') || error.message?.includes('expired')) {
         return reply.code(400).send({ error: error.message });
       }
@@ -666,7 +666,7 @@ export default async function tenantRoutes(
         data: invitations
       };
     } catch (error) {
-      request.log.error('Error fetching invitations:', error);
+      request.log.error(error, 'Error fetching invitations:');
       return reply.code(500).send({ error: 'Failed to fetch invitations' });
     }
   });
@@ -706,7 +706,7 @@ export default async function tenantRoutes(
       };
     } catch (err) {
       const error = err as Error;
-      request.log.error('Error cancelling invitation:', error);
+      request.log.error(error, 'Error cancelling invitation:');
       
       if (error.message?.includes('not found')) {
         return reply.code(404).send({ 
@@ -751,7 +751,7 @@ export default async function tenantRoutes(
       };
     } catch (err) {
       const error = err as Error;
-      request.log.error('Error resending invitation:', error);
+      request.log.error(error, 'Error resending invitation:');
       if (error.message?.includes('not found') || error.message?.includes('expired')) {
         return reply.code(400).send({ error: error.message });
       }
@@ -819,7 +819,7 @@ export default async function tenantRoutes(
       };
     } catch (err) {
       const error = err as Error;
-      request.log.error('Error updating user role:', error);
+      request.log.error(error, 'Error updating user role:');
       if (error.message?.includes('not found')) {
         return reply.code(404).send({ error: error.message });
       }
@@ -995,7 +995,7 @@ export default async function tenantRoutes(
       };
     } catch (err) {
       const error = err as Error;
-      request.log.error('Error removing user:', error);
+      request.log.error(error, 'Error removing user:');
 
       if (error.message?.includes('last admin')) {
         return reply.code(400).send({
@@ -1045,7 +1045,7 @@ export default async function tenantRoutes(
       };
     } catch (err) {
       const error = err as Error;
-      fastify.log.error('Error fetching tenant usage:', error);
+      fastify.log.error(error, 'Error fetching tenant usage:');
       return reply.code(500).send({ error: 'Failed to fetch usage statistics' });
     }
   });
@@ -1090,7 +1090,7 @@ export default async function tenantRoutes(
       };
     } catch (err) {
       const error = err as Error;
-      request.log.error('Error promoting user:', error);
+      request.log.error(error, 'Error promoting user:');
       return reply.code(500).send({ error: 'Failed to promote user' });
     }
   });
@@ -1160,7 +1160,7 @@ export default async function tenantRoutes(
       };
     } catch (err) {
       const error = err as Error;
-      request.log.error('Error deactivating user:', error);
+      request.log.error(error, 'Error deactivating user:');
       return reply.code(500).send({ error: 'Failed to deactivate user' });
     }
   });
@@ -1205,7 +1205,7 @@ export default async function tenantRoutes(
       };
     } catch (err) {
       const error = err as Error;
-      request.log.error('Error reactivating user:', error);
+      request.log.error(error, 'Error reactivating user:');
       return reply.code(500).send({ error: 'Failed to reactivate user' });
     }
   });
@@ -1268,7 +1268,7 @@ export default async function tenantRoutes(
       };
     } catch (err) {
       const error = err as Error;
-      request.log.error('Error updating user:', error);
+      request.log.error(error, 'Error updating user:');
       return reply.code(500).send({ error: 'Failed to update user' });
     }
   });
@@ -1406,7 +1406,7 @@ export default async function tenantRoutes(
       }
     } catch (err) {
       const error = err as Error;
-      request.log.error('Error resending invitation:', error);
+      request.log.error(error, 'Error resending invitation:');
       return reply.code(500).send({ error: 'Failed to resend invitation' });
     }
   });
@@ -1587,7 +1587,7 @@ export default async function tenantRoutes(
     } catch (err) {
       const error = err as Error;
       console.error('❌ Error assigning roles:', error);
-      request.log.error('Error assigning roles:', error);
+      request.log.error(error, 'Error assigning roles:');
       return reply.code(500).send({ 
         success: false,
         error: 'Failed to assign roles',
@@ -2353,7 +2353,7 @@ export default async function tenantRoutes(
       return csvContent;
     } catch (err) {
       const error = err as Error;
-      request.log.error('Error exporting users:', error);
+      request.log.error(error, 'Error exporting users:');
       return reply.code(500).send({ error: 'Failed to export users' });
     }
   });

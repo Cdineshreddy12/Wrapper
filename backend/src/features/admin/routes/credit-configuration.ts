@@ -41,7 +41,7 @@ export default async function creditConfigurationRoutes(fastify: FastifyInstance
       reply.send(configurations);
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching tenant configurations:', error);
+      request.log.error(error, 'Error fetching tenant configurations:');
       reply.code(500).send({ error: 'Failed to fetch tenant configurations' });
     }
   });
@@ -77,7 +77,7 @@ export default async function creditConfigurationRoutes(fastify: FastifyInstance
       reply.send(result);
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error updating operation configuration:', error);
+      request.log.error(error, 'Error updating operation configuration:');
       reply.code(500).send({ error: 'Failed to update operation configuration' });
     }
   });
@@ -111,7 +111,7 @@ export default async function creditConfigurationRoutes(fastify: FastifyInstance
       reply.send(result);
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error updating module configuration:', error);
+      request.log.error(error, 'Error updating module configuration:');
       reply.code(500).send({ error: 'Failed to update module configuration' });
     }
   });
@@ -145,7 +145,7 @@ export default async function creditConfigurationRoutes(fastify: FastifyInstance
       reply.send(result);
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error updating app configuration:', error);
+      request.log.error(error, 'Error updating app configuration:');
       reply.code(500).send({ error: 'Failed to update app configuration' });
     }
   });
@@ -179,7 +179,7 @@ export default async function creditConfigurationRoutes(fastify: FastifyInstance
       reply.send(result);
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error resetting tenant configuration:', error);
+      request.log.error(error, 'Error resetting tenant configuration:');
       reply.code(500).send({ error: 'Failed to reset tenant configuration' });
     }
   });
@@ -212,7 +212,7 @@ export default async function creditConfigurationRoutes(fastify: FastifyInstance
       reply.send(result);
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error bulk updating tenant configurations:', error);
+      request.log.error(error, 'Error bulk updating tenant configurations:');
       reply.code(500).send({ error: 'Failed to bulk update tenant configurations' });
     }
   });
@@ -236,7 +236,7 @@ export default async function creditConfigurationRoutes(fastify: FastifyInstance
       reply.send(templates);
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching configuration templates:', error);
+      request.log.error(error, 'Error fetching configuration templates:');
       reply.code(500).send({ error: 'Failed to fetch configuration templates' });
     }
   });
@@ -269,7 +269,7 @@ export default async function creditConfigurationRoutes(fastify: FastifyInstance
       reply.send(result);
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error applying configuration template:', error);
+      request.log.error(error, 'Error applying configuration template:');
       reply.code(500).send({ error: 'Failed to apply configuration template' });
     }
   });
@@ -298,7 +298,7 @@ export default async function creditConfigurationRoutes(fastify: FastifyInstance
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching application credit configurations:', error);
+      request.log.error(error, 'Error fetching application credit configurations:');
       reply.code(500).send({ error: 'Failed to fetch application credit configurations' });
     }
   });
@@ -326,7 +326,7 @@ export default async function creditConfigurationRoutes(fastify: FastifyInstance
       reply.send(result);
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error updating application credit configuration:', error);
+      request.log.error(error, 'Error updating application credit configuration:');
       reply.code(500).send({ error: 'Failed to update application credit configuration' });
     }
   });
@@ -355,7 +355,7 @@ export default async function creditConfigurationRoutes(fastify: FastifyInstance
       reply.send(result);
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error updating module credit configuration:', error);
+      request.log.error(error, 'Error updating module credit configuration:');
       reply.code(500).send({ error: 'Failed to update module credit configuration' });
     }
   });
@@ -394,7 +394,7 @@ export default async function creditConfigurationRoutes(fastify: FastifyInstance
     } catch (err: unknown) {
       const error = err as Error;
       console.error('❌ Error in tenant operation cost route:', err);
-      request.log.error('Error creating tenant operation cost:', error);
+      request.log.error(error, 'Error creating tenant operation cost:');
 
       reply.code(500).send({
         error: (error?.message ?? '') || 'Failed to create tenant operation cost',
@@ -429,7 +429,7 @@ export default async function creditConfigurationRoutes(fastify: FastifyInstance
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error initializing credits:', error);
+      request.log.error(error, 'Error initializing credits:');
       reply.code(500).send({
         error: 'Failed to initialize credits',
         details: error?.message ?? ''
@@ -463,7 +463,7 @@ export default async function creditConfigurationRoutes(fastify: FastifyInstance
       reply.send(result);
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching global credit configurations by app:', error);
+      request.log.error(error, 'Error fetching global credit configurations by app:');
       reply.code(500).send({
         success: false,
         message: 'Failed to fetch global credit configurations',

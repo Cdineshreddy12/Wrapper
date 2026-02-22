@@ -78,7 +78,7 @@ export default async function userRoutes(
     } catch (err: unknown) {
       const error = err as Error;
       console.error('❌ Error fetching user profile:', error);
-      request.log.error('Error fetching user profile:', error);
+      request.log.error(error, 'Error fetching user profile:');
       return reply.code(500).send({ error: 'Failed to fetch user profile' });
     }
   });
@@ -126,7 +126,7 @@ export default async function userRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error updating user profile:', error);
+      request.log.error(error, 'Error updating user profile:');
       return reply.code(500).send({ error: 'Failed to update profile' });
     }
   });
@@ -172,7 +172,7 @@ export default async function userRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error completing onboarding:', error);
+      request.log.error(error, 'Error completing onboarding:');
       return reply.code(500).send({ error: 'Failed to complete onboarding' });
     }
   });
@@ -199,7 +199,7 @@ export default async function userRoutes(
         }
       };
     } catch (error) {
-      request.log.error('Error fetching user permissions:', error);
+      request.log.error(error, 'Error fetching user permissions:');
       return reply.code(500).send({ error: 'Failed to fetch permissions' });
     }
   });

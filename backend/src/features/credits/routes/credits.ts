@@ -255,7 +255,7 @@ export default async function creditRoutes(
     } catch (err: unknown) {
       const error = err as Error;
       console.error('❌ Error fetching current credit balance:', error);
-      request.log.error('Error fetching current credit balance:', error);
+      request.log.error(error, 'Error fetching current credit balance:');
       const errorMessage = error.message || 'Unknown error';
       const errorStack = process.env.NODE_ENV === 'development' ? error.stack : undefined;
       
@@ -295,7 +295,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching credit transactions:', error);
+      request.log.error(error, 'Error fetching credit transactions:');
       return reply.code(500).send({ error: 'Failed to fetch credit transactions' });
     }
   });
@@ -320,7 +320,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching credit alerts:', error);
+      request.log.error(error, 'Error fetching credit alerts:');
       return reply.code(500).send({ error: 'Failed to fetch credit alerts' });
     }
   });
@@ -387,7 +387,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error processing credit purchase:', error);
+      request.log.error(error, 'Error processing credit purchase:');
       const body = request.body as Record<string, unknown> | undefined;
       const uc = request.userContext as { userId?: string; tenantId?: string | null; internalUserId?: string } | undefined;
       try {
@@ -464,7 +464,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error consuming credits:', error);
+      request.log.error(error, 'Error consuming credits:');
       return reply.code(500).send({
         error: 'Failed to consume credits',
         message: error.message
@@ -498,7 +498,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching credit usage summary:', error);
+      request.log.error(error, 'Error fetching credit usage summary:');
       return reply.code(500).send({ error: 'Failed to fetch usage summary' });
     }
   });
@@ -605,7 +605,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error transferring credits:', error);
+      request.log.error(error, 'Error transferring credits:');
       return reply.code(500).send({
         error: 'Failed to transfer credits',
         message: error.message
@@ -631,7 +631,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching credit configuration:', error);
+      request.log.error(error, 'Error fetching credit configuration:');
       return reply.code(500).send({ error: 'Failed to fetch credit configuration' });
     }
   });
@@ -654,7 +654,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching module configuration:', error);
+      request.log.error(error, 'Error fetching module configuration:');
       return reply.code(500).send({ error: 'Failed to fetch module configuration' });
     }
   });
@@ -677,7 +677,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching application configuration:', error);
+      request.log.error(error, 'Error fetching application configuration:');
       return reply.code(500).send({ error: 'Failed to fetch application configuration' });
     }
   });
@@ -701,7 +701,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching global configurations:', error);
+      request.log.error(error, 'Error fetching global configurations:');
       return reply.code(500).send({ error: 'Failed to fetch configurations' });
     }
   });
@@ -728,7 +728,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error setting operation configuration:', error);
+      request.log.error(error, 'Error setting operation configuration:');
       return reply.code(500).send({ error: 'Failed to update operation configuration' });
     }
   });
@@ -755,7 +755,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error setting module configuration:', error);
+      request.log.error(error, 'Error setting module configuration:');
       return reply.code(500).send({ error: 'Failed to update module configuration' });
     }
   });
@@ -782,7 +782,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error setting application configuration:', error);
+      request.log.error(error, 'Error setting application configuration:');
       return reply.code(500).send({ error: 'Failed to update application configuration' });
     }
   });
@@ -809,7 +809,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error marking alert as read:', error);
+      request.log.error(error, 'Error marking alert as read:');
       return reply.code(500).send({ error: 'Failed to mark alert as read' });
     }
   });
@@ -825,7 +825,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching credit packages:', error);
+      request.log.error(error, 'Error fetching credit packages:');
       return reply.code(500).send({ error: 'Failed to fetch credit packages' });
     }
   });
@@ -877,7 +877,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error allocating credits to application:', error);
+      request.log.error(error, 'Error allocating credits to application:');
 
       if (error.message?.includes('Insufficient credits')) {
         return reply.code(400).send({
@@ -914,7 +914,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching monitor status:', error);
+      request.log.error(error, 'Error fetching monitor status:');
       return reply.code(500).send({
         error: 'Failed to fetch monitor status',
         message: error.message
@@ -941,7 +941,7 @@ export default async function creditRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching credit statistics:', error);
+      request.log.error(error, 'Error fetching credit statistics:');
       return reply.code(500).send({ error: 'Failed to fetch credit statistics' });
     }
   });
@@ -1185,7 +1185,7 @@ export default async function creditRoutes(
         };
       } catch (error: unknown) {
         const err = error as Error;
-        request.log.error('Error fetching credit payment details:', err);
+        request.log.error(err, 'Error fetching credit payment details:');
         return reply.code(500).send({
           error: 'Failed to fetch credit payment details',
           message: err.message
@@ -1193,7 +1193,7 @@ export default async function creditRoutes(
       }
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error in credit payment details route:', error);
+      request.log.error(error, 'Error in credit payment details route:');
       return reply.code(500).send({
         error: 'Internal server error',
         message: 'Failed to process credit payment details request'

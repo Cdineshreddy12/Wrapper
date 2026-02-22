@@ -232,7 +232,7 @@ export default async function enhancedInternalRoutes(fastify: FastifyInstance, _
 
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error fetching user permissions:', error);
+      fastify.log.error(error, 'Error fetching user permissions:');
       return reply.code(500).send({ 
         error: 'Failed to fetch user permissions',
         message: error.message
@@ -252,7 +252,7 @@ export default async function enhancedInternalRoutes(fastify: FastifyInstance, _
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error getting cache stats:', error);
+      fastify.log.error(error, 'Error getting cache stats:');
       return reply.code(500).send({ error: 'Failed to get cache stats' });
     }
   });
@@ -287,7 +287,7 @@ export default async function enhancedInternalRoutes(fastify: FastifyInstance, _
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error invalidating cache:', error);
+      fastify.log.error(error, 'Error invalidating cache:');
       return reply.code(500).send({ error: 'Failed to invalidate cache' });
     }
   });
@@ -327,7 +327,7 @@ export default async function enhancedInternalRoutes(fastify: FastifyInstance, _
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error warming up cache:', error);
+      fastify.log.error(error, 'Error warming up cache:');
       return reply.code(500).send({ error: 'Failed to warm up cache' });
     }
   });

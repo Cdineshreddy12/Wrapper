@@ -82,7 +82,7 @@ export default async function adminManagementRoutes(
       };
 
     } catch (err: unknown) {
-      request.log.error('Error resetting onboarding status:', err);
+      request.log.error(err, 'Error resetting onboarding status:');
       return reply.code(500).send({ error: 'Failed to reset onboarding status' });
     }
   });
@@ -481,7 +481,7 @@ export default async function adminManagementRoutes(
       console.error(`🔍 Error: ${error.message}`);
       console.error(`==========================================================\n`);
 
-      request.log.error('Error during organization creation:', error);
+      request.log.error(error, 'Error during organization creation:');
       return reply.code(500).send({
         error: 'Failed to create organization',
         message: error.message

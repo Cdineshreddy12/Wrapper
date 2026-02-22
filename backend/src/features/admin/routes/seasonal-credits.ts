@@ -30,7 +30,7 @@ export default async function seasonalCreditsRoutes(fastify: FastifyInstance, _o
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching campaigns:', error);
+      request.log.error(error, 'Error fetching campaigns:');
       reply.code(500).send({
         success: false,
         error: 'Failed to fetch campaigns',
@@ -68,7 +68,7 @@ export default async function seasonalCreditsRoutes(fastify: FastifyInstance, _o
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error creating campaign:', error);
+      request.log.error(error, 'Error creating campaign:');
       reply.code(400).send({
         success: false,
         error: 'Failed to create campaign',
@@ -96,7 +96,7 @@ export default async function seasonalCreditsRoutes(fastify: FastifyInstance, _o
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching campaign:', error);
+      request.log.error(error, 'Error fetching campaign:');
       reply.code(404).send({
         success: false,
         error: 'Campaign not found',
@@ -127,7 +127,7 @@ export default async function seasonalCreditsRoutes(fastify: FastifyInstance, _o
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error distributing credits:', error);
+      request.log.error(error, 'Error distributing credits:');
       reply.code(400).send({
         success: false,
         error: 'Failed to distribute credits',
@@ -157,7 +157,7 @@ export default async function seasonalCreditsRoutes(fastify: FastifyInstance, _o
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error getting campaign status:', error);
+      request.log.error(error, 'Error getting campaign status:');
       reply.code(400).send({
         success: false,
         error: 'Failed to get campaign status',
@@ -192,7 +192,7 @@ export default async function seasonalCreditsRoutes(fastify: FastifyInstance, _o
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error extending campaign expiry:', error);
+      request.log.error(error, 'Error extending campaign expiry:');
       reply.code(400).send({
         success: false,
         error: 'Failed to extend campaign expiry',
@@ -226,7 +226,7 @@ export default async function seasonalCreditsRoutes(fastify: FastifyInstance, _o
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error sending expiry warnings:', error);
+      request.log.error(error, 'Error sending expiry warnings:');
       reply.code(500).send({
         success: false,
         error: 'Failed to send expiry warnings',
@@ -258,7 +258,7 @@ export default async function seasonalCreditsRoutes(fastify: FastifyInstance, _o
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching expiring credits:', error);
+      request.log.error(error, 'Error fetching expiring credits:');
       reply.code(500).send({
         success: false,
         error: 'Failed to fetch expiring credits',
@@ -296,7 +296,7 @@ export default async function seasonalCreditsRoutes(fastify: FastifyInstance, _o
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error getting tenant allocations:', error);
+      request.log.error(error, 'Error getting tenant allocations:');
       reply.code(400).send({
         success: false,
         error: 'Failed to get tenant allocations',
@@ -325,7 +325,7 @@ export default async function seasonalCreditsRoutes(fastify: FastifyInstance, _o
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error processing expiries:', error);
+      request.log.error(error, 'Error processing expiries:');
       reply.code(500).send({
         success: false,
         error: 'Failed to process expiries',

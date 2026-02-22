@@ -219,7 +219,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching application assignment overview:', error);
+      request.log.error(error, 'Error fetching application assignment overview:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to fetch application assignment overview'
@@ -420,7 +420,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching tenants with applications:', error);
+      request.log.error(error, 'Error fetching tenants with applications:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to fetch tenants with applications'
@@ -560,7 +560,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching tenant application assignments:', error);
+      request.log.error(error, 'Error fetching tenant application assignments:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to fetch tenant application assignments'
@@ -758,7 +758,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error assigning application to tenant:', error);
+      request.log.error(error, 'Error assigning application to tenant:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to assign application to tenant'
@@ -821,7 +821,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error updating application assignment:', error);
+      request.log.error(error, 'Error updating application assignment:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to update application assignment'
@@ -872,7 +872,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error removing application assignment:', error);
+      request.log.error(error, 'Error removing application assignment:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to remove application assignment'
@@ -1010,7 +1010,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       });
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error bulk assigning applications:', error);
+      request.log.error(error, 'Error bulk assigning applications:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to bulk assign applications'
@@ -1093,7 +1093,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching applications:', error);
+      request.log.error(error, 'Error fetching applications:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to fetch applications'
@@ -1308,7 +1308,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
         name: error.name
       });
 
-      request.log.error('Error assigning module:', error);
+      request.log.error(error, 'Error assigning module:');
       return reply.code(500).send({
         success: false,
         error: `Failed to assign module: ${error.message || 'Unknown error'}`
@@ -1401,7 +1401,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error updating module permissions:', error);
+      request.log.error(error, 'Error updating module permissions:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to update module permissions'
@@ -1489,7 +1489,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error removing module:', error);
+      request.log.error(error, 'Error removing module:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to remove module'
@@ -1577,7 +1577,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching tenant modules:', error);
+      request.log.error(error, 'Error fetching tenant modules:');
       return reply.code(500).send({
         success: false,
         error: 'Failed to fetch tenant modules'

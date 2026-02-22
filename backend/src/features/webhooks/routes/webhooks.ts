@@ -13,10 +13,10 @@ export default async function webhookRoutes(fastify: FastifyInstance, _options?:
     
     try {
       // Log webhook receipt
-      fastify.log.info(`Received webhook from ${service}`, {
+      fastify.log.info({
         headers: request.headers,
         body: request.body,
-      });
+      }, `Received webhook from ${service}`);
 
       // Basic webhook verification would go here
       // For demo purposes, just acknowledge receipt
@@ -29,7 +29,7 @@ export default async function webhookRoutes(fastify: FastifyInstance, _options?:
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error(`Error processing ${service} webhook:`, error);
+      fastify.log.error(error, `Error processing ${service} webhook:`);
       return reply.code(500).send({ error: 'Webhook processing failed' });
     }
   });

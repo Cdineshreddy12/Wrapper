@@ -96,7 +96,7 @@ export default async function subscriptionRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching current subscription:', error);
+      request.log.error(error, 'Error fetching current subscription:');
       return reply.code(500).send({ error: 'Failed to fetch subscription' });
     }
   });
@@ -110,7 +110,7 @@ export default async function subscriptionRoutes(
         data: plans
       };
     } catch (error) {
-      request.log.error('Error fetching plans:', error);
+      request.log.error(error, 'Error fetching plans:');
       return reply.code(500).send({ error: 'Failed to fetch plans' });
     }
   });
@@ -124,7 +124,7 @@ export default async function subscriptionRoutes(
         data: packages
       };
     } catch (error) {
-      request.log.error('Error fetching credit packages:', error);
+      request.log.error(error, 'Error fetching credit packages:');
       return reply.code(500).send({ error: 'Failed to fetch credit packages' });
     }
   });
@@ -157,7 +157,7 @@ export default async function subscriptionRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching config status:', error);
+      request.log.error(error, 'Error fetching config status:');
       return reply.code(500).send({ error: 'Failed to fetch config status' });
     }
   });
@@ -198,7 +198,7 @@ export default async function subscriptionRoutes(
       return result as unknown as ReturnType<FastifyReply['send']>;
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching plan limits:', error);
+      request.log.error(error, 'Error fetching plan limits:');
       return reply.code(500).send({ 
         success: false, 
         error: 'Failed to fetch plan limits' 
@@ -382,7 +382,7 @@ export default async function subscriptionRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error creating checkout session:', error);
+      request.log.error(error, 'Error creating checkout session:');
       return reply.code(500).send({ 
         error: 'Failed to create checkout session',
         message: error.message
@@ -409,7 +409,7 @@ export default async function subscriptionRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching usage metrics:', error);
+      request.log.error(error, 'Error fetching usage metrics:');
       return reply.code(500).send({ error: 'Failed to fetch usage metrics' });
     }
   });
@@ -433,7 +433,7 @@ export default async function subscriptionRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching billing history:', error);
+      request.log.error(error, 'Error fetching billing history:');
       console.error('❌ Billing history error details:', {
         message: error.message,
         name: error.name,
@@ -481,7 +481,7 @@ export default async function subscriptionRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error cancelling subscription:', error);
+      request.log.error(error, 'Error cancelling subscription:');
       return reply.code(500).send({ 
         error: 'Failed to cancel subscription',
         message: error.message
@@ -535,7 +535,7 @@ export default async function subscriptionRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error changing plan:', error);
+      request.log.error(error, 'Error changing plan:');
       return reply.code(500).send({
         error: 'Failed to change plan',
         message: error.message
@@ -672,7 +672,7 @@ export default async function subscriptionRoutes(
     } catch (err: unknown) {
       const error = err as Error;
       console.error('❌ Webhook processing error:', error);
-      request.log.error('Webhook processing error:', error);
+      request.log.error(error, 'Webhook processing error:');
       
       // Return 200 to prevent Stripe from retrying if it's a non-retryable error
       if (error.message?.includes('signature') || error.message?.includes('timestamp')) {
@@ -727,7 +727,7 @@ export default async function subscriptionRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error creating portal session:', error);
+      fastify.log.error(error, 'Error creating portal session:');
       return reply.code(500).send({ error: 'Failed to create portal session' });
     }
   });
@@ -752,7 +752,7 @@ export default async function subscriptionRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error updating payment method:', error);
+      fastify.log.error(error, 'Error updating payment method:');
       return reply.code(500).send({ error: 'Failed to update payment method' });
     }
   });
@@ -771,7 +771,7 @@ export default async function subscriptionRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error reactivating subscription:', error);
+      fastify.log.error(error, 'Error reactivating subscription:');
       return reply.code(500).send({ error: 'Failed to reactivate subscription' });
     }
   });
@@ -797,7 +797,7 @@ export default async function subscriptionRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error applying coupon:', error);
+      fastify.log.error(error, 'Error applying coupon:');
       if (error.message?.includes('Invalid') || error.message?.includes('expired')) {
         return reply.code(400).send({ error: error.message });
       }
@@ -818,7 +818,7 @@ export default async function subscriptionRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error fetching upcoming invoice:', error);
+      fastify.log.error(error, 'Error fetching upcoming invoice:');
       return reply.code(500).send({ error: 'Failed to fetch upcoming invoice' });
     }
   });
@@ -840,7 +840,7 @@ export default async function subscriptionRoutes(
       return reply.redirect(invoiceUrl);
     } catch (err: unknown) {
       const error = err as Error;
-      fastify.log.error('Error downloading invoice:', error);
+      fastify.log.error(error, 'Error downloading invoice:');
       return reply.code(500).send({ error: 'Failed to download invoice' });
     }
   });
@@ -887,7 +887,7 @@ export default async function subscriptionRoutes(
         message: 'Plan change scheduled successfully'
       };
     } catch (error) {
-      request.log.error('Error processing immediate downgrade:', error);
+      request.log.error(error, 'Error processing immediate downgrade:');
       return reply.code(500).send({
         error: 'Failed to process downgrade',
         message: error.message
@@ -929,7 +929,7 @@ export default async function subscriptionRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error processing refund:', error);
+      request.log.error(error, 'Error processing refund:');
       return reply.code(500).send({ 
         error: 'Failed to process refund',
         message: error.message
@@ -1133,7 +1133,7 @@ export default async function subscriptionRoutes(
         };
         } catch (errInner: unknown) {
           const error = errInner as Error;
-          request.log.error('Error fetching payment details:', error);
+          request.log.error(error, 'Error fetching payment details:');
           return reply.code(500).send({
             error: 'Failed to fetch payment details',
             message: error.message
@@ -1141,7 +1141,7 @@ export default async function subscriptionRoutes(
         }
       } catch (err: unknown) {
         const error = err as Error;
-        request.log.error('Error in payment details route:', error);
+        request.log.error(error, 'Error in payment details route:');
         return reply.code(500).send({
           error: 'Internal server error',
           message: 'Failed to process payment details request'
@@ -1172,7 +1172,7 @@ export default async function subscriptionRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching subscription actions:', error);
+      request.log.error(error, 'Error fetching subscription actions:');
       return reply.code(500).send({ 
         error: 'Failed to fetch subscription actions',
         message: error.message

@@ -63,7 +63,7 @@ export default async function dataManagementRoutes(
       };
 
     } catch (err: unknown) {
-      request.log.error('Error getting user organization:', err);
+      request.log.error(err, 'Error getting user organization:');
       return reply.code(500).send({ error: 'Failed to get user organization' });
     }
   });
@@ -115,7 +115,7 @@ export default async function dataManagementRoutes(
       };
 
     } catch (err: unknown) {
-      request.log.error('Error marking onboarding complete:', err);
+      request.log.error(err, 'Error marking onboarding complete:');
       return reply.code(500).send({ error: 'Failed to mark onboarding as complete' });
     }
   });
@@ -254,7 +254,7 @@ export default async function dataManagementRoutes(
       }
 
     } catch (err: unknown) {
-      request.log.error('Error updating onboarding step:', err);
+      request.log.error(err, 'Error updating onboarding step:');
       return reply.code(500).send({ error: 'Failed to update onboarding step' });
     }
   });

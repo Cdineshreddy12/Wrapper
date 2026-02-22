@@ -27,7 +27,7 @@ export default async function subdomainManagementRoutes(
         subdomain
       };
     } catch (err: unknown) {
-      request.log.error('Error checking subdomain availability:', err);
+      request.log.error(err, 'Error checking subdomain availability:');
       return reply.code(500).send({ error: 'Failed to check subdomain availability' });
     }
   });
@@ -54,7 +54,7 @@ export default async function subdomainManagementRoutes(
       };
     } catch (err: unknown) {
       console.error('❌ Error checking subdomain availability:', err);
-      request.log.error('Error checking subdomain availability:', err);
+      request.log.error(err, 'Error checking subdomain availability:');
       return reply.code(500).send({ error: 'Failed to check subdomain availability' });
     }
   });

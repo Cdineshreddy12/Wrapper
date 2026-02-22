@@ -516,7 +516,7 @@ export function requirePermission(permission: string | string[]) {
         return;
       }
     } catch (error) {
-      request.log.error('Permission check failed:', error as Error);
+      request.log.error(error as Error, 'Permission check failed:');
       reply.code(500).send({ error: 'Permission check failed' });
     }
   };

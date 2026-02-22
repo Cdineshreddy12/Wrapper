@@ -189,7 +189,7 @@ export default async function roleRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching role templates:', error);
+      request.log.error(error, 'Error fetching role templates:');
       return reply.code(500).send({ error: 'Failed to fetch role templates' });
     }
   });
@@ -241,7 +241,7 @@ export default async function roleRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error fetching available permissions:', error);
+      request.log.error(error, 'Error fetching available permissions:');
       return reply.code(500).send({ error: 'Failed to fetch permissions' });
     }
   });
@@ -270,7 +270,7 @@ export default async function roleRoutes(
         message: 'Role created from template successfully'
       };
     } catch (error) {
-      request.log.error('Error creating role from template:', error);
+      request.log.error(error, 'Error creating role from template:');
       return reply.code(500).send({ error: 'Failed to create role from template' });
     }
   });
@@ -788,7 +788,7 @@ export default async function roleRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error cloning role:', error);
+      request.log.error(error, 'Error cloning role:');
       return reply.code(500).send({ error: 'Failed to clone role' });
     }
   });
@@ -816,7 +816,7 @@ export default async function roleRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error validating role:', error);
+      request.log.error(error, 'Error validating role:');
       return reply.code(500).send({ error: 'Failed to validate role' });
     }
   });
@@ -845,7 +845,7 @@ export default async function roleRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error in bulk role operation:', error);
+      request.log.error(error, 'Error in bulk role operation:');
       return reply.code(500).send({ error: 'Failed to complete bulk operation' });
     }
   });
@@ -934,7 +934,7 @@ export default async function roleRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error deleting role:', error);
+      request.log.error(error, 'Error deleting role:');
       return reply.code(500).send({ error: 'Failed to delete role' });
     }
   });
@@ -963,7 +963,7 @@ export default async function roleRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error in bulk delete operation:', error);
+      request.log.error(error, 'Error in bulk delete operation:');
       return reply.code(500).send({ error: 'Failed to complete bulk delete' });
     }
   });
@@ -992,7 +992,7 @@ export default async function roleRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error in bulk deactivate operation:', error);
+      request.log.error(error, 'Error in bulk deactivate operation:');
       return reply.code(500).send({ error: 'Failed to complete bulk deactivate' });
     }
   });
@@ -1021,7 +1021,7 @@ export default async function roleRoutes(
       };
     } catch (err: unknown) {
       const error = err as Error;
-      request.log.error('Error in bulk export operation:', error);
+      request.log.error(error, 'Error in bulk export operation:');
       return reply.code(500).send({ error: 'Failed to complete bulk export' });
     }
   });
