@@ -1,3 +1,8 @@
 packages:
   - "backend"
   - "frontend"
+
+onlyBuiltDependencies:
+  - '@tailwindcss/oxide'
+  - '@tsparticles/engine'
+  - esbuild
