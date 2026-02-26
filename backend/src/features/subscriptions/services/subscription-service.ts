@@ -3,18 +3,25 @@
  *
  * Re-exports all subscription functionality through the original SubscriptionService class
  * for full backward compatibility. Actual logic lives in the split modules:
- *   - subscription-core.ts        (Stripe config, plan catalog, subscription state)
+ *   - subscription-core.ts        (gateway config, plan catalog, subscription state)
  *   - subscription-trial.ts       (trial/free creation, cancellation, expiry)
- *   - subscription-checkout.ts    (Stripe checkout, billing portal)
- *   - subscription-plan-change.ts (plan upgrades/downgrades)
+ *   - subscription-checkout.ts    (checkout, billing portal — via adapter)
+ *   - subscription-plan-change.ts (plan upgrades/downgrades — via adapter)
  *   - subscription-plan-roles.ts  (role/permission updates on plan change)
- *   - subscription-payment-records.ts (payment records, refunds)
- *   - subscription-webhook-handler.ts (Stripe webhook processing)
+ *   - subscription-payment-records.ts (payment records, refunds — via adapter)
+ *   - subscription-webhook-handler.ts (webhook processing — via adapter)
+ *
+ * Payment gateway adapter layer:
+ *   - adapters/payment-gateway.port.ts    (interface)
+ *   - adapters/stripe.adapter.ts          (Stripe implementation)
+ *   - adapters/mock.adapter.ts            (mock for dev/test)
+ *   - adapters/payment-gateway.factory.ts (factory + singleton)
  */
 
 import {
   isStripeConfiguredFn,
   getStripeConfigStatus,
+  getPaymentGateway,
   getCurrentSubscription,
   getAvailablePlans,
   getPlanIdFromPriceId,
@@ -81,8 +88,13 @@ import {
 import type { RequestContext } from '../../../services/activityLogger.js';
 
 export class SubscriptionService {
+  // Gateway adapter (primary API for payment operations)
+  static getPaymentGateway = getPaymentGateway;
+
   // Core
+  /** @deprecated Use `getPaymentGateway().isConfigured()` */
   static isStripeConfigured = isStripeConfiguredFn;
+  /** @deprecated Use `getPaymentGateway().getConfigStatus()` */
   static getStripeConfigStatus = getStripeConfigStatus;
   static getCurrentSubscription = getCurrentSubscription;
   static getAvailablePlans = getAvailablePlans;

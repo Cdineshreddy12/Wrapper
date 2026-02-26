@@ -560,12 +560,19 @@ class ActivityLogger {
         };
       });
 
+      const totalCountResult = await db
+        .select({ count: sql`count(*)` })
+        .from(auditLogs)
+        .where(and(...whereConditions));
+
+      const total = Number((totalCountResult[0] as { count: unknown })?.count ?? 0);
+
       return {
         activities: enrichedActivities,
         pagination: {
           limit,
           offset,
-          total: activities.length
+          total
         }
       };
     } catch (err: unknown) {

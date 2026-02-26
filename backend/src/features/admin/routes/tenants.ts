@@ -138,8 +138,10 @@ export default async function tenantRoutes(
       const tenantId = request.userContext.tenantId;
       const userId = request.userContext.internalUserId;
       const query = request.query as Record<string, string>;
-      const { limit = '300', includeActivity = 'true' } = query;
+      const { limit = '20', offset = '0', includeActivity = 'true' } = query;
       const shouldIncludeActivity = includeActivity === 'true';
+      const parsedLimit = parseInt(limit) || 20;
+      const parsedOffset = parseInt(offset) || 0;
       
       if (!tenantId) {
         return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
@@ -284,12 +286,16 @@ export default async function tenantRoutes(
       }
 
       // 4. Get user activity logs (if userId is available and includeActivity is true)
+      let activityTotal = 0;
       if (shouldIncludeActivity && userId) {
         try {
           const activityResult = await ActivityLogger.getUserActivity(userId, tenantId, {
-            limit: parseInt(limit) || 200,
+            limit: parsedLimit,
+            offset: parsedOffset,
             includeMetadata: true
           });
+
+          activityTotal = activityResult?.pagination?.total ?? 0;
 
           if (activityResult && activityResult.activities) {
             for (const activity of activityResult.activities as Array<{ action: string; createdAt?: Date; appName?: string; appCode?: string; userInfo?: Record<string, unknown>; ipAddress?: string | null }>) {
@@ -318,41 +324,26 @@ export default async function tenantRoutes(
       // Sort events by date ascending (oldest first)
       events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-      // Apply limit if specified (keep most recent events, oldest first)
-      let finalEvents = events;
-      if (limit && parseInt(limit) > 0) {
-        const limitNum = parseInt(limit);
-        // Remove "Today" temporarily, limit the rest, then add "Today" back at the end
-        const todayEvent = events.find(e => e.type === 'today');
-        const otherEvents = events.filter(e => e.type !== 'today');
-        // Take the most recent events (last N events)
-        const limitedEvents = otherEvents.slice(-limitNum);
-        finalEvents = [...limitedEvents];
-        // Always add "Today" marker at the end
-        finalEvents.push({
-          type: 'today',
-          label: 'Today',
-          date: new Date().toISOString(),
-          metadata: {}
-        });
-      } else {
-        // Add "Today" marker at the end if not already present
-        const hasToday = events.some(e => e.type === 'today');
-        if (!hasToday) {
-          events.push({
-            type: 'today',
-            label: 'Today',
-            date: new Date().toISOString(),
-            metadata: {}
-          });
-        }
-        finalEvents = events;
-      }
+      // Add "Today" marker at the end
+      events.push({
+        type: 'today',
+        label: 'Today',
+        date: new Date().toISOString(),
+        metadata: {}
+      });
+
+      const hasMore = parsedOffset + parsedLimit < activityTotal;
 
       return {
         success: true,
         data: {
-          events: finalEvents
+          events,
+          pagination: {
+            offset: parsedOffset,
+            limit: parsedLimit,
+            activityTotal,
+            hasMore
+          }
         }
       };
     } catch (error) {

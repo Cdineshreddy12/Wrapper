@@ -4,7 +4,8 @@ import { db } from '../../../db/index.js';
 import { subscriptions, payments } from '../../../db/schema/index.js';
 import { webhookLogs } from '../../../db/schema/tracking/webhook-logs.js';
 import { EmailService } from '../../../utils/email.js';
-import { getCurrentSubscription, getAvailablePlans, stripe, isStripeConfiguredFn } from './subscription-core.js';
+import { getCurrentSubscription, getAvailablePlans, isStripeConfiguredFn } from './subscription-core.js';
+import { getPaymentGateway } from '../adapters/index.js';
 import { updateAdministratorRolesForPlan } from './subscription-plan-roles.js';
 import { createPaymentRecord, processRefund } from './subscription-payment-records.js';
 import { createCheckoutSession, createBillingPortalSession } from './subscription-checkout.js';
@@ -18,13 +19,11 @@ export async function changePlan(params: { tenantId: string; planId: string; bil
   try {
     console.log('🔄 Changing plan for tenant:', tenantId, 'to plan:', planId);
 
-    // Get current subscription
     const currentSubscription = await getCurrentSubscription(tenantId);
     if (!currentSubscription) {
       throw new Error('No current subscription found');
     }
 
-    // Get target plan details
     const plans = await getAvailablePlans();
     const targetPlan = plans.find(p => p.id === planId);
     if (!targetPlan) {
@@ -33,7 +32,6 @@ export async function changePlan(params: { tenantId: string; planId: string; bil
 
     const currentPlan = plans.find(p => p.id === currentSubscription.plan);
 
-    // Check if this is a downgrade and enforce billing cycle restrictions
     const planHierarchy: Record<string, number> = {
       'free': 0,
       'starter': 1,
@@ -45,17 +43,15 @@ export async function changePlan(params: { tenantId: string; planId: string; bil
     const targetLevel = planHierarchy[targetPlan.id as string] ?? 0;
     const isDowngrade = targetLevel < currentLevel;
 
-    // NEW: Enforce billing cycle restrictions for downgrades
     if (isDowngrade && currentSubscription.status === 'active') {
       const now = new Date();
       const currentPeriodEnd = new Date(currentSubscription.currentPeriodEnd as string | Date);
       const billingCycleType = (currentSubscription.billingCycle as string) || 'monthly';
       const endDateStr = currentPeriodEnd.toLocaleDateString();
 
-      // Calculate days remaining in current billing cycle
       const daysRemaining = Math.ceil((currentPeriodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
-      if (daysRemaining > 7) { // More than a week remaining
+      if (daysRemaining > 7) {
         throw new Error(
           `Plan downgrades are only allowed within 7 days of your billing cycle end. ` +
           `Your current ${billingCycleType} plan renews on ${endDateStr}. ` +
@@ -64,26 +60,18 @@ export async function changePlan(params: { tenantId: string; planId: string; bil
         );
       }
 
-      // If within 7 days of renewal, allow but schedule for end of period
-      console.log(`⏰ Downgrade scheduled for end of billing period: ${endDateStr}`);
-
-      // Schedule the downgrade instead of processing immediately
       return await scheduleDowngrade({ tenantId, planId, effectiveDate: currentPeriodEnd });
     }
 
-    // Check for other downgrade restrictions (legacy)
     if (currentPlan && !isValidPlanChange(currentPlan, targetPlan)) {
-      throw new Error(`Cannot downgrade from ${currentPlan.name} to ${targetPlan.name} - plan restrictions apply`);
+      throw new Error(`Cannot downgrade from ${currentPlan.name} to ${targetPlan.name} — plan restrictions apply`);
     }
 
-    // Trial plans are not available through plan changes - only at account creation
     if (planId === 'trial') {
       throw new Error('Trial plans cannot be selected through subscription changes. Trials are only available during account creation.');
     }
 
-    // Allow upgrades immediately (no billing cycle restrictions)
     if (!isDowngrade) {
-      console.log('⬆️ Processing immediate upgrade');
       return (await processImmediatePlanChange({
         tenantId,
         currentSubscription,
@@ -93,7 +81,6 @@ export async function changePlan(params: { tenantId: string; planId: string; bil
       })) as unknown as Record<string, unknown>;
     }
 
-    // Process immediate plan change for same-level changes or allowed downgrades
     return (await processImmediatePlanChange({
       tenantId,
       currentSubscription,
@@ -115,7 +102,6 @@ export async function changePlan(params: { tenantId: string; planId: string; bil
 export async function scheduleDowngrade(params: { tenantId: string; planId: string; effectiveDate: Date }): Promise<Record<string, unknown>> {
   const { tenantId, planId, effectiveDate } = params;
   try {
-    // Record the scheduled change in webhook_logs (subscription_history not in schema)
     await db.insert(webhookLogs).values({
       eventId: `scheduled_downgrade_${randomUUID()}`,
       eventType: 'scheduled_downgrade',
@@ -139,7 +125,8 @@ export async function scheduleDowngrade(params: { tenantId: string; planId: stri
 }
 
 /**
- * Process immediate plan changes (downgrades/same-level only). Upgrades must use Billing Portal or Checkout.
+ * Process immediate plan changes (downgrades/same-level only).
+ * Upgrades must go through Billing Portal or Checkout for payment confirmation.
  */
 export async function processImmediatePlanChange(params: {
   tenantId: string;
@@ -149,15 +136,14 @@ export async function processImmediatePlanChange(params: {
   billingCycle: string;
 }): Promise<string | Record<string, unknown>> {
   const { tenantId, currentSubscription, targetPlan, planId, billingCycle } = params;
+  const gateway = getPaymentGateway();
+
   try {
-    // Handle upgrade/change to paid plan: require Stripe session (Billing Portal), do NOT update plan without payment
-    if (currentSubscription.stripeSubscriptionId && isStripeConfiguredFn()) {
-      // Plan upgrades must go through Stripe Billing Portal so the customer completes payment there
+    if (currentSubscription.stripeSubscriptionId && gateway.isConfigured()) {
       const returnUrl = `${process.env.FRONTEND_URL || ''}/billing?payment=success&plan=${planId}`;
       const portalUrl = await createBillingPortalSession(tenantId, returnUrl);
       return (portalUrl ?? '') as string;
     } else {
-      // No existing Stripe subscription - create new subscription via Checkout
       return await createCheckoutSession({
         tenantId,
         planId,
@@ -178,7 +164,6 @@ export async function processImmediatePlanChange(params: {
  * Helper to check if plan change is valid.
  */
 export function isValidPlanChange(currentPlan: Record<string, unknown>, targetPlan: Record<string, unknown>): boolean {
-  // Can always upgrade to higher plans
   const planHierarchy: Record<string, number> = {
     'free': 0,
     'starter': 1,
@@ -189,38 +174,35 @@ export function isValidPlanChange(currentPlan: Record<string, unknown>, targetPl
   const currentLevel = planHierarchy[currentPlan.id as string] ?? 0;
   const targetLevel = planHierarchy[targetPlan.id as string] ?? 0;
 
-  // Allow upgrades or same level changes
   if (targetLevel >= currentLevel) return true;
 
-  // Allow downgrade if target plan allows it
   return (targetPlan as Record<string, unknown>).allowDowngrade !== false;
 }
 
 /**
  * Immediate downgrade with optional refund.
+ * Uses the payment gateway adapter for all provider interactions.
  */
 export async function immediateDowngrade(params: { tenantId: string; newPlan: string; reason?: string; refundRequested?: boolean }): Promise<Record<string, unknown>> {
   const { tenantId, newPlan, reason = 'customer_request', refundRequested = false } = params;
+  const gateway = getPaymentGateway();
+
   try {
     console.log('🔄 Processing immediate downgrade:', { tenantId, newPlan, refundRequested });
 
-    // Get current subscription
     const currentSubscription = await getCurrentSubscription(tenantId);
     if (!currentSubscription) {
       throw new Error('No active subscription found');
     }
 
-    // Validate downgrade
     if (currentSubscription.plan === newPlan) {
       throw new Error('Already on the requested plan');
     }
 
-    // Calculate proration and refund
     let refundAmount = 0;
     let prorationAmount = 0;
 
     if (refundRequested && currentSubscription.stripeSubscriptionId) {
-      // Calculate prorated refund amount
       const periodEnd = currentSubscription.currentPeriodEnd;
       const periodEndTime = periodEnd instanceof Date ? periodEnd.getTime() : new Date(periodEnd as string).getTime();
       const remainingDays = Math.max(0,
@@ -236,7 +218,6 @@ export async function immediateDowngrade(params: { tenantId: string; newPlan: st
       prorationAmount = currentAmount * prorationRatio;
       refundAmount = prorationAmount;
     } else if (refundRequested && !currentSubscription.stripeSubscriptionId) {
-      // For non-Stripe subscriptions, calculate based on last payment
       const [lastPayment] = await db
         .select()
         .from(payments)
@@ -250,8 +231,6 @@ export async function immediateDowngrade(params: { tenantId: string; newPlan: st
 
       if (lastPayment) {
         const paymentDate = new Date((lastPayment.paidAt ?? lastPayment.createdAt) as Date);
-        const periodEnd = currentSubscription.currentPeriodEnd;
-        const periodEndDate = periodEnd instanceof Date ? periodEnd : new Date(periodEnd as string);
         const totalPeriod = (currentSubscription.billingCycle === 'yearly' ? 365 : 30) as number;
         const daysSincePayment = Math.ceil((Date.now() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
         const remainingDays = Math.max(0, totalPeriod - daysSincePayment);
@@ -264,36 +243,31 @@ export async function immediateDowngrade(params: { tenantId: string; newPlan: st
       }
     }
 
-    // Log subscription change (using audit logs instead of subscriptionActions)
-    console.log(`📝 Subscription downgrade initiated: ${currentSubscription.plan} → ${newPlan} for tenant ${tenantId}`);
+    console.log(`📝 Subscription downgrade: ${currentSubscription.plan} → ${newPlan} for tenant ${tenantId}`);
 
-    // Cancel Stripe subscription if moving to trial
-    if (newPlan === 'trial' && currentSubscription.stripeSubscriptionId && stripe) {
-      await stripe.subscriptions.cancel(currentSubscription.stripeSubscriptionId as string, {
+    // Use gateway adapter for subscription operations
+    if (newPlan === 'trial' && currentSubscription.stripeSubscriptionId && gateway.isConfigured()) {
+      await gateway.cancelSubscription(currentSubscription.stripeSubscriptionId as string, {
         prorate: refundRequested,
-        invoice_now: refundRequested
+        invoiceNow: refundRequested,
       });
-    } else if (currentSubscription.stripeSubscriptionId && stripe) {
-      // Update Stripe subscription to new plan (use subscription ITEM id si_xxx, not subscription id sub_xxx)
+    } else if (currentSubscription.stripeSubscriptionId && gateway.isConfigured()) {
       const plans = await getAvailablePlans();
       const targetPlan = plans.find((p: Record<string, unknown>) => p.id === newPlan) as Record<string, unknown> | undefined;
 
       if (targetPlan && (targetPlan as Record<string, unknown>).stripePriceId) {
-        const stripeSubscription = await stripe.subscriptions.retrieve(currentSubscription.stripeSubscriptionId as string, { expand: ['items.data'] });
-        const subscriptionItemId = stripeSubscription?.items?.data?.[0]?.id;
+        const gatewaySub = await gateway.retrieveSubscription(currentSubscription.stripeSubscriptionId as string);
+        const subscriptionItemId = gatewaySub.items?.[0]?.id;
+
         if (subscriptionItemId) {
-          await stripe.subscriptions.update(currentSubscription.stripeSubscriptionId as string, {
-            items: [{
-              id: subscriptionItemId,
-              price: (targetPlan as Record<string, unknown>).stripePriceId as string,
-            }],
-            proration_behavior: refundRequested ? 'always_invoice' : 'none',
+          await gateway.updateSubscription(currentSubscription.stripeSubscriptionId as string, {
+            items: [{ id: subscriptionItemId, priceId: (targetPlan as Record<string, unknown>).stripePriceId as string }],
+            prorationBehavior: refundRequested ? 'always_invoice' : 'none',
           });
         }
       }
     }
 
-    // Update subscription in database (plans use applications and limits)
     const targetPlanDb = (await getAvailablePlans()).find((p: Record<string, unknown>) => p.id === newPlan) as Record<string, unknown> | undefined;
     await db
       .update(subscriptions)
@@ -309,27 +283,19 @@ export async function immediateDowngrade(params: { tenantId: string; newPlan: st
       })
       .where(eq(subscriptions.tenantId, tenantId));
 
-    // Update administrator roles for the downgraded plan
     await updateAdministratorRolesForPlan(tenantId, newPlan);
 
-    // Update organization applications for the downgraded plan
     try {
       const onboardingOrgSetup = (await import('../../onboarding/services/onboarding-organization-setup.js')).default;
       await onboardingOrgSetup.updateOrganizationApplicationsForPlanChange(tenantId, newPlan);
-      console.log('✅ Organization applications updated for downgraded plan');
     } catch (errOrgApp: unknown) {
-      const orgAppError = errOrgApp as Error;
-      console.error('❌ Failed to update organization applications:', orgAppError.message);
-      // Don't fail the downgrade, but log for manual intervention
+      console.error('❌ Failed to update organization applications:', (errOrgApp as Error).message);
     }
 
-    // Get the updated subscription
     const updatedSubscription = await getCurrentSubscription(tenantId);
 
-    // Record downgrade event appropriately
     const subIdForEvent = (updatedSubscription as Record<string, unknown>).subscriptionId ?? (updatedSubscription as Record<string, unknown>).id;
     if (newPlan === 'trial') {
-      // If downgrading to trial, record as trial event
       await recordTrialEvent(tenantId, subIdForEvent as string, 'plan_downgraded_to_trial', {
         fromPlan: currentSubscription.plan as string,
         toPlan: newPlan,
@@ -340,7 +306,6 @@ export async function immediateDowngrade(params: { tenantId: string; newPlan: st
         isImmediate: true
       });
     } else {
-      // Regular paid plan downgrade - create payment record
       const targetPlanForAmount = (await getAvailablePlans()).find((p: Record<string, unknown>) => p.id === newPlan) as Record<string, unknown> | undefined;
       await createPaymentRecord({
         tenantId: tenantId,
@@ -352,7 +317,7 @@ export async function immediateDowngrade(params: { tenantId: string; newPlan: st
         paymentType: 'plan_change',
         billingReason: 'plan_downgrade',
         description: `Downgraded from ${currentSubscription.plan} to ${newPlan}`,
-        prorationAmount: -prorationAmount, // Negative because it's a credit
+        prorationAmount: -prorationAmount,
         metadata: {
           fromPlan: currentSubscription.plan,
           toPlan: newPlan,
@@ -360,15 +325,14 @@ export async function immediateDowngrade(params: { tenantId: string; newPlan: st
           refundRequested: refundRequested,
           prorationAmount: prorationAmount,
           refundAmount: refundAmount,
-          isImmediate: true
+          isImmediate: true,
+          provider: gateway.providerName,
         },
         paidAt: new Date()
       } as Record<string, unknown>);
     }
 
-    // Process refund if requested and amount > 0
     if (refundRequested && refundAmount > 0) {
-      // Find the most recent payment to refund
       const [recentPayment] = await db
         .select()
         .from(payments)
@@ -388,7 +352,6 @@ export async function immediateDowngrade(params: { tenantId: string; newPlan: st
           reason: `Prorated refund for downgrade from ${currentSubscription.plan} to ${newPlan}`
         });
       } else {
-        // Create refund record even without original payment for tracking
         await createPaymentRecord({
           tenantId: tenantId,
           subscriptionId: ((updatedSubscription as Record<string, unknown>).subscriptionId ?? (updatedSubscription as Record<string, unknown>).id) as string,
@@ -407,17 +370,16 @@ export async function immediateDowngrade(params: { tenantId: string; newPlan: st
               const end = currentSubscription.currentPeriodEnd;
               const endTime = end instanceof Date ? end.getTime() : new Date(end as string).getTime();
               return Math.ceil((endTime - Date.now()) / (1000 * 60 * 60 * 24));
-            })()
+            })(),
+            provider: gateway.providerName,
           },
           paidAt: new Date()
         } as Record<string, unknown>);
       }
     }
 
-    // Log completion (using audit logs instead of subscriptionActions)
-    console.log(`✅ Subscription downgrade completed: ${currentSubscription.plan} → ${newPlan} for tenant ${tenantId}`);
+    console.log(`✅ Downgrade completed: ${currentSubscription.plan} → ${newPlan} for tenant ${tenantId}`);
 
-    // Send confirmation email
     const emailServiceDowngrade = new EmailService();
     await emailServiceDowngrade.sendDowngradeConfirmation({
       tenantId,
@@ -427,7 +389,6 @@ export async function immediateDowngrade(params: { tenantId: string; newPlan: st
       effectiveDate: new Date()
     });
 
-    console.log('✅ Immediate downgrade completed');
     return {
       refundAmount: refundRequested ? refundAmount : 0,
       newSubscription: updatedSubscription
@@ -482,7 +443,7 @@ export function calculateUserLimits(fromPlan: string, toPlan: string): Record<st
     free: 1,
     starter: 10,
     professional: 50,
-    enterprise: -1 // unlimited
+    enterprise: -1
   };
 
   return {

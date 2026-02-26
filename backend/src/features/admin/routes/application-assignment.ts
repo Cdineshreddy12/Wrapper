@@ -10,6 +10,7 @@ import {
 import { eq, and, sql, count, inArray } from 'drizzle-orm';
 import { PERMISSIONS } from '../../../constants/permissions.js';
 import { authenticateToken, requirePermission } from '../../../middleware/auth/auth.js';
+import { publishTenantApplicationSyncEvent } from '../../messaging/services/tenant-application-event-service.js';
 
 /**
  * Admin Application Assignment Routes
@@ -587,9 +588,9 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       const subscriptionTier = body.subscriptionTier ?? 'basic';
       const enabledModules = Array.isArray(body.enabledModules) ? body.enabledModules : [];
       const customPermissions = body.customPermissions;
-      const licenseCount = Number(body.licenseCount) ?? 0;
-      const maxUsers = body.maxUsers;
-      const expiresAt = body.expiresAt;
+      const licenseCount = Number(body.licenseCount) || 0;
+      const maxUsers = body.maxUsers ? Number(body.maxUsers) : null;
+      const expiresAt = body.expiresAt || null;
 
       // Verify tenant and application exist
       const [tenant, app] = await Promise.all([
@@ -680,6 +681,17 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
 
         assignmentId = updatedAssignment[0].id;
 
+        try {
+          const actorId = ((request as any).user?.userId || (request as any).user?.id || 'system') as string;
+          await publishTenantApplicationSyncEvent({
+            tenantId,
+            reason: 'manual_assignment',
+            actorId,
+          });
+        } catch (publishError: unknown) {
+          request.log.warn({ err: publishError, tenantId }, 'Failed to publish tenant application sync event');
+        }
+
         return {
           success: true,
           data: {
@@ -747,6 +759,17 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
         })
         .returning();
 
+      try {
+        const actorId = ((request as any).user?.userId || (request as any).user?.id || 'system') as string;
+        await publishTenantApplicationSyncEvent({
+          tenantId,
+          reason: 'manual_assignment',
+          actorId,
+        });
+      } catch (publishError: unknown) {
+        request.log.warn({ err: publishError, tenantId }, 'Failed to publish tenant application sync event');
+      }
+
       return {
         success: true,
         data: {
@@ -758,6 +781,8 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       };
     } catch (err: unknown) {
       const error = err as Error;
+      console.error('❌ Error assigning application to tenant:', error.message);
+      console.error('❌ Stack:', error.stack);
       request.log.error(error, 'Error assigning application to tenant:');
       return reply.code(500).send({
         success: false,
@@ -813,6 +838,17 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
         .where(eq(organizationApplications.id, assignmentId))
         .returning();
 
+      try {
+        const actorId = ((request as any).user?.userId || (request as any).user?.id || 'system') as string;
+        await publishTenantApplicationSyncEvent({
+          tenantId: existing[0].tenantId,
+          reason: 'manual_assignment',
+          actorId,
+        });
+      } catch (publishError: unknown) {
+        request.log.warn({ err: publishError, assignmentId }, 'Failed to publish tenant application sync event');
+      }
+
       return {
         success: true,
         data: {
@@ -862,6 +898,17 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       await db
         .delete(organizationApplications)
         .where(eq(organizationApplications.id, assignmentId));
+
+      try {
+        const actorId = ((request as any).user?.userId || (request as any).user?.id || 'system') as string;
+        await publishTenantApplicationSyncEvent({
+          tenantId: existing[0].tenantId,
+          reason: 'assignment_removal',
+          actorId,
+        });
+      } catch (publishError: unknown) {
+        request.log.warn({ err: publishError, assignmentId }, 'Failed to publish tenant application sync event');
+      }
 
       return {
         success: true,
@@ -997,6 +1044,19 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
           .insert(organizationApplications)
           .values(assignments as any)
           .returning();
+      }
+
+      if (created.length > 0) {
+        const actorId = ((request as any).user?.userId || (request as any).user?.id || 'system') as string;
+        await Promise.allSettled(
+          tenantIds.map((tenantId: string) =>
+            publishTenantApplicationSyncEvent({
+              tenantId,
+              reason: 'bulk_assignment',
+              actorId,
+            })
+          )
+        );
       }
 
       return reply.send({
@@ -1289,6 +1349,17 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
 
       console.log(`✅ Module ${module[0].moduleCode} assigned successfully to tenant ${tenantId} with ${modulePermissions.length} permissions`);
 
+      try {
+        const actorId = ((request as any).user?.userId || (request as any).user?.id || 'system') as string;
+        await publishTenantApplicationSyncEvent({
+          tenantId,
+          reason: 'module_assignment',
+          actorId,
+        });
+      } catch (publishError: unknown) {
+        request.log.warn({ err: publishError, tenantId }, 'Failed to publish tenant application sync event');
+      }
+
       return {
         success: true,
         data: {
@@ -1390,6 +1461,17 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
         })
         .where(eq(organizationApplications.id, existingAssignment[0].id));
 
+      try {
+        const actorId = ((request as any).user?.userId || (request as any).user?.id || 'system') as string;
+        await publishTenantApplicationSyncEvent({
+          tenantId,
+          reason: 'permission_update',
+          actorId,
+        });
+      } catch (publishError: unknown) {
+        request.log.warn({ err: publishError, tenantId }, 'Failed to publish tenant application sync event');
+      }
+
       return {
         success: true,
         data: {
@@ -1477,6 +1559,17 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
             updatedAt: new Date()
           })
           .where(eq(organizationApplications.id, existingAssignment[0].id));
+      }
+
+      try {
+        const actorId = ((request as any).user?.userId || (request as any).user?.id || 'system') as string;
+        await publishTenantApplicationSyncEvent({
+          tenantId,
+          reason: updatedModules.length === 0 ? 'assignment_removal' : 'module_assignment',
+          actorId,
+        });
+      } catch (publishError: unknown) {
+        request.log.warn({ err: publishError, tenantId }, 'Failed to publish tenant application sync event');
       }
 
       return {

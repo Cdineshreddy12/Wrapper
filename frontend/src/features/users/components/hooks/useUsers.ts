@@ -60,7 +60,7 @@ export const useUserMutations = () => {
     },
     onSuccess: (data, variables) => {
       toast.success(`Invitation sent to ${variables.email}!`);
-      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
     },
     onError: (error: any) => {
       LoggingService.logError(error, 'inviteUser', { email: error.variables?.email });
@@ -75,7 +75,7 @@ export const useUserMutations = () => {
     },
     onSuccess: (data, variables) => {
       toast.success('User updated successfully!');
-      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
     },
     onError: (error: any) => {
       LoggingService.logError(error, 'updateUser', { userId: error.variables?.userId });
@@ -90,7 +90,7 @@ export const useUserMutations = () => {
     },
     onSuccess: (data, variables) => {
       toast.success('User permanently deleted!');
-      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
     },
     onError: (error: any) => {
       LoggingService.logError(error, 'deleteUser', { userId: error.variables });
@@ -109,7 +109,7 @@ export const useUserMutations = () => {
     },
     onSuccess: (data, variables) => {
       toast.success('User promoted to admin!');
-      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
     },
     onError: (error: any) => {
       LoggingService.logError(error, 'promoteUser', { userId: error.variables });
@@ -124,7 +124,7 @@ export const useUserMutations = () => {
     },
     onSuccess: (data, variables) => {
       toast.success('User deactivated!');
-      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
     },
     onError: (error: any) => {
       LoggingService.logError(error, 'deactivateUser', { userId: error.variables });
@@ -139,7 +139,7 @@ export const useUserMutations = () => {
     },
     onSuccess: (data, variables) => {
       toast.success('User reactivated!');
-      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
     },
     onError: (error: any) => {
       LoggingService.logError(error, 'reactivateUser', { userId: error.variables });
@@ -154,6 +154,7 @@ export const useUserMutations = () => {
     },
     onSuccess: (data, variables) => {
       toast.success('Invitation resent!');
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
     },
     onError: (error: any) => {
       LoggingService.logError(error, 'resendInvite', { userId: error.variables });
@@ -168,7 +169,7 @@ export const useUserMutations = () => {
     },
     onSuccess: (data, variables) => {
       toast.success('Roles updated successfully!');
-      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
     },
     onError: (error: any) => {
       LoggingService.logError(error, 'assignRoles', { userId: error.variables?.userId, roleIds: error.variables?.roleIds });
@@ -184,7 +185,7 @@ export const useUserMutations = () => {
     onSuccess: (data, variables) => {
       const role = data.roleName || variables.roleId;
       toast.success(`Role "${role}" removed successfully!`);
-      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
       // Also invalidate user detail queries
       queryClient.invalidateQueries({ queryKey: userKeys.detail(variables.userId) });
       // Trigger permission refresh notification

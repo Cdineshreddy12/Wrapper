@@ -2,6 +2,7 @@ import { db } from '../../../db/index.js';
 import { eventTracking } from '../../../db/schema/index.js';
 import { eq, and, sql } from 'drizzle-orm';
 import { amazonMQPublisher } from '../utils/amazon-mq-publisher.js';
+import { EventTrackingService } from './event-tracking-service.js';
 
 export interface PublishEventParams {
   eventType: string;
@@ -44,9 +45,22 @@ export class InterAppEventService {
     eventData = {},
     publishedBy = 'system'
   }: PublishEventParams): Promise<Record<string, unknown> | undefined> {
+    const eventId = `outbox_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     try {
-      // Publish to Amazon MQ (replaces Redis Streams)
+      await EventTrackingService.trackPublishedEvent({
+        eventId,
+        eventType,
+        tenantId,
+        entityId,
+        streamKey: 'inter-app-events',
+        sourceApplication,
+        targetApplication,
+        eventData,
+        publishedBy
+      });
+
       const publishResult = await amazonMQPublisher.publishInterAppEvent({
+        eventId,
         eventType,
         sourceApplication,
         targetApplication,
@@ -56,26 +70,17 @@ export class InterAppEventService {
         publishedBy
       });
 
-      const eventId = publishResult?.eventId;
-      if (publishResult && publishResult.success && typeof eventId === 'string') {
-        // Track the event in our event tracking table
-        await this.trackPublishedEvent({
-          eventId,
-          eventType,
-          tenantId,
-          entityId,
-          streamKey: 'inter-app-events', // Keep for backward compatibility with tracking
-          sourceApplication,
-          targetApplication,
-          eventData,
-          publishedBy
+      if (publishResult && publishResult.success) {
+        await EventTrackingService.markEventPublished(eventId, {
+          routingKey: publishResult.routingKey,
+          messageId: publishResult.messageId,
         });
-
         console.log(`✅ Inter-app event published: ${sourceApplication} → ${targetApplication} (${eventType})`);
         return publishResult;
       }
     } catch (err: unknown) {
       const error = err as Error;
+      await EventTrackingService.markEventFailed(eventId, error.message, true).catch(() => {});
       console.error(`❌ Failed to publish inter-app event ${sourceApplication} → ${targetApplication}:`, error);
       throw error;
     }
@@ -96,37 +101,19 @@ export class InterAppEventService {
     publishedBy,
     metadata = {}
   }: TrackPublishedEventParams): Promise<Record<string, unknown> | undefined> {
-    try {
-      const trackingRecord = {
-        eventId,
-        eventType,
-        tenantId,
-        entityId,
-        streamKey,
-        sourceApplication,
-        targetApplication,
-        eventData,
-        publishedBy,
-        status: 'published' as const,
-        metadata: {
-          ...metadata,
-          interApp: true,
-          direction: `${sourceApplication}_to_${targetApplication}`
-        }
-      };
-
-      const [record] = await db
-        .insert(eventTracking)
-        .values(trackingRecord)
-        .returning();
-
-      console.log(`📝 Inter-app event tracked: ${sourceApplication} → ${targetApplication} (${eventType})`);
-      return record as Record<string, unknown> | undefined;
-    } catch (err: unknown) {
-      const error = err as Error;
-      console.error('❌ Failed to track inter-app event:', error);
-      throw error;
-    }
+    await EventTrackingService.trackPublishedEvent({
+      eventId,
+      eventType,
+      tenantId,
+      entityId,
+      streamKey,
+      sourceApplication,
+      targetApplication,
+      eventData,
+      publishedBy,
+      metadata,
+    });
+    return { eventId, status: 'pending' };
   }
 
   /**

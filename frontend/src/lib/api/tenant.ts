@@ -22,12 +22,16 @@ export const tenantAPI = {
 
   getOrganizationAssignments: () => api.get<ApiResponse<any>>('/tenants/current/organization-assignments'),
 
-  getTimeline: (params?: { limit?: number; includeActivity?: boolean }) => {
+  getTimeline: (params?: { limit?: number; offset?: number; includeActivity?: boolean }) => {
     const queryParams = new URLSearchParams();
-    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.limit != null) queryParams.append('limit', params.limit.toString());
+    if (params?.offset != null) queryParams.append('offset', params.offset.toString());
     if (params?.includeActivity !== undefined) queryParams.append('includeActivity', params.includeActivity.toString());
     const queryString = queryParams.toString();
-    return api.get<ApiResponse<{ events: Array<{ type: string; label: string; date: string; metadata?: Record<string, unknown> }> }>>(
+    return api.get<ApiResponse<{
+      events: Array<{ type: string; label: string; date: string; metadata?: Record<string, unknown> }>;
+      pagination?: { offset: number; limit: number; activityTotal: number; hasMore: boolean };
+    }>>(
       `/tenants/current/timeline${queryString ? `?${queryString}` : ''}`
     );
   },

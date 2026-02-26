@@ -47,6 +47,9 @@ function BillingContent() {
     subscriptionLoading,
     billingHistoryLoading,
     timelineLoading,
+    hasMoreTimeline,
+    isLoadingMoreTimeline,
+    loadMoreTimeline,
     upgradeMode,
     needsOnboarding,
     mockMode,
@@ -163,6 +166,9 @@ function BillingContent() {
           <TimelineTab
             timelineData={timelineData ?? undefined}
             timelineLoading={timelineLoading}
+            hasMore={hasMoreTimeline}
+            isLoadingMore={isLoadingMoreTimeline}
+            onLoadMore={() => loadMoreTimeline()}
           />
         </TabsContent>
       </Tabs>

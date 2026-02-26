@@ -34,17 +34,59 @@ class AmazonMQPublisher {
   private readonly businessSuiteApps: string[];
 
   constructor() {
-    // Business suite applications that should receive inter-app events
-    // Can be overridden via env: BUSINESS_SUITE_TARGET_APPS=crm,accounting,ops
     const suiteAppsEnv = process.env.BUSINESS_SUITE_TARGET_APPS;
     let apps = suiteAppsEnv
       ? suiteAppsEnv.split(',').map((app: string) => app.trim()).filter(Boolean)
       : ['crm', 'accounting', 'ops'];
-    // Always include 'ops' so Operations Management receives events (idempotent)
     if (!apps.includes('ops')) {
       apps = [...apps, 'ops'];
     }
     this.businessSuiteApps = apps;
+  }
+
+  /**
+   * Check if Amazon MQ credentials are configured in environment variables.
+   */
+  isConfigured(): boolean {
+    const url = process.env.AMAZON_MQ_URL;
+    if (url && url.startsWith('amqp')) return true;
+    return !!(
+      (process.env.AMAZON_MQ_HOSTNAME || process.env.AMAZON_MQ_HOST) &&
+      process.env.AMAZON_MQ_USERNAME &&
+      process.env.AMAZON_MQ_PASSWORD
+    );
+  }
+
+  /**
+   * Attempt to connect at startup. Logs diagnostics on failure but does not
+   * crash the server so other features keep working.
+   */
+  async initializeAtStartup(): Promise<boolean> {
+    if (!this.isConfigured()) {
+      console.warn('⚠️ ══════════════════════════════════════════════════════════════');
+      console.warn('⚠️  AMAZON MQ NOT CONFIGURED — event publishing is DISABLED');
+      console.warn('⚠️  Set AMAZON_MQ_URL or AMAZON_MQ_HOSTNAME/USERNAME/PASSWORD');
+      console.warn('⚠️ ══════════════════════════════════════════════════════════════');
+      return false;
+    }
+
+    try {
+      await this.connect();
+      console.log('✅ ══════════════════════════════════════════════════════════════');
+      console.log('✅  AMAZON MQ CONNECTED — event publishing is ACTIVE');
+      console.log(`✅  Target apps: ${this.businessSuiteApps.join(', ')}`);
+      console.log('✅ ══════════════════════════════════════════════════════════════');
+      return true;
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ ══════════════════════════════════════════════════════════════');
+      console.error('❌  AMAZON MQ CONNECTION FAILED — event publishing is DISABLED');
+      console.error(`❌  Error: ${error.message}`);
+      console.error('❌  Events will NOT be published until the connection is restored.');
+      console.error('❌  Check: credentials, hostname, port, network/firewall, TLS settings');
+      console.error('❌ ══════════════════════════════════════════════════════════════');
+      return false;
+    }
   }
 
   /**
@@ -193,7 +235,8 @@ class AmazonMQPublisher {
     tenantId,
     entityId,
     eventData = {},
-    publishedBy = 'system'
+    publishedBy = 'system',
+    eventId,
   }: {
     eventType: string;
     sourceApplication: string;
@@ -202,16 +245,23 @@ class AmazonMQPublisher {
     entityId: string;
     eventData?: Record<string, unknown>;
     publishedBy?: string;
+    eventId?: string;
   }): Promise<{ success: boolean; eventId: string; routingKey: string; messageId: string }> {
+    if (!this.isConfigured()) {
+      console.error(`❌ [MQ-DISABLED] Event DROPPED: ${sourceApplication} → ${targetApplication} (${eventType}) — Amazon MQ not configured`);
+      throw new Error('Amazon MQ is not configured. Set AMAZON_MQ_URL or AMAZON_MQ_HOSTNAME/USERNAME/PASSWORD environment variables.');
+    }
+
     if (!this.isConnected) {
       await this.connect();
     }
 
     try {
       const routingKey = this.generateRoutingKey(targetApplication, eventType);
+      const resolvedEventId = eventId || `inter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
       const message = {
-        eventId: `inter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        eventId: resolvedEventId,
         eventType,
         sourceApplication,
         targetApplication,
@@ -555,6 +605,11 @@ class AmazonMQPublisher {
    * Uses fanout exchange which ignores routing key
    */
   async publishBroadcast(eventType: string, eventData: Record<string, unknown>, publishedBy = 'system'): Promise<{ success: boolean; eventType: string }> {
+    if (!this.isConfigured()) {
+      console.error(`❌ [MQ-DISABLED] Broadcast DROPPED: ${eventType} — Amazon MQ not configured`);
+      throw new Error('Amazon MQ is not configured.');
+    }
+
     if (!this.isConnected) {
       await this.connect();
     }

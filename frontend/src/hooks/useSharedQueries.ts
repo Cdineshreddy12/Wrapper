@@ -46,8 +46,10 @@ export function useAuthStatus() {
 export function useEntityScope() {
   const { isAuthenticated, user } = useKindeAuth()
   const location = useLocation()
+  const { data: authData } = useAuthStatus()
   
   const isOnboardingPage = location.pathname === '/onboarding' || location.pathname.startsWith('/onboarding/')
+  const isTenantAdmin = authData?.authStatus?.isTenantAdmin === true
 
   return useQuery({
     queryKey: queryKeys.entityScope,
@@ -60,7 +62,8 @@ export function useEntityScope() {
       
       throw new Error('Failed to fetch entity scope')
     },
-    enabled: !!isAuthenticated && !!user && !isOnboardingPage,
+    // Entity scope is an admin-only API; avoid unnecessary 401s for regular users.
+    enabled: !!isAuthenticated && !!user && !isOnboardingPage && isTenantAdmin,
     staleTime: 5 * 60 * 1000, // 5 minutes - entity scope doesn't change often
     gcTime: 15 * 60 * 1000, // 15 minutes cache
     retry: (failureCount, error: any) => {
@@ -516,8 +519,8 @@ export function useInvalidateQueries() {
     invalidateApplicationAllocations: (entityId?: string) => queryClient.invalidateQueries({ queryKey: queryKeys.applicationAllocations(entityId) }),
     invalidateNotifications: () => queryClient.invalidateQueries({ queryKey: queryKeys.notifications }),
     invalidateUnreadCount: () => queryClient.invalidateQueries({ queryKey: queryKeys.unreadCount }),
-    invalidateUsers: (entityId?: string | null) => queryClient.invalidateQueries({ queryKey: queryKeys.users(entityId) }),
-    invalidateRoles: (filters?: { search?: string; type?: string }) => queryClient.invalidateQueries({ queryKey: queryKeys.roles(filters) }),
+    invalidateUsers: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
+    invalidateRoles: () => queryClient.invalidateQueries({ queryKey: ['roles'] }),
     invalidateAll: () => queryClient.invalidateQueries(),
     prefetchAuthStatus: () => queryClient.prefetchQuery({
       queryKey: queryKeys.authStatus,

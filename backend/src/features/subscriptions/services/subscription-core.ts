@@ -7,66 +7,60 @@ import {
   entities
 } from '../../../db/schema/index.js';
 import { CreditService } from '../../credits/index.js';
+import { getPaymentGateway } from '../adapters/index.js';
+import { StripePaymentGateway } from '../adapters/stripe.adapter.js';
+import type { PaymentGatewayPort } from '../adapters/index.js';
 
-// Validate Stripe configuration
-export const validateStripeConfig = (): boolean => {
-  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+// ---------------------------------------------------------------------------
+// Payment Gateway (adapter pattern) — primary API
+// ---------------------------------------------------------------------------
 
-  if (!stripeSecretKey) {
-    console.warn('⚠️ STRIPE_SECRET_KEY not configured - payments will use mock mode');
-    return false;
+export { getPaymentGateway };
+export type { PaymentGatewayPort };
+
+/**
+ * @deprecated Use `getPaymentGateway()` instead for provider-agnostic code.
+ * Kept for backward compatibility during migration.
+ */
+export function getRawStripeClient(): Stripe | null {
+  const gw = getPaymentGateway();
+  if (gw instanceof StripePaymentGateway) {
+    return gw.getRawClient();
   }
-
-  if (!webhookSecret) {
-    console.warn('⚠️ STRIPE_WEBHOOK_SECRET not configured - webhook verification will fail');
-  }
-
-  // Check if using test keys
-  if (stripeSecretKey.startsWith('sk_test_')) {
-    console.log('🧪 Using Stripe test mode');
-  } else if (stripeSecretKey.startsWith('sk_live_')) {
-    console.log('🚀 Using Stripe live mode');
-  }
-
-  return true;
-};
-
-// Initialize Stripe only if properly configured
-let stripe: Stripe | null = null;
-const isStripeConfigured = validateStripeConfig();
-
-if (isStripeConfigured && process.env.STRIPE_SECRET_KEY) {
-  stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-    apiVersion: '2023-10-16'
-  });
-} else {
-  console.warn('⚠️ Stripe not initialized - using mock payment system');
+  return null;
 }
 
-export { stripe, isStripeConfigured };
+// Legacy aliases — thin wrappers around the gateway
+const gateway = getPaymentGateway();
 
-// Check if Stripe is properly configured
+/** @deprecated Use `getPaymentGateway().isConfigured()` */
 export function isStripeConfiguredFn(): boolean {
-  return isStripeConfigured && !!stripe;
+  return gateway.isConfigured();
 }
 
-// Get detailed Stripe configuration status
+/** @deprecated Use `getPaymentGateway().getConfigStatus()` */
 export function getStripeConfigStatus(): Record<string, unknown> {
+  const status = gateway.getConfigStatus();
   return {
-    isConfigured: isStripeConfiguredFn(),
-    hasSecretKey: !!process.env.STRIPE_SECRET_KEY,
-    hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET,
-    stripeInitialized: !!stripe,
-    stripeType: typeof stripe,
-    stripeWebhooksAvailable: stripe ? !!stripe.webhooks : false,
-    environment: process.env.NODE_ENV || 'development',
-    secretKeyStart: process.env.STRIPE_SECRET_KEY ?
-      process.env.STRIPE_SECRET_KEY.substring(0, 10) + '...' : 'not set',
-    webhookSecretStart: process.env.STRIPE_WEBHOOK_SECRET ?
-      process.env.STRIPE_WEBHOOK_SECRET.substring(0, 10) + '...' : 'not set'
+    isConfigured: status.isConfigured,
+    hasSecretKey: status.hasSecretKey,
+    hasWebhookSecret: status.hasWebhookSecret,
+    stripeInitialized: status.isConfigured,
+    stripeType: status.isConfigured ? 'object' : 'undefined',
+    stripeWebhooksAvailable: status.isConfigured,
+    environment: status.environment,
+    secretKeyStart: status.details?.secretKeyPrefix ?? 'not set',
+    webhookSecretStart: status.details?.webhookSecretPrefix ?? 'not set',
+    provider: status.provider,
   };
 }
+
+/**
+ * @deprecated Use `getPaymentGateway()` directly. This is kept so that files
+ * still importing `stripe` continue to compile during migration.
+ */
+export const stripe = getRawStripeClient();
+export const isStripeConfigured = gateway.isConfigured();
 
 // Get current subscription (now returns credit-based information)
 export async function getCurrentSubscription(tenantId: string): Promise<Record<string, unknown>> {

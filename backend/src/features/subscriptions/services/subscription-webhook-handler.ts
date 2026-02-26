@@ -12,8 +12,9 @@ import { EmailService } from '../../../utils/email.js';
 import { v4 as uuidv4 } from 'uuid';
 import { CreditService } from '../../credits/index.js';
 import type { RequestContext } from '../../../services/activityLogger.js';
+import { getPaymentGateway } from '../adapters/index.js';
+import type { NormalizedWebhookEvent } from '../adapters/index.js';
 import {
-  stripe,
   isStripeConfiguredFn,
   getAvailablePlans,
   getPlanIdFromPriceId,
@@ -22,164 +23,112 @@ import {
 import { updateAdministratorRolesForPlan } from './subscription-plan-roles.js';
 import { createPaymentRecord } from './subscription-payment-records.js';
 
-// Handle Stripe webhooks
+function buildCheckoutAuditSnapshot(session: Record<string, unknown>): Record<string, unknown> {
+  const customerDetails = (session.customer_details ?? {}) as Record<string, unknown>;
+  const customerAddress = (customerDetails.address ?? {}) as Record<string, unknown>;
+  const taxIdsRaw = Array.isArray(customerDetails.tax_ids) ? customerDetails.tax_ids : [];
+
+  return {
+    checkoutSessionId: session.id ?? null,
+    paymentIntentId: session.payment_intent ?? null,
+    customerId: session.customer ?? null,
+    customerEmail: customerDetails.email ?? session.customer_email ?? null,
+    customerName: customerDetails.name ?? null,
+    customerPhone: customerDetails.phone ?? null,
+    receiptEmail: customerDetails.email ?? session.customer_email ?? null,
+    billingAddress: {
+      line1: customerAddress.line1 ?? null,
+      line2: customerAddress.line2 ?? null,
+      city: customerAddress.city ?? null,
+      state: customerAddress.state ?? null,
+      postalCode: customerAddress.postal_code ?? null,
+      country: customerAddress.country ?? null,
+    },
+    taxIds: taxIdsRaw.map((taxId) => {
+      const t = taxId as Record<string, unknown>;
+      return {
+        type: t.type ?? null,
+        value: t.value ?? null,
+      };
+    }),
+    currency: session.currency ?? null,
+    amountTotal: session.amount_total ?? null,
+    paymentStatus: session.payment_status ?? null,
+    mode: session.mode ?? null,
+    provider: 'stripe',
+    capturedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Handle payment gateway webhooks.
+ * The adapter normalises provider-specific events so business logic is gateway-agnostic.
+ */
 export async function handleWebhook(
   rawBody: Buffer | string,
   signature: string,
   endpointSecret: string
 ): Promise<Record<string, unknown>> {
-  let event: { id?: string; type?: string; data?: { object: Record<string, unknown> } } | null = null;
+  const gateway = getPaymentGateway();
+  let event: NormalizedWebhookEvent | null = null;
 
   try {
-    console.log('🚀 handleWebhook method called with:', {
-      hasRawBody: !!rawBody,
-      hasSignature: !!signature,
-      hasSecret: !!endpointSecret
-    });
+    console.log('🚀 handleWebhook called — provider:', gateway.providerName);
 
-    console.log('🔍 Environment variables for webhook processing:', {
-      NODE_ENV: process.env.NODE_ENV,
-      BYPASS_WEBHOOK_SIGNATURE: process.env.BYPASS_WEBHOOK_SIGNATURE,
-      BYPASS_ENABLED: process.env.NODE_ENV === 'development' && process.env.BYPASS_WEBHOOK_SIGNATURE === 'true'
-    });
-
-    if (!isStripeConfiguredFn()) {
-      throw new Error('Stripe not properly configured');
-    }
-
-    if (!stripe) {
-      throw new Error('Stripe object not initialized - check environment variables');
+    if (!gateway.isConfigured()) {
+      throw new Error('Payment gateway not properly configured');
     }
 
     if (!endpointSecret) {
-      throw new Error('Stripe webhook secret not configured');
+      throw new Error('Webhook secret not configured');
     }
 
-    console.log('🔍 Webhook processing details:', {
-      hasRawBody: !!rawBody,
-      rawBodyLength: rawBody?.length || 0,
-      hasSignature: !!signature,
-      signatureLength: signature?.length || 0,
-      hasEndpointSecret: !!endpointSecret,
-      endpointSecretLength: endpointSecret?.length || 0,
-      endpointSecretStart: endpointSecret?.substring(0, 10) + '...' || 'none',
-      stripeInitialized: !!stripe,
-      stripeType: typeof stripe,
-      stripeWebhooksAvailable: !!stripe.webhooks
-    });
+    event = await gateway.verifyWebhook(rawBody, signature, endpointSecret);
 
-    // Verify webhook signature with detailed error handling
-    event = null;
-
-    try {
-      console.log('🔐 Attempting to construct Stripe webhook event...');
-
-      // In development mode, allow bypassing signature verification for ngrok testing
-      if (process.env.NODE_ENV === 'development' && (process.env.BYPASS_WEBHOOK_SIGNATURE === 'true' || true)) {
-        console.log('⚠️ DEVELOPMENT MODE: Bypassing webhook signature verification');
-
-        // Try to parse the raw body as JSON to get event data
-        const eventData = JSON.parse(rawBody.toString());
-        console.log('📝 Parsed webhook body:', eventData);
-
-        event = {
-          id: eventData.id || 'dev_' + Date.now(),
-          type: eventData.type || 'unknown',
-          data: eventData.data || eventData,
-          created: eventData.created || Math.floor(Date.now() / 1000)
-        } as { id?: string; type?: string; data?: { object: Record<string, unknown> } };
-
-        console.log('✅ Development mode: Created mock event from raw body:', event);
-      } else {
-        console.log('🔐 Production mode: Verifying webhook signature');
-        // Production mode: Always verify signature
-        if (!stripe) throw new Error('Stripe not initialized');
-        event = stripe.webhooks.constructEvent(rawBody, signature, endpointSecret) as typeof event;
-      }
-
-      console.log('🔍 Event variable after construction:', {
-        eventDefined: typeof event !== 'undefined',
-        eventValue: event,
-        eventType: typeof event
-      });
-
-      if (!event) {
-        throw new Error('Failed to construct webhook event - event is undefined');
-      }
-    } catch (err: unknown) {
-      const stripeError = err as Error;
-      console.error('❌ Stripe webhook signature verification failed:', {
-        error: stripeError.message,
-        errorType: stripeError.constructor?.name,
-        errorStack: stripeError.stack
-      });
-
-      // Check for specific Stripe error types
-      if (stripeError.message.includes('No signatures found')) {
-        throw new Error('Webhook signature missing - check Stripe-Signature header');
-      } else if (stripeError.message.includes('Invalid signature')) {
-        throw new Error('Webhook signature invalid - check webhook secret and signature');
-      } else if (stripeError.message.includes('Timestamp too old')) {
-        throw new Error('Webhook timestamp too old - check system clock');
-      } else {
-        throw new Error(`Stripe webhook verification failed: ${stripeError.message}`);
-      }
-    }
-
-    // At this point, event should be defined
     if (!event || !event.type) {
-      throw new Error('Invalid webhook event - missing type or data');
+      throw new Error('Invalid webhook event — missing type or data');
     }
 
-    console.log('🎣 Stripe webhook received:', event.type);
+    console.log('🎣 Webhook received:', event.type, '(provider:', event.provider + ')');
 
-    // Process the webhook event
-    console.log('🔄 Processing webhook event type:', event.type);
-    const eventObj = event.data?.object ?? {};
-    console.log('🔄 Event data keys:', Object.keys(eventObj));
-    console.log('🔄 Event metadata keys:', Object.keys((eventObj as Record<string, unknown>).metadata || {}));
+    const eventObj = event.data;
 
     switch (event.type) {
-      case 'checkout.session.completed':
-        console.log('💳 Processing checkout.session.completed event');
-        // Check if this is a credit purchase (has creditAmount in metadata)
+      case 'checkout.completed': {
         if ((eventObj as Record<string, unknown>).metadata?.creditAmount) {
-          console.log('🎯 CREDIT PURCHASE DETECTED in subscription webhook - redirecting to credit service');
-          console.log('🎯 Credit amount:', (eventObj as Record<string, unknown>).metadata.creditAmount);
-          console.log('🎯 Tenant ID:', (eventObj as Record<string, unknown>).metadata.tenantId);
-          await handleCreditPurchase(eventObj as Record<string, unknown>);
+          console.log('🎯 CREDIT PURCHASE DETECTED — redirecting to credit handler');
+          await handleCreditPurchase(eventObj);
         } else {
-          console.log('📋 Regular subscription checkout - using standard handler');
-          await handleCheckoutCompleted(eventObj as Record<string, unknown>);
+          await handleCheckoutCompleted(eventObj);
         }
         break;
+      }
 
-      case 'invoice.paid':
-      case 'invoice.payment_succeeded':
+      case 'payment.succeeded':
         await handlePaymentSucceeded(eventObj as Record<string, unknown> & { id?: string; subscription?: string; customer?: string; amount_paid?: number; currency?: string; payment_intent?: string; billing_reason?: string; number?: string; tax?: number; period_start?: number; period_end?: number; attempt_count?: number; next_payment_attempt?: number; status_transitions?: { paid_at?: number }; lines?: { data?: Array<{ price?: { id?: string } }> }; payment_method_types?: string[] });
         break;
 
-      case 'invoice_payment.paid':
-        await handleInvoicePaymentPaid(eventObj as Record<string, unknown>);
+      case 'invoice.payment_paid':
+        await handleInvoicePaymentPaid(eventObj);
         break;
 
-      case 'invoice.payment_failed':
-        await handlePaymentFailed(eventObj as Record<string, unknown>);
+      case 'payment.failed':
+        await handlePaymentFailed(eventObj);
         break;
 
-      case 'customer.subscription.created':
+      case 'subscription.created':
         await handleSubscriptionCreated(eventObj as Record<string, unknown> & { id: string; customer: string; status: string; current_period_start: number; current_period_end: number });
         break;
 
-      case 'customer.subscription.updated':
+      case 'subscription.updated':
         await handleSubscriptionUpdated(eventObj as Record<string, unknown> & { id: string; status: string; current_period_start: number; current_period_end: number; items?: { data?: Array<{ price?: string | { id?: string } }> } });
         break;
 
-      case 'customer.subscription.deleted':
+      case 'subscription.deleted':
         await handleSubscriptionDeleted(eventObj as Record<string, unknown> & { id: string });
         break;
 
-      case 'charge.dispute.created':
+      case 'charge.disputed':
         await handleChargeDispute(eventObj as Record<string, unknown> & { id: string; charge: string; amount: number; reason?: string; status?: string; currency?: string; created?: number; evidence_details?: { due_by?: number; has_evidence?: boolean } });
         break;
 
@@ -195,27 +144,24 @@ export async function handleWebhook(
         console.log(`⚠️ Unhandled webhook event type: ${event.type}`);
     }
 
-    return { processed: true, eventType: event.type };
+    return { processed: true, eventType: event.type, provider: event.provider };
   } catch (err: unknown) {
     const error = err as Error;
     console.error('❌ Webhook processing error:', error);
 
-    // Don't throw error for test webhooks or missing metadata (should not retry)
     if (
       error.message?.includes('Missing tenantId or planId') ||
       error.message?.includes('test webhook') ||
       error.message?.includes('already_processed')
     ) {
-      console.log('🔄 Returning success for test webhook to prevent 500 error');
       return {
         processed: true,
-        eventType: (typeof event !== 'undefined' && event?.type) || 'unknown',
+        eventType: event?.type || 'unknown',
         skipped: true,
         reason: error.message
       };
     }
 
-    // Re-throw the error for other cases
     throw error;
   }
 }
@@ -224,6 +170,7 @@ export async function handleWebhook(
 export async function handleCheckoutCompleted(session: Record<string, unknown>): Promise<void> {
   try {
     const meta = (session.metadata ?? {}) as Record<string, unknown>;
+    const checkoutAuditSnapshot = buildCheckoutAuditSnapshot(session);
     console.log('🛒 Processing checkout completion:', session.id);
 
     const tenantId = meta.tenantId as string | undefined;
@@ -231,7 +178,6 @@ export async function handleCheckoutCompleted(session: Record<string, unknown>):
     const billingCycle = String(meta.billingCycle || 'yearly').toLowerCase();
     const dollarAmount = parseFloat(String(meta.dollarAmount ?? 0));
     const totalAmount = parseFloat(String(meta.totalAmount ?? 0));
-    // Calculate credits from dollar amount ($1 = 1000 credits at $0.001 each)
     const creditAmount = Math.floor(dollarAmount * 1000);
 
     console.log('📦 Checkout session metadata:', {
@@ -249,47 +195,32 @@ export async function handleCheckoutCompleted(session: Record<string, unknown>):
       throw new Error('Missing tenantId in checkout session metadata');
     }
 
+    const gateway = getPaymentGateway();
+
     // Handle credit purchases (payment mode)
     if (session.mode === 'payment' && creditAmount > 0) {
       console.log('💰 Processing credit purchase completion');
 
       if (!creditAmount) {
-        console.warn('⚠️ Missing credit amount in metadata:', { creditAmount });
         throw new Error('Missing credit amount in checkout session metadata');
       }
 
-      // Extract entity information from metadata for hierarchical purchases
       const entityType = (meta.entityType as string) || 'organization';
       let entityId = meta.entityId as string | undefined;
 
-      // If entityId is not in metadata, find the root organization
       if (!entityId) {
-        console.log('🔍 No entityId in metadata, finding root organization...');
         const rootOrgId = await CreditService.findRootOrganization(tenantId);
         if (rootOrgId) {
           entityId = rootOrgId;
-          console.log(`✅ Using root organization from webhook: ${entityId}`);
         } else {
-          console.warn('⚠️ Root organization not found, using tenantId as fallback');
           entityId = tenantId;
         }
       }
 
-      console.log('🏗️ Processing hierarchical credit purchase:', {
-        tenantId,
-        entityType,
-        entityId,
-        creditAmount
-      });
-
-      // Check if tenant exists before processing
       try {
         const tenantExists = await db.select().from(tenants).where(eq(tenants.tenantId, tenantId)).limit(1);
         if (tenantExists.length === 0) {
-          console.warn('⚠️ Tenant does not exist in database:', tenantId);
-          console.log('📝 Recording payment completion for future processing when tenant is created');
-
-          console.log('✅ Payment recorded - credits will be allocated when tenant data is available');
+          console.log('📝 Payment recorded — credits will be allocated when tenant data is available');
           return;
         }
       } catch (errDb: unknown) {
@@ -297,23 +228,21 @@ export async function handleCheckoutCompleted(session: Record<string, unknown>):
         console.warn('⚠️ Could not verify tenant existence:', dbError.message);
       }
 
-      // For webhook processing, we might not have a valid user context
       const purchaseResult = await CreditService.purchaseCredits({
-        tenantId: tenantId as string,
+        tenantId,
         userId: null as unknown as string,
         creditAmount,
-        paymentMethod: 'stripe',
+        paymentMethod: gateway.providerName,
         currency: 'USD',
         entityType,
         entityId: entityId ?? tenantId,
         isWebhookCompletion: true,
         sessionId: session.id as string,
-        notes: `Completed Stripe payment for ${creditAmount} credits (${entityType})`
+        notes: `Completed payment for ${creditAmount} credits (${entityType})`
       });
 
-      console.log('✅ Credit purchase processed successfully for tenant:', tenantId);
+      console.log('✅ Credit purchase processed for tenant:', tenantId);
 
-      // Create payment record for credit purchase
       try {
         const { PaymentService } = await import('./payment-service.js');
         const amountTotal = Number(session.amount_total ?? 0);
@@ -324,7 +253,7 @@ export async function handleCheckoutCompleted(session: Record<string, unknown>):
 
         if (!existingPayment) {
           await PaymentService.recordPayment({
-            tenantId: tenantId as string,
+            tenantId,
             stripePaymentIntentId: paymentIntentId,
             stripeCustomerId: session.customer as string | undefined,
             amount: paymentAmount.toString(),
@@ -334,33 +263,35 @@ export async function handleCheckoutCompleted(session: Record<string, unknown>):
             paymentType: 'credit_purchase',
             description: `Credit purchase: ${creditAmount.toLocaleString()} credits for $${paymentAmount.toFixed(2)}`,
             metadata: {
-              stripeCheckoutSessionId: session.id,
+              checkoutSessionId: session.id,
+              checkoutAuditSnapshot,
               creditAmount: creditAmount.toString(),
               entityType,
               entityId: entityId ?? tenantId,
               purchaseId: (purchaseResult as Record<string, unknown>)?.purchaseId,
+              provider: gateway.providerName,
               ...(typeof session.metadata === 'object' && session.metadata !== null ? (session.metadata as Record<string, unknown>) : {})
+            },
+            stripeRawData: {
+              checkoutSessionAudit: checkoutAuditSnapshot,
+              checkoutSession: session
             },
             paidAt: session.payment_status === 'paid' ? new Date() : undefined
           });
-          console.log('✅ Payment record created for credit purchase');
         } else {
           await PaymentService.updatePaymentStatus(
             paymentIntentId,
             session.payment_status === 'paid' ? 'succeeded' : 'pending',
             {
-              stripeCheckoutSessionId: session.id,
+              checkoutSessionId: session.id,
               paid_at: session.payment_status === 'paid' ? new Date().toISOString() : undefined
             }
           );
-          console.log('✅ Payment record updated for credit purchase');
         }
       } catch (err: unknown) {
-        const paymentError = err as Error;
-        console.error('❌ Failed to create payment record for credit purchase:', paymentError);
+        console.error('❌ Failed to create payment record for credit purchase:', err);
       }
 
-      // Send payment confirmation email for credit purchase
       try {
         const paymentsModule = await import('../routes/payments.js');
         const getTenantAdminEmail = paymentsModule.getTenantAdminEmail || (async () => null);
@@ -370,7 +301,7 @@ export async function handleCheckoutCompleted(session: Record<string, unknown>):
           const emailService = new EmailService();
 
           await emailService.sendPaymentConfirmation({
-            tenantId: tenantId as string,
+            tenantId,
             userEmail: userInfo.email,
             userName: userInfo.name,
             paymentType: 'credit_purchase',
@@ -384,16 +315,15 @@ export async function handleCheckoutCompleted(session: Record<string, unknown>):
           });
         }
       } catch (err: unknown) {
-        const emailError = err as Error;
-        console.error('❌ Failed to send credit purchase confirmation email:', emailError);
+        console.error('❌ Failed to send credit purchase confirmation email:', err);
       }
 
       return;
     }
 
-    // Legacy subscription handling (for backward compatibility)
+    // Subscription handling
     if (session.mode === 'subscription') {
-      console.log('📋 Processing legacy subscription completion');
+      console.log('📋 Processing subscription completion');
 
       const planId = packageId;
       if (!planId) {
@@ -443,17 +373,13 @@ export async function handleCheckoutCompleted(session: Record<string, unknown>):
           throw new Error(`Failed to update subscription for tenant: ${tenantId}`);
         }
 
-        console.log('✅ Subscription updated successfully:', (updatedSubscription as Record<string, unknown>).subscriptionId);
-
         await updateAdministratorRolesForPlan(tenantId, planId);
 
         try {
           const onboardingOrgSetup = (await import('../../onboarding/services/onboarding-organization-setup.js')).default;
           await onboardingOrgSetup.updateOrganizationApplicationsForPlanChange(tenantId, planId, { skipIfRecentlyUpdated: true });
-          console.log('✅ Organization applications updated for new plan');
         } catch (errOrgApp: unknown) {
-          const orgAppError = errOrgApp as Error;
-          console.error('❌ Failed to update organization applications:', orgAppError.message);
+          console.error('❌ Failed to update organization applications:', (errOrgApp as Error).message);
         }
 
         subscriptionRecord = existingSubscription;
@@ -485,7 +411,7 @@ export async function handleCheckoutCompleted(session: Record<string, unknown>):
         subscriptionRecord = newSubscription as unknown as Record<string, unknown>;
       }
 
-      console.log('💰 Checkout completed - payment will be recorded by invoice.payment_succeeded webhook');
+      console.log('💰 Checkout completed — payment will be recorded by payment.succeeded webhook');
 
       const [updatedTenant] = await db
         .update(tenants)
@@ -497,17 +423,73 @@ export async function handleCheckoutCompleted(session: Record<string, unknown>):
         .returning();
 
       if (!updatedTenant) {
-        console.warn('⚠️ Failed to update tenant with Stripe customer ID:', tenantId);
-      } else {
-        console.log('✅ Tenant updated with Stripe customer ID:', updatedTenant.tenantId);
+        console.warn('⚠️ Failed to update tenant with customer ID:', tenantId);
       }
 
-      // Allocate plan credits to tenant's organization entity
+      // Persist enterprise-grade checkout audit data at checkout completion time.
+      try {
+        const { PaymentService } = await import('./payment-service.js');
+        const checkoutPaymentIntentId = String(session.payment_intent ?? session.id);
+        const amountTotal = Number(session.amount_total ?? 0);
+        const checkoutAmount = amountTotal > 0 ? amountTotal / 100 : 0;
+        const existingCheckoutPayment = await PaymentService.getPaymentByIntentId(checkoutPaymentIntentId);
+
+        if (!existingCheckoutPayment) {
+          await PaymentService.recordPayment({
+            tenantId,
+            subscriptionId: (subscriptionRecord?.subscriptionId as string | undefined) ?? undefined,
+            stripePaymentIntentId: checkoutPaymentIntentId,
+            stripeCustomerId: (session.customer as string | undefined) ?? undefined,
+            amount: checkoutAmount.toString(),
+            currency: String(session.currency ?? 'USD').toUpperCase(),
+            status: session.payment_status === 'paid' ? 'succeeded' : 'pending',
+            paymentMethod: 'card',
+            paymentType: 'subscription_checkout',
+            billingReason: 'checkout_completed',
+            description: `Checkout completed for ${String((plan as Record<string, unknown>).name ?? planId)} plan`,
+            metadata: {
+              checkoutSessionId: session.id,
+              checkoutAuditSnapshot,
+              planId,
+              billingCycle,
+              provider: gateway.providerName,
+              ...(typeof session.metadata === 'object' && session.metadata !== null ? (session.metadata as Record<string, unknown>) : {})
+            },
+            stripeRawData: {
+              checkoutSessionAudit: checkoutAuditSnapshot,
+              checkoutSession: session
+            },
+            paidAt: session.payment_status === 'paid' ? new Date() : undefined
+          });
+        } else {
+          await db
+            .update(payments)
+            .set({
+              metadata: {
+                ...((existingCheckoutPayment.metadata as Record<string, unknown>) || {}),
+                checkoutSessionId: session.id,
+                checkoutAuditSnapshot,
+                planId,
+                billingCycle,
+                provider: gateway.providerName,
+              } as Record<string, unknown>,
+              stripeRawData: {
+                ...((existingCheckoutPayment.stripeRawData as Record<string, unknown>) || {}),
+                checkoutSessionAudit: checkoutAuditSnapshot,
+                checkoutSession: session
+              } as Record<string, unknown>,
+              updatedAt: new Date()
+            } as Record<string, unknown>)
+            .where(eq(payments.paymentId, (existingCheckoutPayment as Record<string, unknown>).paymentId as string));
+        }
+      } catch (errAudit: unknown) {
+        console.error('❌ Failed to persist checkout audit snapshot:', errAudit);
+      }
+
+      // Allocate plan credits
       try {
         const planCredits = Number((plan as Record<string, unknown>).credits) || 0;
         if (planCredits > 0) {
-          console.log(`💰 Allocating ${planCredits} plan credits for ${(plan as Record<string, unknown>).name} plan to tenant:`, tenantId);
-
           const orgEntities = await db
             .select()
             .from(entities)
@@ -516,34 +498,23 @@ export async function handleCheckoutCompleted(session: Record<string, unknown>):
           const defaultEntity = orgEntities.find((e: { isDefault?: boolean }) => e.isDefault) || orgEntities[0];
 
           if (defaultEntity) {
-            const entityId = defaultEntity.entityId;
-            console.log(`✅ Found organization entity for credit allocation:`, entityId);
-
             await CreditService.addCreditsToEntity({
               tenantId,
               entityType: 'organization',
-              entityId: entityId,
+              entityId: defaultEntity.entityId,
               creditAmount: planCredits,
               source: 'subscription',
               sourceId: (session as Record<string, unknown>).id || (subscriptionRecord?.subscriptionId as string),
               description: `${(plan as Record<string, unknown>).name} plan credits (${planCredits.toLocaleString()} annual credits)`,
               initiatedBy: '00000000-0000-0000-0000-000000000001'
             });
-
-            console.log(`✅ Successfully allocated ${planCredits} credits to organization entity ${entityId}`);
-          } else {
-            console.warn('⚠️ No organization entity found for tenant, skipping credit allocation:', tenantId);
           }
-        } else {
-          console.log(`ℹ️ Plan ${(plan as Record<string, unknown>).name} has no included credits (${planCredits}), skipping credit allocation`);
         }
       } catch (errCredit: unknown) {
-        const creditError = errCredit as Error;
-        console.error('❌ Failed to allocate plan credits:', creditError.message);
+        console.error('❌ Failed to allocate plan credits:', (errCredit as Error).message);
       }
 
-      console.log('✅ Checkout completed successfully for tenant:', tenantId, 'plan:', planId);
-
+      // Send confirmation email
       try {
         const paymentsModule = await import('../routes/payments.js');
         const getTenantAdminEmail = paymentsModule.getTenantAdminEmail || (async () => null);
@@ -566,8 +537,7 @@ export async function handleCheckoutCompleted(session: Record<string, unknown>):
           });
         }
       } catch (err: unknown) {
-        const emailError = err as Error;
-        console.error('❌ Failed to send subscription confirmation email:', emailError);
+        console.error('❌ Failed to send subscription confirmation email:', err);
       }
     }
   } catch (err: unknown) {
@@ -618,10 +588,8 @@ export async function applyInvoicePaymentToSubscription(
         planId,
         { skipIfRecentlyUpdated: true }
       );
-      console.log('✅ Organization applications updated for new plan');
     } catch (errOrgApp: unknown) {
-      const orgAppError = errOrgApp as Error;
-      console.error('❌ Failed to update organization applications:', orgAppError.message);
+      console.error('❌ Failed to update organization applications:', (errOrgApp as Error).message);
     }
   }
 }
@@ -650,14 +618,6 @@ export async function handlePaymentSucceeded(
 ): Promise<void> {
   try {
     console.log('💰 Processing payment succeeded for invoice:', invoice.id);
-    console.log('📋 Invoice details:', {
-      id: invoice.id,
-      customer: invoice.customer,
-      subscription: invoice.subscription,
-      amount: invoice.amount_paid,
-      currency: invoice.currency,
-      status: invoice.status
-    });
 
     const subscriptionId = invoice.subscription;
 
@@ -678,7 +638,6 @@ export async function handlePaymentSucceeded(
           .limit(1);
 
         if (fallbackSubscription) {
-          console.log('✅ Found subscription by customer ID:', invoice.customer);
           await applyInvoicePaymentToSubscription(fallbackSubscription as unknown as Record<string, unknown>, subscriptionId, invoice);
           return;
         }
@@ -697,16 +656,17 @@ export async function handlePaymentSucceeded(
             .limit(1);
 
           if (subByTenant) {
-            console.log('✅ Found subscription by tenant (Stripe customer):', tenantByCustomer.tenantId);
             await applyInvoicePaymentToSubscription(subByTenant as unknown as Record<string, unknown>, subscriptionId, invoice);
             return;
           }
         }
 
-        if (stripe && invoice.customer) {
+        // Attempt customer lookup via gateway
+        const gateway = getPaymentGateway();
+        if (gateway.isConfigured() && invoice.customer) {
           try {
-            const stripeCustomer = await stripe.customers.retrieve(invoice.customer as string);
-            const customerEmail = stripeCustomer.deleted ? null : (stripeCustomer.email || null);
+            const gatewayCustomer = await gateway.retrieveCustomer(invoice.customer as string);
+            const customerEmail = gatewayCustomer.deleted ? null : gatewayCustomer.email;
             if (customerEmail) {
               const [tenantUserByEmail] = await db
                 .select()
@@ -722,7 +682,7 @@ export async function handlePaymentSucceeded(
                   .limit(1);
 
                 if (subByTenant) {
-                  console.log('✅ Found subscription by Stripe customer email:', customerEmail, 'tenant:', tenantUserByEmail.tenantId);
+                  console.log('✅ Found subscription by customer email:', customerEmail);
                   await applyInvoicePaymentToSubscription(subByTenant as unknown as Record<string, unknown>, subscriptionId, invoice);
                   await db
                     .update(tenants)
@@ -732,9 +692,8 @@ export async function handlePaymentSucceeded(
                 }
               }
             }
-          } catch (errStripe: unknown) {
-            const stripeErr = errStripe as Error;
-            console.warn('⚠️ Stripe customer lookup fallback failed:', stripeErr?.message);
+          } catch (errGw: unknown) {
+            console.warn('⚠️ Gateway customer lookup fallback failed:', (errGw as Error)?.message);
           }
         }
 
@@ -763,56 +722,104 @@ export async function handlePaymentSucceeded(
         .where(eq(subscriptions.stripeSubscriptionId, subscriptionId));
 
       if (planId) {
-        console.log(`🔄 Triggering role upgrade for plan: ${planId}`);
         await updateAdministratorRolesForPlan(subscription.tenantId, planId);
         try {
           const onboardingOrgSetup = (await import('../../onboarding/services/onboarding-organization-setup.js')).default;
-          const result = await onboardingOrgSetup.updateOrganizationApplicationsForPlanChange(subscription.tenantId, planId, { skipIfRecentlyUpdated: true });
-          console.log('✅ Organization applications updated for new plan:', (result as Record<string, unknown>).applicationsAssigned ?? 0, 'assigned');
+          await onboardingOrgSetup.updateOrganizationApplicationsForPlanChange(subscription.tenantId, planId, { skipIfRecentlyUpdated: true });
         } catch (errOrgApp: unknown) {
-          const orgAppError = errOrgApp as Error;
-          console.error('❌ Failed to update organization applications:', orgAppError.message);
+          console.error('❌ Failed to update organization applications:', (errOrgApp as Error).message);
         }
       }
 
       const amountPaid = (invoice as Record<string, unknown>).amount_paid ?? 0;
       const invoiceTax = (invoice as Record<string, unknown>).tax ?? 0;
       const invoiceCurrency = (invoice as Record<string, unknown>).currency ?? 'USD';
+      const paymentIntentId = (invoice as Record<string, unknown>).payment_intent as string | undefined;
 
-      await createPaymentRecord({
-        tenantId: (subscription as Record<string, unknown>).tenantId,
-        subscriptionId: ((subscription as Record<string, unknown>).subscriptionId ?? undefined) as string | undefined,
-        stripePaymentIntentId: (invoice as Record<string, unknown>).payment_intent,
-        stripeInvoiceId: invoice.id,
-        stripeChargeId: (invoice as Record<string, unknown>).charge,
-        amount: amountPaid / 100,
-        currency: String(invoiceCurrency).toUpperCase(),
-        status: 'succeeded',
-        paymentMethod: 'card',
-        paymentType: 'subscription',
-        billingReason: (invoice as Record<string, unknown>).billing_reason,
-        invoiceNumber: (invoice as Record<string, unknown>).number,
-        description: `Subscription payment for ${(subscription as Record<string, unknown>).plan as string} plan`,
-        taxAmount: invoiceTax / 100,
-        processingFees: 0,
-        netAmount: (amountPaid - invoiceTax) / 100,
-        paymentMethodDetails: (invoice as Record<string, unknown>).payment_intent ? {} : {},
-        riskLevel: 'normal',
-        metadata: {
-          stripeCustomerId: (invoice as Record<string, unknown>).customer,
+      let existingPaymentByIntent: Record<string, unknown> | null = null;
+      if (paymentIntentId) {
+        const [existing] = await db
+          .select()
+          .from(payments)
+          .where(eq(payments.stripePaymentIntentId, paymentIntentId))
+          .limit(1);
+        existingPaymentByIntent = (existing as unknown as Record<string, unknown>) || null;
+      }
+
+      if (existingPaymentByIntent) {
+        const existingMeta = (existingPaymentByIntent.metadata as Record<string, unknown>) || {};
+        const existingRaw = (existingPaymentByIntent.stripeRawData as Record<string, unknown>) || {};
+        await db
+          .update(payments)
+          .set({
+            tenantId: (subscription as Record<string, unknown>).tenantId,
+            subscriptionId: ((subscription as Record<string, unknown>).subscriptionId ?? undefined) as string | undefined,
+            stripeInvoiceId: invoice.id as string,
+            stripeChargeId: (invoice as Record<string, unknown>).charge as string | undefined,
+            amount: String(amountPaid / 100),
+            currency: String(invoiceCurrency).toUpperCase(),
+            status: 'succeeded',
+            paymentMethod: 'card',
+            paymentType: 'subscription',
+            billingReason: (invoice as Record<string, unknown>).billing_reason as string | undefined,
+            invoiceNumber: (invoice as Record<string, unknown>).number as string | undefined,
+            description: `Subscription payment for ${(subscription as Record<string, unknown>).plan as string} plan`,
+            taxAmount: String(invoiceTax / 100),
+            metadata: {
+              ...existingMeta,
+              stripeCustomerId: (invoice as Record<string, unknown>).customer,
+              billingReason: (invoice as Record<string, unknown>).billing_reason,
+              subscriptionPeriod: {
+                start: new Date(((invoice as Record<string, unknown>).period_start ?? 0) * 1000),
+                end: new Date(((invoice as Record<string, unknown>).period_end ?? 0) * 1000)
+              },
+              attempt_count: (invoice as Record<string, unknown>).attempt_count,
+              nextPaymentAttempt: (invoice as Record<string, unknown>).next_payment_attempt ? new Date((invoice as Record<string, unknown>).next_payment_attempt * 1000) : null
+            } as Record<string, unknown>,
+            stripeRawData: {
+              ...existingRaw,
+              invoice
+            } as Record<string, unknown>,
+            paidAt: new Date(((invoice as Record<string, unknown>).status_transitions?.paid_at ?? 0) * 1000),
+            updatedAt: new Date()
+          } as Record<string, unknown>)
+          .where(eq(payments.paymentId, (existingPaymentByIntent.paymentId as string)));
+      } else {
+        await createPaymentRecord({
+          tenantId: (subscription as Record<string, unknown>).tenantId,
+          subscriptionId: ((subscription as Record<string, unknown>).subscriptionId ?? undefined) as string | undefined,
+          stripePaymentIntentId: (invoice as Record<string, unknown>).payment_intent,
+          stripeInvoiceId: invoice.id,
+          stripeChargeId: (invoice as Record<string, unknown>).charge,
+          amount: amountPaid / 100,
+          currency: String(invoiceCurrency).toUpperCase(),
+          status: 'succeeded',
+          paymentMethod: 'card',
+          paymentType: 'subscription',
           billingReason: (invoice as Record<string, unknown>).billing_reason,
-          subscriptionPeriod: {
-            start: new Date(((invoice as Record<string, unknown>).period_start ?? 0) * 1000),
-            end: new Date(((invoice as Record<string, unknown>).period_end ?? 0) * 1000)
+          invoiceNumber: (invoice as Record<string, unknown>).number,
+          description: `Subscription payment for ${(subscription as Record<string, unknown>).plan as string} plan`,
+          taxAmount: invoiceTax / 100,
+          processingFees: 0,
+          netAmount: (amountPaid - invoiceTax) / 100,
+          paymentMethodDetails: {},
+          riskLevel: 'normal',
+          metadata: {
+            stripeCustomerId: (invoice as Record<string, unknown>).customer,
+            billingReason: (invoice as Record<string, unknown>).billing_reason,
+            subscriptionPeriod: {
+              start: new Date(((invoice as Record<string, unknown>).period_start ?? 0) * 1000),
+              end: new Date(((invoice as Record<string, unknown>).period_end ?? 0) * 1000)
+            },
+            attempt_count: (invoice as Record<string, unknown>).attempt_count,
+            nextPaymentAttempt: (invoice as Record<string, unknown>).next_payment_attempt ? new Date((invoice as Record<string, unknown>).next_payment_attempt * 1000) : null
           },
-          attempt_count: (invoice as Record<string, unknown>).attempt_count,
-          nextPaymentAttempt: (invoice as Record<string, unknown>).next_payment_attempt ? new Date((invoice as Record<string, unknown>).next_payment_attempt * 1000) : null
-        },
-        stripeRawData: invoice,
-        paidAt: new Date(((invoice as Record<string, unknown>).status_transitions?.paid_at ?? 0) * 1000)
-      });
+          stripeRawData: invoice,
+          paidAt: new Date(((invoice as Record<string, unknown>).status_transitions?.paid_at ?? 0) * 1000)
+        });
+      }
 
-      console.log('✅ Payment succeeded and recorded for tenant:', subscription.tenantId, 'amount:', amountPaid / 100);
+      console.log('✅ Payment succeeded for tenant:', subscription.tenantId, 'amount:', amountPaid / 100);
 
       try {
         const ActivityLogger = (await import('../../../services/activityLogger.js')).default;
@@ -825,7 +832,7 @@ export async function handlePaymentSucceeded(
         if (tenantUser) {
           const requestContext: RequestContext = {
             ipAddress: undefined,
-            userAgent: 'stripe-webhook',
+            userAgent: 'payment-webhook',
             sessionId: undefined,
             source: 'webhook'
           };
@@ -847,8 +854,7 @@ export async function handlePaymentSucceeded(
           );
         }
       } catch (errLog: unknown) {
-        const logError = errLog as Error;
-        console.warn('⚠️ Failed to log payment success activity:', logError.message);
+        console.warn('⚠️ Failed to log payment success activity:', (errLog as Error).message);
       }
     } else {
       console.log('⚠️ Payment succeeded but no subscription ID found in invoice:', invoice.id);
@@ -860,38 +866,28 @@ export async function handlePaymentSucceeded(
   }
 }
 
-// Handle invoice payment paid webhook (different from invoice.payment_succeeded)
+// Handle invoice payment paid webhook
 export async function handleInvoicePaymentPaid(invoicePayment: Record<string, unknown>): Promise<void> {
   try {
     console.log('💰 Processing invoice payment paid:', invoicePayment.id);
-    console.log('📋 Invoice Payment details:', {
-      id: invoicePayment.id,
-      invoice: invoicePayment.invoice,
-      amount_paid: invoicePayment.amount_paid,
-      currency: invoicePayment.currency,
-      status: invoicePayment.status,
-      payment: (invoicePayment as Record<string, unknown>).payment
-    });
 
-    if (!isStripeConfiguredFn()) {
-      console.log('⚠️ Stripe not configured - skipping invoice payment processing');
+    const gateway = getPaymentGateway();
+
+    if (!gateway.isConfigured()) {
+      console.log('⚠️ Gateway not configured — skipping invoice payment processing');
       return;
     }
 
     try {
-      if (!stripe) throw new Error('Stripe not configured');
-      const invoice = await stripe.invoices.retrieve(invoicePayment.invoice as string);
-      console.log('📄 Retrieved invoice:', {
-        id: invoice.id,
-        customer: invoice.customer,
-        subscription: invoice.subscription,
-        status: invoice.status
-      });
+      const gatewayInvoice = await gateway.retrieveInvoice(invoicePayment.invoice as string);
+      console.log('📄 Retrieved invoice:', { id: gatewayInvoice.id, customer: gatewayInvoice.customerId, subscription: gatewayInvoice.subscriptionId });
 
-      await handlePaymentSucceeded(invoice as Record<string, unknown> & { id?: string; subscription?: string; customer?: string; amount_paid?: number; currency?: string; payment_intent?: string; billing_reason?: string; number?: string; tax?: number; period_start?: number; period_end?: number; attempt_count?: number; next_payment_attempt?: number; status_transitions?: { paid_at?: number }; lines?: { data?: Array<{ price?: { id?: string } }> }; payment_method_types?: string[]; charge?: string });
+      // Map gateway invoice back to the shape handlePaymentSucceeded expects
+      const invoiceObj = gatewayInvoice.rawData as Record<string, unknown>;
+      await handlePaymentSucceeded(invoiceObj as Record<string, unknown> & { id?: string; subscription?: string; customer?: string; amount_paid?: number; currency?: string; payment_intent?: string; billing_reason?: string; number?: string; tax?: number; period_start?: number; period_end?: number; attempt_count?: number; next_payment_attempt?: number; status_transitions?: { paid_at?: number }; lines?: { data?: Array<{ price?: { id?: string } }> }; payment_method_types?: string[]; charge?: string });
     } catch (err: unknown) {
-      const stripeError = err as Error;
-      console.error('❌ Failed to retrieve invoice from Stripe:', stripeError);
+      const gwError = err as Error;
+      console.error('❌ Failed to retrieve invoice:', gwError);
 
       const paymentIntent = (invoicePayment as Record<string, unknown>).payment?.payment_intent;
       if (paymentIntent) {
@@ -902,7 +898,6 @@ export async function handleInvoicePaymentPaid(invoicePayment: Record<string, un
           .limit(1);
 
         if (payment) {
-          console.log('✅ Found payment record, updating status');
           const paidAt = (invoicePayment as Record<string, unknown>).status_transitions?.paid_at;
           await db
             .update(payments)
@@ -972,8 +967,6 @@ export async function handlePaymentFailed(invoice: Record<string, unknown>): Pro
         paidAt: new Date()
       } as Record<string, unknown>);
 
-      console.log('❌ Payment failed and recorded for tenant:', subscription.tenantId);
-
       try {
         const ActivityLogger = (await import('../../../services/activityLogger.js')).default;
         const [tenantUser] = await db
@@ -985,7 +978,7 @@ export async function handlePaymentFailed(invoice: Record<string, unknown>): Pro
         if (tenantUser) {
           const requestContext: RequestContext = {
             ipAddress: undefined,
-            userAgent: 'stripe-webhook',
+            userAgent: 'payment-webhook',
             sessionId: undefined,
             source: 'webhook'
           };
@@ -1009,8 +1002,7 @@ export async function handlePaymentFailed(invoice: Record<string, unknown>): Pro
           );
         }
       } catch (errLog: unknown) {
-        const logError = errLog as Error;
-        console.warn('⚠️ Failed to log payment failure activity:', logError.message);
+        console.warn('⚠️ Failed to log payment failure activity:', (errLog as Error).message);
       }
 
       const emailService = new EmailService();
@@ -1178,7 +1170,7 @@ export async function handleRefund(
   }
 }
 
-// Handle subscription updated webhook (e.g. after plan change in Billing Portal)
+// Handle subscription updated webhook
 export async function handleSubscriptionUpdated(
   subscription: Record<string, unknown> & {
     id: string;
@@ -1223,14 +1215,12 @@ export async function handleSubscriptionUpdated(
       .where(eq(subscriptions.stripeSubscriptionId, subscription.id));
 
     if (existing?.tenantId && planId) {
-      console.log('🔄 Syncing plan from Stripe subscription.updated:', planId);
       await updateAdministratorRolesForPlan(existing.tenantId, planId);
       try {
         const onboardingOrgSetup = (await import('../../onboarding/services/onboarding-organization-setup.js')).default;
         await onboardingOrgSetup.updateOrganizationApplicationsForPlanChange(existing.tenantId, planId, { skipIfRecentlyUpdated: true });
       } catch (errOrgApp: unknown) {
-        const orgAppError = errOrgApp as Error;
-        console.error('❌ Failed to update organization applications:', orgAppError.message);
+        console.error('❌ Failed to update organization applications:', (errOrgApp as Error).message);
       }
     }
 
@@ -1273,7 +1263,7 @@ export async function handleSubscriptionCreated(
         })
         .where(eq(subscriptions.subscriptionId, existingSubscription.subscriptionId));
 
-      console.log('✅ Updated existing subscription with Stripe subscription ID');
+      console.log('✅ Updated existing subscription with provider subscription ID');
     }
   } catch (err: unknown) {
     const error = err as Error;
@@ -1333,11 +1323,8 @@ export async function handleChargeSucceeded(
 // Handle credit purchase checkout completion
 export async function handleCreditPurchase(session: Record<string, unknown>): Promise<void> {
   const meta = (session.metadata ?? {}) as Record<string, unknown>;
-  console.log('🎯 === CREDIT PURCHASE WEBHOOK HANDLER STARTED ===');
-  console.log('🎯 Session ID:', session.id);
-  console.log('🎯 Payment Status:', session.payment_status);
+  const gateway = getPaymentGateway();
   try {
-    console.log('🎯 CREDIT PURCHASE WEBHOOK HANDLER CALLED');
     console.log('💰 Processing credit purchase checkout:', session.id);
 
     const tenantId = meta.tenantId as string | undefined;
@@ -1346,28 +1333,15 @@ export async function handleCreditPurchase(session: Record<string, unknown>): Pr
     const entityType = (meta.entityType as string) || 'organization';
     const entityId = (meta.entityId as string) || tenantId;
 
-    console.log('📋 Credit purchase details:', {
-      tenantId,
-      userId,
-      creditAmount,
-      entityType,
-      entityId,
-      paymentStatus: session.payment_status
-    });
-
     if (!tenantId || !creditAmount) {
-      console.error('❌ Missing required metadata for credit purchase');
       throw new Error('Missing required metadata for credit purchase');
     }
 
     let finalUserId: string | undefined = userId as string | undefined;
     if (!finalUserId) {
-      console.log('⚠️ No userId in metadata, finding admin user for tenant...');
       try {
-        console.log('🔐 Setting RLS context for user lookup...');
         await db.execute(sql`SELECT set_config('app.tenant_id', ${tenantId}, false)`);
         await db.execute(sql`SELECT set_config('app.is_admin', 'true', false)`);
-        console.log('✅ RLS context set for user lookup');
 
         const adminUsers = await db.execute(sql`
           SELECT user_id 
@@ -1380,9 +1354,7 @@ export async function handleCreditPurchase(session: Record<string, unknown>): Pr
 
         if (adminUsers.length > 0) {
           finalUserId = (adminUsers[0] as Record<string, unknown>).user_id as string;
-          console.log('✅ Found admin user:', finalUserId);
         } else {
-          console.log('⚠️ No admin user found, looking for any active user...');
           const anyUsers = await db.execute(sql`
             SELECT user_id 
             FROM tenant_users 
@@ -1393,15 +1365,12 @@ export async function handleCreditPurchase(session: Record<string, unknown>): Pr
 
           if (anyUsers.length > 0) {
             finalUserId = (anyUsers[0] as Record<string, unknown>).user_id as string;
-            console.log('✅ Found active user:', finalUserId);
           } else {
-            throw new Error('No active users found for tenant - cannot process credit purchase');
+            throw new Error('No active users found for tenant');
           }
         }
       } catch (errFind: unknown) {
-        const error = errFind as Error;
-        console.error('❌ Error finding user for tenant:', error);
-        throw new Error(`Cannot process credit purchase: ${error.message}`);
+        throw new Error(`Cannot process credit purchase: ${(errFind as Error).message}`);
       }
     }
 
@@ -1410,30 +1379,24 @@ export async function handleCreditPurchase(session: Record<string, unknown>): Pr
       return;
     }
 
-    console.log('🔐 Setting RLS context for credit operations...');
     await db.execute(sql`SELECT set_config('app.tenant_id', ${tenantId}, false)`);
     await db.execute(sql`SELECT set_config('app.user_id', ${finalUserId}, false)`);
     await db.execute(sql`SELECT set_config('app.is_admin', 'true', false)`);
-    console.log('✅ RLS context set');
 
-    console.log('📦 Importing CreditService...');
     const { CreditService } = await import('../../credits/index.js');
-    console.log('✅ CreditService imported successfully');
 
-    console.log('🔄 Calling CreditService.purchaseCredits...');
     const purchaseResult = await CreditService.purchaseCredits({
       tenantId: tenantId!,
       userId: finalUserId!,
       creditAmount,
-      paymentMethod: 'stripe',
+      paymentMethod: gateway.providerName,
       currency: 'USD',
       entityType,
       entityId: entityId ?? tenantId!,
-      notes: `Stripe checkout: ${String(session.id)}`,
+      notes: `Payment checkout: ${String(session.id)}`,
       isWebhookCompletion: true,
       sessionId: String(session.id)
     });
-    console.log('✅ CreditService.purchaseCredits completed');
 
     try {
       const { PaymentService } = await import('./payment-service.js');
@@ -1460,27 +1423,26 @@ export async function handleCreditPurchase(session: Record<string, unknown>): Pr
             entityType,
             entityId: entityId ?? tenantId!,
             purchaseId: (purchaseResult as Record<string, unknown>)?.purchaseId,
+            provider: gateway.providerName,
             ...(typeof session.metadata === 'object' && session.metadata !== null ? (session.metadata as Record<string, unknown>) : {})
           },
           paidAt: (session.payment_status === 'paid' ? new Date() : undefined) as Date | undefined
         } as Record<string, unknown>);
-        console.log('✅ Payment record created for credit purchase');
       } else {
         await PaymentService.updatePaymentStatus(paymentIntentId, session.payment_status === 'paid' ? 'succeeded' : 'pending', {
-          stripe_checkout_session_id: session.id,
+          checkout_session_id: session.id,
           paid_at: session.payment_status === 'paid' ? new Date().toISOString() : undefined
         });
-        console.log('✅ Payment record updated for credit purchase');
       }
     } catch (err: unknown) {
-      const paymentError = err as Error;
-      console.error('❌ Failed to create payment record for credit purchase:', paymentError);
+      console.error('❌ Failed to create payment record for credit purchase:', err);
     }
 
-    console.log('✅ Credit purchase processed successfully:', {
+    console.log('✅ Credit purchase processed:', {
       purchaseId: (purchaseResult as Record<string, unknown>)?.purchaseId,
       creditsAllocated: creditAmount,
-      tenantId
+      tenantId,
+      provider: gateway.providerName,
     });
   } catch (err: unknown) {
     const error = err as Error;

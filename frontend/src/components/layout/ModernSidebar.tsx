@@ -98,20 +98,32 @@ const NavItem = ({ item, isActive, isCollapsed }: { item: any; isActive: boolean
     )
 }
 
+const ADMIN_ONLY_URLS = [
+    '/dashboard/users',
+    '/dashboard/organization',
+    '/dashboard/roles',
+    '/dashboard/activity',
+    '/dashboard/billing',
+    '/dashboard/settings',
+]
+
 export function ModernSidebar({
     navData,
     userData,
+    isTenantAdmin = false,
     className,
 }: {
     navData?: any
     userData?: any
+    isTenantAdmin?: boolean
     className?: string
 }) {
     const { state } = useSidebar()
     const { logout } = useKindeAuth()
     const location = useLocation()
     const isCollapsed = state === "collapsed"
-    const mainNavItems = navData?.navMain || [
+
+    const allMainNavItems = navData?.navMain || [
         { title: "Applications", url: "/dashboard/applications", icon: LayoutDashboard },
         { title: "Team", url: "/dashboard/users", icon: Users },
         { title: "Organization", url: "/dashboard/organization", icon: Building2 },
@@ -119,10 +131,18 @@ export function ModernSidebar({
         { title: "Activity", url: "/dashboard/activity", icon: Activity },
     ]
 
-    const bottomItems = [
+    const allBottomItems = [
         { title: "Billing", url: "/dashboard/billing", icon: CreditCard },
         { title: "Settings", url: "/dashboard/settings", icon: Settings },
     ]
+
+    const mainNavItems = isTenantAdmin
+        ? allMainNavItems
+        : allMainNavItems.filter((item: any) => !ADMIN_ONLY_URLS.some(u => item.url.startsWith(u)))
+
+    const bottomItems = isTenantAdmin
+        ? allBottomItems
+        : allBottomItems.filter((item: any) => !ADMIN_ONLY_URLS.some(u => item.url.startsWith(u)))
 
     const [activeItem, setActiveItem] = useState<string>(() => {
         const allItems = [...mainNavItems, ...bottomItems]

@@ -29,7 +29,7 @@ import { useEffect } from 'react';
 import { config } from '@/lib/config';
 
 export function ApplicationDetailsPage() {
-  const { appId } = useParams<{ appId: string }>();
+  const { appId } = useParams({ strict: false });
   const navigate = useNavigate();
   const { glassmorphismEnabled } = useTheme();
   const { applications, isLoading } = useApplications();

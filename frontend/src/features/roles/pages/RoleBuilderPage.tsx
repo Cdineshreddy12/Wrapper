@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Container } from '@/components/common/Page';
 import { Button } from '@/components/ui/button';
 import { ApplicationModuleRoleBuilder } from '@/features/roles/ApplicationModuleRoleBuilder';
-import { useRoles } from '@/hooks/useSharedQueries';
+import { useRoles, useInvalidateQueries } from '@/hooks/useSharedQueries';
 import AnimatedLoader from '@/components/common/feedback/AnimatedLoader';
 import { AlertCircle } from 'lucide-react';
 
@@ -20,10 +20,10 @@ export function RoleBuilderPage() {
     return rolesData.find((r: any) => r.roleId === roleId || r.id === roleId) || null;
   }, [rolesData, roleId, isEditMode]);
 
+  const { invalidateRoles } = useInvalidateQueries();
+
   const handleSave = async (_role?: any) => {
-    // ApplicationModuleRoleBuilder already performs the create/update via
-    // /api/custom-roles/create-from-builder or update-from-builder and only
-    // calls onSave after success. So we just redirect to the roles dashboard.
+    invalidateRoles();
     navigate({ to: '/dashboard/roles' });
   };
 

@@ -108,7 +108,7 @@ export class AutoPermissionSyncService {
       data: {
         message: 'Permission matrix has been updated',
         version: Date.now(),
-        affectedApps: ['crm', 'hr', 'affiliate'],
+        affectedApps: ['crm', 'hr', 'affiliate', 'operations', 'accounting'],
         recommendedActions: [
           'Refresh user permissions',
           'Clear role caches',

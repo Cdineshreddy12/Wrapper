@@ -39,6 +39,9 @@ export interface TimelineData {
 export interface TimelineTabProps {
   timelineData: TimelineData | null | undefined
   timelineLoading: boolean
+  hasMore?: boolean
+  isLoadingMore?: boolean
+  onLoadMore?: () => void
 }
 
 function getEventIcon(type: string) {
@@ -89,7 +92,7 @@ function getEventStyles(type: string, isToday: boolean, isActivity: boolean) {
   }
 }
 
-export function TimelineTab({ timelineData, timelineLoading }: TimelineTabProps) {
+export function TimelineTab({ timelineData, timelineLoading, hasMore, isLoadingMore, onLoadMore }: TimelineTabProps) {
   const events = timelineData?.events ?? []
 
   return (
@@ -210,6 +213,26 @@ export function TimelineTab({ timelineData, timelineLoading }: TimelineTabProps)
                   )
                 })}
               </div>
+
+              {hasMore && (
+                <div className="flex justify-center pt-6">
+                  <button
+                    type="button"
+                    onClick={onLoadMore}
+                    disabled={isLoadingMore}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold transition-all duration-200 bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-200 hover:border-blue-200"
+                  >
+                    {isLoadingMore ? (
+                      <>
+                        <ZopkitRoundLoader size="sm" />
+                        Loading...
+                      </>
+                    ) : (
+                      'Load more activity'
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

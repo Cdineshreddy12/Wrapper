@@ -9,22 +9,25 @@ async function authenticateServiceOrToken(request: FastifyRequest, reply: Fastif
     const authHeader = request.headers.authorization;
     if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
-      console.log('🔑 Token received - Length:', token.length);
-
       try {
-        // Try to decode as service token
+        // Validate service token with strict secret handling
         const { verify } = await import('jsonwebtoken');
-        const secret = process.env.JWT_SECRET || 'default-secret-change-in-production';
+        const secret = process.env.SERVICE_TOKEN_SECRET || process.env.JWT_SECRET;
+        if (!secret) {
+          throw new Error('SERVICE_TOKEN_SECRET or JWT_SECRET must be configured for service auth');
+        }
+        const allowedServiceNames = (process.env.ALLOWED_SERVICE_TOKENS || 'crm,accounting,ops,wrapper')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
         const decoded = verify(token, secret) as Record<string, unknown>;
 
-        if ((decoded as any).type === 'service_token' && (decoded as any).service === 'crm') {
-          console.log('✅ Service token validated for CRM');
+        if ((decoded as any).type === 'service_token' && allowedServiceNames.includes(String((decoded as any).service || ''))) {
           (request as any).serviceAuth = decoded;
           return; // Service token is valid
         }
       } catch (_serviceTokenError) {
         // Not a valid service token, try regular Kinde authentication
-        console.log('🔄 Service token validation failed, trying Kinde auth');
       }
     }
 
@@ -32,7 +35,7 @@ async function authenticateServiceOrToken(request: FastifyRequest, reply: Fastif
     await authenticateToken(request, reply);
   } catch (err: unknown) {
     const error = err as Error;
-    console.log('❌ All authentication methods failed');
+    console.log('❌ Service/Kinde authentication failed');
     throw error;
   }
 }

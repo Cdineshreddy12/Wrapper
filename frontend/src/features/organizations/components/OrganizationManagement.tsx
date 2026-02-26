@@ -758,8 +758,9 @@ export function OrganizationTreeManagement({
       if (response.success) {
         toast.success('Credits allocated');
         setShowAllocationDialog(false);
-        // Invalidate queries and reload data immediately
         queryClient.invalidateQueries({ queryKey: ['credit'] });
+        queryClient.invalidateQueries({ queryKey: ['creditStatus'] });
+        queryClient.invalidateQueries({ queryKey: ['entityScope'] });
         queryClient.invalidateQueries({ queryKey: ['organizations', 'hierarchy', tenantId] });
         queryClient.invalidateQueries({ queryKey: ['entities', tenantId] });
         await loadData();
@@ -1507,6 +1508,10 @@ export function OrganizationTreeManagement({
                     toast.success(`Successfully transferred ${creditTransferForm.amount} credits!`);
                     setShowCreditTransfer(false);
                     setCreditTransferForm({ sourceEntityType: 'organization', sourceEntityId: '', destinationEntityType: 'organization', destinationEntityId: '', amount: '', transferType: 'direct', isTemporary: false, recallDeadline: '', description: '' });
+                    queryClient.invalidateQueries({ queryKey: ['credit'] });
+                    queryClient.invalidateQueries({ queryKey: ['creditStatus'] });
+                    queryClient.invalidateQueries({ queryKey: ['entityScope'] });
+                    queryClient.invalidateQueries({ queryKey: ['organizations', 'hierarchy', tenantId] });
                     loadData();
                   } else {
                     toast.error(response.message || 'Credit transfer failed');
@@ -1755,11 +1760,10 @@ export function OrganizationManagement({
         onClose={() => setShowEditResponsiblePerson(false)}
         entity={editingEntity}
         onSuccess={async () => {
-          // Invalidate queries and refresh data immediately
           queryClient.invalidateQueries({ queryKey: ['organizations', 'hierarchy', tenantId] });
           queryClient.invalidateQueries({ queryKey: ['organizations', 'available'] });
           queryClient.invalidateQueries({ queryKey: ['entities', tenantId] });
-          // Trigger dashboard refresh
+          queryClient.invalidateQueries({ queryKey: ['entityScope'] });
           loadDashboardData();
         }}
         makeRequest={makeRequest}

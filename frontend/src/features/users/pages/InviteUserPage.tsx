@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { PearlButton } from '@/components/ui/pearl-button';
-import { useRoles } from '@/hooks/useSharedQueries';
+import { useRoles, useInvalidateQueries } from '@/hooks/useSharedQueries';
 import { useOrganizationHierarchy } from '@/hooks/useOrganizationHierarchy';
 import { useOrganizationAuth } from '@/hooks/useOrganizationAuth';
 import { useUserManagement } from '@/features/users/components/context/UserManagementContext';
@@ -22,6 +22,7 @@ export function InviteUserPage() {
   const navigate = useNavigate();
   const { tenantId } = useOrganizationAuth();
   const { userMutations } = useUserManagement();
+  const { invalidateUsers } = useInvalidateQueries();
   const [searchTerm, setSearchTerm] = useState('');
   const [inviteForm, setInviteForm] = useState({
     email: '',
@@ -147,6 +148,7 @@ export function InviteUserPage() {
     }, {
       onSuccess: () => {
         toast.success('User invited successfully');
+        invalidateUsers();
         navigate({ to: '/dashboard/users' });
       },
       onError: (error: any) => {

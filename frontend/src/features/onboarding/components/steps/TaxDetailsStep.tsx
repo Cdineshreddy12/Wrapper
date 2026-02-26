@@ -106,10 +106,10 @@ export const TaxDetailsStep = memo(({ form, userClassification }: TaxDetailsStep
           if (streetAddress) {
             // Set both billingStreet and billingAddress for compatibility
             if (!form.getValues('billingStreet')) {
-              form.setValue('billingStreet', streetAddress, { shouldValidate: false });
+              form.setValue('billingStreet', streetAddress, { shouldValidate: true });
             }
             if (!form.getValues('billingAddress')) {
-              form.setValue('billingAddress', streetAddress, { shouldValidate: false });
+              form.setValue('billingAddress', streetAddress, { shouldValidate: true });
             }
           }
           
@@ -396,8 +396,14 @@ export const TaxDetailsStep = memo(({ form, userClassification }: TaxDetailsStep
                     value={field.value || ''}
                     onChange={(e) => {
                       field.onChange(e.target.value);
-                      // Also sync to billingStreet for compatibility
-                      form.setValue('billingStreet' as any, e.target.value, { shouldValidate: false });
+                      // Keep resolver source-of-truth field in sync and re-validate immediately.
+                      // Without shouldValidate, stale billingStreet errors keep Next disabled.
+                      form.setValue('billingStreet' as any, e.target.value, {
+                        shouldValidate: true,
+                        shouldDirty: true,
+                        shouldTouch: true,
+                      });
+                      form.clearErrors(['billingAddress', 'billingStreet']);
                     }}
                   />
                 </FormControl>

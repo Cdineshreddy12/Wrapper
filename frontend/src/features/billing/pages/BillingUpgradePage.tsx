@@ -221,7 +221,7 @@ export function BillingUpgradePage() {
         selectedPlan: planId
       };
 
-      const profileResponse = await api.post('/api/payment-upgrade/complete-profile', profileData);
+      const profileResponse = await api.post('/payment-upgrade/complete-profile', profileData);
 
       if (profileResponse.data.success) {
         toast.success('Profile completed! Proceeding to payment...', { duration: 2000 });

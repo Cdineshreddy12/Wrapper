@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { toast } from 'sonner';
 import { applicationAssignmentAPI } from '@/lib/api';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface Application {
   appId: string;
@@ -104,6 +105,7 @@ interface AssignmentOverview {
 }
 
 const ApplicationAssignmentManager: React.FC = () => {
+  const queryClient = useQueryClient();
   // Main state
   const [overview, setOverview] = useState<AssignmentOverview | null>(null);
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -250,22 +252,20 @@ const ApplicationAssignmentManager: React.FC = () => {
 
       assignedApps.forEach((ta: TenantApplication) => {
         const enabledModulesArray = Array.isArray(ta.enabledModules) ? ta.enabledModules : [];
-        enabledModulesArray.forEach((m: string) => modules.push(m));
+        enabledModulesArray.forEach((m: string) => modules.push(`${ta.appId}::${m}`));
 
-        // Map permissions to module-grouped state
         allApps.forEach((app: Application) => {
           if (app.appId === ta.appId) {
             app.modules?.forEach((mod: ApplicationModule) => {
               if (enabledModulesArray.includes(mod.moduleCode)) {
-                // Check if the assignment includes specific permissions in customPermissions (Backend stores it as moduleCode -> codes[])
+                const compositeKey = `${ta.appId}::${mod.moduleCode}`;
                 const moduleCustomPerms = ta.customPermissions?.[mod.moduleCode];
                 if (Array.isArray(moduleCustomPerms)) {
-                  perms[mod.moduleCode] = mod.permissions
+                  perms[compositeKey] = mod.permissions
                     ?.map((p: Permission) => p.code)
                     .filter((code: string) => moduleCustomPerms.includes(code)) || [];
                 } else {
-                  // Fallback: Assume full module access if specific perms are missing for an enabled module
-                  perms[mod.moduleCode] = mod.permissions?.map((p: Permission) => p.code) || [];
+                  perms[compositeKey] = mod.permissions?.map((p: Permission) => p.code) || [];
                 }
               }
             });
@@ -304,6 +304,9 @@ const ApplicationAssignmentManager: React.FC = () => {
       setLoading(true);
       await applicationAssignmentAPI.removeAssignment(assignmentId);
       toast.success(`${appName} decommissioned successfully`);
+      queryClient.invalidateQueries({ queryKey: ['tenantApps'] });
+      queryClient.invalidateQueries({ queryKey: ['applicationAllocations'] });
+      lastLoadedTenantId.current = null;
       loadTenants();
       if (selectedTenant) loadTenantApplications(selectedTenant);
     } catch (error) {
@@ -321,16 +324,17 @@ const ApplicationAssignmentManager: React.FC = () => {
       setLoading(true);
 
       // Identify which applications have changes in their modules or permissions
+      // Uses composite keys (appId::moduleCode) to avoid cross-app contamination
       const appsWithChanges = tenantApplications.filter(app => {
-        const appModuleCodes = app.modules?.map(m => m.moduleCode) || [];
+        const appModuleKeys = app.modules?.map(m => `${app.appId}::${m.moduleCode}`) || [];
 
-        const hasModuleChanges = appModuleCodes.some(mc =>
-          assignmentConfig.enabledModules.includes(mc) !== originalModules.includes(mc)
+        const hasModuleChanges = appModuleKeys.some(mk =>
+          assignmentConfig.enabledModules.includes(mk) !== originalModules.includes(mk)
         );
 
-        const hasPermissionChanges = appModuleCodes.some(mc => {
-          const current = assignmentConfig.selectedPermissions[mc] || [];
-          const original = originalPermissions[mc] || [];
+        const hasPermissionChanges = appModuleKeys.some(mk => {
+          const current = assignmentConfig.selectedPermissions[mk] || [];
+          const original = originalPermissions[mk] || [];
           return (
             current.length !== original.length ||
             current.some(p => !original.includes(p)) ||
@@ -348,13 +352,16 @@ const ApplicationAssignmentManager: React.FC = () => {
 
       // Execute sequential commitments to ensure database integrity
       for (const app of appsWithChanges) {
-        const appModuleCodes = app.modules?.map(m => m.moduleCode) || [];
-        const appEnabledModules = assignmentConfig.enabledModules.filter(mc => appModuleCodes.includes(mc));
+        const appModuleKeys = app.modules?.map(m => `${app.appId}::${m.moduleCode}`) || [];
+        const appEnabledModules = appModuleKeys
+          .filter(mk => assignmentConfig.enabledModules.includes(mk))
+          .map(mk => mk.split('::')[1]);
         const appCustomPermissions: Record<string, string[]> = {};
 
-        appModuleCodes.forEach(mc => {
-          if (assignmentConfig.enabledModules.includes(mc)) {
-            appCustomPermissions[mc] = assignmentConfig.selectedPermissions[mc] || [];
+        appModuleKeys.forEach(mk => {
+          if (assignmentConfig.enabledModules.includes(mk)) {
+            const moduleCode = mk.split('::')[1];
+            appCustomPermissions[moduleCode] = assignmentConfig.selectedPermissions[mk] || [];
           }
         });
 
@@ -371,7 +378,9 @@ const ApplicationAssignmentManager: React.FC = () => {
       setOriginalModules([...assignmentConfig.enabledModules]);
       toast.success('Security matrix serialized successfully');
 
-      // Synchronize final state
+      queryClient.invalidateQueries({ queryKey: ['tenantApps'] });
+      queryClient.invalidateQueries({ queryKey: ['applicationAllocations'] });
+      lastLoadedTenantId.current = null;
       await loadTenants();
       const freshTenant = tenants.find(t => t.tenantId === selectedTenant.tenantId);
       if (freshTenant) await loadTenantApplications(freshTenant);
@@ -394,6 +403,9 @@ const ApplicationAssignmentManager: React.FC = () => {
         enabledModules: defaultModules
       });
       toast.success(`Domain ${app.appName} deployed to ${selectedTenant.companyName}`);
+      queryClient.invalidateQueries({ queryKey: ['tenantApps'] });
+      queryClient.invalidateQueries({ queryKey: ['applicationAllocations'] });
+      lastLoadedTenantId.current = null;
       loadTenants();
       if (selectedTenant) loadTenantApplications(selectedTenant);
     } catch (error) {
@@ -694,7 +706,7 @@ const ApplicationAssignmentManager: React.FC = () => {
                         const tenantApp = selectedTenant.applications?.find((ta: TenantApplication) => ta.appId === app.appId);
                         const isAppAssigned = !!tenantApp;
                         const totalAppPerms = app.modules?.reduce((sum: number, m: ApplicationModule) => sum + (m.permissions?.length || 0), 0) || 0;
-                        const selectedAppPerms = app.modules?.reduce((sum: number, m: ApplicationModule) => sum + (assignmentConfig.selectedPermissions[m.moduleCode]?.length || 0), 0) || 0;
+                        const selectedAppPerms = app.modules?.reduce((sum: number, m: ApplicationModule) => sum + (assignmentConfig.selectedPermissions[`${app.appId}::${m.moduleCode}`]?.length || 0), 0) || 0;
 
                         return (
                           <AccordionItem
@@ -755,9 +767,10 @@ const ApplicationAssignmentManager: React.FC = () => {
                             <AccordionContent className="p-0 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950/20">
                               <div className="divide-y divide-slate-100 dark:divide-slate-800/50">
                                 {app.modules?.map((module: ApplicationModule) => {
-                                  const isModuleEnabled = assignmentConfig.enabledModules.includes(module.moduleCode);
-                                  const currentPerms = assignmentConfig.selectedPermissions[module.moduleCode] || [];
-                                  const originalPerms = originalPermissions[module.moduleCode] || [];
+                                  const mk = `${app.appId}::${module.moduleCode}`;
+                                  const isModuleEnabled = assignmentConfig.enabledModules.includes(mk);
+                                  const currentPerms = assignmentConfig.selectedPermissions[mk] || [];
+                                  const originalPerms = originalPermissions[mk] || [];
                                   const isAllModuleSelected = currentPerms.length === (module.permissions?.length || 0) && (module.permissions?.length || 0) > 0;
 
                                   return (
@@ -783,20 +796,18 @@ const ApplicationAssignmentManager: React.FC = () => {
                                             onClick={() => {
                                               const allCodes = module.permissions?.map((p: Permission) => p.code) || [];
                                               setAssignmentConfig((prev: any) => {
-                                                const isCurrentlyEnabled = prev.enabledModules.includes(module.moduleCode);
+                                                const isCurrentlyEnabled = prev.enabledModules.includes(mk);
                                                 let updatedModules = [...prev.enabledModules];
                                                 let updatedPermissions = { ...prev.selectedPermissions };
 
                                                 if (isAllModuleSelected) {
-                                                  // Full Access -> Inactive: Remove from both registries
-                                                  updatedModules = updatedModules.filter(m => m !== module.moduleCode);
-                                                  updatedPermissions[module.moduleCode] = [];
+                                                  updatedModules = updatedModules.filter((m: string) => m !== mk);
+                                                  updatedPermissions[mk] = [];
                                                 } else {
-                                                  // (Inactive or Partial) -> Full Access: Ensure enabled and all perms set
                                                   if (!isCurrentlyEnabled) {
-                                                    updatedModules.push(module.moduleCode);
+                                                    updatedModules.push(mk);
                                                   }
-                                                  updatedPermissions[module.moduleCode] = allCodes;
+                                                  updatedPermissions[mk] = allCodes;
                                                 }
 
                                                 return {
@@ -840,7 +851,7 @@ const ApplicationAssignmentManager: React.FC = () => {
                                                 disabled={!isAppAssigned}
                                                 onClick={() => {
                                                   setAssignmentConfig((prev: any) => {
-                                                    const current = prev.selectedPermissions[module.moduleCode] || [];
+                                                    const current = prev.selectedPermissions[mk] || [];
                                                     const isNowSelected = !current.includes(perm.code);
                                                     const updated = isNowSelected
                                                       ? [...current, perm.code]
@@ -848,13 +859,11 @@ const ApplicationAssignmentManager: React.FC = () => {
 
                                                     let updatedModules = [...prev.enabledModules];
 
-                                                    // Auto-enable module if a permission is selected
-                                                    if (isNowSelected && !updatedModules.includes(module.moduleCode)) {
-                                                      updatedModules.push(module.moduleCode);
+                                                    if (isNowSelected && !updatedModules.includes(mk)) {
+                                                      updatedModules.push(mk);
                                                     }
-                                                    // Auto-disable if no permissions are left (optional, but keeps it clean)
                                                     else if (!isNowSelected && updated.length === 0) {
-                                                      updatedModules = updatedModules.filter(m => m !== module.moduleCode);
+                                                      updatedModules = updatedModules.filter((m: string) => m !== mk);
                                                     }
 
                                                     return {
@@ -862,7 +871,7 @@ const ApplicationAssignmentManager: React.FC = () => {
                                                       enabledModules: updatedModules,
                                                       selectedPermissions: {
                                                         ...prev.selectedPermissions,
-                                                        [module.moduleCode]: updated
+                                                        [mk]: updated
                                                       }
                                                     };
                                                   });

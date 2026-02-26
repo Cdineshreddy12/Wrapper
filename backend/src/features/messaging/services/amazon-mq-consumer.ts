@@ -26,8 +26,10 @@ class AmazonMQInterAppConsumer {
   channel: AmqpChannel | null = null;
   isRunning = false;
   queueName = 'wrapper-events';
+  retryQueueName = 'wrapper-events.retry';
   consumerTag: string | null = null;
   maxRetries = 3;
+  retryDelayMs = 15000;
 
   constructor() {
     // properties initialized above
@@ -81,6 +83,14 @@ class AmazonMQInterAppConsumer {
         arguments: {
           'x-dead-letter-exchange': '',
           'x-dead-letter-routing-key': 'inter-app-events-dlq'
+        }
+      });
+      await this.channel.assertQueue(this.retryQueueName, {
+        durable: true,
+        arguments: {
+          'x-dead-letter-exchange': '',
+          'x-dead-letter-routing-key': this.queueName,
+          'x-message-ttl': this.retryDelayMs
         }
       });
 
@@ -226,7 +236,7 @@ class AmazonMQInterAppConsumer {
     interface ConsumeMsg {
       content: Buffer;
       properties?: { messageId?: string; headers?: Record<string, unknown> };
-      fields: { deliveryTag: number };
+      fields: { deliveryTag: number; routingKey: string };
     }
     const reply = await this.channel!.consume(
       this.queueName,
@@ -272,8 +282,26 @@ class AmazonMQInterAppConsumer {
           const retryCount = (headers?.['x-retry-count'] ?? 0) + 1;
           
           if (retryCount < this.maxRetries) {
-            console.log(`🔄 Requeuing message (retry ${retryCount}/${this.maxRetries})`);
-            this.channel!.nack(msg as Parameters<AmqpChannel['nack']>[0], false, true);
+            console.log(`🔄 Sending message to retry queue (retry ${retryCount}/${this.maxRetries})`);
+            const nextHeaders = {
+              ...(msg.properties?.headers || {}),
+              'x-retry-count': retryCount,
+              'x-retried-at': new Date().toISOString(),
+              'x-original-routing-key': msg.fields.routingKey
+            };
+            const published = this.channel!.sendToQueue(
+              this.retryQueueName,
+              msg.content,
+              {
+                persistent: true,
+                messageId,
+                headers: nextHeaders
+              }
+            );
+            if (!published) {
+              throw new Error('Retry queue backpressure: sendToQueue returned false');
+            }
+            this.channel!.ack(msg as Parameters<AmqpChannel['ack']>[0]);
           } else {
             console.error(`❌ Max retries exceeded for message ${messageId}, sending to DLQ`);
             

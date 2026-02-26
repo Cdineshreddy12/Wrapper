@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,6 +71,7 @@ interface TenantDetails {
 
 export const TenantManagement: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -142,6 +144,7 @@ export const TenantManagement: React.FC = () => {
 
       if (response.data.success) {
         toast.success(`Tenant ${!tenant.isActive ? 'activated' : 'deactivated'} successfully`);
+        queryClient.invalidateQueries({ queryKey: ['tenant'] });
         fetchTenants();
       }
     } catch (error) {
@@ -171,7 +174,8 @@ export const TenantManagement: React.FC = () => {
       const response = await api.post(`/admin/tenants/${tenantId}/clean-orphaned-credits`);
       if (response.data.success) {
         toast.success(response.data.message);
-        // Refresh tenant data
+        queryClient.invalidateQueries({ queryKey: ['tenant'] });
+        queryClient.invalidateQueries({ queryKey: ['creditStatus'] });
         fetchTenants();
       }
     } catch (error) {
@@ -193,8 +197,9 @@ export const TenantManagement: React.FC = () => {
 
       if (response.data.success) {
         toast.success(`Allocated ${amount} credits successfully`);
-
-        // Refresh tenant data
+        queryClient.invalidateQueries({ queryKey: ['tenant'] });
+        queryClient.invalidateQueries({ queryKey: ['creditStatus'] });
+        queryClient.invalidateQueries({ queryKey: ['credit'] });
         fetchTenants();
 
         return response.data;

@@ -187,10 +187,11 @@ export const useStepNavigation = (
           return false;
         }
         
-        // Check for address field errors
-        if (hasError('billingAddress', errors) || hasError('billingStreet', errors) ||
+        // Check only editable address field errors.
+        // `billingAddress` can be a backend alias/manual error key that doesn't clear on input change.
+        if (hasError('billingStreet', errors) ||
             hasError('billingCity', errors) || hasError('billingZip', errors) ||
-            (needsState && (hasError('state', errors) || hasError('billingState', errors) || hasError('incorporationState', errors)))) {
+            (needsState && hasError('state', errors))) {
           return false;
         }
         
@@ -259,7 +260,7 @@ export const useStepNavigation = (
         const needsState = ['IN', 'US', 'CA', 'AU'].includes(country);
         
         if (needsState) {
-          stepFields.push('state', 'billingState', 'incorporationState');
+          stepFields.push('state');
         }
         
         // Conditional fields based on VAT/GST toggle

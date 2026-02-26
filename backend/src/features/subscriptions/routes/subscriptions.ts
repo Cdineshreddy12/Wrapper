@@ -9,6 +9,7 @@ import { tenants, payments, subscriptions } from '../../../db/schema/index.js';
 import { eq, and, desc, inArray, sql } from 'drizzle-orm';
 import ErrorResponses from '../../../utils/error-responses.js';
 import { PLAN_ACCESS_MATRIX } from '../../../data/permission-matrix.js';
+import { z } from 'zod';
 
 export default async function subscriptionRoutes(
   fastify: FastifyInstance,
@@ -207,34 +208,25 @@ export default async function subscriptionRoutes(
   });
 
   // Create Stripe checkout session for both plans and credit packages
+  const checkoutBodySchema = z.union([
+    z.object({
+      planId: z.string(),
+      billingCycle: z.enum(['monthly', 'yearly']),
+      successUrl: z.string(),
+      cancelUrl: z.string()
+    }),
+    z.object({
+      packageId: z.string(),
+      credits: z.number().min(1).max(10000), // Dollar amount for credit purchase
+      successUrl: z.string(),
+      cancelUrl: z.string()
+    })
+  ]);
+
   fastify.post('/checkout', {
     preHandler: authenticateToken,
     schema: {
-      body: {
-        type: 'object',
-        oneOf: [
-          // Plan subscription checkout
-          {
-            required: ['planId', 'billingCycle', 'successUrl', 'cancelUrl'],
-            properties: {
-              planId: { type: 'string' },
-              billingCycle: { type: 'string', enum: ['monthly', 'yearly'] },
-              successUrl: { type: 'string' },
-              cancelUrl: { type: 'string' }
-            }
-          },
-          // Credit package checkout (legacy)
-          {
-            required: ['packageId', 'credits', 'successUrl', 'cancelUrl'],
-            properties: {
-              packageId: { type: 'string' },
-              credits: { type: 'number', minimum: 1, maximum: 10000 }, // Dollar amount for credit purchase
-              successUrl: { type: 'string' },
-              cancelUrl: { type: 'string' }
-            }
-          }
-        ]
-      }
+      body: checkoutBodySchema
     }
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -320,6 +312,7 @@ export default async function subscriptionRoutes(
           planId,
           billingCycle,
           customerId: tenant.stripeCustomerId || null,
+          customerEmail: (uc?.email as string | undefined) ?? undefined,
           successUrl,
           cancelUrl
         };
@@ -350,6 +343,7 @@ export default async function subscriptionRoutes(
           planId: packageId,
           credits,
           customerId: tenant.stripeCustomerId || null,
+          customerEmail: (uc?.email as string | undefined) ?? undefined,
           successUrl,
           cancelUrl
         };

@@ -7,6 +7,12 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import {
+  RELIABILITY_CONTRACT_VERSION,
+  RELIABILITY_SLOS,
+  ERROR_BUDGETS,
+  FAILURE_TAXONOMY,
+} from '../config/reliability-slo.js';
 
 // Read version from package.json at module load
 const __filename = fileURLToPath(import.meta.url);
@@ -35,7 +41,13 @@ export default async function healthRoutes(fastify: FastifyInstance, _options?: 
         version: APP_VERSION,
         memory: process.memoryUsage(),
         platform: process.platform,
-        nodeVersion: process.version
+        nodeVersion: process.version,
+        reliabilityContract: {
+          version: RELIABILITY_CONTRACT_VERSION,
+          slos: RELIABILITY_SLOS,
+          errorBudgets: ERROR_BUDGETS,
+          failureTaxonomy: FAILURE_TAXONOMY
+        }
       };
 
       // Check database connection if available
@@ -138,6 +150,48 @@ export default async function healthRoutes(fastify: FastifyInstance, _options?: 
         }
       }
 
+      // Amazon MQ health check
+      try {
+        const { amazonMQPublisher } = await import('../features/messaging/utils/amazon-mq-publisher.js');
+        const status = amazonMQPublisher.getStatus();
+        (detailedHealth.services as Record<string, unknown>).amazonMq = {
+          status: status.isConnected ? 'healthy' : 'unhealthy',
+          reconnectAttempts: status.reconnectAttempts,
+          timestamp: new Date().toISOString()
+        };
+      } catch (err: unknown) {
+        const error = err as Error;
+        (detailedHealth.services as Record<string, unknown>).amazonMq = {
+          status: 'unhealthy',
+          error: error.message,
+          timestamp: new Date().toISOString()
+        };
+      }
+
+      // Outbox health check
+      if (fastify.db) {
+        try {
+          const dbConn = fastify.db as unknown as { execute: (sql: string) => Promise<{ rows?: Array<Record<string, unknown>> }> };
+          const pendingRes = await dbConn.execute("SELECT count(*)::int as pending_count FROM event_tracking WHERE status = 'pending'");
+          const failedRes = await dbConn.execute("SELECT count(*)::int as failed_count FROM event_tracking WHERE status = 'failed'");
+          const pending = Number((pendingRes.rows?.[0] as any)?.pending_count ?? 0);
+          const failed = Number((failedRes.rows?.[0] as any)?.failed_count ?? 0);
+          (detailedHealth.services as Record<string, unknown>).outbox = {
+            status: failed > 0 ? 'degraded' : 'healthy',
+            pendingCount: pending,
+            failedCount: failed,
+            timestamp: new Date().toISOString()
+          };
+        } catch (err: unknown) {
+          const error = err as Error;
+          (detailedHealth.services as Record<string, unknown>).outbox = {
+            status: 'unhealthy',
+            error: error.message,
+            timestamp: new Date().toISOString()
+          };
+        }
+      }
+
       // Check overall health
       const unhealthyServices = Object.values(detailedHealth.services as Record<string, { status?: string }>)
         .filter((service: { status?: string }) => service.status === 'unhealthy');
@@ -190,6 +244,19 @@ export default async function healthRoutes(fastify: FastifyInstance, _options?: 
           (readiness.checks as Record<string, string>).redis = 'not_ready';
           readiness.ready = false;
         }
+      }
+
+      // MQ readiness check
+      try {
+        const { amazonMQPublisher } = await import('../features/messaging/utils/amazon-mq-publisher.js');
+        const status = amazonMQPublisher.getStatus();
+        (readiness.checks as Record<string, string>).amazonMq = status.isConnected ? 'ready' : 'not_ready';
+        if (!status.isConnected) {
+          readiness.ready = false;
+        }
+      } catch (_err: unknown) {
+        (readiness.checks as Record<string, string>).amazonMq = 'not_ready';
+        readiness.ready = false;
       }
 
       if (readiness.ready) {

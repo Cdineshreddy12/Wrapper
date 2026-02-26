@@ -21,7 +21,7 @@ function TokenSetupComponent() {
     }
     tokenGetterSetupRef.current = true;
 
-    // Enhanced token getter with backup storage
+    // Token getter strictly from Kinde SDK only
     setKindeTokenGetter(async () => {
       try {
         logger.debug('🔑 TokenGetter: Called - isAuthenticated:', isAuthenticated, 'user:', !!user);
@@ -30,16 +30,9 @@ function TokenSetupComponent() {
 
         if (token) {
           logger.debug('✅ TokenGetter: Successfully retrieved token from Kinde');
-          // Always store as backup when we get a valid token
-          localStorage.setItem('kinde_backup_token', token);
           return token;
         } else {
-          logger.debug('❌ TokenGetter: No token from Kinde, trying backup...');
-          const backupToken = localStorage.getItem('kinde_backup_token');
-          if (backupToken) {
-            logger.debug('🔄 TokenGetter: Using backup token');
-            return backupToken;
-          }
+          logger.debug('❌ TokenGetter: No token from Kinde');
           return null;
         }
       } catch (error: any) {
@@ -49,7 +42,7 @@ function TokenSetupComponent() {
                               error?.error === 'invalid_grant';
         
         if (isInvalidGrant) {
-          logger.debug('⚠️ TokenGetter: invalid_grant error - trying backup token');
+          logger.debug('⚠️ TokenGetter: invalid_grant error');
           // Clear potentially corrupted refresh tokens
           try {
             const storageKeys = Object.keys(localStorage);
@@ -62,48 +55,12 @@ function TokenSetupComponent() {
             // Ignore errors when clearing
           }
         } else {
-          logger.error('❌ TokenGetter: Error getting token, trying backup...', error);
-        }
-        
-        const backupToken = localStorage.getItem('kinde_backup_token');
-        if (backupToken) {
-          logger.debug('🔄 TokenGetter: Using backup token after error');
-          return backupToken;
+          logger.error('❌ TokenGetter: Error getting token', error);
         }
         return null;
       }
     });
   }, [getToken, isAuthenticated, user]);
-
-  // Store backup token when user becomes authenticated
-  useEffect(() => {
-    const storeBackupToken = async () => {
-      if (isAuthenticated && user) {
-        try {
-          const token = await getToken();
-          if (token) {
-            localStorage.setItem('kinde_backup_token', token);
-            logger.debug('💾 Stored backup token for user:', user.email);
-          }
-        } catch (error) {
-          logger.debug('❌ Failed to store backup token:', error);
-        }
-      }
-    };
-
-    storeBackupToken();
-  }, [isAuthenticated, user, getToken]);
-
-  // Clear backup token when user logs out
-  useEffect(() => {
-    if (!isAuthenticated) {
-      const hadBackupToken = localStorage.getItem('kinde_backup_token');
-      if (hadBackupToken) {
-        localStorage.removeItem('kinde_backup_token');
-        logger.debug('🗑️ Cleared backup token on logout');
-      }
-    }
-  }, [isAuthenticated]);
 
   return null; // This component doesn't render anything
 }
@@ -142,14 +99,24 @@ export const KindeProvider: React.FC<KindeProviderProps> = ({
   // Keep the auth subdomain - Kinde handles domain-wide cookies automatically
   const domain = config.KINDE_DOMAIN;
   const clientId = import.meta.env.VITE_KINDE_CLIENT_ID;
+  const isDevelopmentEnv =
+    import.meta.env.MODE === 'development' ||
+    import.meta.env.DEV ||
+    import.meta.env.VITE_ENV === 'development';
 
   // CRITICAL: Set a consistent redirect URI to prevent OAuth 400 errors
   // The redirect URI must match between authorization and token requests
   // Default to the standard callback path if not explicitly configured
   // Normalize the redirect URI (remove trailing slashes, ensure exact match)
-  const baseRedirectUri = import.meta.env.VITE_KINDE_REDIRECT_URI || `${window.location.origin}/auth/callback`;
+  const baseRedirectUri = isDevelopmentEnv
+    ? `${window.location.origin}/auth/callback`
+    : (import.meta.env.VITE_KINDE_REDIRECT_URI || `${window.location.origin}/auth/callback`);
   const redirectUri = baseRedirectUri.replace(/\/$/, ''); // Remove trailing slash
-  const logoutUri = (import.meta.env.VITE_KINDE_LOGOUT_URI || window.location.origin).replace(/\/$/, '');
+  const logoutUri = (
+    isDevelopmentEnv
+      ? window.location.origin
+      : (import.meta.env.VITE_KINDE_LOGOUT_URI || window.location.origin)
+  ).replace(/\/$/, '');
 
   if (!domain || !clientId) {
     logger.error('Kinde configuration missing. Please check environment variables.');

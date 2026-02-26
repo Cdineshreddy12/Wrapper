@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { z } from 'zod';
 import { authenticateToken } from '../../../middleware/auth/auth.js';
 import { db } from '../../../db/index.js';
 import { tenants, tenantUsers, customRoles, onboardingFormData } from '../../../db/schema/index.js';
@@ -372,14 +373,10 @@ export default async function statusManagementRoutes(
   // Checks both onboarding_form_data table and user preferences
   fastify.post('/get-data', {
     schema: {
-      body: {
-        type: 'object',
-        required: ['email'],
-        properties: {
-          email: { type: 'string', format: 'email' },
-          kindeUserId: { type: 'string' } // Optional Kinde user ID
-        }
-      }
+      body: z.object({
+        email: z.string().email(),
+        kindeUserId: z.string().optional() // Optional Kinde user ID
+      })
     }
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {

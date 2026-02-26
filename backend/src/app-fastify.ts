@@ -284,11 +284,11 @@ async function registerPlugins() {
   });
 
   const jwtSecret = process.env.JWT_SECRET;
-  if (!jwtSecret && isProductionEnv) {
-    throw new Error('JWT_SECRET environment variable is required in production');
+  if (!jwtSecret && process.env.NODE_ENV !== 'test') {
+    throw new Error('JWT_SECRET environment variable is required');
   }
   await fastify.register(jwt, {
-    secret: jwtSecret || 'dev-only-secret-do-not-use-in-prod',
+    secret: jwtSecret || 'test-only-secret',
     cookie: {
       cookieName: 'token',
       signed: false,
@@ -296,11 +296,11 @@ async function registerPlugins() {
   });
 
   const sessionSecret = process.env.SESSION_SECRET;
-  if (!sessionSecret && isProductionEnv) {
-    throw new Error('SESSION_SECRET environment variable is required in production');
+  if (!sessionSecret && process.env.NODE_ENV !== 'test') {
+    throw new Error('SESSION_SECRET environment variable is required');
   }
   await fastify.register(cookie, {
-    secret: sessionSecret || 'dev-only-cookie-secret-do-not-use-in-prod',
+    secret: sessionSecret || 'test-only-cookie-secret',
     parseOptions: {},
   });
 
@@ -437,6 +437,16 @@ async function start() {
     console.log(`✅ Server listening on http://${host}:${port}`);
     console.log(`📚 API Documentation: http://${host}:${port}/docs`);
     console.log(`🏥 Health Check: http://${host}:${port}/health`);
+
+    // Initialize Amazon MQ publisher so connection issues surface immediately
+    try {
+      const { amazonMQPublisher } = await import('./features/messaging/utils/amazon-mq-publisher.js');
+      await amazonMQPublisher.initializeAtStartup();
+      const { startOutboxReplayWorker } = await import('./features/messaging/services/outbox-replay-worker.js');
+      startOutboxReplayWorker();
+    } catch (err: unknown) {
+      console.warn('⚠️ Amazon MQ initialization skipped:', (err as Error).message);
+    }
 
     // TEST: Force a log to Elasticsearch
     try {

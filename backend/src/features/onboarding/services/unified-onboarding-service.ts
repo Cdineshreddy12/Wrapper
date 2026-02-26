@@ -804,7 +804,7 @@ export class UnifiedOnboardingService {
         // Only try to add if organization was actually created in Kinde (not fallback)
         if (!orgCreatedWithFallback) {
           const addResult = await kindeService.addUserToOrganization(finalKindeUserId, actualOrgCode, {
-          role_code: 'org:admin', // Give admin role in the organization
+          role_code: 'admin', // Give admin role in the organization
           is_admin: true,
           exclusive: true // Remove from other organizations first
         });

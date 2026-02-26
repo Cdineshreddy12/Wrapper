@@ -1618,61 +1618,597 @@ export const BUSINESS_SUITE_MATRIX = {
     }
   },
 
-  // 📱 **APPLICATION CATALOG / APPLICATION MANAGEMENT**
-  applications: {
+  // 💰 **FINANCIAL ACCOUNTING APPLICATION**
+  accounting: {
     appInfo: {
-      appCode: 'applications',
-      appName: 'Application Catalog',
-      description: 'View and manage applications available to your organization',
-      icon: '📱',
-      baseUrl: '/dashboard',
-      version: '1.0.0',
+      appCode: 'accounting',
+      appName: 'Financial Accounting',
+      description: 'Complete financial accounting solution — GL, AR, AP, banking, tax, budgeting, payroll, inventory, fixed assets, compliance, and analytics',
+      icon: '💰',
+      baseUrl: 'https://accounting.zopkit.com',
+      version: '2.0.0',
       isCore: true,
-      sortOrder: 0
+      sortOrder: 5
     },
     modules: {
-      catalog: {
-        moduleCode: 'catalog',
-        moduleName: 'Application Catalog',
-        description: 'Browse and access assigned applications',
-        isCore: true,
-        permissions: [
-          { code: 'read', name: 'View Catalog', description: 'View available applications' },
-          { code: 'read_all', name: 'View All Apps', description: 'View all applications in catalog' },
-          { code: 'request', name: 'Request Application', description: 'Request access to an application' }
-        ]
-      },
       dashboard: {
         moduleCode: 'dashboard',
-        moduleName: 'Applications Dashboard',
-        description: 'Overview of assigned applications and usage',
+        moduleName: 'Accounting Dashboard',
+        description: 'Main accounting dashboard with financial overview',
         isCore: true,
         permissions: [
-          { code: 'view', name: 'View Dashboard', description: 'View applications dashboard' },
-          { code: 'customize', name: 'Customize', description: 'Customize applications dashboard' }
+          { code: 'view', name: 'View Dashboard', description: 'Access accounting dashboard' },
+          { code: 'customize', name: 'Customize Dashboard', description: 'Customize dashboard layout and widgets' },
+          { code: 'export', name: 'Export Dashboard', description: 'Export dashboard reports' }
+        ]
+      },
+      general_ledger: {
+        moduleCode: 'general_ledger',
+        moduleName: 'General Ledger',
+        description: 'Core general ledger, trial balance, closing and adjusting entries',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View General Ledger', description: 'View general ledger entries and balances' },
+          { code: 'create', name: 'Create GL Entries', description: 'Create new general ledger entries' },
+          { code: 'update', name: 'Edit GL Entries', description: 'Modify general ledger entries' },
+          { code: 'delete', name: 'Delete GL Entries', description: 'Remove general ledger entries' },
+          { code: 'post', name: 'Post GL Entries', description: 'Post entries to the ledger' },
+          { code: 'approve', name: 'Approve GL Entries', description: 'Approve general ledger entries' },
+          { code: 'close_period', name: 'Close Period', description: 'Close accounting periods' },
+          { code: 'export', name: 'Export GL Data', description: 'Export general ledger data' }
+        ]
+      },
+      chart_of_accounts: {
+        moduleCode: 'chart_of_accounts',
+        moduleName: 'Chart of Accounts',
+        description: 'Manage the chart of accounts structure',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Chart of Accounts', description: 'View accounts in the chart' },
+          { code: 'create', name: 'Create Accounts', description: 'Add new accounts to the chart' },
+          { code: 'update', name: 'Edit Accounts', description: 'Modify account information' },
+          { code: 'delete', name: 'Delete Accounts', description: 'Remove accounts from the chart' },
+          { code: 'import', name: 'Import Accounts', description: 'Import chart of accounts from files' },
+          { code: 'export', name: 'Export Accounts', description: 'Export chart of accounts' }
+        ]
+      },
+      journal_entries: {
+        moduleCode: 'journal_entries',
+        moduleName: 'Journal Entries',
+        description: 'Create and manage journal entries',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Journal Entries', description: 'View journal entry information' },
+          { code: 'create', name: 'Create Journal Entries', description: 'Create new journal entries' },
+          { code: 'update', name: 'Edit Journal Entries', description: 'Modify journal entries' },
+          { code: 'delete', name: 'Delete Journal Entries', description: 'Remove journal entries' },
+          { code: 'post', name: 'Post Journal Entries', description: 'Post journal entries to the ledger' },
+          { code: 'approve', name: 'Approve Journal Entries', description: 'Approve journal entries for posting' },
+          { code: 'reverse', name: 'Reverse Journal Entries', description: 'Create reversing journal entries' },
+          { code: 'export', name: 'Export Journal Entries', description: 'Export journal entry data' }
+        ]
+      },
+      invoices: {
+        moduleCode: 'invoices',
+        moduleName: 'Customer Invoices',
+        description: 'Create and manage customer invoices',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Invoices', description: 'View invoice information' },
+          { code: 'read_all', name: 'View All Invoices', description: 'View all invoices in organization' },
+          { code: 'create', name: 'Create Invoices', description: 'Create new invoices' },
+          { code: 'update', name: 'Edit Invoices', description: 'Modify invoice information' },
+          { code: 'delete', name: 'Delete Invoices', description: 'Remove invoices' },
+          { code: 'send', name: 'Send Invoices', description: 'Send invoices to customers' },
+          { code: 'post', name: 'Post Invoices', description: 'Post invoices to the ledger' },
+          { code: 'export', name: 'Export Invoices', description: 'Export invoice data' },
+          { code: 'import', name: 'Import Invoices', description: 'Import invoices from files' },
+          { code: 'generate_pdf', name: 'Generate PDF', description: 'Generate PDF versions of invoices' }
+        ]
+      },
+      customers: {
+        moduleCode: 'customers',
+        moduleName: 'Customer Management',
+        description: 'Manage customer accounts and contacts',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Customers', description: 'View customer information' },
+          { code: 'read_all', name: 'View All Customers', description: 'View all customers in organization' },
+          { code: 'create', name: 'Create Customers', description: 'Add new customers' },
+          { code: 'update', name: 'Edit Customers', description: 'Modify customer information' },
+          { code: 'delete', name: 'Delete Customers', description: 'Remove customers' },
+          { code: 'export', name: 'Export Customers', description: 'Export customer data' },
+          { code: 'import', name: 'Import Customers', description: 'Import customers from files' }
+        ]
+      },
+      credit_notes: {
+        moduleCode: 'credit_notes',
+        moduleName: 'Credit Notes',
+        description: 'Create and manage customer credit notes',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Credit Notes', description: 'View credit note information' },
+          { code: 'create', name: 'Create Credit Notes', description: 'Create new credit notes' },
+          { code: 'update', name: 'Edit Credit Notes', description: 'Modify credit note information' },
+          { code: 'delete', name: 'Delete Credit Notes', description: 'Remove credit notes' },
+          { code: 'apply', name: 'Apply Credit Notes', description: 'Apply credit notes to invoices' },
+          { code: 'export', name: 'Export Credit Notes', description: 'Export credit note data' }
+        ]
+      },
+      sales_orders: {
+        moduleCode: 'sales_orders',
+        moduleName: 'Sales Orders',
+        description: 'Manage customer sales orders',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Sales Orders', description: 'View sales order information' },
+          { code: 'read_all', name: 'View All Sales Orders', description: 'View all sales orders' },
+          { code: 'create', name: 'Create Sales Orders', description: 'Create new sales orders' },
+          { code: 'update', name: 'Edit Sales Orders', description: 'Modify sales order information' },
+          { code: 'delete', name: 'Delete Sales Orders', description: 'Remove sales orders' },
+          { code: 'approve', name: 'Approve Sales Orders', description: 'Approve sales orders' },
+          { code: 'convert', name: 'Convert to Invoice', description: 'Convert sales orders to invoices' },
+          { code: 'export', name: 'Export Sales Orders', description: 'Export sales order data' }
+        ]
+      },
+      estimates: {
+        moduleCode: 'estimates',
+        moduleName: 'Estimates & Quotes',
+        description: 'Create and manage estimates and quotations',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Estimates', description: 'View estimate information' },
+          { code: 'create', name: 'Create Estimates', description: 'Create new estimates' },
+          { code: 'update', name: 'Edit Estimates', description: 'Modify estimate information' },
+          { code: 'delete', name: 'Delete Estimates', description: 'Remove estimates' },
+          { code: 'send', name: 'Send Estimates', description: 'Send estimates to customers' },
+          { code: 'convert', name: 'Convert to Invoice', description: 'Convert estimates to invoices' },
+          { code: 'export', name: 'Export Estimates', description: 'Export estimate data' },
+          { code: 'generate_pdf', name: 'Generate PDF', description: 'Generate PDF versions of estimates' }
+        ]
+      },
+      bills: {
+        moduleCode: 'bills',
+        moduleName: 'Vendor Bills',
+        description: 'Manage vendor bills and payments',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Bills', description: 'View bill information' },
+          { code: 'read_all', name: 'View All Bills', description: 'View all bills in organization' },
+          { code: 'create', name: 'Create Bills', description: 'Create new vendor bills' },
+          { code: 'update', name: 'Edit Bills', description: 'Modify bill information' },
+          { code: 'delete', name: 'Delete Bills', description: 'Remove bills' },
+          { code: 'pay', name: 'Pay Bills', description: 'Process bill payments' },
+          { code: 'approve', name: 'Approve Bills', description: 'Approve vendor bills for payment' },
+          { code: 'export', name: 'Export Bills', description: 'Export bill data' }
+        ]
+      },
+      vendors: {
+        moduleCode: 'vendors',
+        moduleName: 'Vendor Management',
+        description: 'Manage vendor accounts and information',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Vendors', description: 'View vendor information' },
+          { code: 'read_all', name: 'View All Vendors', description: 'View all vendors in organization' },
+          { code: 'create', name: 'Create Vendors', description: 'Add new vendors' },
+          { code: 'update', name: 'Edit Vendors', description: 'Modify vendor information' },
+          { code: 'delete', name: 'Delete Vendors', description: 'Remove vendors' },
+          { code: 'export', name: 'Export Vendors', description: 'Export vendor data' },
+          { code: 'import', name: 'Import Vendors', description: 'Import vendors from files' }
+        ]
+      },
+      purchase_orders: {
+        moduleCode: 'purchase_orders',
+        moduleName: 'Purchase Orders',
+        description: 'Create and manage purchase orders',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Purchase Orders', description: 'View purchase order information' },
+          { code: 'read_all', name: 'View All Purchase Orders', description: 'View all purchase orders' },
+          { code: 'create', name: 'Create Purchase Orders', description: 'Create new purchase orders' },
+          { code: 'update', name: 'Edit Purchase Orders', description: 'Modify purchase order information' },
+          { code: 'delete', name: 'Delete Purchase Orders', description: 'Remove purchase orders' },
+          { code: 'approve', name: 'Approve Purchase Orders', description: 'Approve purchase orders' },
+          { code: 'receive', name: 'Receive Goods', description: 'Record receipt of purchased goods' },
+          { code: 'export', name: 'Export Purchase Orders', description: 'Export purchase order data' }
+        ]
+      },
+      expense_reports: {
+        moduleCode: 'expense_reports',
+        moduleName: 'Expense Reports',
+        description: 'Manage employee expense reports and reimbursements',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Expense Reports', description: 'View expense report information' },
+          { code: 'read_all', name: 'View All Expense Reports', description: 'View all expense reports' },
+          { code: 'create', name: 'Create Expense Reports', description: 'Submit expense reports' },
+          { code: 'update', name: 'Edit Expense Reports', description: 'Modify expense report information' },
+          { code: 'delete', name: 'Delete Expense Reports', description: 'Remove expense reports' },
+          { code: 'approve', name: 'Approve Expense Reports', description: 'Approve expense reports for payment' },
+          { code: 'reimburse', name: 'Process Reimbursement', description: 'Process expense reimbursements' },
+          { code: 'export', name: 'Export Expense Reports', description: 'Export expense report data' }
+        ]
+      },
+      vendor_credits: {
+        moduleCode: 'vendor_credits',
+        moduleName: 'Vendor Credits',
+        description: 'Manage vendor credits and debit memos',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Vendor Credits', description: 'View vendor credit information' },
+          { code: 'create', name: 'Create Vendor Credits', description: 'Create new vendor credits' },
+          { code: 'update', name: 'Edit Vendor Credits', description: 'Modify vendor credit information' },
+          { code: 'delete', name: 'Delete Vendor Credits', description: 'Remove vendor credits' },
+          { code: 'apply', name: 'Apply Vendor Credits', description: 'Apply vendor credits to bills' },
+          { code: 'export', name: 'Export Vendor Credits', description: 'Export vendor credit data' }
+        ]
+      },
+      banking: {
+        moduleCode: 'banking',
+        moduleName: 'Banking & Reconciliation',
+        description: 'Bank accounts, transactions, reconciliation, and cash flow management',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Banking', description: 'View bank account and transaction information' },
+          { code: 'read_all', name: 'View All Banking', description: 'View all bank data in organization' },
+          { code: 'create', name: 'Create Bank Entries', description: 'Create bank transactions and accounts' },
+          { code: 'update', name: 'Edit Banking', description: 'Modify bank information' },
+          { code: 'delete', name: 'Delete Banking', description: 'Remove bank records' },
+          { code: 'reconcile', name: 'Reconcile Accounts', description: 'Perform bank reconciliation' },
+          { code: 'import_feeds', name: 'Import Bank Feeds', description: 'Import bank feed data' },
+          { code: 'transfer', name: 'Wire Transfers', description: 'Process wire transfers' },
+          { code: 'export', name: 'Export Banking', description: 'Export bank data' }
+        ]
+      },
+      tax: {
+        moduleCode: 'tax',
+        moduleName: 'Tax Management',
+        description: 'Tax configuration, GST/TDS (India), VAT/Sales Tax, compliance',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Tax', description: 'View tax information and rates' },
+          { code: 'create', name: 'Create Tax Records', description: 'Create new tax records' },
+          { code: 'update', name: 'Edit Tax', description: 'Modify tax information' },
+          { code: 'delete', name: 'Delete Tax Records', description: 'Remove tax records' },
+          { code: 'configure', name: 'Configure Tax Rules', description: 'Configure tax rates and rules' },
+          { code: 'file_returns', name: 'File Tax Returns', description: 'File GST/VAT returns' },
+          { code: 'reconcile', name: 'Tax Reconciliation', description: 'Reconcile tax records' },
+          { code: 'export', name: 'Export Tax Data', description: 'Export tax reports and data' }
+        ]
+      },
+      reports: {
+        moduleCode: 'reports',
+        moduleName: 'Financial Reports',
+        description: 'P&L, Balance Sheet, Cash Flow, Trial Balance, and other financial reports',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Reports', description: 'View financial reports' },
+          { code: 'read_all', name: 'View All Reports', description: 'View all reports in organization' },
+          { code: 'create', name: 'Create Reports', description: 'Create custom financial reports' },
+          { code: 'export', name: 'Export Reports', description: 'Export report data to various formats' },
+          { code: 'schedule', name: 'Schedule Reports', description: 'Schedule automated report generation' },
+          { code: 'generate_pdf', name: 'Generate PDF', description: 'Generate PDF versions of reports' }
+        ]
+      },
+      analytics: {
+        moduleCode: 'analytics',
+        moduleName: 'Analytics & Business Intelligence',
+        description: 'Financial dashboards, KPI monitoring, trend analysis, data visualization',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Analytics', description: 'View analytics and metrics' },
+          { code: 'read_all', name: 'View All Analytics', description: 'View all analytics data' },
+          { code: 'create', name: 'Create Analytics', description: 'Create custom analytics views' },
+          { code: 'export', name: 'Export Analytics', description: 'Export analytics data' },
+          { code: 'schedule', name: 'Schedule Analytics', description: 'Schedule automated analytics' },
+          { code: 'customize_dashboards', name: 'Customize Dashboards', description: 'Customize analytics dashboards' }
+        ]
+      },
+      budgeting: {
+        moduleCode: 'budgeting',
+        moduleName: 'Budgeting & Financial Planning',
+        description: 'Budgets, forecasting, variance analysis, and capital budgeting',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Budgets', description: 'View budget information' },
+          { code: 'read_all', name: 'View All Budgets', description: 'View all budgets in organization' },
+          { code: 'create', name: 'Create Budgets', description: 'Create new budgets' },
+          { code: 'update', name: 'Edit Budgets', description: 'Modify budget information' },
+          { code: 'delete', name: 'Delete Budgets', description: 'Remove budgets' },
+          { code: 'approve', name: 'Approve Budgets', description: 'Approve budgets' },
+          { code: 'forecast', name: 'Create Forecasts', description: 'Create financial forecasts' },
+          { code: 'export', name: 'Export Budgets', description: 'Export budget data' }
+        ]
+      },
+      cost_accounting: {
+        moduleCode: 'cost_accounting',
+        moduleName: 'Cost Accounting',
+        description: 'Cost centers, job costing, and activity-based costing',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Cost Accounting', description: 'View cost accounting data' },
+          { code: 'read_all', name: 'View All Cost Data', description: 'View all cost data in organization' },
+          { code: 'create', name: 'Create Cost Entries', description: 'Create new cost entries' },
+          { code: 'update', name: 'Edit Cost Entries', description: 'Modify cost entries' },
+          { code: 'delete', name: 'Delete Cost Entries', description: 'Remove cost entries' },
+          { code: 'allocate', name: 'Allocate Costs', description: 'Allocate costs to centers and jobs' },
+          { code: 'export', name: 'Export Cost Data', description: 'Export cost accounting data' }
+        ]
+      },
+      fixed_assets: {
+        moduleCode: 'fixed_assets',
+        moduleName: 'Fixed Asset Management',
+        description: 'Asset register, depreciation, disposal, transfers, and maintenance',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Fixed Assets', description: 'View asset information' },
+          { code: 'read_all', name: 'View All Assets', description: 'View all assets in organization' },
+          { code: 'create', name: 'Create Assets', description: 'Register new assets' },
+          { code: 'update', name: 'Edit Assets', description: 'Modify asset information' },
+          { code: 'delete', name: 'Delete Assets', description: 'Remove assets' },
+          { code: 'depreciate', name: 'Run Depreciation', description: 'Process depreciation calculations' },
+          { code: 'dispose', name: 'Dispose Assets', description: 'Record asset disposals' },
+          { code: 'transfer', name: 'Transfer Assets', description: 'Transfer assets between locations' },
+          { code: 'export', name: 'Export Assets', description: 'Export asset data' }
+        ]
+      },
+      payroll: {
+        moduleCode: 'payroll',
+        moduleName: 'Payroll Management',
+        description: 'Employee payroll processing, tax management, benefits, and reports',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Payroll', description: 'View payroll information' },
+          { code: 'read_all', name: 'View All Payroll', description: 'View all payroll data' },
+          { code: 'create', name: 'Create Payroll', description: 'Create payroll records' },
+          { code: 'update', name: 'Edit Payroll', description: 'Modify payroll information' },
+          { code: 'delete', name: 'Delete Payroll', description: 'Remove payroll records' },
+          { code: 'run', name: 'Run Payroll', description: 'Process payroll calculations' },
+          { code: 'approve', name: 'Approve Payroll', description: 'Approve payroll for processing' },
+          { code: 'view_salary', name: 'View Salary Details', description: 'View employee salary information' },
+          { code: 'export', name: 'Export Payroll', description: 'Export payroll data and reports' }
+        ]
+      },
+      projects: {
+        moduleCode: 'projects',
+        moduleName: 'Project Accounting',
+        description: 'Project costing, billing, time tracking, resource allocation, profitability',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Projects', description: 'View project information' },
+          { code: 'read_all', name: 'View All Projects', description: 'View all projects in organization' },
+          { code: 'create', name: 'Create Projects', description: 'Create new projects' },
+          { code: 'update', name: 'Edit Projects', description: 'Modify project information' },
+          { code: 'delete', name: 'Delete Projects', description: 'Remove projects' },
+          { code: 'track_time', name: 'Track Time', description: 'Record time against projects' },
+          { code: 'bill', name: 'Bill Projects', description: 'Generate project invoices' },
+          { code: 'allocate_resources', name: 'Allocate Resources', description: 'Allocate resources to projects' },
+          { code: 'export', name: 'Export Projects', description: 'Export project data' }
+        ]
+      },
+      inventory: {
+        moduleCode: 'inventory',
+        moduleName: 'Inventory Management',
+        description: 'Items, stock levels, locations, transactions, and stock alerts',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Inventory', description: 'View inventory information' },
+          { code: 'read_all', name: 'View All Inventory', description: 'View all inventory items' },
+          { code: 'create', name: 'Create Inventory Items', description: 'Add new inventory items' },
+          { code: 'update', name: 'Edit Inventory', description: 'Modify inventory information' },
+          { code: 'delete', name: 'Delete Inventory', description: 'Remove inventory items' },
+          { code: 'adjust', name: 'Adjust Stock', description: 'Adjust stock quantities' },
+          { code: 'movement', name: 'Track Movements', description: 'Record stock movements and transfers' },
+          { code: 'count', name: 'Perform Stock Counts', description: 'Perform inventory counts' },
+          { code: 'export', name: 'Export Inventory', description: 'Export inventory data' },
+          { code: 'import', name: 'Import Inventory', description: 'Import inventory from files' }
+        ]
+      },
+      multi_entity: {
+        moduleCode: 'multi_entity',
+        moduleName: 'Multi-Entity Management',
+        description: 'Entity management, consolidation, inter-company transactions, currency management',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Entities', description: 'View entity information' },
+          { code: 'read_all', name: 'View All Entities', description: 'View all entities in organization' },
+          { code: 'create', name: 'Create Entities', description: 'Create new entities' },
+          { code: 'update', name: 'Edit Entities', description: 'Modify entity information' },
+          { code: 'delete', name: 'Delete Entities', description: 'Remove entities' },
+          { code: 'consolidate', name: 'Consolidate', description: 'Perform financial consolidation' },
+          { code: 'inter_company', name: 'Inter-Company Transactions', description: 'Manage inter-company transactions' },
+          { code: 'manage_currency', name: 'Manage Currency', description: 'Manage multi-currency settings' },
+          { code: 'export', name: 'Export Entity Data', description: 'Export multi-entity data' }
+        ]
+      },
+      compliance: {
+        moduleCode: 'compliance',
+        moduleName: 'Compliance & Audit',
+        description: 'Audit trail, internal controls, risk management, SOX, regulatory reports',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Compliance', description: 'View compliance information' },
+          { code: 'read_all', name: 'View All Compliance', description: 'View all compliance data' },
+          { code: 'create', name: 'Create Compliance Records', description: 'Create compliance records' },
+          { code: 'update', name: 'Edit Compliance', description: 'Modify compliance records' },
+          { code: 'delete', name: 'Delete Compliance Records', description: 'Remove compliance records' },
+          { code: 'manage_controls', name: 'Manage Controls', description: 'Manage internal controls' },
+          { code: 'manage_risks', name: 'Manage Risks', description: 'Manage risk assessments' },
+          { code: 'audit_trail', name: 'View Audit Trail', description: 'Access audit trail logs' },
+          { code: 'export', name: 'Export Compliance', description: 'Export compliance and audit data' }
+        ]
+      },
+      workflows: {
+        moduleCode: 'workflows',
+        moduleName: 'Workflow Management',
+        description: 'Approval workflows, templates, and automation',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Workflows', description: 'View workflow information' },
+          { code: 'read_all', name: 'View All Workflows', description: 'View all workflows' },
+          { code: 'create', name: 'Create Workflows', description: 'Create new workflow templates' },
+          { code: 'update', name: 'Edit Workflows', description: 'Modify workflow definitions' },
+          { code: 'delete', name: 'Delete Workflows', description: 'Remove workflows' },
+          { code: 'approve', name: 'Approve in Workflows', description: 'Approve items in workflow queues' },
+          { code: 'manage_templates', name: 'Manage Templates', description: 'Manage workflow templates' },
+          { code: 'export', name: 'Export Workflows', description: 'Export workflow data' }
+        ]
+      },
+      documents: {
+        moduleCode: 'documents',
+        moduleName: 'Document Management',
+        description: 'Financial document storage and management',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Documents', description: 'View document information' },
+          { code: 'read_all', name: 'View All Documents', description: 'View all documents' },
+          { code: 'create', name: 'Upload Documents', description: 'Upload new documents' },
+          { code: 'update', name: 'Edit Documents', description: 'Modify document metadata' },
+          { code: 'delete', name: 'Delete Documents', description: 'Remove documents' },
+          { code: 'download', name: 'Download Documents', description: 'Download document files' },
+          { code: 'export', name: 'Export Documents', description: 'Export document data' }
+        ]
+      },
+      integrations: {
+        moduleCode: 'integrations',
+        moduleName: 'Integrations',
+        description: 'Third-party connections, API keys, webhooks, sync jobs',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Integrations', description: 'View integration information' },
+          { code: 'create', name: 'Create Integrations', description: 'Set up new integrations' },
+          { code: 'update', name: 'Edit Integrations', description: 'Modify integration settings' },
+          { code: 'delete', name: 'Delete Integrations', description: 'Remove integrations' },
+          { code: 'manage_api_keys', name: 'Manage API Keys', description: 'Manage API keys' },
+          { code: 'manage_webhooks', name: 'Manage Webhooks', description: 'Manage webhook endpoints' },
+          { code: 'sync', name: 'Run Sync Jobs', description: 'Trigger data sync jobs' },
+          { code: 'export', name: 'Export Integration Logs', description: 'Export integration logs' }
+        ]
+      },
+      ai_insights: {
+        moduleCode: 'ai_insights',
+        moduleName: 'AI-Powered Insights',
+        description: 'AI-powered financial insights, predictive analytics, anomaly detection',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View AI Insights', description: 'View AI-generated insights' },
+          { code: 'read_all', name: 'View All Insights', description: 'View all AI insights' },
+          { code: 'generate', name: 'Generate Insights', description: 'Generate new AI insights' },
+          { code: 'export', name: 'Export Insights', description: 'Export insight data' },
+          { code: 'configure', name: 'Configure AI', description: 'Configure AI models and parameters' }
+        ]
+      },
+      security: {
+        moduleCode: 'security',
+        moduleName: 'Security Management',
+        description: 'Encryption, MFA, SSO, threat intelligence, security policies',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Security', description: 'View security information and settings' },
+          { code: 'configure', name: 'Configure Security', description: 'Configure security settings' },
+          { code: 'manage_mfa', name: 'Manage MFA', description: 'Manage multi-factor authentication' },
+          { code: 'manage_sso', name: 'Manage SSO', description: 'Manage single sign-on settings' },
+          { code: 'manage_policies', name: 'Manage Policies', description: 'Manage security policies' },
+          { code: 'view_threats', name: 'View Threats', description: 'View threat intelligence' },
+          { code: 'manage_alerts', name: 'Manage Alerts', description: 'Manage security alerts' },
+          { code: 'export', name: 'Export Security Data', description: 'Export security reports' }
+        ]
+      },
+      performance: {
+        moduleCode: 'performance',
+        moduleName: 'Performance & Monitoring',
+        description: 'System performance dashboards, cache management, job queues',
+        isCore: false,
+        permissions: [
+          { code: 'read', name: 'View Performance', description: 'View performance metrics' },
+          { code: 'manage_cache', name: 'Manage Cache', description: 'Manage system cache' },
+          { code: 'manage_jobs', name: 'Manage Jobs', description: 'Manage background job queues' },
+          { code: 'configure_alerts', name: 'Configure Alerts', description: 'Configure performance alerts' },
+          { code: 'export', name: 'Export Metrics', description: 'Export performance metrics' }
+        ]
+      },
+      notifications: {
+        moduleCode: 'notifications',
+        moduleName: 'Notifications',
+        description: 'System notifications and alerts',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Notifications', description: 'View notifications' },
+          { code: 'update', name: 'Manage Notifications', description: 'Update notification settings' },
+          { code: 'manage_preferences', name: 'Manage Preferences', description: 'Manage notification preferences' }
+        ]
+      },
+      system: {
+        moduleCode: 'system',
+        moduleName: 'System Administration',
+        description: 'User management, roles & permissions, company settings, audit logs, backups',
+        isCore: true,
+        permissions: [
+          { code: 'settings_read', name: 'View Settings', description: 'View system settings' },
+          { code: 'settings_update', name: 'Update Settings', description: 'Update system settings' },
+          { code: 'users_read', name: 'View Users', description: 'View user information' },
+          { code: 'users_read_all', name: 'View All Users', description: 'View all users in organization' },
+          { code: 'users_create', name: 'Create Users', description: 'Create new user accounts' },
+          { code: 'users_update', name: 'Edit Users', description: 'Modify user information' },
+          { code: 'users_delete', name: 'Delete Users', description: 'Remove user accounts' },
+          { code: 'users_activate', name: 'Activate Users', description: 'Activate/deactivate users' },
+          { code: 'users_reset_password', name: 'Reset Passwords', description: 'Reset user passwords' },
+          { code: 'users_export', name: 'Export Users', description: 'Export user data' },
+          { code: 'users_import', name: 'Import Users', description: 'Import users from files' },
+          { code: 'roles_read', name: 'View Roles', description: 'View role information' },
+          { code: 'roles_read_all', name: 'View All Roles', description: 'View all roles' },
+          { code: 'roles_create', name: 'Create Roles', description: 'Create new roles' },
+          { code: 'roles_update', name: 'Edit Roles', description: 'Modify role permissions' },
+          { code: 'roles_delete', name: 'Delete Roles', description: 'Remove roles' },
+          { code: 'roles_assign', name: 'Assign Roles', description: 'Assign roles to users' },
+          { code: 'roles_export', name: 'Export Roles', description: 'Export role data' },
+          { code: 'audit_read', name: 'View Audit Logs', description: 'View audit log information' },
+          { code: 'audit_read_all', name: 'View All Audit Logs', description: 'View all audit logs' },
+          { code: 'audit_export', name: 'Export Audit Logs', description: 'Export audit log data' },
+          { code: 'tenant_config_read', name: 'View Tenant Config', description: 'View tenant-specific configurations' },
+          { code: 'tenant_config_update', name: 'Update Tenant Config', description: 'Update tenant configurations' },
+          { code: 'credit_config_view', name: 'View Credit Config', description: 'View credit configuration settings' },
+          { code: 'credit_config_edit', name: 'Edit Credit Config', description: 'Edit credit configuration settings' },
+          { code: 'backup_create', name: 'Create Backups', description: 'Create system backups' },
+          { code: 'backup_restore', name: 'Restore Backups', description: 'Restore system from backups' },
+          { code: 'dropdowns_read', name: 'View Dropdowns', description: 'View dropdown values' },
+          { code: 'dropdowns_manage', name: 'Manage Dropdowns', description: 'Create/update/delete dropdown values' },
+          { code: 'fiscal_year_manage', name: 'Manage Fiscal Year', description: 'Manage fiscal year setup' },
+          { code: 'sequences_manage', name: 'Manage Sequences', description: 'Manage number sequences' },
+          { code: 'wrapper_sync', name: 'Wrapper Sync', description: 'Trigger and view Wrapper tenant sync' }
         ]
       }
     }
-  }
+  },
+
 };
 
 // 🎯 **PLAN-BASED ACCESS CONTROL**
 export const PLAN_ACCESS_MATRIX = {
   free: {
-    applications: ['applications', 'crm'],
+    applications: ['crm', 'accounting'],
     modules: {
-      applications: ['catalog', 'dashboard'],
-      crm: ['leads', 'contacts', 'dashboard']
+      crm: ['leads', 'contacts', 'dashboard'],
+      accounting: ['dashboard', 'general_ledger', 'chart_of_accounts', 'journal_entries', 'invoices', 'customers', 'bills', 'vendors', 'reports', 'multi_entity']
     },
     permissions: {
-      applications: {
-        catalog: ['read', 'read_all', 'request'],
-        dashboard: ['view']
-      },
       crm: {
         leads: ['read', 'create', 'update', 'delete'],
         contacts: ['read', 'create', 'update', 'delete'],
         dashboard: ['read']
+      },
+      accounting: {
+        dashboard: ['view'],
+        general_ledger: ['read', 'create', 'update'],
+        chart_of_accounts: ['read', 'create', 'update'],
+        journal_entries: ['read', 'create', 'update'],
+        invoices: ['read', 'create', 'update', 'delete'],
+        customers: ['read', 'create', 'update', 'delete'],
+        bills: ['read', 'create', 'update', 'delete'],
+        vendors: ['read', 'create', 'update', 'delete'],
+        reports: ['read', 'export'],
+        multi_entity: ['read']
       }
     },
     credits: {
@@ -1684,18 +2220,20 @@ export const PLAN_ACCESS_MATRIX = {
 
 
   starter: {
-    applications: ['applications', 'crm', 'hr', 'project_management'],
+    applications: ['crm', 'hr', 'project_management', 'accounting'],
     modules: {
-      applications: ['catalog', 'dashboard'],
       crm: ['leads', 'contacts', 'accounts', 'opportunities', 'dashboard'],
       hr: ['employees', 'leave', 'dashboard'],
-      project_management: ['projects', 'tasks', 'team', 'dashboard']
+      project_management: ['projects', 'tasks', 'team', 'dashboard'],
+      accounting: [
+        'dashboard', 'general_ledger', 'chart_of_accounts', 'journal_entries',
+        'invoices', 'customers', 'credit_notes', 'sales_orders', 'estimates',
+        'bills', 'vendors', 'purchase_orders', 'expense_reports', 'vendor_credits',
+        'banking', 'tax', 'reports', 'analytics', 'workflows', 'documents',
+        'notifications', 'system'
+      ]
     },
     permissions: {
-      applications: {
-        catalog: ['read', 'read_all', 'request'],
-        dashboard: ['view', 'customize']
-      },
       crm: {
         leads: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import', 'assign', 'convert'],
         contacts: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
@@ -1713,6 +2251,30 @@ export const PLAN_ACCESS_MATRIX = {
         tasks: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'assign', 'change_status'],
         team: ['read', 'read_all', 'create', 'update', 'delete', 'export'],
         dashboard: ['view']
+      },
+      accounting: {
+        dashboard: ['view', 'customize'],
+        general_ledger: ['read', 'create', 'update', 'delete', 'post', 'export'],
+        chart_of_accounts: ['read', 'create', 'update', 'delete', 'export'],
+        journal_entries: ['read', 'create', 'update', 'delete', 'post', 'export'],
+        invoices: ['read', 'read_all', 'create', 'update', 'delete', 'send', 'export'],
+        customers: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
+        credit_notes: ['read', 'create', 'update'],
+        sales_orders: ['read', 'create', 'update', 'delete'],
+        estimates: ['read', 'create', 'update', 'delete', 'send'],
+        bills: ['read', 'read_all', 'create', 'update', 'delete', 'pay', 'export'],
+        vendors: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
+        purchase_orders: ['read', 'create', 'update', 'delete', 'approve'],
+        expense_reports: ['read', 'create', 'update', 'approve'],
+        vendor_credits: ['read', 'create', 'update'],
+        banking: ['read', 'create', 'update', 'reconcile', 'export'],
+        tax: ['read', 'create', 'update', 'configure'],
+        reports: ['read', 'create', 'export'],
+        analytics: ['read', 'export'],
+        workflows: ['read', 'approve'],
+        documents: ['read', 'create', 'update'],
+        notifications: ['read', 'update'],
+        system: ['settings_read', 'users_read', 'roles_read', 'audit_read']
       }
     },
     credits: {
@@ -1723,18 +2285,22 @@ export const PLAN_ACCESS_MATRIX = {
   },
 
   professional: {
-    applications: ['applications', 'crm', 'hr', 'project_management'],
+    applications: ['crm', 'hr', 'project_management', 'accounting'],
     modules: {
-      applications: ['catalog', 'dashboard'],
       crm: ['leads', 'contacts', 'accounts', 'opportunities', 'quotations', 'invoices', 'inventory', 'product_orders', 'tickets', 'communications', 'calendar', 'dashboard'],
       hr: ['employees', 'payroll', 'leave', 'dashboard'],
-      project_management: ['projects', 'tasks', 'sprints', 'time_tracking', 'team', 'backlog', 'documents', 'analytics', 'reports', 'chat', 'calendar', 'kanban', 'dashboard', 'notifications', 'workspace']
+      project_management: ['projects', 'tasks', 'sprints', 'time_tracking', 'team', 'backlog', 'documents', 'analytics', 'reports', 'chat', 'calendar', 'kanban', 'dashboard', 'notifications', 'workspace'],
+      accounting: [
+        'dashboard', 'general_ledger', 'chart_of_accounts', 'journal_entries',
+        'invoices', 'customers', 'credit_notes', 'sales_orders', 'estimates',
+        'bills', 'vendors', 'purchase_orders', 'expense_reports', 'vendor_credits',
+        'banking', 'tax', 'reports', 'analytics', 'budgeting', 'cost_accounting',
+        'fixed_assets', 'payroll', 'projects', 'inventory',
+        'compliance', 'workflows', 'documents', 'integrations',
+        'notifications', 'system'
+      ]
     },
     permissions: {
-      applications: {
-        catalog: ['read', 'read_all', 'request'],
-        dashboard: ['view', 'customize']
-      },
       crm: {
         leads: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import', 'assign', 'convert'],
         contacts: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
@@ -1771,6 +2337,47 @@ export const PLAN_ACCESS_MATRIX = {
         dashboard: ['view', 'customize', 'export', 'share', 'create_widgets', 'manage_widgets'],
         notifications: ['read', 'read_all', 'create', 'update', 'delete', 'manage_preferences', 'mark_read', 'bulk_actions'],
         workspace: ['read', 'read_all', 'create', 'update', 'delete', 'manage_members', 'manage_roles', 'manage_settings', 'export', 'archive', 'restore']
+      },
+      accounting: {
+        dashboard: ['view', 'customize', 'export'],
+        general_ledger: ['read', 'create', 'update', 'delete', 'post', 'approve', 'close_period', 'export'],
+        chart_of_accounts: ['read', 'create', 'update', 'delete', 'import', 'export'],
+        journal_entries: ['read', 'create', 'update', 'delete', 'post', 'approve', 'reverse', 'export'],
+        invoices: ['read', 'read_all', 'create', 'update', 'delete', 'send', 'post', 'export', 'import', 'generate_pdf'],
+        customers: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
+        credit_notes: ['read', 'create', 'update', 'delete', 'apply', 'export'],
+        sales_orders: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'convert', 'export'],
+        estimates: ['read', 'create', 'update', 'delete', 'send', 'convert', 'export', 'generate_pdf'],
+        bills: ['read', 'read_all', 'create', 'update', 'delete', 'pay', 'approve', 'export'],
+        vendors: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
+        purchase_orders: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'receive', 'export'],
+        expense_reports: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'reimburse', 'export'],
+        vendor_credits: ['read', 'create', 'update', 'delete', 'apply', 'export'],
+        banking: ['read', 'read_all', 'create', 'update', 'delete', 'reconcile', 'import_feeds', 'transfer', 'export'],
+        tax: ['read', 'create', 'update', 'delete', 'configure', 'file_returns', 'reconcile', 'export'],
+        reports: ['read', 'read_all', 'create', 'export', 'schedule', 'generate_pdf'],
+        analytics: ['read', 'read_all', 'create', 'export', 'schedule', 'customize_dashboards'],
+        budgeting: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'forecast', 'export'],
+        cost_accounting: ['read', 'read_all', 'create', 'update', 'delete', 'allocate', 'export'],
+        fixed_assets: ['read', 'read_all', 'create', 'update', 'delete', 'depreciate', 'dispose', 'transfer', 'export'],
+        payroll: ['read', 'read_all', 'create', 'update', 'run', 'approve', 'view_salary', 'export'],
+        projects: ['read', 'read_all', 'create', 'update', 'delete', 'track_time', 'bill', 'allocate_resources', 'export'],
+        inventory: ['read', 'read_all', 'create', 'update', 'delete', 'adjust', 'movement', 'count', 'export', 'import'],
+        compliance: ['read', 'read_all', 'create', 'update', 'manage_controls', 'audit_trail', 'export'],
+        workflows: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'manage_templates', 'export'],
+        documents: ['read', 'read_all', 'create', 'update', 'delete', 'download', 'export'],
+        integrations: ['read', 'create', 'update', 'delete', 'manage_api_keys', 'manage_webhooks', 'sync'],
+        notifications: ['read', 'update', 'manage_preferences'],
+        system: [
+          'settings_read', 'settings_update',
+          'users_read', 'users_read_all', 'users_create', 'users_update', 'users_delete', 'users_activate', 'users_export',
+          'roles_read', 'roles_read_all', 'roles_create', 'roles_update', 'roles_delete', 'roles_assign', 'roles_export',
+          'audit_read', 'audit_read_all', 'audit_export',
+          'tenant_config_read', 'tenant_config_update',
+          'credit_config_view', 'credit_config_edit',
+          'dropdowns_read', 'dropdowns_manage',
+          'fiscal_year_manage', 'sequences_manage'
+        ]
       }
     },
     credits: {
@@ -1782,20 +2389,24 @@ export const PLAN_ACCESS_MATRIX = {
 
 
   enterprise: {
-    applications: ['applications', 'crm', 'hr', 'affiliateConnect', 'project_management', 'operations'],
+    applications: ['crm', 'hr', 'affiliateConnect', 'project_management', 'operations', 'accounting'],
     modules: {
-      applications: ['catalog', 'dashboard'],
       crm: ['leads', 'accounts', 'contacts', 'opportunities', 'quotations', 'invoices', 'inventory', 'product_orders', 'sales_orders', 'tickets', 'communications', 'calendar', 'ai_insights', 'form_builder', 'analytics', 'dashboard', 'system'],
       hr: ['employees', 'payroll', 'leave', 'dashboard'],
       affiliateConnect: ['dashboard', 'products', 'affiliates', 'tracking', 'commissions', 'campaigns', 'influencers', 'payments', 'analytics', 'fraud', 'communications', 'integrations', 'settings', 'support'],
       project_management: ['projects', 'tasks', 'sprints', 'time_tracking', 'team', 'backlog', 'documents', 'analytics', 'reports', 'chat', 'calendar', 'kanban', 'dashboard', 'notifications', 'workspace', 'workflow', 'system'],
-      operations: ['dashboard', 'inventory', 'warehouse', 'procurement', 'suppliers', 'transportation', 'orders', 'fulfillments', 'shipments', 'catalog', 'quality', 'rfx', 'finance', 'tax_compliance', 'supply_chain', 'analytics', 'contracts', 'service_appointments', 'notifications', 'system', 'marketing', 'customers', 'returns', 'customer_portal', 'vendor_management', 'service_providers']
+      operations: ['dashboard', 'inventory', 'warehouse', 'procurement', 'suppliers', 'transportation', 'orders', 'fulfillments', 'shipments', 'catalog', 'quality', 'rfx', 'finance', 'tax_compliance', 'supply_chain', 'analytics', 'contracts', 'service_appointments', 'notifications', 'system', 'marketing', 'customers', 'returns', 'customer_portal', 'vendor_management', 'service_providers'],
+      accounting: [
+        'dashboard', 'general_ledger', 'chart_of_accounts', 'journal_entries',
+        'invoices', 'customers', 'credit_notes', 'sales_orders', 'estimates',
+        'bills', 'vendors', 'purchase_orders', 'expense_reports', 'vendor_credits',
+        'banking', 'tax', 'reports', 'analytics', 'budgeting', 'cost_accounting',
+        'fixed_assets', 'payroll', 'projects', 'inventory', 'multi_entity',
+        'compliance', 'workflows', 'documents', 'integrations',
+        'ai_insights', 'security', 'performance', 'notifications', 'system'
+      ]
     },
     permissions: {
-      applications: {
-        catalog: ['read', 'read_all', 'request'],
-        dashboard: ['view', 'customize']
-      },
       crm: {
         leads: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import', 'assign', 'convert'],
         accounts: ['read', 'read_all', 'create', 'update', 'delete', 'view_contacts', 'export', 'import', 'assign'],
@@ -1883,6 +2494,53 @@ export const PLAN_ACCESS_MATRIX = {
         customer_portal: ['read', 'read_all', 'manage_shop', 'manage_services', 'manage_orders', 'manage_bookings', 'manage_payments', 'manage_wishlist', 'manage_preferences', 'export'],
         vendor_management: ['read', 'read_all', 'create', 'update', 'delete', 'manage_products', 'manage_ratings', 'manage_policies', 'manage_communication', 'view_analytics', 'manage_certifications', 'manage_portfolios', 'export'],
         service_providers: ['read', 'read_all', 'create', 'update', 'delete', 'manage_catalog', 'manage_pricing', 'manage_promotions', 'view_analytics', 'export']
+      },
+      accounting: {
+        dashboard: ['view', 'customize', 'export'],
+        general_ledger: ['read', 'create', 'update', 'delete', 'post', 'approve', 'close_period', 'export'],
+        chart_of_accounts: ['read', 'create', 'update', 'delete', 'import', 'export'],
+        journal_entries: ['read', 'create', 'update', 'delete', 'post', 'approve', 'reverse', 'export'],
+        invoices: ['read', 'read_all', 'create', 'update', 'delete', 'send', 'post', 'export', 'import', 'generate_pdf'],
+        customers: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
+        credit_notes: ['read', 'create', 'update', 'delete', 'apply', 'export'],
+        sales_orders: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'convert', 'export'],
+        estimates: ['read', 'create', 'update', 'delete', 'send', 'convert', 'export', 'generate_pdf'],
+        bills: ['read', 'read_all', 'create', 'update', 'delete', 'pay', 'approve', 'export'],
+        vendors: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
+        purchase_orders: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'receive', 'export'],
+        expense_reports: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'reimburse', 'export'],
+        vendor_credits: ['read', 'create', 'update', 'delete', 'apply', 'export'],
+        banking: ['read', 'read_all', 'create', 'update', 'delete', 'reconcile', 'import_feeds', 'transfer', 'export'],
+        tax: ['read', 'create', 'update', 'delete', 'configure', 'file_returns', 'reconcile', 'export'],
+        reports: ['read', 'read_all', 'create', 'export', 'schedule', 'generate_pdf'],
+        analytics: ['read', 'read_all', 'create', 'export', 'schedule', 'customize_dashboards'],
+        budgeting: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'forecast', 'export'],
+        cost_accounting: ['read', 'read_all', 'create', 'update', 'delete', 'allocate', 'export'],
+        fixed_assets: ['read', 'read_all', 'create', 'update', 'delete', 'depreciate', 'dispose', 'transfer', 'export'],
+        payroll: ['read', 'read_all', 'create', 'update', 'delete', 'run', 'approve', 'view_salary', 'export'],
+        projects: ['read', 'read_all', 'create', 'update', 'delete', 'track_time', 'bill', 'allocate_resources', 'export'],
+        inventory: ['read', 'read_all', 'create', 'update', 'delete', 'adjust', 'movement', 'count', 'export', 'import'],
+        multi_entity: ['read', 'read_all', 'create', 'update', 'delete', 'consolidate', 'inter_company', 'manage_currency', 'export'],
+        compliance: ['read', 'read_all', 'create', 'update', 'delete', 'manage_controls', 'manage_risks', 'audit_trail', 'export'],
+        workflows: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'manage_templates', 'export'],
+        documents: ['read', 'read_all', 'create', 'update', 'delete', 'download', 'export'],
+        integrations: ['read', 'create', 'update', 'delete', 'manage_api_keys', 'manage_webhooks', 'sync', 'export'],
+        ai_insights: ['read', 'read_all', 'generate', 'export', 'configure'],
+        security: ['read', 'configure', 'manage_mfa', 'manage_sso', 'manage_policies', 'view_threats', 'manage_alerts', 'export'],
+        performance: ['read', 'manage_cache', 'manage_jobs', 'configure_alerts', 'export'],
+        notifications: ['read', 'update', 'manage_preferences'],
+        system: [
+          'settings_read', 'settings_update',
+          'users_read', 'users_read_all', 'users_create', 'users_update', 'users_delete', 'users_activate', 'users_reset_password', 'users_export', 'users_import',
+          'roles_read', 'roles_read_all', 'roles_create', 'roles_update', 'roles_delete', 'roles_assign', 'roles_export',
+          'audit_read', 'audit_read_all', 'audit_export',
+          'tenant_config_read', 'tenant_config_update',
+          'credit_config_view', 'credit_config_edit',
+          'backup_create', 'backup_restore',
+          'dropdowns_read', 'dropdowns_manage',
+          'fiscal_year_manage', 'sequences_manage',
+          'wrapper_sync'
+        ]
       }
     },
     credits: {
@@ -2126,4 +2784,98 @@ export function createSuperAdminRoleConfig(selectedPlan: string = 'free', tenant
   };
 }
 
-export default BUSINESS_SUITE_MATRIX; 
+// ─── ACCOUNTING UTILITY FUNCTIONS ───────────────────────────────────────────
+
+/**
+ * Returns a Record mapping each accounting module keyword to an array of module names
+ * that should become accessible when the user has any permission containing
+ * that keyword. Used by GET /auth/user/permissions to derive moduleAccess.
+ */
+export function buildAccountingPermissionToModulesMap(): Record<string, string[]> {
+  const accountingApp = BUSINESS_SUITE_MATRIX.accounting;
+  if (!accountingApp) return {};
+
+  const map: Record<string, string[]> = {};
+
+  for (const moduleCode of Object.keys(accountingApp.modules)) {
+    if (!map[moduleCode]) map[moduleCode] = [];
+    if (!map[moduleCode].includes(moduleCode)) {
+      map[moduleCode].push(moduleCode);
+    }
+  }
+
+  // AR umbrella → sub-modules
+  map['invoices'] = [...(map['invoices'] || []), 'accounts_receivable'];
+  map['customers'] = [...(map['customers'] || []), 'accounts_receivable'];
+  map['credit_notes'] = [...(map['credit_notes'] || []), 'accounts_receivable'];
+  map['sales_orders'] = [...(map['sales_orders'] || []), 'accounts_receivable'];
+  map['estimates'] = [...(map['estimates'] || []), 'accounts_receivable'];
+
+  // AP umbrella → sub-modules
+  map['bills'] = [...(map['bills'] || []), 'accounts_payable'];
+  map['vendors'] = [...(map['vendors'] || []), 'accounts_payable'];
+  map['purchase_orders'] = [...(map['purchase_orders'] || []), 'accounts_payable'];
+  map['expense_reports'] = [...(map['expense_reports'] || []), 'accounts_payable'];
+  map['vendor_credits'] = [...(map['vendor_credits'] || []), 'accounts_payable'];
+
+  // Additional aliases for backward compat with sidebar requiredModules
+  map['general_ledger'] = [...(map['general_ledger'] || []), 'accounting'];
+  map['chart_of_accounts'] = [...(map['chart_of_accounts'] || []), 'accounting'];
+  map['journal_entries'] = [...(map['journal_entries'] || []), 'accounting'];
+  map['budgeting'] = [...(map['budgeting'] || []), 'financial_planning'];
+  map['banking'] = [...(map['banking'] || []), 'bank_accounts', 'bank_reconciliation', 'cash_flow'];
+  map['tax'] = [...(map['tax'] || []), 'tax_management', 'gst', 'tds', 'tax_compliance'];
+  map['payroll'] = [...(map['payroll'] || []), 'payroll_employees', 'payroll_runs', 'payroll_payslips'];
+  map['reports'] = [...(map['reports'] || []), 'financial_statements'];
+  map['analytics'] = [...(map['analytics'] || []), 'reports'];
+  map['compliance'] = [...(map['compliance'] || []), 'audit'];
+  map['projects'] = [...(map['projects'] || []), 'time_tracking', 'project_billing', 'project_costing'];
+  map['system'] = [...(map['system'] || []), 'user_management', 'system_admin', 'settings', 'admin_settings', 'rbac'];
+
+  for (const key of Object.keys(map)) {
+    map[key] = [...new Set(map[key])];
+  }
+
+  return map;
+}
+
+/**
+ * Generates the LEGACY_TO_WRAPPER mapping automatically from the accounting permission matrix.
+ * For each module, creates:
+ *   manage_{module} → all accounting.{module}.* permissions
+ *   view_{module}   → [accounting.{module}.read]
+ */
+export function buildAccountingLegacyToWrapperMap(): Record<string, string[]> {
+  const accountingApp = BUSINESS_SUITE_MATRIX.accounting;
+  if (!accountingApp) return {};
+
+  const map: Record<string, string[]> = {};
+  const appCode = accountingApp.appInfo.appCode;
+
+  for (const [moduleCode, mod] of Object.entries(accountingApp.modules)) {
+    const allPerms = mod.permissions.map((p: { code: string }) => `${appCode}.${moduleCode}.${p.code}`);
+    const readPerms = mod.permissions
+      .filter((p: { code: string }) => p.code === 'read' || p.code === 'read_all')
+      .map((p: { code: string }) => `${appCode}.${moduleCode}.${p.code}`);
+
+    map[`manage_${moduleCode}`] = allPerms;
+    if (readPerms.length > 0) {
+      map[`view_${moduleCode}`] = readPerms;
+    }
+  }
+
+  map['manage_accounting'] = [
+    ...map['manage_general_ledger'],
+    ...map['manage_chart_of_accounts'],
+  ];
+  map['view_accounting'] = [
+    `${appCode}.general_ledger.read`,
+    `${appCode}.chart_of_accounts.read`,
+  ];
+  map['manage_entities'] = map['manage_multi_entity'];
+  map['view_entities'] = map['view_multi_entity'];
+
+  return map;
+}
+
+export default BUSINESS_SUITE_MATRIX;

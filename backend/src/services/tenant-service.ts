@@ -759,7 +759,7 @@ export class TenantService {
               }
             } catch (err: unknown) {
               const publishError = err as Error;
-              console.warn('⚠️ Failed to publish organization assignment event during invitation acceptance:', publishError.message);
+              console.error('❌ [EVENT-DROPPED] Failed to publish org assignment event:', publishError.message);
             }
           });
         }
@@ -788,7 +788,7 @@ export class TenantService {
             });
         }
 
-        // Publish user creation event to Redis streams for CRM sync
+        // Publish user creation event to Amazon MQ for suite sync
         try {
           // Split name into firstName and lastName for CRM requirements
           const nameParts = (user.name || '').split(' ');
@@ -804,11 +804,10 @@ export class TenantService {
             isActive: user.isActive !== undefined ? user.isActive : true,
             createdAt: user.createdAt ? (typeof user.createdAt === 'string' ? user.createdAt : user.createdAt.toISOString()) : new Date().toISOString()
           });
-          console.log('📡 Published user_created event to Redis streams');
+          console.log('📡 Published user_created event to Amazon MQ');
         } catch (err: unknown) {
           const streamError = err as Error;
-          console.warn('⚠️ Failed to publish user creation event to Redis streams:', streamError.message);
-          // Don't fail the user creation if stream publishing fails
+          console.error('❌ [EVENT-DROPPED] Failed to publish user_created event:', streamError.message);
         }
 
         // Publish role_assigned for each role so other apps get the role (after transaction commits)
@@ -831,7 +830,7 @@ export class TenantService {
               console.log('📡 Published role_assigned events for invitation acceptance:', assignments.length);
             } catch (err: unknown) {
               const publishError = err as Error;
-              console.warn('⚠️ Failed to publish role assignment events during invitation acceptance:', publishError.message);
+              console.error('❌ [EVENT-DROPPED] Failed to publish role_assigned events:', publishError.message);
             }
           });
         }
@@ -950,6 +949,53 @@ export class TenantService {
         commissions: ['view', 'calculate', 'approve', 'pay', 'dispute'],
         analytics: ['view', 'export', 'create_reports'],
         settings: ['view', 'edit']
+      },
+      accounting: {
+        dashboard: ['view', 'customize', 'export'],
+        general_ledger: ['read', 'create', 'update', 'delete', 'post', 'approve', 'close_period', 'export'],
+        chart_of_accounts: ['read', 'create', 'update', 'delete', 'import', 'export'],
+        journal_entries: ['read', 'create', 'update', 'delete', 'post', 'approve', 'reverse', 'export'],
+        invoices: ['read', 'read_all', 'create', 'update', 'delete', 'send', 'post', 'export', 'import', 'generate_pdf'],
+        customers: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
+        credit_notes: ['read', 'create', 'update', 'delete', 'apply', 'export'],
+        sales_orders: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'convert', 'export'],
+        estimates: ['read', 'create', 'update', 'delete', 'send', 'convert', 'export', 'generate_pdf'],
+        bills: ['read', 'read_all', 'create', 'update', 'delete', 'pay', 'approve', 'export'],
+        vendors: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
+        purchase_orders: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'receive', 'export'],
+        expense_reports: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'reimburse', 'export'],
+        vendor_credits: ['read', 'create', 'update', 'delete', 'apply', 'export'],
+        banking: ['read', 'read_all', 'create', 'update', 'delete', 'reconcile', 'import_feeds', 'transfer', 'export'],
+        tax: ['read', 'create', 'update', 'delete', 'configure', 'file_returns', 'reconcile', 'export'],
+        reports: ['read', 'read_all', 'create', 'export', 'schedule', 'generate_pdf'],
+        analytics: ['read', 'read_all', 'create', 'export', 'schedule', 'customize_dashboards'],
+        budgeting: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'forecast', 'export'],
+        cost_accounting: ['read', 'read_all', 'create', 'update', 'delete', 'allocate', 'export'],
+        fixed_assets: ['read', 'read_all', 'create', 'update', 'delete', 'depreciate', 'dispose', 'transfer', 'export'],
+        payroll: ['read', 'read_all', 'create', 'update', 'delete', 'run', 'approve', 'view_salary', 'export'],
+        projects: ['read', 'read_all', 'create', 'update', 'delete', 'track_time', 'bill', 'allocate_resources', 'export'],
+        inventory: ['read', 'read_all', 'create', 'update', 'delete', 'adjust', 'movement', 'count', 'export', 'import'],
+        multi_entity: ['read', 'read_all', 'create', 'update', 'delete', 'consolidate', 'inter_company', 'manage_currency', 'export'],
+        compliance: ['read', 'read_all', 'create', 'update', 'delete', 'manage_controls', 'manage_risks', 'audit_trail', 'export'],
+        workflows: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'manage_templates', 'export'],
+        documents: ['read', 'read_all', 'create', 'update', 'delete', 'download', 'export'],
+        integrations: ['read', 'create', 'update', 'delete', 'manage_api_keys', 'manage_webhooks', 'sync', 'export'],
+        ai_insights: ['read', 'read_all', 'generate', 'export', 'configure'],
+        security: ['read', 'configure', 'manage_mfa', 'manage_sso', 'manage_policies', 'view_threats', 'manage_alerts', 'export'],
+        performance: ['read', 'manage_cache', 'manage_jobs', 'configure_alerts', 'export'],
+        notifications: ['read', 'update', 'manage_preferences'],
+        system: [
+          'settings_read', 'settings_update',
+          'users_read', 'users_read_all', 'users_create', 'users_update', 'users_delete', 'users_activate', 'users_reset_password', 'users_export', 'users_import',
+          'roles_read', 'roles_read_all', 'roles_create', 'roles_update', 'roles_delete', 'roles_assign', 'roles_export',
+          'audit_read', 'audit_read_all', 'audit_export',
+          'tenant_config_read', 'tenant_config_update',
+          'credit_config_view', 'credit_config_edit',
+          'backup_create', 'backup_restore',
+          'dropdowns_read', 'dropdowns_manage',
+          'fiscal_year_manage', 'sequences_manage',
+          'wrapper_sync'
+        ]
       },
       admin: {
         users: ['view', 'create', 'edit', 'delete', 'invite'],
@@ -1778,7 +1824,7 @@ export class TenantService {
           .returning();
         console.log(`✅ Cancelled ${cancelledInvitations.length} tenant invitation(s) for email ${user.email}`);
 
-        // 6. Publish user deletion event to Redis streams before deletion
+        // 6. Publish user deletion event to Amazon MQ before deletion
         try {
           // Split name into firstName and lastName for CRM requirements
           const nameParts = (user.name || '').split(' ');
@@ -1798,8 +1844,7 @@ export class TenantService {
           console.log('📡 Published user_deleted event to AWS MQ');
         } catch (err: unknown) {
           const streamError = err as Error;
-          console.warn('⚠️ Failed to publish user deletion event to Redis streams:', streamError.message);
-          // Continue with user deletion even if stream publishing fails
+          console.error('❌ [EVENT-DROPPED] Failed to publish user_deleted event:', streamError.message);
         }
 
         // 6b. Clear audit_logs reference to this user so FK does not block delete (preserve logs, dissociate user)
@@ -1895,7 +1940,7 @@ export class TenantService {
         throw new Error('User not found');
       }
 
-      // Publish user deactivation event to Redis streams (via amazonMQPublisher)
+      // Publish user deactivation event to Amazon MQ
       try {
         // Split name into firstName and lastName for CRM requirements
         const nameParts = (updatedUser.name || '').split(' ');
@@ -1915,8 +1960,7 @@ export class TenantService {
         console.log('📡 Published user_deactivated event to AWS MQ');
       } catch (err: unknown) {
         const publishError = err as Error;
-        console.warn('⚠️ Failed to publish user_deactivated event:', publishError.message);
-        // Don't fail the operation if event publishing fails
+        console.error('❌ [EVENT-DROPPED] Failed to publish user_deactivated event:', publishError.message);
       }
 
       return {
@@ -1983,7 +2027,7 @@ export class TenantService {
             console.log('📡 Published role unassignment event successfully');
           } catch (err: unknown) {
             const streamError = err as Error;
-            console.warn('⚠️ Failed to publish role unassignment event:', streamError.message);
+            console.error('❌ [EVENT-DROPPED] Failed to publish role_unassigned event:', streamError.message);
           }
         }
 
@@ -2017,7 +2061,7 @@ export class TenantService {
           console.log('📡 Published role assignment event successfully');
         } catch (err: unknown) {
           const streamError = err as Error;
-          console.warn('⚠️ Failed to publish role assignment event:', streamError.message);
+          console.error('❌ [EVENT-DROPPED] Failed to publish role_assigned event:', streamError.message);
         }
 
         return {

@@ -6,7 +6,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticateToken, requirePermission } from '../../../middleware/auth/auth.js';
 import { PERMISSIONS } from '../../../constants/permissions.js';
 import { db } from '../../../db/index.js';
-import { tenants, tenantUsers, entities, credits, auditLogs } from '../../../db/schema/index.js';
+import { tenants, tenantUsers, entities, credits, auditLogs, subscriptions, tenantInvitations } from '../../../db/schema/index.js';
 import { eq, and, desc, sql, count, gte, lte } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import ActivityLogger from '../../../services/activityLogger.js';
@@ -185,48 +185,140 @@ export default async function adminTenantManagementRoutes(
         return reply.code(404).send({ error: 'Tenant not found' });
       }
 
-      // Get tenant users
-      const tenantUsersList = await db
-        .select({
+      // Run all queries in parallel for performance
+      const [
+        tenantUsersList,
+        entitySummary,
+        creditSummary,
+        subscriptionData,
+        pendingInvitationsResult,
+        recentActivityLogs
+      ] = await Promise.all([
+        // Tenant users with admin flag
+        db.select({
           userId: tenantUsers.userId,
           email: tenantUsers.email,
           firstName: tenantUsers.firstName,
           lastName: tenantUsers.lastName,
           isActive: tenantUsers.isActive,
+          isTenantAdmin: tenantUsers.isTenantAdmin,
           lastLoginAt: tenantUsers.lastLoginAt,
           createdAt: tenantUsers.createdAt
         })
         .from(tenantUsers)
-        .where(eq(tenantUsers.tenantId, tenantId));
+        .where(eq(tenantUsers.tenantId, tenantId)),
 
-      // Get entity hierarchy summary
-      const entitySummary = await db
-        .select({
+        // Entity hierarchy summary
+        db.select({
           total: count(),
-          organizations: sql`count(case when ${entities.entityType} = 'organization' then 1 end)`,
-          locations: sql`count(case when ${entities.entityType} = 'location' then 1 end)`,
-          departments: sql`count(case when ${entities.entityType} = 'department' then 1 end)`,
-          teams: sql`count(case when ${entities.entityType} = 'team' then 1 end)`
+          organizations: sql<number>`count(case when ${entities.entityType} = 'organization' then 1 end)`,
+          locations: sql<number>`count(case when ${entities.entityType} = 'location' then 1 end)`,
+          departments: sql<number>`count(case when ${entities.entityType} = 'department' then 1 end)`,
+          teams: sql<number>`count(case when ${entities.entityType} = 'team' then 1 end)`,
+          active: sql<number>`count(case when ${entities.isActive} = true then 1 end)`
         })
         .from(entities)
-        .where(eq(entities.tenantId, tenantId));
+        .where(eq(entities.tenantId, tenantId)),
 
-      // Get credit summary
-      const creditSummary = await db
-        .select({
-          totalCredits: sql`coalesce(sum(${credits.availableCredits}::numeric), 0)`,
-          activeEntities: sql`count(case when ${credits.isActive} = true then 1 end)`
+        // Credit summary with reserved
+        db.select({
+          totalCredits: sql<string>`coalesce(sum(${credits.availableCredits}::numeric), 0)`,
+          reservedCredits: sql<string>`coalesce(sum(case when ${credits.isActive} = false then ${credits.availableCredits}::numeric else 0 end), 0)`,
+          activeEntities: sql<number>`count(case when ${credits.isActive} = true then 1 end)`,
+          averageCredits: sql<string>`coalesce(avg(case when ${credits.isActive} = true then ${credits.availableCredits}::numeric end), 0)`
         })
         .from(credits)
-        .where(eq(credits.tenantId, tenantId));
+        .where(eq(credits.tenantId, tenantId)),
+
+        // Current subscription
+        db.select({
+          plan: subscriptions.plan,
+          status: subscriptions.status,
+          billingCycle: subscriptions.billingCycle,
+          yearlyPrice: subscriptions.yearlyPrice,
+          isTrialUser: subscriptions.isTrialUser,
+          hasEverUpgraded: subscriptions.hasEverUpgraded,
+          stripeSubscriptionId: subscriptions.stripeSubscriptionId,
+          stripeCustomerId: subscriptions.stripeCustomerId,
+          currentPeriodStart: subscriptions.currentPeriodStart,
+          currentPeriodEnd: subscriptions.currentPeriodEnd,
+          cancelAt: subscriptions.cancelAt,
+          canceledAt: subscriptions.canceledAt,
+          createdAt: subscriptions.createdAt,
+        })
+        .from(subscriptions)
+        .where(eq(subscriptions.tenantId, tenantId))
+        .orderBy(desc(subscriptions.createdAt))
+        .limit(1),
+
+        // Pending invitations count
+        db.select({ count: count() })
+          .from(tenantInvitations)
+          .where(and(
+            eq(tenantInvitations.tenantId, tenantId),
+            eq(tenantInvitations.status, 'pending')
+          )),
+
+        // Recent activity (last 10 events)
+        db.select({
+          logId: auditLogs.logId,
+          action: auditLogs.action,
+          userId: auditLogs.userId,
+          userName: tenantUsers.name,
+          userEmail: tenantUsers.email,
+          resourceType: auditLogs.resourceType,
+          createdAt: auditLogs.createdAt,
+        })
+        .from(auditLogs)
+        .leftJoin(tenantUsers, and(
+          eq(auditLogs.userId, tenantUsers.userId),
+          eq(auditLogs.tenantId, tenantUsers.tenantId)
+        ))
+        .where(eq(auditLogs.tenantId, tenantId))
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(10),
+      ]);
+
+      // Compute activity stats: unique active users in last 24h, 7d, 30d
+      const now = new Date();
+      const day1 = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const day7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const day30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      const activityStatsResult = await db
+        .select({
+          active24h: sql<number>`count(distinct case when ${auditLogs.createdAt} >= ${day1} then ${auditLogs.userId} end)`,
+          active7d: sql<number>`count(distinct case when ${auditLogs.createdAt} >= ${day7} then ${auditLogs.userId} end)`,
+          active30d: sql<number>`count(distinct case when ${auditLogs.createdAt} >= ${day30} then ${auditLogs.userId} end)`,
+        })
+        .from(auditLogs)
+        .where(and(
+          eq(auditLogs.tenantId, tenantId),
+          gte(auditLogs.createdAt, day30)
+        ));
 
       return {
         success: true,
         data: {
           tenant: tenantInfo[0],
           users: tenantUsersList,
-          entitySummary: entitySummary[0] || { total: 0, organizations: 0, locations: 0, departments: 0, teams: 0 },
-          creditSummary: creditSummary[0] || { totalCredits: 0, activeEntities: 0 }
+          entitySummary: entitySummary[0] || { total: 0, organizations: 0, locations: 0, departments: 0, teams: 0, active: 0 },
+          creditSummary: creditSummary[0] || { totalCredits: '0', reservedCredits: '0', activeEntities: 0, averageCredits: '0' },
+          subscription: subscriptionData[0] || null,
+          pendingInvitations: Number(pendingInvitationsResult[0]?.count ?? 0),
+          activityStats: {
+            uniqueActiveUsers24h: Number(activityStatsResult[0]?.active24h ?? 0),
+            uniqueActiveUsers7d: Number(activityStatsResult[0]?.active7d ?? 0),
+            uniqueActiveUsers30d: Number(activityStatsResult[0]?.active30d ?? 0),
+          },
+          recentActivity: recentActivityLogs.map(log => ({
+            logId: log.logId,
+            action: log.action,
+            userName: log.userName,
+            userEmail: log.userEmail,
+            resourceType: log.resourceType,
+            timestamp: log.createdAt,
+          })),
         }
       };
     } catch (error) {

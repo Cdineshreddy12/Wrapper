@@ -10,6 +10,36 @@ import { checkUserLimit } from '../../../middleware/restrictions/planRestriction
 import Logger from '../../../utils/logger.js';
 import ErrorResponses from '../../../utils/error-responses.js';
 import permissionService from '../../roles/services/permission-service.js';
+import { shouldLogVerbose } from '../../../utils/verbose-log.js';
+
+/**
+ * Flatten hierarchical permissions object {app: {module: [ops]}} into
+ * an array of dotted strings like ["app.module.op", ...].
+ * Also handles the legacy {app: {operations: [...], level: "..."}} shape.
+ */
+function flattenHierarchicalPermissions(perms: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  for (const [app, appVal] of Object.entries(perms)) {
+    if (app === 'metadata' || app === 'inheritance' || app === 'restrictions') continue;
+    if (!appVal || typeof appVal !== 'object') continue;
+
+    const appObj = appVal as Record<string, unknown>;
+
+    // Legacy shape: {operations: string[], level: string}
+    if (Array.isArray(appObj.operations)) {
+      (appObj.operations as string[]).forEach(op => out.push(op));
+      continue;
+    }
+
+    // Hierarchical shape: {module: [operations]}
+    for (const [mod, modVal] of Object.entries(appObj)) {
+      if (Array.isArray(modVal)) {
+        (modVal as string[]).forEach(op => out.push(`${app}.${mod}.${op}`));
+      }
+    }
+  }
+  return out;
+}
 
 type ReqWithUser = FastifyRequest & { userContext?: Record<string, unknown> };
 
@@ -107,68 +137,35 @@ export default async function adminOrgRoutes(fastify: FastifyInstance): Promise<
 
               // Merge permissions - ensure rolePermissions is an object
               if (rolePermissions && typeof rolePermissions === 'object') {
-                Object.keys(rolePermissions).forEach(resource => {
-                if (resource === 'metadata' || resource === 'inheritance' || resource === 'restrictions') {
-                  console.log(`⏭️ Skipping non-permission object: ${resource}`);
-                  return; // Skip non-permission objects
+                // Flatten hierarchical permissions: {app: {module: [operations]}}
+                const flattenedOps = flattenHierarchicalPermissions(rolePermissions);
+
+                if (shouldLogVerbose()) {
+                  console.log(`🔍 Flattened ${flattenedOps.length} operations from role ${role.roleName}`);
                 }
 
-                const permission = rolePermissions[resource];
-                console.log(`🔍 Processing resource: ${resource}`, {
-                  hasPermission: !!permission,
-                  hasOperations: !!(permission && permission.operations),
-                  operationsCount: permission?.operations?.length || 0
-                });
-
-                if (permission && permission.operations) {
-                  (permission.operations as string[]).forEach((operation: string) => {
-                    // Create structured permission object
-                    const permissionExists = userPermissions.find(p => p.name === operation);
-                    if (!permissionExists) {
-                      const newPermission = {
-                        id: operation,
-                        name: operation,
-                        description: `${permission.level} access to ${resource}`,
-                        resource: resource,
-                        level: permission.level
-                      };
-                      userPermissions.push(newPermission);
-                      console.log(`➕ Added permission: ${operation} (${resource})`);
-                    } else {
-                      console.log(`⏭️ Permission already exists: ${operation}`);
-                    }
-
-                    // Extract simple permission names for legacy B2B CRM compatibility
-                    const simplePermName = operation.split('.').pop(); // Get last part (e.g., 'view' from 'crm.accounts.view')
-                    if (simplePermName && !legacyPermissions.includes(simplePermName)) {
-                      legacyPermissions.push(simplePermName);
-                      console.log(`➕ Added legacy permission: ${simplePermName}`);
-                    }
-
-                    // Add module-based permission format for drag-drop system
+                flattenedOps.forEach((operation: string) => {
+                  const permissionExists = userPermissions.find(p => p.name === operation);
+                  if (!permissionExists) {
                     const parts = operation.split('.');
-                    if (parts.length >= 3) {
-                      const [app, module, action] = parts;
-                      const modulePermName = `${app}.${module}.${action}`;
-                      const modulePermExists = userPermissions.find(p => p.name === modulePermName);
-                      if (!modulePermExists) {
-                        const modulePermission = {
-                          id: modulePermName,
-                          name: modulePermName,
-                          description: `${action} access to ${module} in ${app}`,
-                          resource: module,
-                          level: permission.level,
-                          app: app,
-                          module: module,
-                          action: action
-                        };
-                        userPermissions.push(modulePermission);
-                        console.log(`➕ Added module permission: ${modulePermName}`);
-                      }
-                    }
-                  });
-                }
-              });
+                    const [app, mod, action] = parts.length >= 3 ? parts : [parts[0], parts[1] ?? '', parts[2] ?? ''];
+                    userPermissions.push({
+                      id: operation,
+                      name: operation,
+                      description: `${action} access to ${mod} in ${app}`,
+                      resource: mod || app,
+                      level: 'granted',
+                      app,
+                      module: mod,
+                      action
+                    });
+                  }
+
+                  const simplePermName = operation.split('.').pop();
+                  if (simplePermName && !legacyPermissions.includes(simplePermName)) {
+                    legacyPermissions.push(simplePermName);
+                  }
+                });
               }
             }
           }

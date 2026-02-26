@@ -3,6 +3,7 @@ import { eq, and } from 'drizzle-orm';
 import { tenants } from '../../../db/schema/index.js';
 import { applications, organizationApplications, applicationModules } from '../../../db/schema/core/suite-schema.js';
 import { v4 as uuidv4 } from 'uuid';
+import { publishTenantApplicationSyncEvent } from '../../messaging/services/tenant-application-event-service.js';
 
 interface PlanChangeOptions { skipIfRecentlyUpdated?: boolean }
 
@@ -120,6 +121,17 @@ class OnboardingOrganizationSetupService {
         console.log(`✅ Assigned ${applicationsToInsert.length} application(s) for plan ${planId} to tenant ${tenantId}`);
       } else {
         console.log(`ℹ️ No new applications to assign for plan ${planId} (tenant already has plan apps).`);
+      }
+
+      try {
+        await publishTenantApplicationSyncEvent({
+          tenantId,
+          reason: 'plan_change',
+          planId,
+          actorId: 'system',
+        });
+      } catch (publishError: unknown) {
+        console.error('❌ Failed to publish tenant application sync event for plan change:', (publishError as Error).message);
       }
 
       return {

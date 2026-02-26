@@ -10,6 +10,15 @@ export interface AddUserToOrgOptions {
   is_admin?: boolean;
 }
 
+type ApiErrorShape = {
+  response?: {
+    data?: unknown;
+    status?: number;
+    statusText?: string;
+  };
+  message?: string;
+};
+
 export interface SocialAuthOptions {
   redirectUri?: string;
   state?: string;
@@ -83,6 +92,72 @@ class KindeService {
     }
   }
 
+  private normalizeOrgRole(role: string): string {
+    // Kinde role assignment APIs expect role key without "org:" namespace.
+    if (!role) return 'member';
+    return role.replace(/^org:/i, '');
+  }
+
+  private isNotFoundOrAlreadyHandledError(error: ApiErrorShape): boolean {
+    const status = error.response?.status;
+    if (status === 404 || status === 409) return true;
+
+    const data = error.response?.data;
+    const serialized = typeof data === 'string' ? data : JSON.stringify(data || {});
+    const msg = `${error.message || ''} ${serialized}`.toLowerCase();
+    return msg.includes('already') || msg.includes('not found') || msg.includes('does not exist');
+  }
+
+  private async assignUserRoleWithFallbacks(m2mToken: string, orgCode: string, kindeUserId: string, role: string): Promise<Record<string, unknown>> {
+    const normalizedRole = this.normalizeOrgRole(role);
+    const roleAttempts: Array<{ endpoint: string; body: Record<string, unknown> }> = [
+      // Most specific pattern: role key in path.
+      {
+        endpoint: `${this.baseURL}/api/v1/organizations/${orgCode}/users/${kindeUserId}/roles/${encodeURIComponent(normalizedRole)}`,
+        body: {}
+      },
+      // Common fallback patterns used by management APIs.
+      {
+        endpoint: `${this.baseURL}/api/v1/organizations/${orgCode}/users/${kindeUserId}/roles`,
+        body: { role: normalizedRole }
+      },
+      {
+        endpoint: `${this.baseURL}/api/v1/organizations/${orgCode}/users/${kindeUserId}/roles`,
+        body: { role_code: normalizedRole }
+      },
+      {
+        endpoint: `${this.baseURL}/api/v1/organizations/${orgCode}/users/${kindeUserId}/roles`,
+        body: { roles: [normalizedRole] }
+      }
+    ];
+
+    let lastError: ApiErrorShape | null = null;
+    for (const attempt of roleAttempts) {
+      try {
+        const response = await axios.post(attempt.endpoint, attempt.body, {
+          headers: {
+            'Authorization': `Bearer ${m2mToken}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        });
+        return { success: true, endpoint: attempt.endpoint, responseData: response.data };
+      } catch (err: unknown) {
+        const apiErr = err as ApiErrorShape;
+        lastError = apiErr;
+        if (shouldLogVerbose()) {
+          console.warn('⚠️ Role assignment attempt failed:', {
+            endpoint: attempt.endpoint,
+            body: attempt.body,
+            status: apiErr.response?.status
+          });
+        }
+      }
+    }
+
+    throw lastError || new Error('Role assignment failed');
+  }
+
   /**
    * Verify JWT using Kinde's JWKS endpoint (RS256 signature verification)
    */
@@ -90,7 +165,7 @@ class KindeService {
     if (!this.jwks) return null;
     try {
       const { payload } = await jwtVerify(token, this.jwks, {
-        issuer: this.baseURL + '/',
+        issuer: this.baseURL,
       });
       return payload;
     } catch (err: unknown) {
@@ -487,50 +562,14 @@ class KindeService {
       if (shouldLogVerbose()) console.log(`🔑 M2M token obtained: ${m2mToken ? 'Yes' : 'No'}`);
 
       if (options.exclusive) {
-        try {
-          if (shouldLogVerbose()) console.log(`🔄 addUserToOrganization - Exclusive mode: removing user from existing orgs first`);
-          const existingOrgs = await this.getUserOrganizations(kindeUserId);
-          if (shouldLogVerbose()) console.log(`📋 Current user organizations:`, existingOrgs);
-          
-          if (existingOrgs.success && existingOrgs.organizations && existingOrgs.organizations.length > 0) {
-            for (const org of existingOrgs.organizations as Array<{ code?: string }>) {
-              const code = org.code;
-              if (code !== undefined && code !== orgCode) {
-                if (shouldLogVerbose()) console.log(`🗑️ Removing user from existing org: ${code}`);
-                try {
-                  await this.removeUserFromOrganization(kindeUserId, code);
-                  if (shouldLogVerbose()) console.log(`✅ Successfully removed user from org: ${org.code}`);
-                } catch (removeErr: unknown) {
-                  const removeError = removeErr as Error;
-                  console.warn(`⚠️ Failed to remove user from org ${org.code}:`, removeError.message);
-                }
-              }
-            }
-          } else {
-            if (shouldLogVerbose()) console.log(`📋 User is not currently in any organizations`);
-          }
-        } catch (cleanupErr: unknown) {
-          const cleanupError = cleanupErr as Error;
-          console.warn('⚠️ Failed to cleanup existing orgs, continuing with assignment:', cleanupError.message);
+        if (shouldLogVerbose()) {
+          console.warn('⚠️ addUserToOrganization - Exclusive cleanup skipped to avoid removing user from unrelated orgs.');
         }
       }
-      
-      const role = options.role_code ?? (options.is_admin ? 'admin' : 'member');
-      const endpoint = `${this.baseURL}/api/v1/organizations/${orgCode}/users/${kindeUserId}/roles`;
-      
-      if (shouldLogVerbose()) console.log(`🔗 addUserToOrganization - Using endpoint: ${endpoint} with role: ${role}`);
-      
-      // FIXED: Use empty body {} as per Kinde API documentation
-      // The role is specified in the URL path, not the body
-      const response = await axios.post(endpoint, {}, {
-        headers: {
-          'Authorization': `Bearer ${m2mToken}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000 // 10 second timeout
-      });
-      
-      if (shouldLogVerbose()) console.log(`✅ addUserToOrganization - Success with endpoint: ${endpoint}`);
+
+      const role = this.normalizeOrgRole(options.role_code ?? (options.is_admin ? 'admin' : 'member'));
+      const roleResult = await this.assignUserRoleWithFallbacks(m2mToken, orgCode, kindeUserId, role);
+      if (shouldLogVerbose()) console.log(`✅ addUserToOrganization - Success with role ${role}`);
 
       return {
         success: true,
@@ -539,8 +578,8 @@ class KindeService {
         role: role,
         method: options.exclusive ? 'exclusive_assignment' : 'standard_assignment',
         message: 'User added to organization successfully',
-        endpoint: endpoint,
-        responseData: response.data
+        endpoint: roleResult.endpoint,
+        responseData: roleResult.responseData
       };
     } catch (err: unknown) {
       const error = err as Error & { response?: { data?: unknown; status?: number; statusText?: string }; stack?: string };
@@ -595,11 +634,24 @@ class KindeService {
         message: 'User removed from organization successfully'
       };
     } catch (err: unknown) {
-      const error = err as Error;
-      console.error(`❌ removeUserFromOrganization - Error:`, error);
+      const error = err as ApiErrorShape;
+      const shouldIgnore = this.isNotFoundOrAlreadyHandledError(error);
+      if (shouldIgnore) {
+        if (shouldLogVerbose()) {
+          console.warn('⚠️ removeUserFromOrganization - User not in org (treated as success):', {
+            orgCode,
+            userId: kindeUserId
+          });
+        }
+        return {
+          success: true,
+          message: 'User was not a member of organization'
+        };
+      }
+      console.error(`❌ removeUserFromOrganization - Error:`, err);
       return {
         success: false,
-        error: error.message,
+        error: error.message || 'Unknown error',
         message: 'Failed to remove user from organization'
       };
     }

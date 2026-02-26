@@ -3,9 +3,9 @@
  * Centralizes subscription, credit, billing history, timeline, and mutations.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import toast from 'react-hot-toast'
 
@@ -195,20 +195,69 @@ export function useBilling() {
     retry: 1
   })
 
-  const { data: timelineData, isLoading: timelineLoading } = useQuery({
+  const TIMELINE_PAGE_SIZE = 20
+
+  const {
+    data: timelinePages,
+    isLoading: timelineLoading,
+    isFetchingNextPage: isLoadingMoreTimeline,
+    hasNextPage: hasMoreTimeline,
+    fetchNextPage: loadMoreTimeline
+  } = useInfiniteQuery({
     queryKey: ['tenant', 'timeline'],
-    queryFn: async () => {
+    queryFn: async ({ pageParam = 0 }) => {
       try {
-        const response = await tenantAPI.getTimeline({ includeActivity: true, limit: 300 })
-        return response.data.data ?? { events: [] }
+        const response = await tenantAPI.getTimeline({
+          includeActivity: true,
+          limit: TIMELINE_PAGE_SIZE,
+          offset: pageParam
+        })
+        return response.data.data ?? { events: [], pagination: { offset: pageParam, limit: TIMELINE_PAGE_SIZE, activityTotal: 0, hasMore: false } }
       } catch (error: unknown) {
         console.warn('Failed to fetch timeline:', error)
-        return { events: [] }
+        return { events: [], pagination: { offset: pageParam, limit: TIMELINE_PAGE_SIZE, activityTotal: 0, hasMore: false } }
       }
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      const pagination = lastPage?.pagination
+      if (pagination?.hasMore) {
+        return (pagination.offset ?? 0) + (pagination.limit ?? TIMELINE_PAGE_SIZE)
+      }
+      return undefined
     },
     enabled: isAuthenticated && !mockMode,
     retry: 1
   })
+
+  const timelineData = useMemo(() => {
+    if (!timelinePages?.pages?.length) return { events: [] }
+
+    const fixedEvents: Array<{ type: string; label: string; date: string; metadata?: Record<string, unknown> }> = []
+    const activityEvents: Array<{ type: string; label: string; date: string; metadata?: Record<string, unknown> }> = []
+    const seenActivityKeys = new Set<string>()
+
+    for (const page of timelinePages.pages) {
+      for (const event of (page.events ?? [])) {
+        if (event.type === 'today') continue
+        if (event.type === 'activity') {
+          const key = `${event.date}|${event.label}`
+          if (!seenActivityKeys.has(key)) {
+            seenActivityKeys.add(key)
+            activityEvents.push(event)
+          }
+        } else if (fixedEvents.every(e => e.type !== event.type || e.date !== event.date)) {
+          fixedEvents.push(event)
+        }
+      }
+    }
+
+    const allEvents = [...fixedEvents, ...activityEvents]
+    allEvents.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    allEvents.push({ type: 'today', label: 'Today', date: new Date().toISOString(), metadata: {} })
+
+    return { events: allEvents }
+  }, [timelinePages])
 
   const displaySubscription: DisplaySubscription =
     ensureValidSubscription(subscription as DisplaySubscription) ?? defaultDisplaySubscription
@@ -291,7 +340,7 @@ export function useBilling() {
   const checkProfileStatus = async () => {
     try {
       setIsCheckingProfile(true)
-      const response = await api.get('/api/payment-upgrade/profile-status')
+      const response = await api.get('/payment-upgrade/profile-status')
       const status = response.data
       setProfileCompleted(status.profileCompleted)
       return status
@@ -450,6 +499,10 @@ export function useBilling() {
     subscriptionLoading,
     billingHistoryLoading,
     timelineLoading,
+    // Timeline pagination
+    hasMoreTimeline: hasMoreTimeline ?? false,
+    isLoadingMoreTimeline,
+    loadMoreTimeline,
     // Mutations
     createCheckoutMutation,
     changePlanMutation,

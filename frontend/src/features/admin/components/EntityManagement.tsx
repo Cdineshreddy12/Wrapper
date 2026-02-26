@@ -254,6 +254,8 @@ export const EntityManagement: React.FC = () => {
 
       if (response.data.success) {
         toast.success(`Entity ${!entity.isActive ? 'activated' : 'deactivated'} successfully`);
+        queryClient.invalidateQueries({ queryKey: ['entityScope'] });
+        queryClient.invalidateQueries({ queryKey: ['admin', 'entities'] });
         fetchEntities();
       }
     } catch (error) {
@@ -310,7 +312,11 @@ export const EntityManagement: React.FC = () => {
         setShowBulkAllocation(false);
         setSelectedEntities(new Set());
         setBulkAllocationAmount('');
-        fetchEntities(); // Refresh the list
+        queryClient.invalidateQueries({ queryKey: ['credit'] });
+        queryClient.invalidateQueries({ queryKey: ['creditStatus'] });
+        queryClient.invalidateQueries({ queryKey: ['admin', 'entities'] });
+        queryClient.invalidateQueries({ queryKey: ['entityScope'] });
+        fetchEntities();
       }
     } catch (error) {
       console.error('Bulk allocation failed:', error);

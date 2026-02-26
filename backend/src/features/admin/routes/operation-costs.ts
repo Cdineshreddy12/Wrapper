@@ -6,6 +6,7 @@ import {
 import { eq, sql, count, avg, min, max, desc, and } from 'drizzle-orm';
 import { authenticateToken, requirePermission } from '../../../middleware/auth/auth.js';
 import { PERMISSIONS } from '../../../constants/permissions.js';
+import { amazonMQPublisher } from '../../messaging/utils/amazon-mq-publisher.js';
 
 /**
  * Admin Operation Cost Management Routes
@@ -13,6 +14,54 @@ import { PERMISSIONS } from '../../../constants/permissions.js';
  */
 
 export default async function operationCostRoutes(fastify: FastifyInstance, _options?: object): Promise<void> {
+  const publishCreditConfigToAccounting = async (
+    config: Record<string, unknown>,
+    changeType: 'created' | 'updated' | 'deleted',
+    actor: string
+  ): Promise<void> => {
+    try {
+      const operationCode = String(config.operationCode ?? '');
+      const parts = operationCode.split('.');
+      const moduleName = parts.length > 1 ? parts[1] : null;
+      const permissionName = parts.length > 2 ? parts.slice(2).join('.') : null;
+      const isGlobal = config.isGlobal === true || config.tenantId == null;
+      const configId = String(config.configId ?? '');
+      const tenantIdForMessage = String(config.tenantId ?? 'global');
+
+      if (!operationCode || !configId) {
+        return;
+      }
+
+      await amazonMQPublisher.publishCreditEvent(
+        'accounting',
+        'credit.config.updated',
+        tenantIdForMessage,
+        {
+          configId,
+          tenantId: config.tenantId ?? null,
+          configName: String(config.operationName ?? operationCode),
+          operationCode,
+          description: null,
+          creditCost: Number(config.creditCost ?? 0),
+          unit: String(config.unit ?? 'operation'),
+          isGlobal,
+          source: isGlobal ? 'global' : 'tenant',
+          moduleName,
+          permissionName,
+          syncSource: 'wrapper',
+          changeType,
+        },
+        actor || 'system'
+      );
+    } catch (publishErr: unknown) {
+      const error = publishErr as Error;
+      fastify.log.warn(
+        { err: error, configId: config.configId, operationCode: config.operationCode },
+        'Failed to publish credit config update event to accounting'
+      );
+    }
+  };
+
   // All routes require authentication and admin permissions
   fastify.addHook('preHandler', authenticateToken);
 
@@ -445,6 +494,8 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
           .where(eq(creditConfigurations.configId, existing[0].configId))
           .returning() as any;
 
+        await publishCreditConfigToAccounting(updatedConfig[0] as Record<string, unknown>, 'updated', userId);
+
         console.log('✅ Operation cost configuration updated successfully:', updatedConfig[0]);
         return {
           success: true,
@@ -497,6 +548,8 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
         .insert(creditConfigurations)
         .values(configData as any)
         .returning();
+
+      await publishCreditConfigToAccounting(newConfig[0] as Record<string, unknown>, 'created', userId);
         
       const configType = isGlobal ? 'Global' : 'Tenant-specific';
       console.log(`✅ Successfully created ${configType.toLowerCase()} configuration:`, newConfig[0]);
@@ -596,6 +649,8 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
         } as any)
         .where(eq(creditConfigurations.configId, configId))
         .returning();
+
+      await publishCreditConfigToAccounting(updated[0] as Record<string, unknown>, 'updated', userId);
 
       return reply.send({
         success: true,

@@ -165,7 +165,7 @@ export function RoleManagementDashboard() {
 
   // Load roles function - now uses shared hook
   const loadRoles = async () => {
-    invalidateRoles({ search: searchQuery, type: typeFilter !== 'all' ? typeFilter : undefined });
+    invalidateRoles();
     await refetchRoles();
   };
 
@@ -209,7 +209,7 @@ export function RoleManagementDashboard() {
       const response = await api.delete(`/permissions/roles/${roleId}?force=true`);
       if (response.data.success) {
         toast.success('Role deleted successfully');
-        invalidateRoles({ search: searchQuery, type: typeFilter !== 'all' ? typeFilter : undefined });
+        invalidateRoles();
         await refetchRoles();
         triggerRefresh();
       } else {
@@ -227,7 +227,7 @@ export function RoleManagementDashboard() {
       const response = await api.post('/permissions/roles/bulk-delete', { roleIds });
       if (response.data.success) {
         toast.success(`${roleIds.length} role(s) deleted successfully`);
-        invalidateRoles({ search: searchQuery, type: typeFilter !== 'all' ? typeFilter : undefined });
+        invalidateRoles();
         await refetchRoles();
         triggerRefresh();
       } else {
@@ -292,7 +292,7 @@ export function RoleManagementDashboard() {
       // The role has already been created/updated, refresh the list and close
 
       try {
-        invalidateRoles({ search: searchQuery, type: typeFilter !== 'all' ? typeFilter : undefined });
+        invalidateRoles();
         await refetchRoles(); // Force immediate refetch
       } catch (error) {
         console.error('⚠️ Failed to refresh roles:', error);
@@ -368,7 +368,7 @@ export function RoleManagementDashboard() {
 
         // Invalidate and refetch roles data to show updated list
         try {
-          invalidateRoles({ search: searchQuery, type: typeFilter !== 'all' ? typeFilter : undefined });
+          invalidateRoles();
           await refetchRoles(); // Force immediate refetch
         } catch (error) {
           console.error('⚠️ Failed to refresh roles:', error);

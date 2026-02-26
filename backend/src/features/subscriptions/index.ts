@@ -14,3 +14,15 @@ export { default as trialRoutes } from './routes/trial.js';
 // Services
 export { SubscriptionService } from './services/subscription-service.js';
 export { PaymentService } from './services/payment-service.js';
+
+// Payment Gateway Adapter (public API)
+export { getPaymentGateway, setPaymentGateway, resetPaymentGateway } from './adapters/index.js';
+export type { PaymentGatewayPort } from './adapters/index.js';
+export type {
+  PaymentGatewayProvider,
+  CreateCheckoutParams,
+  CheckoutResult,
+  NormalizedWebhookEvent,
+  NormalizedEventType,
+  GatewayConfigStatus,
+} from './adapters/index.js';
