@@ -840,11 +840,16 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
 
       try {
         const actorId = ((request as any).user?.userId || (request as any).user?.id || 'system') as string;
-        await publishTenantApplicationSyncEvent({
-          tenantId: existing[0].tenantId,
-          reason: 'manual_assignment',
-          actorId,
-        });
+        const tenantId = existing[0].tenantId;
+        if (!tenantId) {
+          request.log.warn({ assignmentId }, 'Skipping tenant application sync event: missing tenantId');
+        } else {
+          await publishTenantApplicationSyncEvent({
+            tenantId,
+            reason: 'manual_assignment',
+            actorId,
+          });
+        }
       } catch (publishError: unknown) {
         request.log.warn({ err: publishError, assignmentId }, 'Failed to publish tenant application sync event');
       }
@@ -901,11 +906,16 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
 
       try {
         const actorId = ((request as any).user?.userId || (request as any).user?.id || 'system') as string;
-        await publishTenantApplicationSyncEvent({
-          tenantId: existing[0].tenantId,
-          reason: 'assignment_removal',
-          actorId,
-        });
+        const tenantId = existing[0].tenantId;
+        if (!tenantId) {
+          request.log.warn({ assignmentId }, 'Skipping tenant application sync event: missing tenantId');
+        } else {
+          await publishTenantApplicationSyncEvent({
+            tenantId,
+            reason: 'assignment_removal',
+            actorId,
+          });
+        }
       } catch (publishError: unknown) {
         request.log.warn({ err: publishError, assignmentId }, 'Failed to publish tenant application sync event');
       }
