@@ -3,8 +3,10 @@ import { authenticateToken } from '../../../middleware/auth/auth.js';
 import { WrapperSyncService } from '../services/sync-service.js';
 import { bootstrapService } from '../services/bootstrap-service.js';
 import { db } from '../../../db/index.js';
-import { tenants, applications, organizationApplications } from '../../../db/schema/index.js';
-import { eq, and } from 'drizzle-orm';
+import { tenants, applications, organizationApplications, tenantUsers, customRoles, userRoleAssignments, entities, credits, creditTransactions, creditUsage, creditConfigurations, organizationMemberships } from '../../../db/schema/index.js';
+import { eq, and, or, sql, inArray } from 'drizzle-orm';
+import ErrorResponses from '../../../utils/error-responses.js';
+import { BUSINESS_SUITE_MATRIX } from '../../../data/permission-matrix.js';
 
 // Combined authentication middleware that accepts both Kinde tokens and service tokens
 async function authenticateServiceOrToken(request: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -43,12 +45,6 @@ async function authenticateServiceOrToken(request: FastifyRequest, reply: Fastif
     throw error;
   }
 }
-import { db } from '../../../db/index.js';
-import { tenants, tenantUsers, customRoles, userRoleAssignments, entities, credits, creditTransactions, creditUsage, creditConfigurations, organizationMemberships } from '../../../db/schema/index.js';
-// REMOVED: creditAllocations - Table removed, applications manage their own credits
-import { eq, and, or, sql, inArray } from 'drizzle-orm';
-import ErrorResponses from '../../../utils/error-responses.js';
-import { BUSINESS_SUITE_MATRIX } from '../../../data/permission-matrix.js';
 
 /** Resolve :tenantId param (UUID or kindeOrgId) to Wrapper tenant UUID, or null if not found */
 async function resolveTenantIdParam(tenantIdParam: string | undefined): Promise<string | null> {
