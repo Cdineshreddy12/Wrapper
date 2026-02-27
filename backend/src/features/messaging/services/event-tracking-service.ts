@@ -1,7 +1,10 @@
 import { db } from '../../../db/index.js';
 import { eventTracking } from '../../../db/schema/index.js';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, inArray, sql } from 'drizzle-orm';
 import { amazonMQPublisher } from '../utils/amazon-mq-publisher.js';
+
+// Maximum rows returned by getUnacknowledgedEvents to prevent OOM on large tenants.
+const UNACKNOWLEDGED_EVENTS_LIMIT = Number(process.env.UNACKNOWLEDGED_EVENTS_LIMIT || 500);
 
 export interface TrackPublishedEventParams {
   eventId: string;
@@ -96,24 +99,23 @@ export class EventTrackingService {
 
   /**
    * Mark an event as failed.
+   * Uses a single atomic UPDATE with inline COALESCE to avoid the SELECT+UPDATE race
+   * (previously two round-trips; now one).
    */
   static async markEventFailed(eventId: string, errorMessage: string, incrementRetry = true): Promise<unknown> {
     try {
-      const [current] = await db
-        .select({ retryCount: eventTracking.retryCount })
-        .from(eventTracking)
-        .where(eq(eventTracking.eventId, eventId))
-        .limit(1);
-
-      const retryCount = incrementRetry ? Number(current?.retryCount || 0) + 1 : Number(current?.retryCount || 0);
+      const now = new Date();
       const [record] = await db
         .update(eventTracking)
         .set({
           status: 'failed',
           errorMessage,
-          retryCount,
-          lastRetryAt: incrementRetry ? new Date() : null,
-          updatedAt: new Date(),
+          // Inline retry-count increment — no separate SELECT needed.
+          retryCount: incrementRetry
+            ? sql`COALESCE(${eventTracking.retryCount}, 0) + 1`
+            : sql`COALESCE(${eventTracking.retryCount}, 0)`,
+          lastRetryAt: incrementRetry ? now : sql`${eventTracking.lastRetryAt}`,
+          updatedAt: now,
         } as any)
         .where(eq(eventTracking.eventId, eventId))
         .returning();
@@ -145,9 +147,18 @@ export class EventTrackingService {
   }
 
   /**
-   * Get unacknowledged events for a tenant (for reconciliation)
+   * Get unacknowledged events for a tenant (for reconciliation).
+   *
+   * Scalability fix: added `.limit(UNACKNOWLEDGED_EVENTS_LIMIT)` to prevent
+   * unbounded memory growth when a tenant has thousands of stale events.
+   * Callers that need pagination can call repeatedly with an `offset` or
+   * narrow the `hoursOld` window.
    */
-  static async getUnacknowledgedEvents(tenantId: string, hoursOld = 24): Promise<unknown[]> {
+  static async getUnacknowledgedEvents(
+    tenantId: string,
+    hoursOld = 24,
+    limit = UNACKNOWLEDGED_EVENTS_LIMIT
+  ): Promise<unknown[]> {
     try {
       const cutoffTime = new Date(Date.now() - (hoursOld * 60 * 60 * 1000));
 
@@ -159,7 +170,8 @@ export class EventTrackingService {
           eq(eventTracking.acknowledged, false),
           sql`${eventTracking.publishedAt} < ${cutoffTime}`
         ))
-        .orderBy(eventTracking.publishedAt);
+        .orderBy(eventTracking.publishedAt)
+        .limit(limit);
 
       return records;
     } catch (err: unknown) {
@@ -302,6 +314,10 @@ export class EventTrackingService {
 
   /**
    * Replay pending/failed outbox events with bounded retries.
+   *
+   * Scalability fix: instead of one DB write per event (N+1), we now collect
+   * succeeded / failed event IDs and flush them with two bulk UPDATE statements
+   * (at most 2 round-trips regardless of batch size).
    */
   static async replayPendingEvents(maxBatchSize = 100, maxRetries = 10): Promise<number> {
     const rows = await db
@@ -315,10 +331,16 @@ export class EventTrackingService {
       )
       .limit(maxBatchSize);
 
-    let replayed = 0;
-    for (const row of rows) {
-      try {
-        await amazonMQPublisher.publishInterAppEvent({
+    if (rows.length === 0) return 0;
+
+    const succeededIds: string[] = [];
+    const failedMap = new Map<string, string>(); // eventId → error message
+
+    // Publish all events concurrently (broker publish is I/O bound, not DB bound).
+    // Use allSettled so one failure does not abort the rest.
+    const publishResults = await Promise.allSettled(
+      rows.map((row) =>
+        amazonMQPublisher.publishInterAppEvent({
           eventId: row.eventId,
           eventType: row.eventType,
           sourceApplication: row.sourceApplication,
@@ -327,15 +349,59 @@ export class EventTrackingService {
           entityId: row.entityId || '',
           eventData: (row.eventData as Record<string, unknown>) || {},
           publishedBy: row.publishedBy || 'outbox-replay-worker',
-        });
-        await this.markEventPublished(row.eventId, { replayedAt: new Date().toISOString() });
-        replayed++;
-      } catch (error: any) {
-        await this.markEventFailed(row.eventId, error?.message || 'Replay failed', true);
+        })
+      )
+    );
+
+    publishResults.forEach((result, i) => {
+      const row = rows[i];
+      if (result.status === 'fulfilled') {
+        succeededIds.push(row.eventId);
+      } else {
+        failedMap.set(
+          row.eventId,
+          (result.reason as Error)?.message || 'Replay failed'
+        );
       }
+    });
+
+    const now = new Date();
+    const replayedAt = now.toISOString();
+
+    // Bulk UPDATE succeeded events (1 round-trip for up to maxBatchSize rows).
+    if (succeededIds.length > 0) {
+      await db
+        .update(eventTracking)
+        .set({
+          status: 'published',
+          metadata: sql`COALESCE(${eventTracking.metadata}, '{}'::jsonb) || ${JSON.stringify({ replayedAt })}::jsonb`,
+          updatedAt: now,
+        } as any)
+        .where(inArray(eventTracking.eventId, succeededIds));
     }
 
-    return replayed;
+    // Bulk UPDATE failed events — increment retry_count inline with CASE expression.
+    if (failedMap.size > 0) {
+      const failedIds = Array.from(failedMap.keys());
+      // Use a single UPDATE with CASE to set individual error messages per row.
+      const caseExpr = sql.raw(
+        failedIds
+          .map((id) => `WHEN event_id = '${id.replace(/'/g, "''")}' THEN ${JSON.stringify(failedMap.get(id) ?? 'Replay failed').replace(/'/g, "''")}`)
+          .join(' ')
+      );
+      await db
+        .update(eventTracking)
+        .set({
+          status: 'failed',
+          errorMessage: sql`CASE ${caseExpr} ELSE error_message END`,
+          retryCount: sql`COALESCE(${eventTracking.retryCount}, 0) + 1`,
+          lastRetryAt: now,
+          updatedAt: now,
+        } as any)
+        .where(inArray(eventTracking.eventId, failedIds));
+    }
+
+    return succeededIds.length;
   }
 
   /**

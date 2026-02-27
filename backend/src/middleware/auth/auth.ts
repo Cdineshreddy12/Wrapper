@@ -98,8 +98,22 @@ async function findUserInDatabase(kindeUserId: string): Promise<UserRecord | nul
   }
 }
 
+// Short-lived cache for org-code → tenantId lookups.
+// Caches both hits (tenantId string) and misses (null sentinel) to prevent
+// a DB round-trip on every authenticated request for the same org code.
+// TTL is intentionally short (2 min) so new tenants propagate quickly.
+const TENANT_LOOKUP_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+interface TenantLookupEntry { value: string | null; expiresAt: number }
+const tenantLookupCache = new Map<string, TenantLookupEntry>();
+
 async function findTenantByOrgCode(orgCode: string): Promise<string | null> {
   if (!orgCode) return null;
+
+  // Check in-process cache (hits AND misses).
+  const cached = tenantLookupCache.get(orgCode);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.value; // null means "not found" — also cached to avoid repeated DB hits
+  }
 
   try {
     if (shouldLogVerbose()) console.log('🔍 Looking up tenant:', orgCode);
@@ -110,13 +124,17 @@ async function findTenantByOrgCode(orgCode: string): Promise<string | null> {
       .where(eq(tenants.kindeOrgId, orgCode))
       .limit(1);
 
-    if (tenant?.tenantId) {
-      if (shouldLogVerbose()) console.log('✅ Found tenant:', tenant.tenantId);
-      return tenant.tenantId;
-    }
+    const result = tenant?.tenantId ?? null;
+    // Cache the result (hit or miss).
+    tenantLookupCache.set(orgCode, { value: result, expiresAt: Date.now() + TENANT_LOOKUP_CACHE_TTL_MS });
 
-    if (shouldLogVerbose()) console.log('⚠️ No tenant found');
-    return null;
+    if (result) {
+      if (shouldLogVerbose()) console.log('✅ Found tenant:', result);
+    } else {
+      // Only log once per TTL window — the cache prevents log spam on every request.
+      console.log(`⚠️ No tenant found for org code: ${orgCode} (will suppress for ${TENANT_LOOKUP_CACHE_TTL_MS / 1000}s)`);
+    }
+    return result;
   } catch (error: unknown) {
     const err = error as Error;
     console.error('❌ Tenant lookup error:', err.message);

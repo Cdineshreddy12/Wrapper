@@ -4,6 +4,9 @@ import { tenantUsers, auditLogs } from '../../../db/schema/core/users.js';
 import { organizationMemberships } from '../../../db/schema/organizations/organization_memberships.js';
 import { eq, and, like, desc, count, or, ne, inArray } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+// Static imports — avoids repeated module-resolution overhead on every request.
+import { amazonMQPublisher } from '../../messaging/utils/amazon-mq-publisher.js';
+import { CRM_PERMISSION_MATRIX, CRM_SPECIAL_PERMISSIONS } from '../../../data/comprehensive-crm-permissions.js';
 // Role templates removed - using application/module based role creation
 
 // --- Types ---
@@ -25,9 +28,6 @@ type AdvancedRoleUpdateData = { name?: string; description?: string; color?: str
 class PermissionService {
   // Get all available permissions organized by application → module → operation
   async getAvailablePermissions(): Promise<{ applications: unknown[]; summary: { applicationCount: number; moduleCount: number; operationCount: number }; structure: Record<string, unknown> }> {
-    // Import realistic CRM permissions
-    const { CRM_PERMISSION_MATRIX, CRM_SPECIAL_PERMISSIONS } = await import('../../../data/comprehensive-crm-permissions.js');
-    
     // Convert realistic permissions to frontend format
     const crmModules: Record<string, ModuleDisplay> = {};
     
@@ -370,8 +370,6 @@ class PermissionService {
 
     // Publish role change event to AWS MQ for real-time sync
     try {
-      const { amazonMQPublisher } = await import('../../messaging/utils/amazon-mq-publisher.js');
-      
       const row = updatedRole[0] as typeof customRoles.$inferSelect;
       await amazonMQPublisher.publishRoleEventToSuite('role_updated', tenantId, row.roleId, {
         roleId: row.roleId,
@@ -384,11 +382,10 @@ class PermissionService {
         updatedBy: updatedBy,
         updatedAt: (row.updatedAt ?? new Date()).toISOString()
       });
-      
+
       console.log('📡 Published role_updated event to Redis streams');
-      
+
       // Also publish to custom stream for backward compatibility
-      const { v4: uuidv4 } = await import('uuid');
       const eventData = {
         eventId: uuidv4(),
         timestamp: new Date().toISOString(),
@@ -413,7 +410,7 @@ class PermissionService {
         }
       };
 
-      // Publish to AWS MQ (reusing amazonMQPublisher from above)
+      // Publish to AWS MQ
       const result = await amazonMQPublisher.publishInterAppEvent({
         eventType: 'role_permissions_changed',
         sourceApplication: 'wrapper',
@@ -618,7 +615,6 @@ class PermissionService {
       
       // Publish role assignment event (reassignment)
       try {
-        const { amazonMQPublisher } = await import('../../messaging/utils/amazon-mq-publisher.js');
         await amazonMQPublisher.publishRoleEventToSuite('role_assigned', tenantId, roleId, {
           assignmentId: updated[0].id ?? '',
           userId: userId,
@@ -657,7 +653,6 @@ class PermissionService {
     
     // Publish role assignment event
     try {
-      const { amazonMQPublisher } = await import('../../messaging/utils/amazon-mq-publisher.js');
       await amazonMQPublisher.publishRoleEventToSuite('role_assigned', tenantId, roleId, {
         assignmentId: assignment[0].id,
         userId: userId,
@@ -711,7 +706,6 @@ class PermissionService {
     
     // Publish role unassignment event
     try {
-      const { amazonMQPublisher } = await import('../../messaging/utils/amazon-mq-publisher.js');
       await amazonMQPublisher.publishRoleEventToSuite('role_unassigned', tenantId, roleId, {
         assignmentId: assignment.id ?? '',
         userId: userId,
@@ -725,7 +719,7 @@ class PermissionService {
       const error = err as Error;
       console.warn('⚠️ Failed to publish role unassignment event:', error.message);
     }
-    
+
     return { success: true, assignmentId: assignment.id ?? '' };
   }
 
@@ -759,7 +753,6 @@ class PermissionService {
     
     // Publish role unassignment event
     try {
-      const { amazonMQPublisher } = await import('../../messaging/utils/amazon-mq-publisher.js');
       await amazonMQPublisher.publishRoleEventToSuite('role_unassigned', tenantId, assignment.roleId, {
         assignmentId: assignment.id, // Use 'id' as assignmentId in event
         userId: assignment.userId,
@@ -1884,9 +1877,8 @@ class PermissionService {
         // Don't fail the entire operation for audit logging
       }
 
-      // Publish role update event to Redis streams
+      // Publish role update event to AWS MQ
       try {
-        const { amazonMQPublisher } = await import('../../messaging/utils/amazon-mq-publisher.js');
         const row = updatedRole[0] as typeof customRoles.$inferSelect;
         await amazonMQPublisher.publishRoleEventToSuite('role_updated', tenantId, row.roleId, {
           roleId: row.roleId,

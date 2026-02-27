@@ -21,8 +21,8 @@ export const onboardingAPI = {
   markComplete: (organizationId: string) => 
     api.post('/onboarding/mark-complete', { organizationId }),
   
-  updateStep: (step: string, data?: any, email?: string, formData?: any) => 
-    api.post('/onboarding/update-step', { step, data, email, formData }),
+  updateStep: (step: string, data?: any, email?: string, formData?: any, kindeUserId?: string) => 
+    api.post('/onboarding/update-step', { step, data, email, formData, kindeUserId }),
   
   reset: (targetUserId?: string) => 
     api.post('/onboarding/reset', targetUserId ? { targetUserId } : {}),

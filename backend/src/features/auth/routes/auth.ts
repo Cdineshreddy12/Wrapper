@@ -2,9 +2,121 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import kindeService from '../services/kinde-service.js';
 import jwt from 'jsonwebtoken';
 import { db } from '../../../db/index.js';
-import { tenants, tenantUsers } from '../../../db/schema/index.js';
+import { tenants, tenantUsers, applications, organizationApplications } from '../../../db/schema/index.js';
 import { eq, and } from 'drizzle-orm';
 import { shouldLogVerbose } from '../../../utils/verbose-log.js';
+
+// ─── validate-token response cache ────────────────────────────────────────
+// The FA backend (and other downstream apps) call POST /validate-token on
+// every request. Without a cache, a page load that fires 4 parallel requests
+// triggers 4 independent JWKS verifications + 2 DB queries each (≈16 DB
+// round-trips for a single page). With a 2-minute TTL cache those collapse
+// to 1 round-trip for the same token.
+//
+// Cache key   = SHA-256(token) truncated to 64 chars — avoids storing raw JWTs.
+// Eviction    = TTL expiry (checked on read) + LRU on overflow.
+// Capacity    = VALIDATE_TOKEN_CACHE_MAX (default 1000 entries).
+import { createHash } from 'crypto';
+
+const VALIDATE_TOKEN_CACHE_TTL_MS  = Number(process.env.VALIDATE_TOKEN_CACHE_TTL_MS  || 2 * 60 * 1000); // 2 min
+const VALIDATE_TOKEN_CACHE_MAX     = Number(process.env.VALIDATE_TOKEN_CACHE_MAX      || 1000);
+
+interface ValidateTokenCacheEntry {
+  response: Record<string, unknown>;
+  expiresAt: number;
+  lastAccessedAt: number;
+}
+
+const validateTokenCache = new Map<string, ValidateTokenCacheEntry>();
+
+function tokenCacheKey(rawToken: string): string {
+  return createHash('sha256').update(rawToken).digest('hex').slice(0, 64);
+}
+
+function getValidateTokenCache(rawToken: string): Record<string, unknown> | null {
+  const key = tokenCacheKey(rawToken);
+  const entry = validateTokenCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    validateTokenCache.delete(key);
+    return null;
+  }
+  entry.lastAccessedAt = Date.now(); // LRU promotion
+  return entry.response;
+}
+
+function setValidateTokenCache(rawToken: string, response: Record<string, unknown>): void {
+  if (validateTokenCache.size >= VALIDATE_TOKEN_CACHE_MAX) {
+    // Evict the least-recently-accessed entry
+    let lruKey: string | undefined;
+    let lruTime = Infinity;
+    for (const [k, v] of validateTokenCache) {
+      if (v.lastAccessedAt < lruTime) { lruTime = v.lastAccessedAt; lruKey = k; }
+    }
+    if (lruKey) validateTokenCache.delete(lruKey);
+  }
+  const now = Date.now();
+  validateTokenCache.set(tokenCacheKey(rawToken), {
+    response,
+    expiresAt: now + VALIDATE_TOKEN_CACHE_TTL_MS,
+    lastAccessedAt: now,
+  });
+}
+
+/** Invalidate a token's cached validate-token response (e.g. after plan change). */
+export function invalidateValidateTokenCache(rawToken: string): void {
+  validateTokenCache.delete(tokenCacheKey(rawToken));
+}
+// ──────────────────────────────────────────────────────────────────────────
+
+// ─── Enabled-apps helper ──────────────────────────────────────────────────
+// Returns which apps a tenant has active access to, including module+tier info.
+// Called inside validate-token so downstream apps can gate on entitlement
+// without a separate API call.
+async function fetchEnabledApps(tenantId: string): Promise<Array<{
+  appCode: string;
+  appName: string;
+  subscriptionTier: string | null;
+  enabledModules: string[];
+  expiresAt: string | null;
+}>> {
+  try {
+    const rows = await db
+      .select({
+        appCode:          applications.appCode,
+        appName:          applications.appName,
+        subscriptionTier: organizationApplications.subscriptionTier,
+        enabledModules:   organizationApplications.enabledModules,
+        expiresAt:        organizationApplications.expiresAt,
+      })
+      .from(organizationApplications)
+      .innerJoin(applications, eq(applications.appId, organizationApplications.appId))
+      .where(and(
+        eq(organizationApplications.tenantId, tenantId),
+        eq(organizationApplications.isEnabled, true),
+        eq(applications.status, 'active'),
+      ));
+
+    return rows
+      .filter(r => {
+        // Exclude expired entitlements
+        if (r.expiresAt && new Date(r.expiresAt) < new Date()) return false;
+        return true;
+      })
+      .map(r => ({
+        appCode:          r.appCode,
+        appName:          r.appName,
+        subscriptionTier: r.subscriptionTier ?? null,
+        enabledModules:   Array.isArray(r.enabledModules) ? (r.enabledModules as string[]) : [],
+        expiresAt:        r.expiresAt ? new Date(r.expiresAt).toISOString() : null,
+      }));
+  } catch (err: unknown) {
+    // Non-fatal: if organization_applications doesn't exist yet (older tenants)
+    // return empty array — downstream apps handle entitlement gracefully.
+    if (shouldLogVerbose()) console.warn('⚠️ fetchEnabledApps failed (non-fatal):', (err as Error).message);
+    return [];
+  }
+}
 
 const SUPPORTED_PROVIDERS = ['google', 'github', 'microsoft', 'apple', 'linkedin'] as const;
 
@@ -357,6 +469,18 @@ export default async function authRoutes(
         });
       }
 
+      // ── Cache check ──────────────────────────────────────────────────────
+      // Return cached result immediately — skips JWKS verification + DB queries.
+      // This is the primary fix for the "getUserInfo JWKS verified" log appearing
+      // 3-4 times per page load (parallel requests from the same client).
+      const cachedResponse = getValidateTokenCache(token);
+      if (cachedResponse) {
+        if (shouldLogVerbose()) request.log.debug('[validate-token] cache HIT');
+        return reply.send(cachedResponse);
+      }
+      if (shouldLogVerbose()) request.log.debug('[validate-token] cache MISS — validating with Kinde');
+      // ─────────────────────────────────────────────────────────────────────
+
       // Try Operations-issued JWT first when shared secret is configured
       const sharedSecret = process.env.OPERATIONS_JWT_SECRET || process.env.SHARED_APP_JWT_SECRET;
       if (sharedSecret) {
@@ -372,11 +496,15 @@ export default async function authRoutes(
                 .where(and(eq(tenantUsers.tenantId, tenant.tenantId), eq(tenantUsers.email, decoded.email)))
                 .limit(1);
               if (u) {
-                return reply.send({
+                const enabledApps = await fetchEnabledApps(tenant.tenantId);
+                const res = {
                   success: true,
                   user: { id: u.userId, email: u.email, firstName: u.firstName ?? undefined, lastName: u.lastName ?? undefined, name: u.name, kindeId: u.kindeUserId },
                   tenant: { id: tenant.tenantId, name: tenant.companyName, kindeOrgId: tenant.kindeOrgId },
-                });
+                  enabledApps,
+                };
+                setValidateTokenCache(token, res);
+                return reply.send(res);
               }
             }
           }
@@ -418,15 +546,62 @@ export default async function authRoutes(
           return reply.code(403).send({ success: false, error: 'No organization', message: 'Token has no organization context; user has multiple tenants' });
         }
         const row = byEmail[0];
-        return reply.send({
+        const enabledApps = await fetchEnabledApps(row.tenantId);
+        const res = {
           success: true,
           user: { id: row.userId, email: row.userEmail, firstName: row.firstName ?? undefined, lastName: row.lastName ?? undefined, name: row.userName, kindeId: row.kindeUserId },
           tenant: { id: row.tenantId, name: row.companyName, kindeOrgId: row.kindeOrgId },
-        });
+          enabledApps,
+        };
+        setValidateTokenCache(token, res);
+        return reply.send(res);
       }
 
-      const [tenant] = await db.select().from(tenants).where(eq(tenants.kindeOrgId, orgCode)).limit(1);
+      let [tenant] = await db.select().from(tenants).where(eq(tenants.kindeOrgId, orgCode)).limit(1);
       if (!tenant) {
+        // Fallback for stale/mismatched org context in token:
+        // resolve tenant by kinde user membership when exactly one tenant match exists.
+        const byKindeMembership = await db
+          .select({
+            tenantId: tenants.tenantId,
+            companyName: tenants.companyName,
+            kindeOrgId: tenants.kindeOrgId,
+            userId: tenantUsers.userId,
+            userEmail: tenantUsers.email,
+            firstName: tenantUsers.firstName,
+            lastName: tenantUsers.lastName,
+            userName: tenantUsers.name,
+            kindeUserId: tenantUsers.kindeUserId,
+          })
+          .from(tenantUsers)
+          .innerJoin(tenants, eq(tenants.tenantId, tenantUsers.tenantId))
+          .where(eq(tenantUsers.kindeUserId, kindeId))
+          .limit(2);
+
+        if (byKindeMembership.length === 1) {
+          const row = byKindeMembership[0];
+          const enabledApps = await fetchEnabledApps(row.tenantId);
+          const res = {
+            success: true,
+            user: {
+              id: row.userId,
+              email: row.userEmail,
+              firstName: row.firstName ?? undefined,
+              lastName: row.lastName ?? undefined,
+              name: row.userName,
+              kindeId: row.kindeUserId,
+            },
+            tenant: {
+              id: row.tenantId,
+              name: row.companyName,
+              kindeOrgId: row.kindeOrgId,
+            },
+            enabledApps,
+          };
+          setValidateTokenCache(token, res);
+          return reply.send(res);
+        }
+
         return reply.code(404).send({ success: false, error: 'Tenant not found', message: `No tenant for org_code: ${orgCode}` });
       }
 
@@ -437,11 +612,15 @@ export default async function authRoutes(
         return reply.code(404).send({ success: false, error: 'User not found', message: 'User not found in tenant' });
       }
 
-      return reply.send({
+      const enabledApps = await fetchEnabledApps(tenant.tenantId);
+      const res = {
         success: true,
         user: { id: u.userId, email: u.email, firstName: u.firstName ?? undefined, lastName: u.lastName ?? undefined, name: u.name, kindeId: u.kindeUserId },
         tenant: { id: tenant.tenantId, name: tenant.companyName, kindeOrgId: tenant.kindeOrgId },
-      });
+        enabledApps,
+      };
+      setValidateTokenCache(token, res);
+      return reply.send(res);
     } catch (err: unknown) {
       const error = err as Error;
       console.error('❌ validate-token error:', error.message);

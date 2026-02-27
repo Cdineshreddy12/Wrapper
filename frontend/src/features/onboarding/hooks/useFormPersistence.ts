@@ -32,6 +32,38 @@ export const useFormPersistence = ({
   const hasRestoredRef = useRef(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const normalizeRestoredData = useCallback((rawData: any) => {
+    if (!rawData || typeof rawData !== 'object') return rawData;
+
+    const normalized = { ...rawData } as Record<string, any>;
+    const existingBusinessDetails =
+      normalized.businessDetails && typeof normalized.businessDetails === 'object'
+        ? normalized.businessDetails
+        : {};
+
+    // Support legacy flat payload keys so select fields hydrate correctly.
+    normalized.businessDetails = {
+      ...existingBusinessDetails,
+      companyName: existingBusinessDetails.companyName ?? normalized.companyName ?? normalized.businessName,
+      businessType: existingBusinessDetails.businessType ?? normalized.businessType ?? normalized.industry,
+      organizationSize:
+        existingBusinessDetails.organizationSize ?? normalized.organizationSize ?? normalized.companySize,
+      country: (existingBusinessDetails.country ?? normalized.country ?? 'IN')?.toUpperCase(),
+    };
+
+    normalized.country = (normalized.country ?? normalized.businessDetails.country ?? 'IN')?.toUpperCase();
+    normalized.defaultCurrency = normalized.defaultCurrency ?? normalized.currency;
+    normalized.defaultTimeZone = normalized.defaultTimeZone ?? normalized.timezone;
+    normalized.defaultLanguage = normalized.defaultLanguage ?? normalized.language;
+    normalized.defaultLocale = normalized.defaultLocale ?? normalized.locale;
+    normalized.billingAddress = normalized.billingAddress ?? normalized.billingStreet;
+    normalized.billingStreet = normalized.billingStreet ?? normalized.billingAddress;
+    normalized.state = normalized.state ?? normalized.billingState ?? normalized.incorporationState;
+    normalized.billingState = normalized.billingState ?? normalized.state;
+
+    return normalized;
+  }, []);
+
   // Save form data to backend only (DB-only persistence)
   const saveFormData = useCallback(async () => {
     try {
@@ -44,7 +76,8 @@ export const useFormPersistence = ({
             `step_${currentStep}`,
             { step: currentStep, formData, flowType },
             user.email,
-            formData
+            formData,
+            user.id
           );
         } catch (error) {
           console.warn('Failed to save progress to backend:', error);
@@ -103,6 +136,7 @@ export const useFormPersistence = ({
 
       // Restore form data if found (only when form is still pristine to avoid overwriting user input)
       if (restoredData) {
+        restoredData = normalizeRestoredData(restoredData);
         // Skip applying restored data if user has already modified the form (prevents state issues when typing/backspace)
         if (form.formState.isDirty) {
           return 1;
@@ -144,14 +178,14 @@ export const useFormPersistence = ({
     }
 
     return 1; // Default to step 1 if no saved data
-  }, [form, flowType, user]);
+  }, [form, flowType, user, normalizeRestoredData]);
 
   // Clear saved form data (backend + cleanup localStorage keys)
   const clearFormData = useCallback(() => {
     try {
       // Clear backend data if authenticated
       if (user?.email) {
-        onboardingAPI.updateStep('step_1', {}, user.email, {}).catch(console.error);
+        onboardingAPI.updateStep('step_1', {}, user.email, {}, user.id).catch(console.error);
       }
       
       // Clean up any remaining localStorage keys (for cleanup, not as source of truth)
@@ -187,6 +221,9 @@ export const useFormPersistence = ({
       subscription.unsubscribe();
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+        // Flush pending edits when step changes/unmount happens before debounce fires.
+        void saveFormData();
       }
     };
   }, [currentStep, autoSave, saveFormData, form]);

@@ -448,6 +448,36 @@ async function start() {
       console.warn('⚠️ Amazon MQ initialization skipped:', (err as Error).message);
     }
 
+    // Schedule nightly cleanup of old event_tracking rows (default: older than 7 days).
+    // Prevents the event_tracking (outbox) table from growing unboundedly.
+    // Runs once at startup (to recover from long downtimes) and then every 24 hours.
+    try {
+      const { EventTrackingService } = await import('./features/messaging/services/event-tracking-service.js');
+      const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+      const CLEANUP_DAYS_OLD = Number(process.env.EVENT_TRACKING_CLEANUP_DAYS ?? 7);
+
+      const runCleanup = async () => {
+        try {
+          const deleted = await EventTrackingService.cleanupOldEvents(CLEANUP_DAYS_OLD);
+          if (deleted > 0) {
+            console.log(`🧹 Nightly event_tracking cleanup: removed ${deleted} rows older than ${CLEANUP_DAYS_OLD} days`);
+          }
+        } catch (cleanupErr: unknown) {
+          console.warn('⚠️ Nightly event_tracking cleanup failed (non-fatal):', (cleanupErr as Error).message);
+        }
+      };
+
+      // First run: delay by 30 seconds after startup to avoid contending with bootstrap
+      setTimeout(() => {
+        void runCleanup();
+        setInterval(() => { void runCleanup(); }, CLEANUP_INTERVAL_MS);
+      }, 30_000);
+
+      console.log(`✅ Nightly event_tracking cleanup scheduled (every 24h, retains last ${CLEANUP_DAYS_OLD} days)`);
+    } catch (err: unknown) {
+      console.warn('⚠️ Failed to schedule event_tracking cleanup (non-fatal):', (err as Error).message);
+    }
+
     // TEST: Force a log to Elasticsearch
     try {
       const enhancedLogger = (await import('./utils/logger-enhanced.js')).default;

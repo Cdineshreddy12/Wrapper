@@ -126,26 +126,31 @@ export default async function dataManagementRoutes(
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = request.body as Record<string, unknown>;
-      const { step, data, formData, email } = body;
+      const { step, data, formData, email, kindeUserId: kindeUserIdFromBody } = body;
       let kindeUserId: string | null = null;
       let userEmail: string | null = null;
-      const userContext = request.userContext as { userId?: string; email?: string } | undefined;
+      const userContext = request.userContext as { userId?: string; kindeUserId?: string; email?: string } | undefined;
 
       // Get Kinde user ID and email from authenticated context
       if (userContext?.userId) {
-        kindeUserId = userContext.userId;
+        kindeUserId = userContext.kindeUserId || userContext.userId;
         userEmail = (userContext.email || email) as string;
       } else if (email) {
         userEmail = email as string;
+        if (typeof kindeUserIdFromBody === 'string' && kindeUserIdFromBody.trim().length > 0) {
+          kindeUserId = kindeUserIdFromBody;
+        }
         // Try to get Kinde ID from existing onboarding data
-        const [existingData] = await db
-          .select()
-          .from(onboardingFormData)
-          .where(eq(onboardingFormData.email, email as string))
-          .limit(1);
-        
-        if (existingData) {
-          kindeUserId = existingData.kindeUserId;
+        if (!kindeUserId) {
+          const [existingData] = await db
+            .select()
+            .from(onboardingFormData)
+            .where(eq(onboardingFormData.email, email as string))
+            .limit(1);
+
+          if (existingData) {
+            kindeUserId = existingData.kindeUserId;
+          }
         }
       } else {
         return reply.code(400).send({

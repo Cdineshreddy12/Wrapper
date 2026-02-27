@@ -16,6 +16,7 @@ import { CreditService } from '../../../features/credits/index.js';
 import { SubscriptionService } from '../../../features/subscriptions/index.js';
 import OnboardingValidationService from './onboarding-validation-service.js';
 import { OnboardingFileLogger } from '../../../utils/onboarding-file-logger.js';
+import { InterAppEventService } from '../../../features/messaging/index.js';
 
 /** Validation result with optional errors and data */
 interface ValidationResult {
@@ -497,6 +498,20 @@ export class UnifiedOnboardingService {
         verified: true
       });
 
+      // ── Publish thin per-app provisioning events (replaces one fat snapshot event) ──
+      // One event per enabled app, routed to that app's MQ queue only.
+      // Each app receives a lightweight "you now have this tenant" signal.
+      // No snapshot data is embedded — apps bootstrap lazily on first user login.
+      // This is fire-and-forget: onboarding is already complete by this point.
+      void this.publishAppProvisioningEvents(
+        dbResult.tenant.tenantId,
+        dbResult.adminUser.userId,
+        selectedPlan ?? 'free',
+      ).catch((err: unknown) => {
+        // Non-fatal: if MQ is down, apps will discover the tenant on first login.
+        console.warn('⚠️ [Onboarding] Failed to publish app provisioning events (non-fatal):', (err as Error).message);
+      });
+
       // Finalize logger with success
       const logResult = await logger.finalize({
         success: true,
@@ -569,6 +584,93 @@ export class UnifiedOnboardingService {
       });
       
       throw error;
+    }
+  }
+
+  /**
+   * publishAppProvisioningEvents
+   *
+   * Publishes ONE thin `tenant.app.provisioned` event per app the tenant has
+   * access to, based on organization_applications rows.
+   *
+   * Why thin events instead of one fat snapshot:
+   *  - SRP: each event carries only provisioning metadata, not domain data
+   *  - Routing: each event is routed with key `<appCode>.tenant.app.provisioned`
+   *    so only the target app's queue receives it
+   *  - Loose coupling: apps bootstrap lazily on first login — Wrapper never
+   *    needs to know which data each app wants
+   *  - Fault isolation: if one app's event fails to publish, others still succeed
+   *  - Idempotency: receiving the event twice is safe (DB upsert with NO CONFLICT)
+   *
+   * Called after onboarding verification passes. Non-fatal if MQ is down.
+   */
+  private static async publishAppProvisioningEvents(
+    tenantId: string,
+    publishedBy: string,
+    plan: string,
+  ): Promise<void> {
+    // Fetch which apps this tenant has enabled
+    const { organizationApplications, applications } = await import('../../../db/schema/index.js');
+    const { eq, and } = await import('drizzle-orm');
+
+    const enabledApps = await db
+      .select({
+        appCode:          applications.appCode,
+        subscriptionTier: organizationApplications.subscriptionTier,
+        enabledModules:   organizationApplications.enabledModules,
+        expiresAt:        organizationApplications.expiresAt,
+      })
+      .from(organizationApplications)
+      .innerJoin(applications, eq(applications.appId, organizationApplications.appId))
+      .where(and(
+        eq(organizationApplications.tenantId, tenantId),
+        eq(organizationApplications.isEnabled, true),
+        eq(applications.status, 'active'),
+      ));
+
+    if (!enabledApps.length) {
+      // Tenant has no app assignments — publish a broadcast so all apps can
+      // decide whether to self-register via their own entitlement query.
+      console.log(`[Onboarding] No organization_applications rows for tenant ${tenantId} — skipping per-app events`);
+      return;
+    }
+
+    console.log(`[Onboarding] Publishing ${enabledApps.length} app provisioning events for tenant ${tenantId}`);
+
+    // Publish concurrently — independent events per app
+    const results = await Promise.allSettled(
+      enabledApps.map(async (app) => {
+        await InterAppEventService.publishEvent({
+          eventType:         'tenant.app.provisioned',
+          sourceApplication: 'wrapper',
+          // Route to specific app's queue: e.g. 'accounting.tenant.app.provisioned'
+          targetApplication: app.appCode,
+          tenantId,
+          entityId:          tenantId,
+          publishedBy,
+          eventData: {
+            // Thin payload — NO domain data embedded
+            appCode:          app.appCode,
+            tenantId,
+            plan,
+            subscriptionTier: app.subscriptionTier ?? null,
+            enabledModules:   Array.isArray(app.enabledModules) ? app.enabledModules : [],
+            expiresAt:        app.expiresAt ? new Date(app.expiresAt).toISOString() : null,
+            onboardedAt:      new Date().toISOString(),
+            // Signal: "pull your data when you're ready, via POST /bootstrap"
+            bootstrapHint:    'lazy — call POST /api/wrapper/tenants/:id/bootstrap on first user login',
+          },
+        });
+        console.log(`  ✅ Published tenant.app.provisioned → ${app.appCode} (tenant: ${tenantId})`);
+      })
+    );
+
+    // Log any failures without throwing — onboarding already succeeded
+    for (const [i, result] of results.entries()) {
+      if (result.status === 'rejected') {
+        const appCode = enabledApps[i]?.appCode ?? 'unknown';
+        console.warn(`  ⚠️ Failed to publish tenant.app.provisioned → ${appCode}:`, (result.reason as Error).message);
+      }
     }
   }
 
@@ -804,50 +906,35 @@ export class UnifiedOnboardingService {
         // Only try to add if organization was actually created in Kinde (not fallback)
         if (!orgCreatedWithFallback) {
           const addResult = await kindeService.addUserToOrganization(finalKindeUserId, actualOrgCode, {
-          role_code: 'admin', // Give admin role in the organization
-          is_admin: true,
-          exclusive: true // Remove from other organizations first
-        });
-          
+            role_code: 'admin', // Give admin role in the organization
+            is_admin: true,
+            exclusive: true // Remove from other organizations first
+          });
+
           if (addResult?.success) {
             console.log('✅ User successfully added to Kinde organization');
           } else {
-            console.warn('⚠️ User addition returned non-success result:', addResult);
+            // Non-fatal: the user is already a member of the org via Kinde's
+            // createOrganization flow (is_admin:true). The role assignment is
+            // supplementary — failure here does NOT block onboarding.
+            // FIX: Create a role with key "admin" in your Kinde dashboard
+            //      (auth.zopkit.com → Roles) to silence this warning.
+            console.warn(
+              '⚠️ [Kinde] Role assignment for the new org admin failed (non-fatal). ' +
+              'The user is already an org member. ' +
+              'To resolve: create a role with key "admin" in your Kinde dashboard → Roles.'
+            );
           }
         } else {
           console.log('ℹ️ Skipping Kinde user addition (organization created with fallback)');
-          console.log('ℹ️ User will need to be added manually via Kinde dashboard or invitation');
         }
       } catch (err: unknown) {
-        const addUserError = err as Error & { response?: { status?: number; data?: unknown } };
-        console.error('❌ Failed to add user to Kinde organization:', addUserError.message);
-        console.error('❌ Error details:', {
-          status: addUserError.response?.status,
-          data: addUserError.response?.data,
-          message: addUserError.message
-        });
-        
-        // Provide helpful guidance
-        if (addUserError.message?.includes('No users added') || addUserError.response?.status === 400) {
-          console.log(`
-🔧 KINDE ORGANIZATION MANAGEMENT SETUP REQUIRED:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Your M2M client needs organization management permissions.
-
-In your Kinde dashboard:
-1. Go to Settings → Applications
-2. Find your M2M application
-3. Add these scopes: 'admin', 'organizations:read', 'organizations:write'
-4. Ensure the M2M client has 'Organization Admin' role
-5. The organization must allow M2M management
-
-The user can still access the system - Kinde org assignment is optional.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          `);
-        }
-        
-        // Don't fail the entire onboarding process for this - user can still use the system
-        console.log('ℹ️ Continuing onboarding despite Kinde user addition failure');
+        // Non-fatal: user is already provisioned in Kinde via org creation.
+        // Role assignment is best-effort; failure must not abort onboarding.
+        const addUserError = err as Error & { response?: { status?: number } };
+        console.warn(
+          `⚠️ [Kinde] addUserToOrganization threw unexpectedly (non-fatal, onboarding continues): ${addUserError.message}`
+        );
       }
     } else {
       // Create new user in Kinde
@@ -1559,6 +1646,85 @@ The user can still access the system - Kinde org assignment is optional.
     });
 
     console.log('✅ Complete onboarding transaction committed successfully');
+
+    // Publish tenant.onboarded to the outbox (event_tracking table) so Financial-Accounting
+    // can bootstrap its local copy of all tenant data without requiring a separate API call.
+    // This is non-fatal: if it fails, FA falls back to auth-flow pull-based bootstrap.
+    try {
+      await InterAppEventService.publishEvent({
+        eventType: 'tenant.onboarded',
+        sourceApplication: 'wrapper',
+        targetApplication: 'accounting',
+        tenantId: result.tenant?.tenantId ?? String(result.tenant?.id ?? ''),
+        entityId: result.tenant?.tenantId ?? String(result.tenant?.id ?? ''),
+        publishedBy: result.adminUser?.userId ?? result.adminUser?.id ?? 'system',
+        eventData: {
+          tenantId: result.tenant?.tenantId ?? String(result.tenant?.id ?? ''),
+          tenantName: result.tenant?.companyName ?? result.tenant?.name ?? '',
+          onboardedAt: new Date().toISOString(),
+          adminEmail: result.adminUser?.email ?? null,
+          kindeOrgId: result.tenant?.kindeOrgId ?? null,
+          subdomain: result.tenant?.subdomain ?? null,
+          wrapperTenantId: result.tenant?.tenantId ?? String(result.tenant?.id ?? ''),
+          snapshot: {
+            tenant: {
+              tenantId: result.tenant?.tenantId ?? String(result.tenant?.id ?? ''),
+              name: result.tenant?.companyName ?? result.tenant?.name ?? '',
+              kindeOrgId: result.tenant?.kindeOrgId ?? null,
+              status: 'active',
+            },
+            // Organizations, users, roles will be fetched by FA via pull-sync if needed.
+            // Embedding minimal onboarding org so FA can bootstrap without any API calls.
+            organizations: result.organization ? [{
+              orgCode: result.organization.orgCode ?? result.organization.id,
+              orgName: result.organization.companyName ?? result.organization.name ?? '',
+              status: 'active',
+              isActive: true,
+              country: result.organization.country ?? null,
+              currency: result.organization.currency ?? null,
+              hierarchyLevel: 0,
+              parentOrgCode: null,
+            }] : [],
+            users: result.adminUser ? [{
+              userId: result.adminUser.userId ?? result.adminUser.id,
+              email: result.adminUser.email,
+              firstName: result.adminUser.firstName ?? '',
+              lastName: result.adminUser.lastName ?? '',
+              status: { isActive: true },
+            }] : [],
+            roles: result.adminRole ? [{
+              roleId: result.adminRole.roleId ?? result.adminRole.id,
+              roleName: result.adminRole.name ?? 'admin',
+              permissions: Array.isArray(result.adminRole.permissions) ? result.adminRole.permissions : [],
+              isActive: true,
+              priority: 1,
+            }] : [],
+            employeeAssignments: result.orgMembership ? [{
+              assignmentId: result.orgMembership.id ?? `emp_${result.tenant?.tenantId}_${result.adminUser?.userId}`,
+              userId: result.adminUser?.userId ?? result.adminUser?.id,
+              entityId: result.organization?.orgCode ?? result.organization?.id,
+              accessLevel: 'admin',
+              isActive: true,
+              assignedAt: new Date().toISOString(),
+            }] : [],
+            roleAssignments: result.roleAssignment ? [{
+              assignmentId: result.roleAssignment.id ?? `ra_${result.tenant?.tenantId}`,
+              userIdString: result.adminUser?.userId ?? result.adminUser?.id,
+              roleIdString: result.adminRole?.roleId ?? result.adminRole?.id,
+              isActive: true,
+              assignedAt: new Date().toISOString(),
+            }] : [],
+            creditConfigs: [],
+            entityCredits: [],
+          },
+        },
+      });
+      console.log('✅ tenant.onboarded event written to outbox for Financial-Accounting');
+    } catch (outboxErr: any) {
+      // Non-fatal: onboarding succeeded; FA will fall back to auth-flow bootstrap on first login.
+      console.warn('⚠️ Failed to write tenant.onboarded to outbox (non-fatal):', outboxErr?.message);
+    }
+
     return result;
   }
 

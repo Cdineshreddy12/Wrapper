@@ -132,8 +132,8 @@ export const onboardingAPIOptimized = {
   markComplete: (organizationId: string) =>
     apiOptimized.post('/onboarding/mark-complete', { organizationId }),
 
-  updateStep: (step: string, data?: any, email?: string, formData?: any) =>
-    apiOptimized.post('/onboarding/update-step', { step, data, email, formData }),
+  updateStep: (step: string, data?: any, email?: string, formData?: any, kindeUserId?: string) =>
+    apiOptimized.post('/onboarding/update-step', { step, data, email, formData, kindeUserId }),
 
   reset: (targetUserId?: string) =>
     apiOptimized.post('/onboarding/reset', targetUserId ? { targetUserId } : {}),

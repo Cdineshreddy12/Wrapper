@@ -1,6 +1,10 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticateToken } from '../../../middleware/auth/auth.js';
 import { WrapperSyncService } from '../services/sync-service.js';
+import { bootstrapService } from '../services/bootstrap-service.js';
+import { db } from '../../../db/index.js';
+import { tenants, applications, organizationApplications } from '../../../db/schema/index.js';
+import { eq, and } from 'drizzle-orm';
 
 // Combined authentication middleware that accepts both Kinde tokens and service tokens
 async function authenticateServiceOrToken(request: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -42,7 +46,7 @@ async function authenticateServiceOrToken(request: FastifyRequest, reply: Fastif
 import { db } from '../../../db/index.js';
 import { tenants, tenantUsers, customRoles, userRoleAssignments, entities, credits, creditTransactions, creditUsage, creditConfigurations, organizationMemberships } from '../../../db/schema/index.js';
 // REMOVED: creditAllocations - Table removed, applications manage their own credits
-import { eq, and, or, sql } from 'drizzle-orm';
+import { eq, and, or, sql, inArray } from 'drizzle-orm';
 import ErrorResponses from '../../../utils/error-responses.js';
 import { BUSINESS_SUITE_MATRIX } from '../../../data/permission-matrix.js';
 
@@ -1234,6 +1238,137 @@ export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _op
     }
   });
 
+  // ════════════════════════════════════════════════════════════════════════
+  // BFF BOOTSTRAP ENDPOINT
+  // POST /tenants/:tenantId/bootstrap
+  //
+  // Returns a single, consistent, app-scoped snapshot of all tenant data
+  // required for a downstream app's first-time bootstrap. All DB reads are
+  // wrapped in one READ COMMITTED transaction on Wrapper's Postgres, so FA
+  // receives a coherent cross-collection view with no races between calls.
+  //
+  // This is the ONLY place FA calls during bootstrap. The individual
+  // /tenants/:id/users, /roles, etc. endpoints still exist and are still
+  // used by UI and other direct consumers — we do NOT remove or bypass them.
+  //
+  // Why POST not GET:
+  //   • Bootstrap is a stateful operation (transitions tenant_sync_status)
+  //   • POST signals intent to consume/process, not just observe
+  //   • We include body params (appCode, requestedBy) without URL pollution
+  // ════════════════════════════════════════════════════════════════════════
+  fastify.post('/tenants/:tenantId/bootstrap', {
+    preHandler: [authenticateServiceOrToken],
+    schema: {
+      description: 'BFF: Assemble and return a full, app-scoped bootstrap payload in one atomic read',
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as Record<string, string>;
+    const body   = (request.body ?? {}) as Record<string, unknown>;
+    const query  = request.query  as Record<string, string>;
+
+    const rawTenantId = params.tenantId;
+    // appCode can come from body OR query string (?appCode=accounting)
+    const appCode     = String(body.appCode ?? query.appCode ?? 'accounting').trim().toLowerCase();
+    const requestedBy = String(body.requestedBy ?? (request as any).serviceAuth?.service ?? 'unknown');
+
+    if (!rawTenantId) {
+      return reply.code(400).send({ success: false, error: 'tenantId is required' });
+    }
+
+    // Validate appCode is a known application
+    const knownApp = await db
+      .select({ appCode: applications.appCode, appName: applications.appName })
+      .from(applications)
+      .where(and(eq(applications.appCode, appCode), eq(applications.status, 'active')))
+      .limit(1);
+
+    if (!knownApp.length) {
+      return reply.code(400).send({
+        success: false,
+        error:   `Unknown or inactive appCode: ${appCode}`,
+        hint:    'Valid values: crm, accounting, hr, ops (must exist in applications table)',
+      });
+    }
+
+    // Resolve tenantId (accept UUID or kindeOrgId)
+    const resolvedTenantId = await resolveTenantIdParam(rawTenantId);
+    if (!resolvedTenantId) {
+      return reply.code(404).send({ success: false, error: 'Tenant not found' });
+    }
+
+    // Verify tenant has access to this app (entitlement gate on Wrapper side)
+    const entitlement = await db
+      .select({
+        isEnabled:        organizationApplications.isEnabled,
+        subscriptionTier: organizationApplications.subscriptionTier,
+        enabledModules:   organizationApplications.enabledModules,
+        expiresAt:        organizationApplications.expiresAt,
+      })
+      .from(organizationApplications)
+      .innerJoin(applications, eq(applications.appId, organizationApplications.appId))
+      .where(and(
+        eq(organizationApplications.tenantId, resolvedTenantId),
+        eq(applications.appCode, appCode),
+      ))
+      .limit(1);
+
+    if (!entitlement.length || !entitlement[0].isEnabled) {
+      return reply.code(403).send({
+        success: false,
+        error:   'ENTITLEMENT_DENIED',
+        message: `Tenant ${resolvedTenantId} does not have access to app: ${appCode}`,
+        hint:    'Check organization_applications table or tenant plan configuration',
+      });
+    }
+
+    const ent = entitlement[0];
+    const isExpired = ent.expiresAt && new Date(ent.expiresAt) < new Date();
+    if (isExpired) {
+      return reply.code(403).send({
+        success: false,
+        error:   'ENTITLEMENT_EXPIRED',
+        message: `Tenant access to ${appCode} expired at ${ent.expiresAt}`,
+      });
+    }
+
+    // Assemble the payload via BootstrapService (single DB transaction)
+    try {
+      console.log(`🚀 [Bootstrap] Assembling payload — tenant:${resolvedTenantId} app:${appCode} by:${requestedBy}`);
+
+      const payload = await bootstrapService.assemble(resolvedTenantId, appCode);
+
+      return reply.send({
+        success: true,
+        appCode,
+        tenantId:         resolvedTenantId,
+        snapshotAt:       payload.snapshotAt,
+        subscriptionTier: ent.subscriptionTier ?? null,
+        enabledModules:   ent.enabledModules   ?? [],
+        data: {
+          tenant:               payload.tenant,
+          organizations:        payload.organizations,
+          users:                payload.users,
+          roles:                payload.roles,
+          employeeAssignments:  payload.employeeAssignments,
+          roleAssignments:      payload.roleAssignments,
+          creditConfigs:        payload.creditConfigs,
+          entityCredits:        payload.entityCredits,
+        },
+        recordCounts: payload.recordCounts,
+        // warnings are non-fatal: FA should log them but still complete bootstrap
+        warnings: payload.warnings,
+      });
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ [Bootstrap] Assembly failed:', error.message, { resolvedTenantId, appCode });
+      return reply.code(500).send({
+        success: false,
+        error:   'Bootstrap assembly failed',
+        message: error.message,
+      });
+    }
+  });
+
   // Get role assignments for tenant
   fastify.get('/tenants/:tenantId/role-assignments', {
     preHandler: [authenticateServiceOrToken],
@@ -1305,31 +1440,33 @@ export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _op
         .limit(limit)
         .offset(offset);
 
-      // Enrich with organization data
-      const assignments = await Promise.all(roleAssignmentsData.map(async (assignment) => {
-        let orgCode = null;
+      // Enrich with organization data — single batch query instead of one query per assignment.
+      // Collect all distinct non-null roleOrgIds, fetch them all at once, then enrich in-memory.
+      const distinctOrgIds = [
+        ...new Set(
+          roleAssignmentsData
+            .map((a) => a.roleOrgId as string | null | undefined)
+            .filter((id): id is string => Boolean(id))
+        ),
+      ];
 
-        if (assignment.roleOrgId) {
-          const org = await db
-            .select({
-              orgCode: entities.entityId
-            })
-            .from(entities)
-            .where(and(
-              eq(entities.tenantId, tenantId),
-              eq(entities.entityId, assignment.roleOrgId)
-            ))
-            .limit(1);
-
-          if (org.length > 0) {
-            orgCode = org[0].orgCode;
-          }
+      const orgCodeMap = new Map<string, string>();
+      if (distinctOrgIds.length > 0) {
+        const orgRows = await db
+          .select({ entityId: entities.entityId })
+          .from(entities)
+          .where(and(
+            eq(entities.tenantId, tenantId),
+            inArray(entities.entityId, distinctOrgIds),
+          ));
+        for (const row of orgRows) {
+          orgCodeMap.set(row.entityId, row.entityId);
         }
+      }
 
-        return {
-          ...assignment,
-          orgCode
-        };
+      const assignments = roleAssignmentsData.map((assignment) => ({
+        ...assignment,
+        orgCode: assignment.roleOrgId ? (orgCodeMap.get(assignment.roleOrgId as string) ?? null) : null,
       }));
 
       // Transform to CRM format

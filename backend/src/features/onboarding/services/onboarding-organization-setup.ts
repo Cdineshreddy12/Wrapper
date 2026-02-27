@@ -123,6 +123,57 @@ class OnboardingOrganizationSetupService {
         console.log(`ℹ️ No new applications to assign for plan ${planId} (tenant already has plan apps).`);
       }
 
+      // ── Publish thin tenant.app.provisioned for EACH newly granted app ──
+      // These are the apps that did NOT exist in organization_applications before
+      // this plan change. Each downstream app receives its own scoped event so
+      // it knows to prepare for bootstrap on first user login.
+      // This is separate from the fat tenant.applications.updated event below —
+      // that event is for permission sync; these are for bootstrap triggering.
+      if (applicationsToInsert.length > 0) {
+        const newAppCodes = applicationsToInsert.map((a: any) => {
+          // reverse-lookup appCode from appCodeToIdMap
+          return Object.entries(appCodeToIdMap).find(([, id]) => id === a.appId)?.[0] ?? null;
+        }).filter(Boolean) as string[];
+
+        if (newAppCodes.length > 0) {
+          const { InterAppEventService } = await import('../../messaging/services/inter-app-event-service.js');
+
+          await Promise.allSettled(
+            newAppCodes.map(async (newAppCode) => {
+              const appRow = applicationsToInsert.find((a: any) => appCodeToIdMap[newAppCode] === a.appId) as any;
+              try {
+                await InterAppEventService.publishEvent({
+                  eventType:         'tenant.app.provisioned',
+                  sourceApplication: 'wrapper',
+                  // Route to THIS specific app's queue only
+                  targetApplication: newAppCode,
+                  tenantId,
+                  entityId:          tenantId,
+                  publishedBy:       'system',
+                  eventData: {
+                    appCode:          newAppCode,
+                    tenantId,
+                    plan:             planId,
+                    subscriptionTier: planId,
+                    enabledModules:   Array.isArray(appRow?.enabledModules) ? appRow.enabledModules : [],
+                    expiresAt:        appRow?.expiresAt ? new Date(appRow.expiresAt).toISOString() : null,
+                    provisionReason:  'plan_upgrade',
+                    // No domain data embedded — app bootstraps lazily on first login
+                    bootstrapHint:    'lazy — call POST /api/wrapper/tenants/:id/bootstrap on first user login',
+                  },
+                });
+                console.log(`  ✅ Published tenant.app.provisioned → ${newAppCode} (plan_upgrade for tenant ${tenantId})`);
+              } catch (pubErr: unknown) {
+                console.warn(`  ⚠️ Failed to publish tenant.app.provisioned → ${newAppCode}:`, (pubErr as Error).message);
+              }
+            })
+          );
+        }
+      }
+
+      // ── Also publish the existing fat tenant.applications.updated ──────────
+      // This keeps existing downstream permission-sync logic working.
+      // (Role permissions + entitlement flags update via this event.)
       try {
         await publishTenantApplicationSyncEvent({
           tenantId,
@@ -139,7 +190,12 @@ class OnboardingOrganizationSetupService {
         tenantId,
         planId,
         applicationsAssigned: applicationsToInsert.length,
-        applicationsInPlan: appCodes
+        applicationsInPlan: appCodes,
+        newlyProvisionedApps: applicationsToInsert.length > 0
+          ? applicationsToInsert.map((a: any) =>
+              Object.entries(appCodeToIdMap).find(([, id]) => id === a.appId)?.[0] ?? 'unknown'
+            )
+          : [],
       };
     } catch (err: unknown) {
       const error = err as Error;

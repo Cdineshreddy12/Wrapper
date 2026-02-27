@@ -145,6 +145,8 @@ class KindeService {
       } catch (err: unknown) {
         const apiErr = err as ApiErrorShape;
         lastError = apiErr;
+        // Only log individual attempt failures at verbose level — callers surface
+        // the final outcome at warn/error level so the console is not flooded.
         if (shouldLogVerbose()) {
           console.warn('⚠️ Role assignment attempt failed:', {
             endpoint: attempt.endpoint,

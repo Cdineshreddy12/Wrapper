@@ -33,6 +33,38 @@ export const useFormPersistenceOptimized = ({
   const hasRestoredRef = useRef(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const normalizeRestoredData = useCallback((rawData: any) => {
+    if (!rawData || typeof rawData !== 'object') return rawData;
+
+    const normalized = { ...rawData } as Record<string, any>;
+    const existingBusinessDetails =
+      normalized.businessDetails && typeof normalized.businessDetails === 'object'
+        ? normalized.businessDetails
+        : {};
+
+    // Support legacy flat payload keys so select fields hydrate correctly.
+    normalized.businessDetails = {
+      ...existingBusinessDetails,
+      companyName: existingBusinessDetails.companyName ?? normalized.companyName ?? normalized.businessName,
+      businessType: existingBusinessDetails.businessType ?? normalized.businessType ?? normalized.industry,
+      organizationSize:
+        existingBusinessDetails.organizationSize ?? normalized.organizationSize ?? normalized.companySize,
+      country: (existingBusinessDetails.country ?? normalized.country ?? 'IN')?.toUpperCase(),
+    };
+
+    normalized.country = (normalized.country ?? normalized.businessDetails.country ?? 'IN')?.toUpperCase();
+    normalized.defaultCurrency = normalized.defaultCurrency ?? normalized.currency;
+    normalized.defaultTimeZone = normalized.defaultTimeZone ?? normalized.timezone;
+    normalized.defaultLanguage = normalized.defaultLanguage ?? normalized.language;
+    normalized.defaultLocale = normalized.defaultLocale ?? normalized.locale;
+    normalized.billingAddress = normalized.billingAddress ?? normalized.billingStreet;
+    normalized.billingStreet = normalized.billingStreet ?? normalized.billingAddress;
+    normalized.state = normalized.state ?? normalized.billingState ?? normalized.incorporationState;
+    normalized.billingState = normalized.billingState ?? normalized.state;
+
+    return normalized;
+  }, []);
+
   // OPTIMIZED: Save form data with reduced frequency and secure storage
   const saveFormData = useCallback(async () => {
     try {
@@ -74,7 +106,8 @@ export const useFormPersistenceOptimized = ({
               flowType: flowType
             },
             user.email,
-            dataToStore // Send complete form data to backend for persistence
+            dataToStore, // Send complete form data to backend for persistence
+            user.id
           );
           
           if (response?.data?.success) {
@@ -144,6 +177,7 @@ export const useFormPersistenceOptimized = ({
 
       // Restore form data if found
       if (restoredData) {
+        restoredData = normalizeRestoredData(restoredData);
         form.reset();
 
         // OPTIMIZED: Batch all setValue calls - handle nested objects properly
@@ -187,14 +221,14 @@ export const useFormPersistenceOptimized = ({
     }
 
     return 1;
-  }, [form, flowType]);
+  }, [form, flowType, normalizeRestoredData]);
 
   // Clear saved form data (backend + cleanup localStorage keys)
   const clearFormData = useCallback(() => {
     try {
       // Clear backend data if authenticated
       if (user?.email) {
-        onboardingAPIOptimized.updateStep('step_1', {}, user.email, {}).catch(() => {});
+        onboardingAPIOptimized.updateStep('step_1', {}, user.email, {}, user.id).catch(() => {});
       }
       
       // Clean up any remaining localStorage keys (for cleanup, not as source of truth)
@@ -227,6 +261,9 @@ export const useFormPersistenceOptimized = ({
       subscription.unsubscribe();
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+        // Flush pending edits when step changes/unmount happens before debounce fires.
+        void saveFormData();
       }
     };
   }, [currentStep, autoSave, saveFormData, form]);
