@@ -20,7 +20,7 @@ import {
   Landing, ProductPage, IndustryPage, PrivacyPolicy, TermsOfService,
   CookiePolicy, Security, Pricing, Login, AuthCallback, InviteAccept,
   OnboardingPage, PaymentSuccess, PaymentCancelled, PaymentDetailsPage,
-  BillingUpgradePage, Billing, SuiteDashboard, ActivityDashboard,
+  BillingUpgradePage, Billing, SuiteDashboard, ActivityDashboard, AccountingDashboardPage, AccountingChartOfAccountsPage,
   ApplicationPage, ApplicationDetailsPage, UserManagementDashboard,
   InviteUserPage, UserDetailsPage, UserApplicationAccessPage,
   RolesPage, RoleDetailsPage, RoleBuilderPage, OrganizationPage,
@@ -218,6 +218,16 @@ const dashboardBillingRoute = createRoute({ getParentRoute: () => dashboardLayou
 const dashboardPermissionsRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/permissions', component: () => <AdminRoute><Permissions /></AdminRoute> })
 const dashboardSettingsRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/settings', component: () => <AdminRoute><Settings /></AdminRoute> })
 const dashboardActivityRoute = createRoute({ getParentRoute: () => dashboardLayoutRoute, path: '/activity', component: () => <AdminRoute><ActivityDashboard /></AdminRoute> })
+const dashboardAccountingRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: '/accounting',
+  component: () => <AccountingDashboardPage />,
+})
+const dashboardAccountingCoaRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: '/accounting/coa',
+  component: () => <AccountingChartOfAccountsPage />,
+})
 
 // Company Admin
 const companyAdminTenantRoute = createRoute({
@@ -294,6 +304,8 @@ const routeTree = rootRoute.addChildren([
     dashboardPermissionsRoute,
     dashboardSettingsRoute,
     dashboardActivityRoute,
+    dashboardAccountingRoute,
+    dashboardAccountingCoaRoute,
   ]),
   companyAdminTenantRoute,
   companyAdminCampaignRoute,

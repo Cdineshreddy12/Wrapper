@@ -28,6 +28,12 @@ export const Billing = React.lazy(() => import('@/features/billing/pages/Billing
 // Dashboard
 export const SuiteDashboard = React.lazy(() => import('@/features/dashboard/pages/SuiteDashboard'))
 export const ActivityDashboard = React.lazy(() => import('@/features/dashboard/pages/ActivityDashboardPage').then(m => ({ default: m.ActivityDashboard })))
+export const AccountingDashboardPage = React.lazy(() =>
+  import('@/features/accounting/pages/AccountingDashboardPage').then(m => ({ default: m.AccountingDashboardPage }))
+)
+export const AccountingChartOfAccountsPage = React.lazy(() =>
+  import('@/features/accounting/pages/AccountingChartOfAccountsPage').then(m => ({ default: m.AccountingChartOfAccountsPage }))
+)
 
 // Applications
 export const ApplicationPage = React.lazy(() => import('@/features/applications/pages/ApplicationPage').then(m => ({ default: m.ApplicationPage })))

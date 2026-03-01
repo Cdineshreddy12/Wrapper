@@ -39,3 +39,15 @@ interface ImportMeta {
 }
 
 declare const __APP_VERSION__: string; 
+
+declare module 'remote_financial/Dashboard' {
+  import type { ComponentType } from 'react'
+  const Dashboard: ComponentType
+  export default Dashboard
+}
+
+declare module 'remote_financial/ChartOfAccounts' {
+  import type { ComponentType } from 'react'
+  const ChartOfAccounts: ComponentType
+  export default ChartOfAccounts
+}

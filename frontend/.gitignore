@@ -12,6 +12,12 @@ dist/
 # Vite
 vite.config.ts.timestamp-*
 
+# Module Federation temp artifacts
+__mf__temp/
+**/__mf__temp/**
+.__mf__temp/
+**/.__mf__temp/**
+
 # OS
 .DS_Store
 Thumbs.db

@@ -22,10 +22,10 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "test:watch": "vitest --watch",
-    "prepare": "[ -d .git ] && husky install || true",
+    "prepare": "node -e \"const { existsSync } = require('fs'); const { spawnSync } = require('child_process'); if (existsSync('.git')) { const result = spawnSync('npx', ['husky', 'install'], { stdio: 'inherit', shell: true }); if ((result.status ?? 0) !== 0) process.exit(result.status ?? 1); }\"",
     "clean": "rm -rf dist node_modules/.vite",
     "clean:vite": "rm -rf node_modules/.vite",
-    "postinstall": "[ -d .git ] && husky install || true"
+    "postinstall": "node -e \"const { existsSync } = require('fs'); const { spawnSync } = require('child_process'); if (existsSync('.git')) { const result = spawnSync('npx', ['husky', 'install'], { stdio: 'inherit', shell: true }); if ((result.status ?? 0) !== 0) process.exit(result.status ?? 1); }\""
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -101,6 +101,7 @@
     ]
   },
   "devDependencies": {
+    "@module-federation/vite": "^1.8.1",
     "@tailwindcss/postcss": "^4.1.18",
     "@testing-library/react": "^16.3.0",
     "@types/node": "^24.5.2",

@@ -6,6 +6,7 @@ import { KindeProvider } from "@/components/auth/KindeProvider"
 import { Toaster } from "@/components/ui/sonner"
 import { ErrorBoundary } from "@/errors/ErrorBoundary"
 import { router } from "@/routes/router"
+import { AuthContractBridge } from "@/auth/AuthContractBridge"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,6 +34,7 @@ export const AppRoot = () => {
           <ThemeProvider defaultTheme="system" storageKey="zopkit-theme">
             <Toaster position="top-right" richColors offset="80px" gap={12} />
             <KindeProvider>
+              <AuthContractBridge />
               <RouterProvider router={router} />
             </KindeProvider>
           </ThemeProvider>

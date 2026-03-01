@@ -12,13 +12,25 @@ import {
     CreditCard,
     Settings,
     LogOut,
-    Activity
+    Activity,
+    Calculator
 } from "lucide-react"
 import {
     Avatar,
     AvatarFallback,
     AvatarImage,
 } from "@/components/ui/avatar"
+
+const isRouteMatch = (pathname: string, itemUrl: string): boolean => {
+    if (pathname === itemUrl) return true
+    return pathname.startsWith(`${itemUrl}/`)
+}
+
+const getMostSpecificActiveItem = (pathname: string, items: any[]) => {
+    const matches = items.filter((item) => isRouteMatch(pathname, item.url))
+    if (matches.length === 0) return null
+    return matches.sort((a, b) => b.url.length - a.url.length)[0]
+}
 
 // Map sidebar URLs to tour step IDs so DashboardFeatureTour can highlight nav items
 const getTourStepId = (url: string): string | undefined => {
@@ -37,6 +49,7 @@ const NavItem = ({ item, isActive, isCollapsed }: { item: any; isActive: boolean
     return (
         <Link
             to={item.url}
+            activeOptions={{ exact: true }}
             {...(tourStepId ? { 'data-tour-step': tourStepId } : {})}
             className={cn(
                 "relative flex items-center gap-4 px-8 py-4 transition-all duration-500 overflow-visible group"
@@ -125,6 +138,7 @@ export function ModernSidebar({
 
     const allMainNavItems = navData?.navMain || [
         { title: "Applications", url: "/dashboard/applications", icon: LayoutDashboard },
+        { title: "Accounting", url: "/dashboard/accounting", icon: Calculator },
         { title: "Team", url: "/dashboard/users", icon: Users },
         { title: "Organization", url: "/dashboard/organization", icon: Building2 },
         { title: "Roles", url: "/dashboard/roles", icon: Shield },
@@ -146,7 +160,7 @@ export function ModernSidebar({
 
     const [activeItem, setActiveItem] = useState<string>(() => {
         const allItems = [...mainNavItems, ...bottomItems]
-        const currentItem = allItems.find(item => location.pathname.startsWith(item.url))
+        const currentItem = getMostSpecificActiveItem(location.pathname, allItems)
         return currentItem ? currentItem.title : ""
     })
 
@@ -158,11 +172,11 @@ export function ModernSidebar({
 
     useEffect(() => {
         const allItems = [...mainNavItems, ...bottomItems]
-        const currentItem = allItems.find(item => location.pathname.startsWith(item.url))
+        const currentItem = getMostSpecificActiveItem(location.pathname, allItems)
         if (currentItem) {
             setActiveItem(currentItem.title)
         }
-    }, [location.pathname])
+    }, [bottomItems, location.pathname, mainNavItems])
 
     return (
         <div
