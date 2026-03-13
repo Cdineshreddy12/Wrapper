@@ -251,6 +251,7 @@ jobs:
         env:
           EC2_USER: ${{ secrets.EC2_USER || 'ec2-user' }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
+          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${EC2_USER}@${EC2_HOST} bash <<EOF
@@ -260,7 +261,11 @@ jobs:
           pnpm install --frozen-lockfile
           cd backend
           echo "🗄️ Running DB migrations..."
-          pnpm run db:migrate
+          if [ -n "${MIGRATION_DATABASE_URL}" ]; then
+            DATABASE_URL="${MIGRATION_DATABASE_URL}" pnpm run db:migrate
+          else
+            pnpm run db:migrate
+          fi
           echo "✅ Migrations complete"
           EOF
 
