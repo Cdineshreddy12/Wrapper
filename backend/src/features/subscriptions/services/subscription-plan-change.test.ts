@@ -4,7 +4,7 @@ import {
   calculateFeatureLoss,
   calculateUserLimits,
   isValidPlanChange,
-} from './subscription-plan-change.js';
+} from './subscription-plan-change.helpers.js';
 
 describe('subscription-plan-change helper logic', () => {
   it('allows upgrades and blocks restricted downgrades', () => {

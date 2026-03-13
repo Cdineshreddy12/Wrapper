@@ -36,6 +36,18 @@ let container: StartedPostgreSqlContainer;
 // setup() — called once before ANY test worker starts
 // ---------------------------------------------------------------------------
 export async function setup(): Promise<void> {
+  const useExistingDb =
+    process.env.SKIP_TESTCONTAINERS === 'true' &&
+    typeof process.env.DATABASE_URL === 'string' &&
+    process.env.DATABASE_URL.length > 0;
+
+  if (useExistingDb) {
+    console.log('\n🧪  [global-setup] SKIP_TESTCONTAINERS=true — using existing DATABASE_URL');
+    console.log('ℹ️   Ensure DATABASE_URL points to a dedicated test database.');
+    process.env.TEST_DATABASE_URL = process.env.DATABASE_URL;
+    return;
+  }
+
   console.log('\n🐳  [global-setup] Starting PostgreSQL container…');
 
   // Use a lightweight Alpine-based image for speed.
@@ -239,6 +251,11 @@ export async function setup(): Promise<void> {
 // teardown() — called once after ALL test workers have finished
 // ---------------------------------------------------------------------------
 export async function teardown(): Promise<void> {
+  if (process.env.SKIP_TESTCONTAINERS === 'true') {
+    console.log('\nℹ️   [global-setup] SKIP_TESTCONTAINERS=true — no container teardown needed');
+    return;
+  }
+
   if (container) {
     console.log('\n🛑  [global-setup] Stopping PostgreSQL container…');
     await container.stop({ timeout: 10_000 });
