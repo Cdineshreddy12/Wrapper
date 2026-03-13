@@ -36,8 +36,6 @@ export async function trialRestrictionMiddleware(request: FastifyRequest, reply:
     '/api/admin/trials', // For admin trial management
     '/health',
     '/docs',
-    '/debug-routes',
-    '/test-no-middleware'
   ];
 
   // Check if current path is allowed for expired trials

@@ -7,7 +7,8 @@ import {
   creditTransactions
 } from '../../../db/schema/index.js';
 import { v4 as uuidv4 } from 'uuid';
-import { getCurrentSubscription, stripe } from './subscription-core.js';
+import { getCurrentSubscription } from './subscription-core.js';
+import { getPaymentGateway } from '../adapters/index.js';
 
 /**
  * Create trial subscription for new tenant (creates initial credit balance).
@@ -189,6 +190,7 @@ export async function cancelSubscription(
 ): Promise<Record<string, unknown>> {
   try {
     const currentSubscription = await getCurrentSubscription(tenantId) as Record<string, unknown>;
+    const gateway = getPaymentGateway();
 
     if (!currentSubscription) {
       throw new Error('No subscription found to cancel');
@@ -198,10 +200,8 @@ export async function cancelSubscription(
       throw new Error('Cannot cancel trial plan');
     }
 
-    if (currentSubscription.stripeSubscriptionId && stripe) {
-      await stripe.subscriptions.cancel(
-        currentSubscription.stripeSubscriptionId as string
-      );
+    if (currentSubscription.stripeSubscriptionId && gateway.isConfigured()) {
+      await gateway.cancelSubscription(currentSubscription.stripeSubscriptionId as string);
 
       await db
         .update(subscriptions)

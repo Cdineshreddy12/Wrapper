@@ -5,6 +5,8 @@ export * from './core/permissions.js';
 export * from './core/suite-schema.js';
 export * from './core/contact-submissions.js';
 export * from './core/onboarding-form-data.js';
+export * from './core/usage.js';
+export * from './core/external-applications.js';
 
 // Billing & Credits
 export * from './billing/subscriptions.js';
@@ -22,7 +24,6 @@ export * from './organizations/responsible_persons.js';
 // Notifications
 export * from './notifications/notifications.js';
 export * from './notifications/notification-templates.js';
-export * from './notifications/admin-notification-history.js';
 export * from './notifications/tenant-template-customizations.js';
 
 // Tracking

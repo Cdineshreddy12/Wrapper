@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, uuid, jsonb, integer } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, boolean, uuid, jsonb, integer, index } from 'drizzle-orm/pg-core';
 import { tenants } from '../core/tenants.js';
 
 /**
@@ -58,7 +58,18 @@ export const notifications = pgTable('notifications', {
 
   // Target user (null means all users in tenant)
   targetUserId: uuid('target_user_id'), // If null, notification is for all tenant users
-});
+}, (table) => ({
+  tenantIdIdx: index('idx_notifications_tenant_id').on(table.tenantId),
+  typeIdx: index('idx_notifications_type').on(table.type),
+  priorityIdx: index('idx_notifications_priority').on(table.priority),
+  isReadIdx: index('idx_notifications_is_read').on(table.isRead),
+  isDismissedIdx: index('idx_notifications_is_dismissed').on(table.isDismissed),
+  isActiveIdx: index('idx_notifications_is_active').on(table.isActive),
+  createdAtIdx: index('idx_notifications_created_at').on(table.createdAt),
+  expiresAtIdx: index('idx_notifications_expires_at').on(table.expiresAt),
+  scheduledAtIdx: index('idx_notifications_scheduled_at').on(table.scheduledAt),
+  targetUserIdIdx: index('idx_notifications_target_user_id').on(table.targetUserId),
+}));
 
 // Indexes for efficient querying
 export const notificationsIndexes = {

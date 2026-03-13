@@ -18,6 +18,9 @@ import type {
   webhookLogs,
   eventTracking,
   onboardingFormData,
+  usageLogs,
+  usageMetricsDaily,
+  externalApplications,
   entities,
   organizationMemberships,
   membershipInvitations,
@@ -33,7 +36,6 @@ import type {
   notifications,
   notificationTemplates,
   tenantTemplateCustomizations,
-  adminNotificationHistory,
   seasonalCreditCampaigns,
   seasonalCreditAllocations,
   changeLog,
@@ -65,6 +67,9 @@ export type UserApplicationPermission = InferSelectModel<typeof userApplicationP
 export type WebhookLog = InferSelectModel<typeof webhookLogs>;
 export type EventTrackingRecord = InferSelectModel<typeof eventTracking>;
 export type OnboardingFormData = InferSelectModel<typeof onboardingFormData>;
+export type UsageLog = InferSelectModel<typeof usageLogs>;
+export type UsageMetricDaily = InferSelectModel<typeof usageMetricsDaily>;
+export type ExternalApplication = InferSelectModel<typeof externalApplications>;
 
 export type Entity = InferSelectModel<typeof entities>;
 export type OrganizationMembership = InferSelectModel<typeof organizationMemberships>;
@@ -84,7 +89,6 @@ export type ResponsibilityNotification = InferSelectModel<typeof responsibilityN
 export type Notification = InferSelectModel<typeof notifications>;
 export type NotificationTemplate = InferSelectModel<typeof notificationTemplates>;
 export type TenantTemplateCustomization = InferSelectModel<typeof tenantTemplateCustomizations>;
-export type AdminNotificationHistoryRecord = InferSelectModel<typeof adminNotificationHistory>;
 
 export type SeasonalCreditCampaign = InferSelectModel<typeof seasonalCreditCampaigns>;
 export type SeasonalCreditAllocation = InferSelectModel<typeof seasonalCreditAllocations>;
@@ -109,6 +113,9 @@ export type NewUserRoleAssignment = InferInsertModel<typeof userRoleAssignments>
 
 export type NewApplication = InferInsertModel<typeof applications>;
 export type NewOrganizationApplication = InferInsertModel<typeof organizationApplications>;
+export type NewExternalApplication = InferInsertModel<typeof externalApplications>;
+export type NewUsageLog = InferInsertModel<typeof usageLogs>;
+export type NewUsageMetricDaily = InferInsertModel<typeof usageMetricsDaily>;
 
 export type NewEntity = InferInsertModel<typeof entities>;
 export type NewOrganizationMembership = InferInsertModel<typeof organizationMemberships>;

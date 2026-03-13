@@ -1,8 +1,17 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import crypto from 'crypto';
 import { PaymentService } from '../services/payment-service.js';
 import Stripe from 'stripe';
+import { getPaymentGateway } from '../adapters/index.js';
+import { RazorpayPaymentGateway } from '../adapters/razorpay.adapter.js';
+import type { NormalizedWebhookEvent } from '../adapters/types.js';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2023-10-16' });
+const paymentGateway = getPaymentGateway();
+
+// Dedicated Razorpay instance for webhook/verify routes.
+// Always a RazorpayPaymentGateway regardless of PAYMENT_GATEWAY_PROVIDER,
+// so the Razorpay routes are self-contained and never conflict with Stripe.
+const razorpayGateway = new RazorpayPaymentGateway();
 
 export default async function paymentRoutes(
   fastify: FastifyInstance,
@@ -166,14 +175,19 @@ export default async function paymentRoutes(
       return reply.code(500).send({ error: 'Webhook secret not configured' });
     }
 
-    let event;
+    let event: Stripe.Event;
 
     try {
       // Get raw body for webhook verification
       const rawBody = request.rawBody || Buffer.from(JSON.stringify(request.body));
       
-      // Verify the webhook signature
-      event = stripe.webhooks.constructEvent(rawBody as Buffer, (sig ?? '') as string, endpointSecret);
+      // Verify and normalize with the payment gateway adapter.
+      const normalized = await paymentGateway.verifyWebhook(
+        rawBody as Buffer,
+        (sig ?? '') as string,
+        endpointSecret
+      );
+      event = normalized.rawEvent as Stripe.Event;
       console.log('✅ Webhook signature verified:', event.type);
     } catch (err: unknown) {
       const e = err as Error;
@@ -189,6 +203,144 @@ export default async function paymentRoutes(
       const error = err as Error;
       console.error('❌ Error handling webhook event:', error);
       return reply.code(500).send({ error: 'Webhook handler failed' });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Razorpay Webhook Handler  —  POST /webhook/razorpay
+  //
+  // Uses a dedicated RazorpayPaymentGateway instance so this route always works
+  // regardless of the PAYMENT_GATEWAY_PROVIDER env var (Stripe stays untouched).
+  // ---------------------------------------------------------------------------
+  fastify.post('/webhook/razorpay', { schema: {} }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const sig = request.headers['x-razorpay-signature'] as string | undefined;
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+    if (!secret) {
+      console.error('❌ RAZORPAY_WEBHOOK_SECRET not configured');
+      return reply.code(500).send({ error: 'Webhook secret not configured' });
+    }
+
+    let normalized: NormalizedWebhookEvent;
+
+    try {
+      const rawBody = request.rawBody || Buffer.from(JSON.stringify(request.body));
+      normalized = await razorpayGateway.verifyWebhook(rawBody as Buffer, sig ?? '', secret);
+      console.log('✅ Razorpay webhook signature verified:', normalized.type);
+    } catch (err: unknown) {
+      const e = err as Error;
+      console.error('❌ Razorpay webhook signature verification failed:', e.message);
+      return reply.code(400).send({ error: 'Invalid signature' });
+    }
+
+    try {
+      await handleRazorpayEvent(normalized);
+      return reply.code(200).send({ received: true });
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error handling Razorpay webhook event:', error);
+      return reply.code(500).send({ error: 'Webhook handler failed' });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Razorpay verify-payment  —  POST /razorpay/verify-payment
+  //
+  // Called by the frontend immediately after the Razorpay popup closes
+  // (razorpay_payment_id + razorpay_order_id + razorpay_signature).
+  // We verify the HMAC, fetch the order from Razorpay to get the amount/metadata,
+  // then record the payment and trigger plan activation.
+  // The subsequent payment.captured webhook is idempotent — it updates the same record.
+  // ---------------------------------------------------------------------------
+  fastify.post('/razorpay/verify-payment', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!(request as any).userContext?.isAuthenticated) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+
+    const {
+      razorpay_payment_id,
+      razorpay_order_id,
+      razorpay_signature,
+    } = (request.body as Record<string, string>) ?? {};
+
+    if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+      return reply.code(400).send({ error: 'Missing required Razorpay payment fields' });
+    }
+
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keySecret) {
+      return reply.code(500).send({ error: 'Razorpay not configured' });
+    }
+
+    // Razorpay HMAC: SHA256( order_id + "|" + payment_id )
+    const expectedSig = crypto
+      .createHmac('sha256', keySecret)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+
+    if (expectedSig !== razorpay_signature) {
+      console.error('❌ Razorpay payment signature verification failed');
+      return reply.code(400).send({ error: 'Invalid payment signature' });
+    }
+
+    try {
+      const tenantId = (request as any).userContext?.tenantId as string | undefined;
+      if (!tenantId) {
+        return reply.code(400).send({ error: 'Tenant ID required' });
+      }
+
+      // Fetch order from Razorpay to get the real amount + notes/metadata.
+      let amountPaise = 0;
+      let currency = 'INR';
+      let planId: string | undefined;
+      let billingCycle = 'yearly';
+
+      try {
+        const order = await razorpayGateway.retrieveCheckoutSession(razorpay_order_id);
+        amountPaise = order.amountTotal ?? 0;
+        currency    = (order.currency ?? 'inr').toUpperCase();
+        planId      = order.metadata?.planId;
+        billingCycle = order.metadata?.billingCycle ?? 'yearly';
+      } catch (fetchErr) {
+        console.warn('⚠️ Could not fetch Razorpay order details (non-fatal):', fetchErr);
+      }
+
+      // Record payment — the webhook's payment.captured is idempotent and will update this.
+      await PaymentService.recordPayment({
+        tenantId,
+        stripePaymentIntentId: razorpay_payment_id, // reusing column for Razorpay payment_id
+        amount:        (amountPaise / 100).toString(),
+        currency,
+        status:        'succeeded',
+        paymentMethod: 'razorpay',
+        paymentType:   'subscription',
+        description:   `Razorpay payment ${razorpay_payment_id}`,
+        metadata:      { razorpay_order_id, razorpay_payment_id },
+        paidAt:        new Date(),
+      });
+
+      // Activate plan immediately so the user sees the updated subscription without
+      // having to wait for the async webhook.
+      if (planId) {
+        try {
+          const { SubscriptionService } = await import('../services/subscription-service.js');
+          await SubscriptionService.handleCheckoutCompleted({
+            metadata: { tenantId, planId, billingCycle },
+            mode:     'payment',
+            customer: null,
+          });
+          console.log(`✅ Plan ${planId} activated for tenant ${tenantId} via verify-payment`);
+        } catch (planErr) {
+          console.error('❌ Failed to activate plan via verify-payment (non-fatal):', planErr);
+        }
+      }
+
+      console.log(`✅ Razorpay payment verified: ${razorpay_payment_id} for tenant ${tenantId}`);
+      return reply.code(200).send({ success: true, paymentId: razorpay_payment_id });
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error recording Razorpay payment:', error);
+      return reply.code(500).send({ error: 'Failed to record payment' });
     }
   });
 }
@@ -613,8 +765,14 @@ async function handleChargeRefunded(charge: any) {
 // Dispute Event Handlers
 async function handleDisputeCreated(dispute: any) {
   console.log('⚖️ Dispute Created:', dispute.id);
-  
-  const charge = await stripe.charges.retrieve(dispute.charge);
+
+  const maybeStripeClient = (paymentGateway as unknown as { getRawClient?: () => Stripe | null }).getRawClient?.();
+  if (!maybeStripeClient) {
+    console.warn('⚠️ Stripe client unavailable in current payment gateway; skipping dispute charge lookup');
+    return;
+  }
+
+  const charge = await maybeStripeClient.charges.retrieve(dispute.charge);
   if (charge.payment_intent) {
     await PaymentService.recordDispute(typeof charge.payment_intent === 'string' ? charge.payment_intent : (charge.payment_intent as any)?.id ?? '', {
       disputeId: dispute.id,
@@ -1083,4 +1241,255 @@ async function handleCheckoutSessionCompleted(session: any) {
 
 async function handleCheckoutSessionExpired(session: any) {
   console.log('🛒 Checkout Session Expired:', session.id);
-} 
+}
+
+// =============================================================================
+// Razorpay Event Handlers
+// =============================================================================
+
+/**
+ * Top-level dispatcher for normalised Razorpay webhook events.
+ * Maps NormalizedEventType → individual handlers below.
+ */
+async function handleRazorpayEvent(event: NormalizedWebhookEvent): Promise<void> {
+  console.log(`🔔 Processing Razorpay event: ${event.type}`);
+
+  try {
+    switch (event.type) {
+      case 'checkout.completed':    // order.paid
+        await handleRazorpayOrderPaid(event.data);
+        break;
+
+      case 'payment.succeeded':     // payment.captured
+        await handleRazorpayPaymentCaptured(event.data);
+        break;
+
+      case 'payment.failed':
+        await handleRazorpayPaymentFailed(event.data);
+        break;
+
+      case 'subscription.created':  // subscription.activated
+        await handleRazorpaySubscriptionActivated(event.data);
+        break;
+
+      case 'invoice.payment_paid':  // subscription.charged (renewal)
+        await handleRazorpaySubscriptionCharged(event.data);
+        break;
+
+      case 'subscription.deleted':  // subscription.cancelled
+        await handleRazorpaySubscriptionCancelled(event.data);
+        break;
+
+      default:
+        console.log(`⚠️ Unhandled Razorpay event type: ${event.type}`);
+        break;
+    }
+    console.log(`✅ Successfully processed Razorpay ${event.type}`);
+  } catch (error) {
+    console.error(`❌ Error processing Razorpay ${event.type}:`, error);
+    throw error;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helper — extract tenantId from Razorpay entity `notes`
+//
+// We always store tenantId in notes/metadata when creating orders/subscriptions
+// (see razorpay.adapter.ts createCheckoutSession → notes: params.metadata).
+// ---------------------------------------------------------------------------
+function findTenantFromRazorpayNotes(data: Record<string, unknown>): string | null {
+  const notes = data.notes as Record<string, unknown> | undefined;
+  return (notes?.tenantId as string | undefined) ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// order.paid → checkout.completed
+//
+// Fires when the full order amount is settled.  We record the payment AND
+// activate the plan so users don't wait for the async verify-payment call.
+// The verify-payment endpoint is idempotent — duplicate records are safe.
+// ---------------------------------------------------------------------------
+async function handleRazorpayOrderPaid(data: Record<string, unknown>) {
+  console.log('🛒 Razorpay Order Paid:', data.id);
+
+  const tenantId = findTenantFromRazorpayNotes(data);
+  if (!tenantId) {
+    console.warn('⚠️ No tenantId in Razorpay order notes — skipping');
+    return;
+  }
+
+  const amountPaise = (data.amount as number) ?? 0;
+  const currency    = ((data.currency as string) ?? 'INR').toUpperCase();
+
+  await PaymentService.recordPayment({
+    tenantId,
+    stripePaymentIntentId: data.id as string,
+    amount:        (amountPaise / 100).toString(),
+    currency,
+    status:        'succeeded',
+    paymentMethod: 'razorpay',
+    paymentType:   'subscription',
+    description:   `Razorpay order ${data.id as string} paid`,
+    metadata:      { razorpay_order_id: data.id as string },
+    paidAt:        new Date(),
+  });
+
+  // Activate the purchased plan (notes carry planId / billingCycle set by our server).
+  const notes = data.notes as Record<string, unknown> | undefined;
+  const planId      = notes?.planId as string | undefined;
+  const billingCycle = (notes?.billingCycle as string) ?? 'yearly';
+
+  if (planId) {
+    try {
+      const { SubscriptionService } = await import('../services/subscription-service.js');
+      await SubscriptionService.handleCheckoutCompleted({
+        metadata: { tenantId, planId, billingCycle },
+        mode:     'payment',
+        customer: null,
+      });
+      console.log(`✅ Plan ${planId} activated for tenant ${tenantId} via order.paid`);
+    } catch (err) {
+      console.error('❌ Failed to activate plan on Razorpay order.paid:', err);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// payment.captured → payment.succeeded
+//
+// Fires when an individual payment is captured (may be after order.paid).
+// We record / upsert the payment record with full details.
+// ---------------------------------------------------------------------------
+async function handleRazorpayPaymentCaptured(data: Record<string, unknown>) {
+  console.log('💳 Razorpay Payment Captured:', data.id);
+
+  const tenantId = findTenantFromRazorpayNotes(data);
+  if (!tenantId) {
+    console.warn('⚠️ No tenantId in Razorpay payment notes — skipping');
+    return;
+  }
+
+  const amountPaise = (data.amount as number) ?? 0;
+
+  await PaymentService.recordPayment({
+    tenantId,
+    stripePaymentIntentId: data.id as string,
+    amount:        (amountPaise / 100).toString(),
+    currency:      ((data.currency as string) ?? 'INR').toUpperCase(),
+    status:        'succeeded',
+    paymentMethod: (data.method as string) ?? 'razorpay',
+    paymentType:   'subscription',
+    description:   `Razorpay payment ${data.id as string} captured`,
+    metadata: {
+      razorpay_payment_id: data.id as string,
+      razorpay_order_id:   (data.order_id as string) ?? '',
+    },
+    paidAt: new Date(),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// payment.failed → payment.failed
+// ---------------------------------------------------------------------------
+async function handleRazorpayPaymentFailed(data: Record<string, unknown>) {
+  console.log('❌ Razorpay Payment Failed:', data.id);
+
+  const tenantId = findTenantFromRazorpayNotes(data);
+  if (!tenantId) return;
+
+  const amountPaise = (data.amount as number) ?? 0;
+
+  await PaymentService.recordPayment({
+    tenantId,
+    stripePaymentIntentId: data.id as string,
+    amount:        (amountPaise / 100).toString(),
+    currency:      ((data.currency as string) ?? 'INR').toUpperCase(),
+    status:        'failed',
+    paymentMethod: 'razorpay',
+    paymentType:   'subscription',
+    description:   `Razorpay payment ${data.id as string} failed`,
+    metadata: {
+      error_code:        (data.error_code as string)        ?? '',
+      error_description: (data.error_description as string) ?? '',
+    },
+    failedAt: new Date(),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// subscription.activated → subscription.created
+// ---------------------------------------------------------------------------
+async function handleRazorpaySubscriptionActivated(data: Record<string, unknown>) {
+  console.log('🔄 Razorpay Subscription Activated:', data.id);
+
+  const tenantId = findTenantFromRazorpayNotes(data);
+  if (!tenantId) return;
+
+  try {
+    const { db }            = await import('../../../db/index.js');
+    const { subscriptions } = await import('../../../db/schema/index.js');
+    const { eq }            = await import('drizzle-orm');
+
+    await db
+      .update(subscriptions)
+      .set({ status: 'active', updatedAt: new Date() })
+      .where(eq(subscriptions.tenantId, tenantId));
+
+    console.log(`✅ Subscription activated for tenant ${tenantId}`);
+  } catch (error) {
+    console.error('❌ Error updating subscription on Razorpay activation:', error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// subscription.charged → invoice.payment_paid  (recurring renewal)
+// ---------------------------------------------------------------------------
+async function handleRazorpaySubscriptionCharged(data: Record<string, unknown>) {
+  console.log('💰 Razorpay Subscription Charged:', data.id);
+
+  const tenantId = findTenantFromRazorpayNotes(data);
+  if (!tenantId) return;
+
+  // Razorpay subscription entity carries amount_paid for the latest charge.
+  const amountPaise =
+    (data.amount_paid as number) ??
+    (data.amount      as number) ?? 0;
+
+  await PaymentService.recordPayment({
+    tenantId,
+    stripePaymentIntentId: data.id as string,
+    amount:        (amountPaise / 100).toString(),
+    currency:      ((data.currency as string) ?? 'INR').toUpperCase(),
+    status:        'succeeded',
+    paymentMethod: 'razorpay',
+    paymentType:   'subscription',
+    description:   `Razorpay subscription ${data.id as string} renewal charged`,
+    metadata:      { subscription_id: data.id as string },
+    paidAt:        new Date(),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// subscription.cancelled → subscription.deleted
+// ---------------------------------------------------------------------------
+async function handleRazorpaySubscriptionCancelled(data: Record<string, unknown>) {
+  console.log('🗑️ Razorpay Subscription Cancelled:', data.id);
+
+  const tenantId = findTenantFromRazorpayNotes(data);
+  if (!tenantId) return;
+
+  try {
+    const { db }            = await import('../../../db/index.js');
+    const { subscriptions } = await import('../../../db/schema/index.js');
+    const { eq }            = await import('drizzle-orm');
+
+    await db
+      .update(subscriptions)
+      .set({ status: 'canceled', canceledAt: new Date(), updatedAt: new Date() })
+      .where(eq(subscriptions.tenantId, tenantId));
+
+    console.log(`✅ Subscription cancelled for tenant ${tenantId}`);
+  } catch (error) {
+    console.error('❌ Error updating subscription on Razorpay cancellation:', error);
+  }
+}

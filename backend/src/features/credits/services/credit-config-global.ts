@@ -2,18 +2,14 @@ import { db, systemDbConnection } from '../../../db/index.js';
 import { creditConfigurations, applications as applicationsTable, applicationModules } from '../../../db/schema/index.js';
 import { eq, and, sql, inArray, or } from 'drizzle-orm';
 import { getModulePermissions } from './credit-core.js';
+import { CreditConfigRepository } from './credit-config-repository.js';
 
 /**
  * Get global operation configurations
  */
 export async function getGlobalOperationConfigs() {
   try {
-    // Use system database connection for admin operations (bypasses RLS)
-    const configs = await systemDbConnection
-      .select()
-      .from(creditConfigurations)
-      .where(eq(creditConfigurations.isGlobal, true))
-      .orderBy(creditConfigurations.operationCode);
+    const configs = await CreditConfigRepository.getAllGlobalConfigs();
 
     return configs.map(config => ({
       configId: config.configId,
@@ -146,27 +142,12 @@ export async function getOperationConfig(operationCode: string, tenantId: string
 
     // Step 1: Try tenant-specific configuration first
     if (tenantId) {
-      [config] = await db
-        .select()
-        .from(creditConfigurations)
-        .where(and(
-          eq(creditConfigurations.operationCode, operationCode),
-          eq(creditConfigurations.tenantId, tenantId as string),
-          eq(creditConfigurations.isGlobal, false)
-        ))
-        .limit(1);
+      config = await CreditConfigRepository.getTenantOperationConfig(operationCode, tenantId);
     }
 
     // Step 2: If no tenant-specific config, try global configuration
     if (!config) {
-      [config] = await db
-        .select()
-        .from(creditConfigurations)
-        .where(and(
-          eq(creditConfigurations.operationCode, operationCode),
-          eq(creditConfigurations.isGlobal, true)
-        ))
-        .limit(1);
+      config = await CreditConfigRepository.getGlobalOperationConfig(operationCode);
     }
 
     // Step 3: If no configuration found, return defaults

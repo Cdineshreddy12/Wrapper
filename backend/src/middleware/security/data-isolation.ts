@@ -30,7 +30,7 @@ export class DataIsolationMiddleware {
         const organizationId = params?.organizationId ?? body?.organizationId;
 
         if (organizationId) {
-          const hasAccess = await DataIsolationService.canAccessOrganization(userContext, organizationId);
+          const hasAccess = await DataIsolationService.canAccessEntity(userContext, organizationId);
 
           if (!hasAccess) {
             return reply.code(403).send({
@@ -76,7 +76,7 @@ export class DataIsolationMiddleware {
         const locationId = locParams?.locationId ?? locBody?.locationId;
 
         if (locationId) {
-          const hasAccess = await DataIsolationService.canAccessLocation(userContext, locationId);
+          const hasAccess = await DataIsolationService.canAccessEntity(userContext, locationId);
 
           if (!hasAccess) {
             return reply.code(403).send({
@@ -124,7 +124,7 @@ export class DataIsolationMiddleware {
     }
 
     // For single organization objects
-    const hasAccess = await DataIsolationService.canAccessOrganization(userContext, (data as { organizationId: string }).organizationId);
+    const hasAccess = await DataIsolationService.canAccessEntity(userContext, (data as { organizationId: string }).organizationId);
     return hasAccess ? data : null;
   }
 
@@ -137,7 +137,7 @@ export class DataIsolationMiddleware {
     }
 
     // For single location objects
-    const hasAccess = await DataIsolationService.canAccessLocation(userContext, (data as { locationId: string }).locationId);
+    const hasAccess = await DataIsolationService.canAccessEntity(userContext, (data as { locationId: string }).locationId);
     return hasAccess ? data : null;
   }
 }

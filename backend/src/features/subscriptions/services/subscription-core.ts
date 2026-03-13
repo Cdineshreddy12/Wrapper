@@ -1,4 +1,3 @@
-import Stripe from 'stripe';
 import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import {
@@ -8,8 +7,8 @@ import {
 } from '../../../db/schema/index.js';
 import { CreditService } from '../../credits/index.js';
 import { getPaymentGateway } from '../adapters/index.js';
-import { StripePaymentGateway } from '../adapters/stripe.adapter.js';
 import type { PaymentGatewayPort } from '../adapters/index.js';
+import { SubscriptionRepository } from './subscription-repository.js';
 
 // ---------------------------------------------------------------------------
 // Payment Gateway (adapter pattern) — primary API
@@ -18,65 +17,13 @@ import type { PaymentGatewayPort } from '../adapters/index.js';
 export { getPaymentGateway };
 export type { PaymentGatewayPort };
 
-/**
- * @deprecated Use `getPaymentGateway()` instead for provider-agnostic code.
- * Kept for backward compatibility during migration.
- */
-export function getRawStripeClient(): Stripe | null {
-  const gw = getPaymentGateway();
-  if (gw instanceof StripePaymentGateway) {
-    return gw.getRawClient();
-  }
-  return null;
-}
-
-// Legacy aliases — thin wrappers around the gateway
-const gateway = getPaymentGateway();
-
-/** @deprecated Use `getPaymentGateway().isConfigured()` */
-export function isStripeConfiguredFn(): boolean {
-  return gateway.isConfigured();
-}
-
-/** @deprecated Use `getPaymentGateway().getConfigStatus()` */
-export function getStripeConfigStatus(): Record<string, unknown> {
-  const status = gateway.getConfigStatus();
-  return {
-    isConfigured: status.isConfigured,
-    hasSecretKey: status.hasSecretKey,
-    hasWebhookSecret: status.hasWebhookSecret,
-    stripeInitialized: status.isConfigured,
-    stripeType: status.isConfigured ? 'object' : 'undefined',
-    stripeWebhooksAvailable: status.isConfigured,
-    environment: status.environment,
-    secretKeyStart: status.details?.secretKeyPrefix ?? 'not set',
-    webhookSecretStart: status.details?.webhookSecretPrefix ?? 'not set',
-    provider: status.provider,
-  };
-}
-
-/**
- * @deprecated Use `getPaymentGateway()` directly. This is kept so that files
- * still importing `stripe` continue to compile during migration.
- */
-export const stripe = getRawStripeClient();
-export const isStripeConfigured = gateway.isConfigured();
-
 // Get current subscription (now returns credit-based information)
 export async function getCurrentSubscription(tenantId: string): Promise<Record<string, unknown>> {
   try {
     // FIRST: Check for actual subscription record in database
     let actualSubscription: typeof subscriptions.$inferSelect | null = null;
     try {
-      const [subscriptionRecord] = await db
-        .select()
-        .from(subscriptions)
-        .where(and(
-          eq(subscriptions.tenantId, tenantId),
-          eq(subscriptions.status, 'active')
-        ))
-        .orderBy(desc(subscriptions.createdAt))
-        .limit(1);
+      const subscriptionRecord = await SubscriptionRepository.getLatestActiveByTenant(tenantId);
 
       if (subscriptionRecord) {
         actualSubscription = subscriptionRecord;
@@ -182,12 +129,7 @@ export async function getCurrentSubscription(tenantId: string): Promise<Record<s
 
     // Fallback: try to get traditional subscription if no credits found
     try {
-      const [subscription] = await db
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.tenantId, tenantId))
-        .orderBy(desc(subscriptions.createdAt))
-        .limit(1);
+      const subscription = await SubscriptionRepository.getLatestByTenant(tenantId);
 
       if (subscription) {
         return subscription as unknown as Record<string, unknown>;
@@ -389,12 +331,7 @@ export async function getBillingHistory(tenantId: string): Promise<Record<string
     // Include plan upgrade / subscription entry from current subscription
     const planUpgradeEntries = [];
     try {
-      const [subscription] = await db
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.tenantId, tenantId))
-        .orderBy(desc(subscriptions.createdAt))
-        .limit(1);
+      const subscription = await SubscriptionRepository.getLatestByTenant(tenantId);
 
       if (subscription && subscription.plan && subscription.plan !== 'free') {
         const planDisplayName = subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1);

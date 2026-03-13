@@ -285,20 +285,6 @@ export default async function adminOrgRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  // Test endpoint for checking current user's context
-  fastify.get('/test-context', {
-    preHandler: [authenticateToken]
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const body = request.body as Record<string, unknown>;
-    const params = request.params as Record<string, string>;
-    const query = request.query as Record<string, string>;
-    return {
-      success: true,
-      userContext: request.userContext,
-      timestamp: new Date().toISOString()
-    };
-  });
-
   // Get all organizations for tenant (flat list, no hierarchy filtering)
   fastify.get('/organizations/all', {
     preHandler: [authenticateToken, requirePermission(PERMISSIONS.USERS_MANAGEMENT_VIEW)]

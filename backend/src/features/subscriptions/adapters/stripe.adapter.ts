@@ -74,7 +74,10 @@ export class StripePaymentGateway implements PaymentGatewayPort {
       console.log('🚀 Stripe adapter initialised in LIVE mode');
     }
 
-    this.stripe = new Stripe(secretKey, { apiVersion: '2023-10-16' });
+    this.stripe = new Stripe(secretKey, {
+      apiVersion: '2023-10-16',
+      timeout: Number(process.env.STRIPE_TIMEOUT_MS ?? 10_000)
+    });
     this.configured = true;
   }
 

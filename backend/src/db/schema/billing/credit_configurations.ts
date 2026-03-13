@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, boolean, decimal, integer, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, boolean, decimal, integer, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { tenants } from '../core/tenants.js';
 import { tenantUsers } from '../core/users.js';
 import { entities } from '../organizations/unified-entities.js';
@@ -42,7 +42,10 @@ export const creditConfigurations = pgTable('credit_configurations', {
   updatedAt: timestamp('updated_at').defaultNow(),
 
 }, (table) => ({
-  uniqueCreditConfig: uniqueIndex('unique_credit_config').on(table.tenantId, table.operationCode)
+  uniqueCreditConfig: uniqueIndex('unique_credit_config').on(table.tenantId, table.operationCode),
+  idxCreditConfigLookup: index('idx_credit_config_lookup').on(table.tenantId, table.operationCode, table.isActive),
+  uniqueGlobalCreditConfig: uniqueIndex('unique_global_credit_config').on(table.operationCode),
+  uniqueTenantCreditConfig: uniqueIndex('unique_tenant_credit_config').on(table.tenantId, table.operationCode),
 }));
 
 // REMOVED: moduleCreditConfigurations - Use simple operation-level configs only

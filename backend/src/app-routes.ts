@@ -11,7 +11,6 @@ import { subscriptionsRoutes, paymentsRoutes, paymentUpgradeRoutes, paymentProfi
 import permissionRoutes from './features/roles/routes/permissions.js';
 import { rolesRoutes, customRolesRoutes } from './features/roles/index.js';
 import internalRoutes from './routes/internal.js';
-import enhancedInternalRoutes from './routes/internal-enhanced.js';
 import webhookRoutes from './features/webhooks/routes/webhooks.js';
 import onboardingRoutes from './features/onboarding/index.js';
 import dnsManagementRoutes from './features/onboarding/routes/dns-management.js';
@@ -84,35 +83,6 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     };
   });
 
-  fastify.get('/debug-routes', async (request: FastifyRequest, reply: FastifyReply) => {
-    const routes: Array<{ method: string; url: string; prefix?: string }> = [];
-    const routeList = (fastify as any).routes ?? [];
-    routeList.forEach((route: { method: string; url: string; prefix?: string }) => {
-      routes.push({
-        method: route.method,
-        url: route.url,
-        prefix: route.prefix
-      });
-    });
-    return {
-      success: true,
-      message: 'Route debugging info',
-      totalRoutes: routes.length,
-      routes: routes.slice(0, 20),
-      timestamp: new Date().toISOString()
-    };
-  });
-
-  fastify.get('/test-no-middleware', async (request: FastifyRequest, reply: FastifyReply) => {
-    return {
-      success: true,
-      message: 'This endpoint bypasses all middleware',
-      timestamp: new Date().toISOString(),
-      headers: request.headers,
-      url: request.url,
-      method: request.method
-    };
-  });
 
   await fastify.register(authRoutes, { prefix: '/api/auth' });
   await fastify.register(tenantRoutes, { prefix: '/api/tenants' });
@@ -123,7 +93,6 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   await fastify.register(customRolesRoutes, { prefix: '/api/custom-roles' });
   await fastify.register(customRolesRoutes, { prefix: '/api/api/custom-roles' });
   await fastify.register(internalRoutes, { prefix: '/api/internal' });
-  await fastify.register(enhancedInternalRoutes, { prefix: '/api' });
   await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
   await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
   await fastify.register(dnsManagementRoutes, { prefix: '/api/dns' });

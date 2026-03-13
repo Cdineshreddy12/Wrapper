@@ -51,3 +51,10 @@ notifications/
 | **PersonalizationService** | Personalize notification content per tenant using AI. Batch personalization and personalized A/B variants |
 | **SentimentService** | Analyze notification content: full sentiment/tone/urgency analysis, quick sentiment checks, problematic content detection |
 | **SmartTargetingService** | Suggest target tenants from notification content. Analyze targeting criteria, rank tenants, recommend send times using engagement data |
+
+## Ports and Adapters Convention
+
+- Put email provider interfaces in `ports/` (for example `ports/email-provider.ts`).
+- Put concrete implementations in `adapters/` (for example `adapters/brevo-adapter.ts`).
+- Business services should use `getEmailProvider()` and program against the port.
+- New email providers should be added as adapters without changing feature-level business logic.

@@ -4,7 +4,10 @@ import { tenants, tenantUsers, subscriptions } from '../../../db/schema/index.js
 import { eq, and } from 'drizzle-orm';
 import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2023-10-16' });
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2023-10-16',
+  timeout: Number(process.env.STRIPE_TIMEOUT_MS ?? 10_000)
+});
 
 export default async function paymentProfileCompletionRoutes(
   fastify: FastifyInstance,

@@ -79,6 +79,13 @@ const sub = await gw.retrieveSubscription(subscriptionId);
 await gw.cancelSubscription(subscriptionId, { prorate: true });
 ```
 
+## Ports and Adapters Convention
+
+- Keep contracts in `ports/` (for example `ports/payment-gateway.ts`).
+- Keep provider implementations in `adapters/` and expose them via the factory.
+- Route and service code should call `getPaymentGateway()` and consume the port, not Stripe SDK directly.
+- New gateways must implement `PaymentGatewayPort` and be registered in `payment-gateway.factory.ts`.
+
 ### Testing
 
 ```typescript

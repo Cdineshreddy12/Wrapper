@@ -7,3 +7,5 @@
 
 export { default as appSyncRoutes } from './routes/sync-routes.js';
 export { WrapperSyncService } from './services/sync-service.js';
+export { getAppSyncRepository, setAppSyncRepository, resetAppSyncRepository } from './adapters/postgres-app-sync-repository.js';
+export type { AppSyncRepository, BasicTenantRecord } from './repositories/app-sync-repository.js';

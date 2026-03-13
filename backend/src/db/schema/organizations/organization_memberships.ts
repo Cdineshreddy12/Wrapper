@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, jsonb, boolean, integer, text } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, jsonb, boolean, integer, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { tenants } from '../core/tenants.js';
 import { tenantUsers } from '../core/users.js';
 import { customRoles } from '../core/permissions.js';
@@ -88,7 +88,7 @@ export const membershipInvitations = pgTable('membership_invitations', {
   // Invitation Details
   invitedUserId: uuid('invited_user_id').references(() => tenantUsers.userId),
   invitedEmail: varchar('invited_email', { length: 255 }).notNull(),
-  invitationToken: varchar('invitation_token', { length: 255 }).notNull().unique(),
+  invitationToken: varchar('invitation_token', { length: 255 }).notNull(),
 
   // Entity Context - FIXED REFERENCES
   entityId: uuid('entity_id').references(() => entities.entityId).notNull(), // References unified entities table
@@ -111,7 +111,9 @@ export const membershipInvitations = pgTable('membership_invitations', {
   invitedBy: uuid('invited_by').references(() => tenantUsers.userId).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (table) => ({
+  invitationTokenUnique: uniqueIndex('membership_invitations_invitation_token_unique').on(table.invitationToken),
+}));
 
 // Membership history (for audit trails)
 export const membershipHistory = pgTable('membership_history', {

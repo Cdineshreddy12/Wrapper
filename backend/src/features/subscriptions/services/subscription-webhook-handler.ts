@@ -15,7 +15,6 @@ import type { RequestContext } from '../../../services/activityLogger.js';
 import { getPaymentGateway } from '../adapters/index.js';
 import type { NormalizedWebhookEvent } from '../adapters/index.js';
 import {
-  isStripeConfiguredFn,
   getAvailablePlans,
   getPlanIdFromPriceId,
   getCurrentSubscription

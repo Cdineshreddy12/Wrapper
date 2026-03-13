@@ -318,27 +318,4 @@ export default async function suiteRoutes(fastify: FastifyInstance, _options?: R
     }
   });
 
-  // Test endpoint for debugging
-  fastify.get('/debug', async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const userContext = request.userContext;
-
-      return {
-        success: true,
-        debug: {
-          userContext,
-          timestamp: new Date().toISOString(),
-          environment: process.env.NODE_ENV || 'development'
-        }
-      };
-
-    } catch (err: unknown) {
-      const error = err as Error;
-      console.error('❌ Debug endpoint failed:', error);
-      return reply.code(500).send({
-        error: 'Debug failed',
-        message: error.message
-      });
-    }
-  });
 } 

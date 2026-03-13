@@ -1,6 +1,7 @@
 import { db } from '../../../db/index.js';
 import { payments } from '../../../db/schema/billing/subscriptions.js';
 import { eq, desc, and } from 'drizzle-orm';
+import { PaymentRepository } from './payment-repository.js';
 
 type PaymentData = Record<string, unknown> & {
   tenantId: string;
@@ -38,7 +39,7 @@ export class PaymentService {
   // Record a comprehensive payment transaction
   static async recordPayment(paymentData: PaymentData) {
     try {
-      const [payment] = await db.insert(payments).values({
+      const payment = await PaymentRepository.create({
         tenantId: paymentData.tenantId,
         subscriptionId: paymentData.subscriptionId,
         stripePaymentIntentId: paymentData.stripePaymentIntentId,
@@ -59,7 +60,7 @@ export class PaymentService {
         metadata: (paymentData.metadata || {}) as Record<string, unknown>,
         stripeRawData: (paymentData.stripeRawData || {}) as Record<string, unknown>,
         paidAt: paymentData.paidAt || new Date(),
-      } as any).returning();
+      });
 
       console.log('✅ Payment recorded:', payment.paymentId);
       return payment;
@@ -73,12 +74,7 @@ export class PaymentService {
   // Get payment by Stripe payment intent ID
   static async getPaymentByIntentId(paymentIntentId: string) {
     try {
-      const [payment] = await db
-        .select()
-        .from(payments)
-        .where(eq(payments.stripePaymentIntentId, paymentIntentId))
-        .limit(1);
-      return payment ?? null;
+      return PaymentRepository.getByPaymentIntentId(paymentIntentId);
     } catch (err: unknown) {
       const error = err as Error;
       console.error('❌ Failed to get payment by intent ID:', error);
@@ -89,21 +85,15 @@ export class PaymentService {
   // Update payment status with comprehensive metadata
   static async updatePaymentStatus(paymentIntentId: string, status: string, metadata: Record<string, unknown> = {}) {
     try {
-      const [updatedPayment] = await db
-        .update(payments)
-        .set({
-          status,
-          metadata,
-          updatedAt: new Date(),
-          ...(status === 'succeeded' && { paidAt: new Date() }),
-          ...(status === 'failed' && { failedAt: new Date() }),
-          ...(status === 'refunded' && { refundedAt: new Date() }),
-          ...(status === 'disputed' && { disputedAt: new Date() })
-        })
-        .where(eq(payments.stripePaymentIntentId, paymentIntentId))
-        .returning();
-
-      return updatedPayment;
+      return PaymentRepository.updateByPaymentIntentId(paymentIntentId, {
+        status,
+        metadata,
+        updatedAt: new Date(),
+        ...(status === 'succeeded' && { paidAt: new Date() }),
+        ...(status === 'failed' && { failedAt: new Date() }),
+        ...(status === 'refunded' && { refundedAt: new Date() }),
+        ...(status === 'disputed' && { disputedAt: new Date() }),
+      });
     } catch (err: unknown) {
       const error = err as Error;
       console.error('❌ Failed to update payment status:', error);
@@ -114,14 +104,7 @@ export class PaymentService {
   // Get comprehensive payment history for a tenant
   static async getPaymentHistory(tenantId: string, limit = 50) {
     try {
-      const paymentHistory = await db
-        .select()
-        .from(payments)
-        .where(eq(payments.tenantId, tenantId))
-        .orderBy(desc(payments.createdAt))
-        .limit(limit);
-
-      return paymentHistory;
+      return PaymentRepository.getHistoryByTenant(tenantId, limit);
     } catch (err: unknown) {
       const error = err as Error;
       console.error('❌ Failed to get payment history:', error);
@@ -345,13 +328,7 @@ export class PaymentService {
   // Get payments by subscription
   static async getPaymentsBySubscription(subscriptionId: string) {
     try {
-      const subscriptionPayments = await db
-        .select()
-        .from(payments)
-        .where(eq(payments.subscriptionId, subscriptionId))
-        .orderBy(desc(payments.createdAt));
-
-      return subscriptionPayments;
+      return PaymentRepository.getBySubscription(subscriptionId);
     } catch (err: unknown) {
       const error = err as Error;
       console.error('❌ Failed to get subscription payments:', error);
@@ -362,17 +339,7 @@ export class PaymentService {
   // Get failed payments for retry
   static async getFailedPayments(tenantId: string, limit = 10) {
     try {
-      const failedPayments = await db
-        .select()
-        .from(payments)
-        .where(and(
-          eq(payments.tenantId, tenantId),
-          eq(payments.status, 'failed')
-        ))
-        .orderBy(desc((payments as any).failedAt ?? payments.createdAt))
-        .limit(limit);
-
-      return failedPayments;
+      return PaymentRepository.getFailedByTenant(tenantId, limit);
     } catch (err: unknown) {
       const error = err as Error;
       console.error('❌ Failed to get failed payments:', error);

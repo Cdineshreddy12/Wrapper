@@ -32,3 +32,10 @@ auth/
 | Service | Description |
 |---------|-------------|
 | **KindeService** | Full Kinde integration: social auth URLs with connection IDs, org-scoped login, token exchange, refresh, JWKS verification, user info retrieval, M2M tokens, user/organization management (create, list, add/remove users, role assignment) |
+
+## Ports and Adapters Convention
+
+- Put identity contracts in `ports/` (for example `ports/identity-provider.ts`).
+- Put concrete provider implementations in `adapters/` (for example `adapters/kinde-adapter.ts`).
+- Route/service code should depend on `IdentityProviderPort` via `getIdentityProvider()`, not directly on provider SDK/client classes.
+- New identity providers should be introduced as a new adapter that satisfies the same port.

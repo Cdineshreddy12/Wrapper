@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import kindeService from '../services/kinde-service.js';
+import { getIdentityProvider } from '../adapters/kinde-adapter.js';
 import jwt from 'jsonwebtoken';
 import { db } from '../../../db/index.js';
 import { tenants, tenantUsers, applications, organizationApplications } from '../../../db/schema/index.js';
@@ -167,6 +167,7 @@ export default async function authRoutes(
   fastify: FastifyInstance,
   _options?: Record<string, unknown>
 ): Promise<void> {
+  const identityProvider = getIdentityProvider();
 
   /**
    * GET /oauth/login
@@ -181,7 +182,7 @@ export default async function authRoutes(
     if (shouldLogVerbose()) console.log('🔍 OAuth login request:', { state, provider });
 
     try {
-      const authUrl = kindeService.getSocialAuthUrl(provider || 'default', {
+      const authUrl = identityProvider.getSocialAuthUrl(provider || 'default', {
         redirectUri: redirect_uri || getDefaultRedirectUri(),
         state: state || 'onboarding',
         prompt,
@@ -219,7 +220,7 @@ export default async function authRoutes(
     }
 
     try {
-      const authUrl = kindeService.getSocialAuthUrl(provider, {
+      const authUrl = identityProvider.getSocialAuthUrl(provider, {
         redirectUri: redirect_uri || getDefaultRedirectUri(),
         state: state || 'onboarding',
         prompt: prompt || 'select_account',
@@ -255,7 +256,7 @@ export default async function authRoutes(
       const redirectUri = `${process.env.BACKEND_URL}/api/auth/callback`;
       const state = JSON.stringify({ subdomain, flow: 'login' });
 
-      const authUrl = kindeService.generateLoginUrl(subdomain, redirectUri, {
+      const authUrl = identityProvider.generateLoginUrl(subdomain, redirectUri, {
         state,
         prompt: prompt || 'select_account',
       });
@@ -303,8 +304,8 @@ export default async function authRoutes(
       }
 
       const redirectUri = `${process.env.BACKEND_URL}/api/auth/callback`;
-      const tokens = await kindeService.exchangeCodeForTokens(code, redirectUri);
-      const userInfo = await kindeService.getEnhancedUserInfo(tokens.access_token as string);
+      const tokens = await identityProvider.exchangeCodeForTokens(code, redirectUri);
+      const userInfo = await identityProvider.getEnhancedUserInfo(tokens.access_token as string);
 
       if (shouldLogVerbose()) console.log('✅ Authenticated user:', { id: userInfo.id, email: userInfo.email });
 
@@ -397,7 +398,7 @@ export default async function authRoutes(
       reply.clearCookie('kinde_token', clearOpts).clearCookie('kinde_refresh_token', clearOpts);
 
       const redirectTarget = (redirect_uri as string) || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/login`;
-      const logoutUrl = `${kindeService.baseURL}/logout?redirect=${encodeURIComponent(redirectTarget)}`;
+      const logoutUrl = `${identityProvider.baseURL}/logout?redirect=${encodeURIComponent(redirectTarget)}`;
 
       return reply.send({ success: true, data: { logoutUrl, message: 'Logged out successfully' } });
     } catch (err: unknown) {
@@ -419,7 +420,7 @@ export default async function authRoutes(
         return reply.code(401).send({ error: 'Unauthorized', message: 'Refresh token not found' });
       }
 
-      const tokens = await kindeService.refreshToken(refreshToken);
+      const tokens = await identityProvider.refreshToken(refreshToken);
 
       const base = getAuthCookieOptions();
       const opts = {
@@ -457,15 +458,48 @@ export default async function authRoutes(
   fastify.post('/validate-token', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = request.body as Record<string, unknown> | undefined;
-      const token =
-        (body?.token as string) ||
-        (request.headers.authorization as string | undefined)?.replace(/^Bearer\s+/i, '');
+      const rawToken = (body?.token as string) || (request.headers.authorization as string | undefined);
+      const token = rawToken?.replace(/^Bearer\s+/i, '').trim();
 
       if (!token) {
         return reply.code(400).send({
           success: false,
+          code: 'TOKEN_MISSING',
           error: 'Missing token',
           message: 'Provide token in body { "token": "..." } or Authorization: Bearer <token>',
+        });
+      }
+
+      // Normalize and reject obviously invalid JWTs before hitting Kinde APIs.
+      // This avoids noisy fallback logs like "Invalid Compact JWS".
+      const tokenParts = token.split('.');
+      if (tokenParts.length !== 3) {
+        return reply.code(400).send({
+          success: false,
+          code: 'TOKEN_MALFORMED',
+          error: 'Malformed token',
+          message: 'Token must be a valid JWT (header.payload.signature)',
+        });
+      }
+
+      const decoded = jwt.decode(token);
+      if (!decoded || typeof decoded !== 'object') {
+        return reply.code(400).send({
+          success: false,
+          code: 'TOKEN_MALFORMED',
+          error: 'Malformed token',
+          message: 'Unable to decode JWT payload',
+        });
+      }
+
+      const exp = (decoded as jwt.JwtPayload).exp;
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      if (typeof exp === 'number' && exp < nowSeconds) {
+        return reply.code(401).send({
+          success: false,
+          code: 'TOKEN_EXPIRED',
+          error: 'Token expired',
+          message: 'Access token is expired. Re-authenticate to get a new token.',
         });
       }
 
@@ -514,7 +548,7 @@ export default async function authRoutes(
       }
 
       // Validate as Kinde RS256 token (JWKS -> API -> introspect)
-      const userInfo = (await kindeService.getUserInfo(token)) as Record<string, unknown> | undefined;
+      const userInfo = (await identityProvider.getUserInfo(token)) as Record<string, unknown> | undefined;
       const kindeId = (userInfo?.id as string) || (userInfo?.sub as string);
       const orgCode = (userInfo?.org_code as string) || (Array.isArray(userInfo?.org_codes) ? (userInfo?.org_codes as string[])[0] : undefined);
 
@@ -624,7 +658,29 @@ export default async function authRoutes(
     } catch (err: unknown) {
       const error = err as Error;
       console.error('❌ validate-token error:', error.message);
-      return reply.code(500).send({ success: false, error: 'Validation failed', message: error.message });
+      const lowerMessage = (error.message || '').toLowerCase();
+      if (lowerMessage.includes('invalid compact jws') || lowerMessage.includes('jwt malformed')) {
+        return reply.code(400).send({
+          success: false,
+          code: 'TOKEN_MALFORMED',
+          error: 'Malformed token',
+          message: error.message,
+        });
+      }
+      if (lowerMessage.includes('expired')) {
+        return reply.code(401).send({
+          success: false,
+          code: 'TOKEN_EXPIRED',
+          error: 'Token expired',
+          message: error.message,
+        });
+      }
+      return reply.code(401).send({
+        success: false,
+        code: 'TOKEN_VALIDATION_FAILED',
+        error: 'Validation failed',
+        message: error.message,
+      });
     }
   });
 

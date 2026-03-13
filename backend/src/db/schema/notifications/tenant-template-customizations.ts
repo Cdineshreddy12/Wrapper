@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, jsonb, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, jsonb, boolean, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { tenants } from '../core/tenants.js';
 import { notificationTemplates } from './notification-templates.js';
 import { tenantUsers } from '../core/users.js';
@@ -32,7 +32,13 @@ export const tenantTemplateCustomizations = pgTable('tenant_template_customizati
   createdBy: uuid('created_by').references(() => tenantUsers.userId),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull()
-});
+}, (table) => ({
+  tenantTemplateUnique: uniqueIndex('tenant_template_customizations_tenant_template_unique').on(table.tenantId, table.templateId),
+  tenantTemplateIdx: index('idx_tenant_template_customizations_tenant_template').on(table.tenantId, table.templateId),
+  tenantIdIdx: index('idx_tenant_template_customizations_tenant_id').on(table.tenantId),
+  templateIdIdx: index('idx_tenant_template_customizations_template_id').on(table.templateId),
+  isActiveIdx: index('idx_tenant_template_customizations_is_active').on(table.isActive),
+}));
 
 // Indexes for efficient querying
 export const tenantTemplateCustomizationsIndexes = {

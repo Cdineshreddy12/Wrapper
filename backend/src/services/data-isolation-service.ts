@@ -154,26 +154,6 @@ export class DataIsolationService {
   }
 
   /**
-   * Check if user has access to specific organization
-   * @deprecated Use canAccessEntity instead
-   */
-  async canAccessOrganization(userContext: UserContext, organizationId: string): Promise<boolean> {
-    const accessibleOrgs = await this.getUserAccessibleOrganizations(userContext);
-    return accessibleOrgs.includes(organizationId);
-  }
-
-  /**
-   * Check if user has access to specific location
-   * @deprecated Use canAccessEntity instead
-   */
-  async canAccessLocation(userContext: UserContext, locationId: string): Promise<boolean> {
-    const accessibleOrgs = await this.getUserAccessibleOrganizations(userContext);
-    const accessibleLocations = await this.getUserAccessibleLocations(userContext, accessibleOrgs);
-
-    return accessibleLocations.includes(locationId);
-  }
-
-  /**
    * Get user's data access scope
    */
   async getUserAccessScope(userContext: UserContext): Promise<{ organizations: Array<Record<string, unknown>>; locations: Array<Record<string, unknown>>; scope: { orgCount: number; locationCount: number } }> {

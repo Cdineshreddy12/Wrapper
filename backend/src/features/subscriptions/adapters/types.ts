@@ -44,7 +44,12 @@ export interface CreateCheckoutParams {
 
 export interface CheckoutResult {
   sessionId: string;
+  /** Redirect URL (Stripe). Empty string for popup-based gateways (Razorpay). */
   url: string;
+  /** Razorpay: order or subscription ID passed to the frontend checkout popup. */
+  orderId?: string;
+  /** Razorpay: publishable key ID needed by the frontend to initialise the popup. */
+  keyId?: string;
 }
 
 // ---------------------------------------------------------------------------

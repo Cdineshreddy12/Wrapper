@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, jsonb, boolean, text, integer, decimal, date, numeric } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, jsonb, boolean, text, integer, decimal, date, numeric, index } from 'drizzle-orm/pg-core';
 
 // Main tenants table
 export const tenants = pgTable('tenants', {
@@ -132,7 +132,17 @@ export const tenants = pgTable('tenants', {
   // Metadata
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (table) => ({
+  idxTenantsTaxRegistered: index('idx_tenants_tax_registered').on(table.taxRegistered),
+  idxTenantsVatGstRegistered: index('idx_tenants_vat_gst_registered').on(table.vatGstRegistered),
+  idxTenantsOrganizationSize: index('idx_tenants_organization_size').on(table.organizationSize),
+  idxTenantsBillingEmail: index('idx_tenants_billing_email').on(table.billingEmail),
+  idxTenantsSupportEmail: index('idx_tenants_support_email').on(table.supportEmail),
+  idxTenantsBankName: index('idx_tenants_bank_name').on(table.bankName),
+  idxTenantsTaxExemptStatus: index('idx_tenants_tax_exempt_status').on(table.taxExemptStatus),
+  idxTenantsTaxResidenceCountry: index('idx_tenants_tax_residence_country').on(table.taxResidenceCountry),
+  idxTenantsRegulatoryComplianceStatus: index('idx_tenants_regulatory_compliance_status').on(table.regulatoryComplianceStatus),
+}));
 
 
 
@@ -160,7 +170,11 @@ export const tenantInvitations = pgTable('tenant_invitations', {
   cancelledBy: uuid('cancelled_by'), // Who cancelled the invitation
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (table) => ({
+  idxTenantInvitationsScope: index('idx_tenant_invitations_scope').on(table.invitationScope),
+  idxTenantInvitationsPrimaryEntity: index('idx_tenant_invitations_primary_entity').on(table.primaryEntityId),
+  idxTenantInvitationsPendingMulti: index('idx_tenant_invitations_pending_multi').on(table.invitationToken, table.expiresAt),
+}));
 
 // Onboarding events tracking for analytics and scalability
 export const onboardingEvents = pgTable('onboarding_events', {

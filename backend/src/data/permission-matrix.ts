@@ -1767,6 +1767,22 @@ export const BUSINESS_SUITE_MATRIX = {
           { code: 'generate_pdf', name: 'Generate PDF', description: 'Generate PDF versions of estimates' }
         ]
       },
+      recurring_invoices: {
+        moduleCode: 'recurring_invoices',
+        moduleName: 'Recurring Invoices',
+        description: 'Manage recurring invoice templates and scheduled billing',
+        isCore: true,
+        permissions: [
+          { code: 'read', name: 'View Recurring Invoices', description: 'View recurring invoice templates' },
+          { code: 'read_all', name: 'View All Recurring Invoices', description: 'View all recurring invoice templates in organization' },
+          { code: 'create', name: 'Create Recurring Invoices', description: 'Create recurring invoice templates' },
+          { code: 'update', name: 'Edit Recurring Invoices', description: 'Modify recurring invoice templates' },
+          { code: 'delete', name: 'Delete Recurring Invoices', description: 'Remove recurring invoice templates' },
+          { code: 'send', name: 'Send Recurring Invoices', description: 'Trigger delivery of recurring invoices' },
+          { code: 'post', name: 'Post Recurring Invoices', description: 'Post generated recurring invoices to ledger' },
+          { code: 'export', name: 'Export Recurring Invoices', description: 'Export recurring invoice data' }
+        ]
+      },
       bills: {
         moduleCode: 'bills',
         moduleName: 'Vendor Bills',
@@ -1868,6 +1884,7 @@ export const BUSINESS_SUITE_MATRIX = {
         isCore: true,
         permissions: [
           { code: 'read', name: 'View Tax', description: 'View tax information and rates' },
+          { code: 'read_all', name: 'View All Tax Data', description: 'View all tax records and summaries' },
           { code: 'create', name: 'Create Tax Records', description: 'Create new tax records' },
           { code: 'update', name: 'Edit Tax', description: 'Modify tax information' },
           { code: 'delete', name: 'Delete Tax Records', description: 'Remove tax records' },
@@ -1886,6 +1903,8 @@ export const BUSINESS_SUITE_MATRIX = {
           { code: 'read', name: 'View Reports', description: 'View financial reports' },
           { code: 'read_all', name: 'View All Reports', description: 'View all reports in organization' },
           { code: 'create', name: 'Create Reports', description: 'Create custom financial reports' },
+          { code: 'update', name: 'Edit Reports', description: 'Modify report definitions and settings' },
+          { code: 'delete', name: 'Delete Reports', description: 'Remove saved reports' },
           { code: 'export', name: 'Export Reports', description: 'Export report data to various formats' },
           { code: 'schedule', name: 'Schedule Reports', description: 'Schedule automated report generation' },
           { code: 'generate_pdf', name: 'Generate PDF', description: 'Generate PDF versions of reports' }
@@ -2077,6 +2096,7 @@ export const BUSINESS_SUITE_MATRIX = {
         isCore: false,
         permissions: [
           { code: 'read', name: 'View Integrations', description: 'View integration information' },
+          { code: 'read_all', name: 'View All Integrations', description: 'View all integrations and statuses' },
           { code: 'create', name: 'Create Integrations', description: 'Set up new integrations' },
           { code: 'update', name: 'Edit Integrations', description: 'Modify integration settings' },
           { code: 'delete', name: 'Delete Integrations', description: 'Remove integrations' },
@@ -2122,6 +2142,7 @@ export const BUSINESS_SUITE_MATRIX = {
         isCore: false,
         permissions: [
           { code: 'read', name: 'View Performance', description: 'View performance metrics' },
+          { code: 'read_all', name: 'View All Performance Data', description: 'View all performance dashboards and diagnostics' },
           { code: 'manage_cache', name: 'Manage Cache', description: 'Manage system cache' },
           { code: 'manage_jobs', name: 'Manage Jobs', description: 'Manage background job queues' },
           { code: 'configure_alerts', name: 'Configure Alerts', description: 'Configure performance alerts' },
@@ -2190,7 +2211,7 @@ export const PLAN_ACCESS_MATRIX = {
     applications: ['crm', 'accounting'],
     modules: {
       crm: ['leads', 'contacts', 'dashboard'],
-      accounting: ['dashboard', 'general_ledger', 'chart_of_accounts', 'journal_entries', 'invoices', 'customers', 'bills', 'vendors', 'reports', 'multi_entity']
+      accounting: ['dashboard', 'general_ledger', 'chart_of_accounts', 'journal_entries', 'invoices', 'customers', 'payments', 'bills', 'vendors', 'reports']
     },
     permissions: {
       crm: {
@@ -2205,10 +2226,10 @@ export const PLAN_ACCESS_MATRIX = {
         journal_entries: ['read', 'create', 'update'],
         invoices: ['read', 'create', 'update', 'delete'],
         customers: ['read', 'create', 'update', 'delete'],
+        payments: ['read', 'create', 'update', 'delete'],
         bills: ['read', 'create', 'update', 'delete'],
         vendors: ['read', 'create', 'update', 'delete'],
-        reports: ['read', 'export'],
-        multi_entity: ['read']
+        reports: ['read', 'export']
       }
     },
     credits: {
@@ -2227,7 +2248,7 @@ export const PLAN_ACCESS_MATRIX = {
       project_management: ['projects', 'tasks', 'team', 'dashboard'],
       accounting: [
         'dashboard', 'general_ledger', 'chart_of_accounts', 'journal_entries',
-        'invoices', 'customers', 'credit_notes', 'sales_orders', 'estimates',
+        'invoices', 'customers', 'credit_notes', 'sales_orders', 'estimates', 'recurring_invoices',
         'bills', 'vendors', 'purchase_orders', 'expense_reports', 'vendor_credits',
         'banking', 'tax', 'reports', 'analytics', 'workflows', 'documents',
         'notifications', 'system'
@@ -2262,6 +2283,7 @@ export const PLAN_ACCESS_MATRIX = {
         credit_notes: ['read', 'create', 'update'],
         sales_orders: ['read', 'create', 'update', 'delete'],
         estimates: ['read', 'create', 'update', 'delete', 'send'],
+        recurring_invoices: ['read', 'read_all', 'create', 'update', 'delete', 'send'],
         bills: ['read', 'read_all', 'create', 'update', 'delete', 'pay', 'export'],
         vendors: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
         purchase_orders: ['read', 'create', 'update', 'delete', 'approve'],
@@ -2292,7 +2314,7 @@ export const PLAN_ACCESS_MATRIX = {
       project_management: ['projects', 'tasks', 'sprints', 'time_tracking', 'team', 'backlog', 'documents', 'analytics', 'reports', 'chat', 'calendar', 'kanban', 'dashboard', 'notifications', 'workspace'],
       accounting: [
         'dashboard', 'general_ledger', 'chart_of_accounts', 'journal_entries',
-        'invoices', 'customers', 'credit_notes', 'sales_orders', 'estimates',
+        'invoices', 'customers', 'credit_notes', 'sales_orders', 'estimates', 'recurring_invoices',
         'bills', 'vendors', 'purchase_orders', 'expense_reports', 'vendor_credits',
         'banking', 'tax', 'reports', 'analytics', 'budgeting', 'cost_accounting',
         'fixed_assets', 'payroll', 'projects', 'inventory',
@@ -2348,6 +2370,7 @@ export const PLAN_ACCESS_MATRIX = {
         credit_notes: ['read', 'create', 'update', 'delete', 'apply', 'export'],
         sales_orders: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'convert', 'export'],
         estimates: ['read', 'create', 'update', 'delete', 'send', 'convert', 'export', 'generate_pdf'],
+        recurring_invoices: ['read', 'read_all', 'create', 'update', 'delete', 'send', 'post', 'export'],
         bills: ['read', 'read_all', 'create', 'update', 'delete', 'pay', 'approve', 'export'],
         vendors: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
         purchase_orders: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'receive', 'export'],
@@ -2398,7 +2421,7 @@ export const PLAN_ACCESS_MATRIX = {
       operations: ['dashboard', 'inventory', 'warehouse', 'procurement', 'suppliers', 'transportation', 'orders', 'fulfillments', 'shipments', 'catalog', 'quality', 'rfx', 'finance', 'tax_compliance', 'supply_chain', 'analytics', 'contracts', 'service_appointments', 'notifications', 'system', 'marketing', 'customers', 'returns', 'customer_portal', 'vendor_management', 'service_providers'],
       accounting: [
         'dashboard', 'general_ledger', 'chart_of_accounts', 'journal_entries',
-        'invoices', 'customers', 'credit_notes', 'sales_orders', 'estimates',
+        'invoices', 'customers', 'credit_notes', 'sales_orders', 'estimates', 'recurring_invoices',
         'bills', 'vendors', 'purchase_orders', 'expense_reports', 'vendor_credits',
         'banking', 'tax', 'reports', 'analytics', 'budgeting', 'cost_accounting',
         'fixed_assets', 'payroll', 'projects', 'inventory', 'multi_entity',
@@ -2505,6 +2528,7 @@ export const PLAN_ACCESS_MATRIX = {
         credit_notes: ['read', 'create', 'update', 'delete', 'apply', 'export'],
         sales_orders: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'convert', 'export'],
         estimates: ['read', 'create', 'update', 'delete', 'send', 'convert', 'export', 'generate_pdf'],
+        recurring_invoices: ['read', 'read_all', 'create', 'update', 'delete', 'send', 'post', 'export'],
         bills: ['read', 'read_all', 'create', 'update', 'delete', 'pay', 'approve', 'export'],
         vendors: ['read', 'read_all', 'create', 'update', 'delete', 'export', 'import'],
         purchase_orders: ['read', 'read_all', 'create', 'update', 'delete', 'approve', 'receive', 'export'],
@@ -2553,9 +2577,6 @@ export const PLAN_ACCESS_MATRIX = {
 
 type AppCodeKey = keyof typeof BUSINESS_SUITE_MATRIX;
 type PlanIdKey = keyof typeof PLAN_ACCESS_MATRIX;
-
-// 🎯 **ROLE TEMPLATES** - REMOVED
-// Templates are no longer needed - roles are created directly from applications/modules
 
 // 🛠️ **UTILITY FUNCTIONS**
 export class PermissionMatrixUtils {
@@ -2810,6 +2831,8 @@ export function buildAccountingPermissionToModulesMap(): Record<string, string[]
   map['credit_notes'] = [...(map['credit_notes'] || []), 'accounts_receivable'];
   map['sales_orders'] = [...(map['sales_orders'] || []), 'accounts_receivable'];
   map['estimates'] = [...(map['estimates'] || []), 'accounts_receivable'];
+  map['recurring_invoices'] = [...(map['recurring_invoices'] || []), 'accounts_receivable'];
+  map['payments'] = [...(map['payments'] || []), 'accounts_receivable'];
 
   // AP umbrella → sub-modules
   map['bills'] = [...(map['bills'] || []), 'accounts_payable'];

@@ -13,11 +13,12 @@ import {
 } from '../db/schema/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { kindeService } from '../features/auth/index.js';
-import EmailService from '../utils/email.js';
+import { getEmailProvider } from '../features/notifications/adapters/brevo-adapter.js';
 import { SubscriptionService } from '../features/subscriptions/index.js';
 import { sql } from 'drizzle-orm';
 import { inArray } from 'drizzle-orm';
 import { amazonMQPublisher } from '../features/messaging/utils/amazon-mq-publisher.js';
+import { TenantRepository } from './tenant-repository.js';
 
 type CreateTenantData = {
   companyName: string;
@@ -107,44 +108,12 @@ export class TenantService {
 
   // Get tenant by subdomain
   static async getBySubdomain(subdomain: string): Promise<Record<string, unknown> | null> {
-    const [tenant] = await db
-      .select({
-        tenantId: tenants.tenantId,
-        companyName: tenants.companyName,
-        subdomain: tenants.subdomain,
-        kindeOrgId: tenants.kindeOrgId,
-        adminEmail: tenants.adminEmail,
-        isActive: tenants.isActive,
-        isVerified: tenants.isVerified,
-        createdAt: tenants.createdAt,
-        updatedAt: tenants.updatedAt
-      })
-      .from(tenants)
-      .where(eq(tenants.subdomain, subdomain))
-      .limit(1);
-    
-    return tenant || null;
+    return TenantRepository.getBySubdomain(subdomain);
   }
 
   // Get tenant by Kinde org ID
   static async getByKindeOrgId(kindeOrgId: string): Promise<Record<string, unknown> | null> {
-    const [tenant] = await db
-      .select({
-        tenantId: tenants.tenantId,
-        companyName: tenants.companyName,
-        subdomain: tenants.subdomain,
-        kindeOrgId: tenants.kindeOrgId,
-        adminEmail: tenants.adminEmail,
-        isActive: tenants.isActive,
-        isVerified: tenants.isVerified,
-        createdAt: tenants.createdAt,
-        updatedAt: tenants.updatedAt
-      })
-      .from(tenants)
-      .where(eq(tenants.kindeOrgId, kindeOrgId))
-      .limit(1);
-    
-    return tenant || null;
+    return TenantRepository.getByKindeOrgId(kindeOrgId);
   }
 
   // Get tenant details with subscription info
@@ -356,13 +325,7 @@ export class TenantService {
 
   // Update tenant settings
   static async updateTenant(tenantId: string, updates: Record<string, unknown>): Promise<typeof tenants.$inferSelect | undefined> {
-    const [updated] = await db
-      .update(tenants)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(tenants.tenantId, tenantId))
-      .returning();
-
-    return updated;
+    return TenantRepository.updateTenantById(tenantId, updates);
   }
 
   // Invite user to tenant
@@ -556,7 +519,7 @@ export class TenantService {
           expiryDate: invitation.expiresAt
         });
 
-        const emailResult = await EmailService.sendUserInvitation({
+        const emailResult = await getEmailProvider().sendUserInvitation({
           email: data.email,
           tenantName: (tenant as { companyName: string }).companyName,
           roleName,
@@ -897,7 +860,7 @@ export class TenantService {
 
       // Send invitation email (tenant_invitations has no message column; use empty string)
       const roleRow = role as { roleName?: string } | undefined;
-      await EmailService.sendUserInvitation({
+      await getEmailProvider().sendUserInvitation({
         email: invitation.email,
         tenantName: (tenant as { companyName: string }).companyName,
         roleName: roleRow?.roleName ?? 'Member',
@@ -1009,15 +972,7 @@ export class TenantService {
 
   // Deactivate tenant
   static async deactivateTenant(tenantId: string, reason: string): Promise<typeof tenants.$inferSelect | undefined> {
-    const [updated] = await db
-      .update(tenants)
-      .set({
-        isActive: false,
-        updatedAt: new Date(),
-        settings: { deactivationReason: reason }
-      })
-      .where(eq(tenants.tenantId, tenantId))
-      .returning();
+    const updated = await TenantRepository.deactivateTenant(tenantId, reason);
 
     // Also deactivate all users
     await db
@@ -1030,16 +985,7 @@ export class TenantService {
 
   // Reactivate tenant
   static async reactivateTenant(tenantId: string): Promise<typeof tenants.$inferSelect | undefined> {
-    const [updated] = await db
-      .update(tenants)
-      .set({
-        isActive: true,
-        updatedAt: new Date(),
-      })
-      .where(eq(tenants.tenantId, tenantId))
-      .returning();
-
-    return updated;
+    return TenantRepository.reactivateTenant(tenantId);
   }
 
   // Get tenant users with consolidated invitation data

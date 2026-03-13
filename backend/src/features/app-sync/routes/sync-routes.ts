@@ -7,6 +7,7 @@ import { tenants, applications, organizationApplications, tenantUsers, customRol
 import { eq, and, or, sql, inArray } from 'drizzle-orm';
 import ErrorResponses from '../../../utils/error-responses.js';
 import { BUSINESS_SUITE_MATRIX } from '../../../data/permission-matrix.js';
+import { getAppSyncRepository } from '../adapters/postgres-app-sync-repository.js';
 
 // Combined authentication middleware that accepts both Kinde tokens and service tokens
 async function authenticateServiceOrToken(request: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -46,20 +47,12 @@ async function authenticateServiceOrToken(request: FastifyRequest, reply: Fastif
   }
 }
 
-/** Resolve :tenantId param (UUID or kindeOrgId) to Wrapper tenant UUID, or null if not found */
-async function resolveTenantIdParam(tenantIdParam: string | undefined): Promise<string | null> {
-  if (!tenantIdParam) return null;
-  let [row] = await db.select({ tenantId: tenants.tenantId }).from(tenants).where(eq(tenants.tenantId, tenantIdParam)).limit(1) as any[];
-  if (row) return row.tenantId;
-  [row] = await db.select({ tenantId: tenants.tenantId }).from(tenants).where(eq(tenants.kindeOrgId, tenantIdParam)).limit(1) as any[];
-  return row ? row.tenantId : null;
-}
-
 /**
  * Wrapper CRM Data Synchronization Routes
  * Provides endpoints for CRM to sync tenant data from Wrapper
  */
 export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _options?: Record<string, unknown>): Promise<void> {
+  const appSyncRepository = getAppSyncRepository();
 
   // ===============================
   // SYNC MANAGEMENT ENDPOINTS
@@ -76,7 +69,7 @@ export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _op
     const params = request.params as Record<string, string>;
     const query = request.query as Record<string, string>;
     try {
-      const resolvedTenantId = await resolveTenantIdParam(params.tenantId);
+      const resolvedTenantId = await appSyncRepository.resolveTenantId(params.tenantId);
       if (!resolvedTenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       const tenantId = resolvedTenantId;
       const skipReferenceData = query.skipReferenceData === 'true';
@@ -120,7 +113,7 @@ export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _op
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const params = request.params as Record<string, string>;
     try {
-      const tenantId = await resolveTenantIdParam(params.tenantId);
+      const tenantId = await appSyncRepository.resolveTenantId(params.tenantId);
       if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
 
       const status = await (WrapperSyncService as any).getSyncStatus(tenantId);
@@ -181,18 +174,10 @@ export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _op
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const params = request.params as Record<string, string>;
     try {
-      const resolvedTenantId = await resolveTenantIdParam(params.tenantId);
+      const resolvedTenantId = await appSyncRepository.resolveTenantId(params.tenantId);
       if (!resolvedTenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
 
-      const [tenant] = await db
-        .select({
-          tenantId: tenants.tenantId,
-          companyName: tenants.companyName,
-          isActive: tenants.isActive
-        })
-        .from(tenants)
-        .where(eq(tenants.tenantId, resolvedTenantId))
-        .limit(1) as any[];
+      const tenant = await appSyncRepository.getBasicTenantById(resolvedTenantId);
 
       if (!tenant) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
 
@@ -231,7 +216,7 @@ export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _op
     const params = request.params as Record<string, string>;
     const query = request.query as Record<string, string>;
     try {
-      const tenantId = await resolveTenantIdParam(params.tenantId);
+      const tenantId = await appSyncRepository.resolveTenantId(params.tenantId);
       if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       const entityId = query.entityId ?? '';
       const includeInactive = query.includeInactive === 'true';
@@ -334,7 +319,7 @@ export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _op
     const params = request.params as Record<string, string>;
     const query = request.query as Record<string, string>;
     try {
-      const tenantId = await resolveTenantIdParam(params.tenantId);
+      const tenantId = await appSyncRepository.resolveTenantId(params.tenantId);
       if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       const includeInactive = query.includeInactive === 'true';
       const page = Number(query.page) || 1;
@@ -411,7 +396,7 @@ export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _op
     const params = request.params as Record<string, string>;
     const query = request.query as Record<string, string>;
     try {
-      const tenantId = await resolveTenantIdParam(params.tenantId);
+      const tenantId = await appSyncRepository.resolveTenantId(params.tenantId);
       if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       const includeInactive = query.includeInactive === 'true';
       const page = Number(query.page) || 1;
@@ -524,7 +509,7 @@ export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _op
     const params = request.params as Record<string, string>;
     const query = request.query as Record<string, string>;
     try {
-      const tenantId = await resolveTenantIdParam(params.tenantId);
+      const tenantId = await appSyncRepository.resolveTenantId(params.tenantId);
       if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       const includeInactive = query.includeInactive === 'true';
       const page = Number(query.page) || 1;
@@ -646,7 +631,7 @@ export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _op
     const params = request.params as Record<string, string>;
     const query = request.query as Record<string, string>;
     try {
-      const tenantId = await resolveTenantIdParam(params.tenantId);
+      const tenantId = await appSyncRepository.resolveTenantId(params.tenantId);
       if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
 
       const appCode = (query.appCode ?? 'crm').toString().trim();
@@ -903,7 +888,7 @@ export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _op
     const params = request.params as Record<string, string>;
     const query = request.query as Record<string, string>;
     try {
-      const tenantId = await resolveTenantIdParam(params.tenantId);
+      const tenantId = await appSyncRepository.resolveTenantId(params.tenantId);
       if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
 
       const appCode = (query.appCode ?? '').toString().trim();
@@ -999,7 +984,7 @@ export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _op
     const params = request.params as Record<string, string>;
     const query = request.query as Record<string, string>;
     try {
-      const tenantId = await resolveTenantIdParam(params.tenantId);
+      const tenantId = await appSyncRepository.resolveTenantId(params.tenantId);
       if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       const entityId = query.entityId ?? '';
       const page = Number(query.page) || 1;
@@ -1129,7 +1114,7 @@ export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _op
     try {
       console.log('🔐 Received token:', request.headers.authorization);
 
-      const tenantId = await resolveTenantIdParam(params.tenantId);
+      const tenantId = await appSyncRepository.resolveTenantId(params.tenantId);
       if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       const userId = query.userId ?? '';
       const entityId = query.entityId ?? '';
@@ -1287,7 +1272,7 @@ export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _op
     }
 
     // Resolve tenantId (accept UUID or kindeOrgId)
-    const resolvedTenantId = await resolveTenantIdParam(rawTenantId);
+    const resolvedTenantId = await appSyncRepository.resolveTenantId(rawTenantId);
     if (!resolvedTenantId) {
       return reply.code(404).send({ success: false, error: 'Tenant not found' });
     }
@@ -1375,7 +1360,7 @@ export default async function wrapperCrmSyncRoutes(fastify: FastifyInstance, _op
     const params = request.params as Record<string, string>;
     const query = request.query as Record<string, string>;
     try {
-      const tenantId = await resolveTenantIdParam(params.tenantId);
+      const tenantId = await appSyncRepository.resolveTenantId(params.tenantId);
       if (!tenantId) return ErrorResponses.notFound(reply, 'Tenant', 'Tenant not found');
       const userId = query.userId ?? '';
       const roleId = query.roleId ?? '';

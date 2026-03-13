@@ -87,92 +87,6 @@ export default async function adminManagementRoutes(
     }
   });
 
-  // Debug user roles and organization assignment
-  fastify.get('/debug-user/:kindeUserId', async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const params = request.params as Record<string, string>;
-      const { kindeUserId } = params;
-
-      console.log('🔍 Debug user info for:', kindeUserId);
-
-      // Get user from our database
-      const [dbUser] = await db
-        .select()
-        .from(tenantUsers)
-        .where(eq(tenantUsers.kindeUserId, kindeUserId))
-        .limit(1);
-
-      // Get user's tenant
-      let tenant = null;
-      if (dbUser) {
-        [tenant] = await db
-          .select({
-            tenantId: tenants.tenantId,
-            companyName: tenants.companyName,
-            subdomain: tenants.subdomain,
-            adminEmail: tenants.adminEmail,
-            isActive: tenants.isActive
-          })
-          .from(tenants)
-          .where(eq(tenants.tenantId, dbUser.tenantId))
-          .limit(1);
-      }
-
-      // Get user's roles in our database
-      const roles = await db
-        .select({
-          roleId: userRoleAssignments.roleId,
-          roleName: customRoles.roleName,
-          assignedAt: userRoleAssignments.assignedAt,
-          permissions: customRoles.permissions
-        })
-        .from(userRoleAssignments)
-        .leftJoin(customRoles, eq(userRoleAssignments.roleId, customRoles.roleId))
-        .where(eq(userRoleAssignments.userId, dbUser?.userId))
-        .limit(10);
-
-      // Get Kinde organizations
-      let kindeOrgs = null;
-      try {
-        kindeOrgs = await kindeService.getUserOrganizations(kindeUserId);
-      } catch (kindeErr: unknown) {
-        console.warn('Could not get Kinde organizations:', (kindeErr as Error).message);
-      }
-
-      // Get Kinde user roles
-      let kindeRoles = null;
-      try {
-        kindeRoles = await (kindeService as any).getUserRoles?.(kindeUserId) ?? null;
-      } catch (kindeErr: unknown) {
-        console.warn('Could not get Kinde roles:', (kindeErr as Error).message);
-      }
-
-      return reply.send({
-        success: true,
-        data: {
-          kindeUserId,
-          database: {
-            user: dbUser,
-            tenant: tenant,
-            roles: roles
-          },
-          kinde: {
-            organizations: kindeOrgs,
-            roles: kindeRoles
-          }
-        }
-      });
-
-    } catch (err: unknown) {
-      const error = err as Error;
-      console.error('❌ Debug user failed:', error);
-      return reply.status(500).send({
-        error: 'Failed to debug user',
-        message: error.message
-      });
-    }
-  });
-
   // SIMPLE: Create Organization Endpoint
   fastify.post('/create-organization', {
     schema: {
@@ -199,7 +113,7 @@ export default async function adminManagementRoutes(
     }
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const startTime = Date.now();
-    const requestId = `onboard_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const requestId = `onboard_${Date.now()}`;
 
     try {
       console.log('\n🚀 =================== ONBOARDING STARTED ===================');

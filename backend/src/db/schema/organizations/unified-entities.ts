@@ -4,7 +4,7 @@
 // Since locations ARE organizations in your context, use ONE table for everything
 // This replaces both organizations.js and locations.js files
 
-import { pgTable, uuid, varchar, timestamp, jsonb, boolean, integer, text, decimal } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, jsonb, boolean, integer, text, decimal, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { tenants } from '../core/tenants.js';
 
 // Unified entity table (handles organizations, locations, departments, etc.)
@@ -21,7 +21,7 @@ export const entities = pgTable('entities', {
 
   // Basic Entity Info
   entityName: varchar('entity_name', { length: 255 }).notNull(),
-  entityCode: varchar('entity_code', { length: 50 }).unique(),
+  entityCode: varchar('entity_code', { length: 50 }),
   description: text('description'),
 
   // Classification fields (depend on entity_type)
@@ -92,7 +92,13 @@ export const entities = pgTable('entities', {
   updatedBy: uuid('updated_by'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (table) => ({
+  entityCodeUnique: uniqueIndex('entities_entity_code_unique').on(table.entityCode),
+  idxEntitiesHierarchyPath: index('idx_entities_hierarchy_path').on(table.hierarchyPath),
+  idxEntitiesParentEntityId: index('idx_entities_parent_entity_id').on(table.parentEntityId),
+  idxEntitiesTenantHierarchy: index('idx_entities_tenant_hierarchy').on(table.tenantId, table.parentEntityId, table.entityLevel),
+  idxEntitiesTypeHierarchy: index('idx_entities_type_hierarchy').on(table.entityType, table.tenantId, table.parentEntityId),
+}));
 
 // =============================================================================
 // ADVANTAGES OF UNIFIED APPROACH

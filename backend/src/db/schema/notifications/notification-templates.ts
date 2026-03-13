@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, jsonb, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, jsonb, boolean, index } from 'drizzle-orm/pg-core';
 import { tenantUsers } from '../core/users.js';
 
 /**
@@ -139,7 +139,13 @@ export const notificationTemplates = pgTable('notification_templates', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   lastUsedAt: timestamp('last_used_at')
-});
+}, (table) => ({
+  categoryActiveIdx: index('idx_notification_templates_category_active').on(table.category, table.isActive, table.createdAt),
+  typeActiveIdx: index('idx_notification_templates_type_active').on(table.type, table.isActive, table.createdAt),
+  isActiveIdx: index('idx_notification_templates_is_active').on(table.isActive),
+  createdByIdx: index('idx_notification_templates_created_by').on(table.createdBy),
+  createdAtIdx: index('idx_notification_templates_created_at').on(table.createdAt),
+}));
 
 // Indexes for efficient querying
 export const notificationTemplatesIndexes = {

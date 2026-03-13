@@ -73,8 +73,7 @@ export class RequestAnalyzer {
       '/api/auth/logout',
       '/health',
       '/api/health',
-      '/api/debug-routes',
-      '/api/test-no-middleware',
+
       '/api/permissions/sync',
       '/api/user-sync/',
       '/api/permission-sync/'

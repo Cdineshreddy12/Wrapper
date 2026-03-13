@@ -35,6 +35,7 @@ import './startup/run-before-dbmanager.js';
 import { dbManager } from './db/connection-manager.js';
 
 const fastify = Fastify({
+  requestTimeout: Number(process.env.FASTIFY_REQUEST_TIMEOUT_MS ?? 30_000),
   logger: DISABLE_ALL_LOGGING ? false : {
     level: process.env.LOG_LEVEL || 'info',
   },
@@ -457,13 +458,30 @@ async function start() {
       const CLEANUP_DAYS_OLD = Number(process.env.EVENT_TRACKING_CLEANUP_DAYS ?? 7);
 
       const runCleanup = async () => {
+        const cleanupLockKey = Number(process.env.EVENT_TRACKING_CLEANUP_LOCK_KEY ?? 719_001);
+        const appSql = dbManager.getAppConnection();
         try {
+          const lockResult = await appSql`SELECT pg_try_advisory_lock(${cleanupLockKey}) AS locked`;
+          const lockAcquired = !!lockResult[0]?.locked;
+          if (!lockAcquired) {
+            if (shouldLogVerbose()) {
+              console.log('⏭️ Skipping event_tracking cleanup: advisory lock held by another instance');
+            }
+            return;
+          }
+
           const deleted = await EventTrackingService.cleanupOldEvents(CLEANUP_DAYS_OLD);
           if (deleted > 0) {
             console.log(`🧹 Nightly event_tracking cleanup: removed ${deleted} rows older than ${CLEANUP_DAYS_OLD} days`);
           }
         } catch (cleanupErr: unknown) {
           console.warn('⚠️ Nightly event_tracking cleanup failed (non-fatal):', (cleanupErr as Error).message);
+        } finally {
+          try {
+            await appSql`SELECT pg_advisory_unlock(${cleanupLockKey})`;
+          } catch {
+            // No-op: lock might not have been acquired in this process.
+          }
         }
       };
 

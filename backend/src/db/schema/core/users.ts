@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, boolean, jsonb, integer, text } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, boolean, jsonb, integer, text, index } from 'drizzle-orm/pg-core';
 import { tenants } from './tenants.js';
 import { entities } from '../organizations/unified-entities.js';
 
@@ -52,7 +52,11 @@ export const tenantUsers = pgTable('tenant_users', {
   
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (table) => ({
+  tenantIdIdx: index('idx_tenant_users_tenant_id').on(table.tenantId),
+  emailIdx: index('idx_tenant_users_email').on(table.email),
+  kindeUserIdIdx: index('idx_tenant_users_kinde_user_id').on(table.kindeUserId),
+}));
 
 
 //is it mandatory to have this table?(think later)
@@ -109,4 +113,7 @@ export const auditLogs = pgTable('audit_logs', {
   userAgent: text('user_agent'),
 
   createdAt: timestamp('created_at').defaultNow(),
-}); 
+}, (table) => ({
+  tenantIdIdx: index('idx_audit_logs_tenant_id').on(table.tenantId),
+  tenantCreatedAtIdx: index('idx_audit_logs_tenant_created_at').on(table.tenantId, table.createdAt),
+}));

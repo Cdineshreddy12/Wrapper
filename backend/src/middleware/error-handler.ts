@@ -20,7 +20,7 @@ interface ErrorResponse {
   statusCode: number;
   timestamp: string;
   path: string;
-  details?: { field: string | undefined; message: string; value: unknown }[];
+  details?: { field: string | undefined; message: string; value: unknown }[] | null;
   message?: string;
   stack?: string;
   correlationId?: string;
@@ -96,14 +96,18 @@ export async function errorHandler(error: FastifyError, request: FastifyRequest,
     path: request.url,
   };
 
-  if (details) {
+  if (details !== null) {
     response.details = details;
-    if (error.validation && Array.isArray(details) && details.length > 0) {
-      if (details.length === 1) {
-        response.message = details[0].message;
-      } else {
-        response.message = `Please fix the following errors: ${details.map((d) => d.message).join(', ')}`;
-      }
+  } else if (error.name === 'DrizzleError' && process.env.NODE_ENV !== 'development') {
+    // Keep an explicit null in production DB errors (tests/API rely on this shape).
+    response.details = null;
+  }
+
+  if (error.validation && Array.isArray(details) && details.length > 0) {
+    if (details.length === 1) {
+      response.message = details[0].message;
+    } else {
+      response.message = `Please fix the following errors: ${details.map((d) => d.message).join(', ')}`;
     }
   }
 

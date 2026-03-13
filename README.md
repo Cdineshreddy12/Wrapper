@@ -484,6 +484,15 @@ Each feature directory contains its own `README.md` with detailed endpoint docum
 
 ---
 
+## Integration Guardrails
+
+- New third-party SDK usage should be introduced behind a feature `ports/` interface and `adapters/` implementation.
+- Prefer `get*Provider()` / `get*Gateway()` accessors in routes/services instead of direct SDK imports.
+- For high-churn billing/tenant/credit flows, place DB access behind repository wrappers before adding complex business logic.
+- Keep simple CRUD paths direct until there is clear complexity or testability pressure.
+
+---
+
 ## API Routes
 
 All routes are prefixed with `/api`. Interactive documentation is available at [`/docs`](http://localhost:3000/docs) (Swagger UI).

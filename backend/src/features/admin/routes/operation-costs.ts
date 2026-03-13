@@ -3,7 +3,7 @@ import { db } from '../../../db/index.js';
 import { 
   creditConfigurations
 } from '../../../db/schema/index.js';
-import { eq, sql, count, avg, min, max, desc, and } from 'drizzle-orm';
+import { eq, sql, count, avg, desc, and } from 'drizzle-orm';
 import { authenticateToken, requirePermission } from '../../../middleware/auth/auth.js';
 import { PERMISSIONS } from '../../../constants/permissions.js';
 import { amazonMQPublisher } from '../../messaging/utils/amazon-mq-publisher.js';
@@ -14,7 +14,7 @@ import { amazonMQPublisher } from '../../messaging/utils/amazon-mq-publisher.js'
  */
 
 export default async function operationCostRoutes(fastify: FastifyInstance, _options?: object): Promise<void> {
-  const publishCreditConfigToAccounting = async (
+  const publishCreditConfigToTargets = async (
     config: Record<string, unknown>,
     changeType: 'created' | 'updated' | 'deleted',
     actor: string
@@ -32,32 +32,45 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
         return;
       }
 
-      await amazonMQPublisher.publishCreditEvent(
-        'accounting',
-        'credit.config.updated',
-        tenantIdForMessage,
-        {
-          configId,
-          tenantId: config.tenantId ?? null,
-          configName: String(config.operationName ?? operationCode),
-          operationCode,
-          description: null,
-          creditCost: Number(config.creditCost ?? 0),
-          unit: String(config.unit ?? 'operation'),
-          isGlobal,
-          source: isGlobal ? 'global' : 'tenant',
-          moduleName,
-          permissionName,
-          syncSource: 'wrapper',
-          changeType,
-        },
-        actor || 'system'
-      );
+      const payload = {
+        configId,
+        tenantId: config.tenantId ?? null,
+        configName: String(config.operationName ?? operationCode),
+        operationCode,
+        description: null,
+        creditCost: Number(config.creditCost ?? 0),
+        unit: String(config.unit ?? 'operation'),
+        isGlobal,
+        source: isGlobal ? 'global' : 'tenant',
+        moduleName,
+        permissionName,
+        syncSource: 'wrapper',
+        changeType,
+      };
+
+      // Keep FA behavior and extend to Ops for global/operation-cost updates.
+      for (const targetApp of ['accounting', 'operations']) {
+        try {
+          await amazonMQPublisher.publishCreditEvent(
+            targetApp,
+            'credit.config.updated',
+            tenantIdForMessage,
+            payload,
+            actor || 'system'
+          );
+        } catch (publishErr: unknown) {
+          const error = publishErr as Error;
+          fastify.log.warn(
+            { err: error, targetApp, configId: config.configId, operationCode: config.operationCode },
+            'Failed to publish credit config update event'
+          );
+        }
+      }
     } catch (publishErr: unknown) {
       const error = publishErr as Error;
       fastify.log.warn(
         { err: error, configId: config.configId, operationCode: config.operationCode },
-        'Failed to publish credit config update event to accounting'
+        'Failed to publish credit config update event'
       );
     }
   };
@@ -76,14 +89,11 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
     },
     preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
   }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const body = request.body as Record<string, unknown>;
-    const params = request.params as Record<string, string>;
     const queryParams = request.query as Record<string, string>;
     try {
       const search = queryParams.search;
       const category = queryParams.category;
       const isActive = queryParams.isActive;
-      const includeUsage = queryParams.includeUsage === 'true';
 
       // Build where conditions - specifically for global configurations
       let conditions = [
@@ -132,18 +142,6 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
         isCustomized: false // Global configs are never customized
       }));
 
-      // TODO: Add usage analytics if requested
-      if (includeUsage) {
-        operationsWithDetails.forEach((op: any) => {
-          op.usage = {
-            dailyAverage: Math.floor(Math.random() * 100),
-            weeklyTotal: Math.floor(Math.random() * 1000),
-            monthlyTotal: Math.floor(Math.random() * 5000),
-            totalCostThisMonth: Math.floor(Math.random() * 1000)
-          };
-        });
-      }
-
       return reply.send({
         success: true,
         data: {
@@ -173,7 +171,6 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
     },
     preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
   }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const body = request.body as Record<string, unknown>;
     const params = request.params as Record<string, string>;
     const queryParams = request.query as Record<string, string>;
     try {
@@ -181,7 +178,6 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       const search = queryParams.search;
       const category = queryParams.category;
       const isActive = queryParams.isActive;
-      const includeUsage = queryParams.includeUsage === 'true';
 
       // Verify tenant access
       const userContext = (request as any).userContext;
@@ -239,18 +235,6 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
         isCustomized: true // Tenant-specific configs are always customized
       }));
 
-      // TODO: Add usage analytics if requested
-      if (includeUsage) {
-        operationsWithDetails.forEach((op: any) => {
-          op.usage = {
-            dailyAverage: Math.floor(Math.random() * 100),
-            weeklyTotal: Math.floor(Math.random() * 1000),
-            monthlyTotal: Math.floor(Math.random() * 5000),
-            totalCostThisMonth: Math.floor(Math.random() * 1000)
-          };
-        });
-      }
-
       return reply.send({
         success: true,
         data: {
@@ -271,109 +255,6 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
   });
 
   /**
-   * GET /api/admin/operation-costs
-   * Get all operation cost configurations (LEGACY - use specific endpoints instead)
-   * @deprecated Use /api/admin/operation-costs/global or /api/admin/operation-costs/tenant/:tenantId
-   */
-  fastify.get('/', {
-    schema: {
-      description: 'Get all operation cost configurations (DEPRECATED - use specific endpoints)',
-      tags: ['Admin', 'Operation Costs'],
-      deprecated: true
-    },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const body = request.body as Record<string, unknown>;
-    const params = request.params as Record<string, string>;
-    const queryParams = request.query as Record<string, string>;
-    try {
-      const search = queryParams.search;
-      const category = queryParams.category;
-      const isGlobal = queryParams.isGlobal;
-      const isActive = queryParams.isActive;
-      const includeUsage = queryParams.includeUsage === 'true';
-
-      // Build where conditions
-      const conditions: ReturnType<typeof eq>[] = [];
-      
-      if (search) {
-        conditions.push(sql`${creditConfigurations.operationCode} ILIKE ${`%${String(search)}%`}` as any);
-      }
-      
-      if (category) {
-        conditions.push(sql`split_part(${creditConfigurations.operationCode}, '.', 1) = ${String(category)}` as any);
-      }
-      
-      if (isGlobal !== undefined) {
-        conditions.push(eq(creditConfigurations.isGlobal, isGlobal === 'true'));
-      }
-      
-      if (isActive !== undefined) {
-        conditions.push(eq(creditConfigurations.isActive, isActive === 'true'));
-      }
-
-      let legacyQuery = db
-        .select({
-          configId: creditConfigurations.configId,
-          operationCode: creditConfigurations.operationCode,
-          creditCost: creditConfigurations.creditCost,
-          unit: creditConfigurations.unit,
-          unitMultiplier: creditConfigurations.unitMultiplier,
-          isGlobal: creditConfigurations.isGlobal,
-          isActive: creditConfigurations.isActive,
-          createdAt: creditConfigurations.createdAt,
-          updatedAt: creditConfigurations.updatedAt,
-          category: sql`split_part(${creditConfigurations.operationCode}, '.', 1)`,
-          priority: sql`100`
-        })
-        .from(creditConfigurations);
-      if (conditions.length > 0) {
-        legacyQuery = legacyQuery.where(and(...conditions)) as any;
-      }
-
-      const operations = await legacyQuery.orderBy(creditConfigurations.operationCode) as any[];
-
-      // Transform operations to include calculated fields
-      const operationsWithDetails = operations.map((op: any) => ({
-        ...op,
-        operationName: op.operationCode.split('.').pop()?.replace(/([A-Z])/g, ' $1').trim(),
-        category: getCategoryDisplayName(String(op.category ?? '')),
-        priority: 100
-      }));
-
-      // TODO: Add usage analytics if requested
-      if (includeUsage) {
-        operationsWithDetails.forEach((op: any) => {
-          op.usage = {
-            dailyAverage: Math.floor(Math.random() * 100),
-            weeklyTotal: Math.floor(Math.random() * 1000),
-            monthlyTotal: Math.floor(Math.random() * 5000),
-            totalCostThisMonth: Math.floor(Math.random() * 1000)
-          };
-        });
-      }
-
-      return reply.send({
-        success: true,
-        data: {
-          operations: operationsWithDetails
-        },
-        warning: {
-          message: 'This endpoint is deprecated. Use /api/admin/operation-costs/global for global configurations or /api/admin/operation-costs/tenant/:tenantId for tenant-specific configurations.',
-          deprecated: true
-        }
-      });
-    } catch (err: unknown) {
-      const error = err as Error;
-      request.log.error(error, 'Error fetching operation costs:');
-      return reply.code(500).send({
-        success: false,
-        error: 'Failed to fetch operation costs'
-      });
-    }
-  });
-
-  /**
    * POST /api/admin/operation-costs
    * Create a new operation cost configuration (global or tenant-specific)
    */
@@ -382,12 +263,9 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       description: 'Create a new operation cost configuration (global or tenant-specific)',
       tags: ['Admin', 'Operation Costs']
     },
-    // Temporarily disable permission check for debugging
-    // preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_CREATE)
+    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_CREATE)
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as Record<string, unknown>;
-    const params = request.params as Record<string, string>;
-    const query = request.query as Record<string, string>;
     try {
       const operationCode = body.operationCode;
       const operationName = body.operationName;
@@ -494,7 +372,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
           .where(eq(creditConfigurations.configId, existing[0].configId))
           .returning() as any;
 
-        await publishCreditConfigToAccounting(updatedConfig[0] as Record<string, unknown>, 'updated', userId);
+        await publishCreditConfigToTargets(updatedConfig[0] as Record<string, unknown>, 'updated', userId);
 
         console.log('✅ Operation cost configuration updated successfully:', updatedConfig[0]);
         return {
@@ -549,7 +427,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
         .values(configData as any)
         .returning();
 
-      await publishCreditConfigToAccounting(newConfig[0] as Record<string, unknown>, 'created', userId);
+      await publishCreditConfigToTargets(newConfig[0] as Record<string, unknown>, 'created', userId);
         
       const configType = isGlobal ? 'Global' : 'Tenant-specific';
       console.log(`✅ Successfully created ${configType.toLowerCase()} configuration:`, newConfig[0]);
@@ -597,7 +475,6 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as Record<string, unknown>;
     const params = request.params as Record<string, string>;
-    const query = request.query as Record<string, string>;
     try {
       const configId = params.configId ?? '';
       const updateData = body;
@@ -650,7 +527,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
         .where(eq(creditConfigurations.configId, configId))
         .returning();
 
-      await publishCreditConfigToAccounting(updated[0] as Record<string, unknown>, 'updated', userId);
+      await publishCreditConfigToTargets(updated[0] as Record<string, unknown>, 'updated', userId);
 
       return reply.send({
         success: true,
@@ -679,9 +556,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
     },
     preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_DELETE)
   }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const body = request.body as Record<string, unknown>;
     const params = request.params as Record<string, string>;
-    const query = request.query as Record<string, string>;
     try {
       const configId = params.configId ?? '';
 
@@ -701,6 +576,8 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       await db
         .delete(creditConfigurations)
         .where(eq(creditConfigurations.configId, configId));
+
+      await publishCreditConfigToTargets(existing[0] as Record<string, unknown>, 'deleted', 'system');
 
       return reply.send({
         success: true,
@@ -730,9 +607,6 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
     },
     preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
   }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const body = request.body as Record<string, unknown>;
-    const params = request.params as Record<string, string>;
-    const query = request.query as Record<string, string>;
     try {
       // Get basic stats
       const totalOps = await db
@@ -778,28 +652,6 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
         totalUsage: parseInt(String(cat.totalUsage ?? 0), 10)
       }));
 
-      // Mock trends data (would come from historical usage data)
-      const trends = [
-        {
-          period: 'Last 7 days',
-          totalCost: Math.floor(Math.random() * 10000),
-          operationCount: Math.floor(Math.random() * 1000),
-          averageCostPerOperation: Math.random() * 10
-        },
-        {
-          period: 'Last 30 days',
-          totalCost: Math.floor(Math.random() * 50000),
-          operationCount: Math.floor(Math.random() * 5000),
-          averageCostPerOperation: Math.random() * 10
-        },
-        {
-          period: 'Last 90 days',
-          totalCost: Math.floor(Math.random() * 100000),
-          operationCount: Math.floor(Math.random() * 15000),
-          averageCostPerOperation: Math.random() * 10
-        }
-      ];
-
       return reply.send({
         success: true,
         data: {
@@ -807,8 +659,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
           averageCost: parseFloat(String((avgCost[0] as any)?.avg ?? 0)),
           mostExpensive: mostExpensive[0] || null,
           leastExpensive: leastExpensive[0] || null,
-          categoryCosts: transformedCategoryCosts,
-          trends
+          categoryCosts: transformedCategoryCosts
         }
       });
     } catch (err: unknown) {
@@ -832,9 +683,6 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
     },
     preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
   }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const body = request.body as Record<string, unknown>;
-    const params = request.params as Record<string, string>;
-    const query = request.query as Record<string, string>;
     try {
       const templates = [
         {
@@ -915,8 +763,6 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
     preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_CREATE)
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as Record<string, unknown>;
-    const params = request.params as Record<string, string>;
-    const query = request.query as Record<string, string>;
     try {
       const templateId = body.templateId as string;
       const userId = (request as any).userContext?.internalUserId ?? '';
@@ -978,6 +824,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
             })
             .returning();
 
+          await publishCreditConfigToTargets(newConfig[0] as Record<string, unknown>, 'created', userId);
           created.push(newConfig[0]);
         } else {
           // Update existing configuration if credit cost is different
@@ -994,6 +841,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
               .where(eq(creditConfigurations.configId, existing[0].configId))
               .returning();
 
+            await publishCreditConfigToTargets(updatedConfig[0] as Record<string, unknown>, 'updated', userId);
             updated.push(updatedConfig[0]);
           } else {
             skipped.push(operation.operationCode);
@@ -1037,9 +885,6 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
     },
     preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
   }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const body = request.body as Record<string, unknown>;
-    const params = request.params as Record<string, string>;
-    const query = request.query as Record<string, string>;
     try {
       const operations = await db
         .select()

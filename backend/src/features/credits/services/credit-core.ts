@@ -3,7 +3,9 @@ import { db } from '../../../db/index.js';
 import { credits, applications as applicationsTable, applicationModules } from '../../../db/schema/index.js';
 import { eq, and, isNull, desc } from 'drizzle-orm';
 
-export const stripe = new Stripe((process.env.STRIPE_SECRET_KEY ?? '') as string);
+export const stripe = new Stripe((process.env.STRIPE_SECRET_KEY ?? '') as string, {
+  timeout: Number(process.env.STRIPE_TIMEOUT_MS ?? 10_000)
+});
 
 /**
  * Initialize credit record for an entity if it doesn't exist

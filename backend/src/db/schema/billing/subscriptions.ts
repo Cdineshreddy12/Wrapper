@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, jsonb, decimal, integer, boolean, text } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, jsonb, decimal, integer, boolean, text, index } from 'drizzle-orm/pg-core';
 import { tenants } from '../core/tenants.js';
 import { entities } from '../organizations/unified-entities.js';
 
@@ -70,6 +70,12 @@ export const payments = pgTable('payments', {
   invoiceNumber: varchar('invoice_number', { length: 50 }),
   description: text('description'),
 
+  // Refund tracking
+  amountRefunded: decimal('amount_refunded', { precision: 10, scale: 2 }).default('0'),
+  refundReason: varchar('refund_reason', { length: 100 }),
+  isPartialRefund: boolean('is_partial_refund').default(false),
+  refundedAt: timestamp('refunded_at'),
+
   // Tax Information
   taxAmount: decimal('tax_amount', { precision: 10, scale: 2 }).default('0'),
 
@@ -81,4 +87,7 @@ export const payments = pgTable('payments', {
   paidAt: timestamp('paid_at'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (table) => ({
+  tenantIdIdx: index('idx_payments_tenant_id').on(table.tenantId),
+  tenantCreatedAtIdx: index('idx_payments_tenant_created_at').on(table.tenantId, table.createdAt),
+}));

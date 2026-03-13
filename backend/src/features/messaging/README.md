@@ -34,3 +34,10 @@ This feature does not define any HTTP routes. It is used internally by other fea
 | Utility | Description |
 |---------|-------------|
 | **AmazonMQPublisher** | Single publisher for Amazon MQ: topic exchange `inter-app-events`, fanout `inter-app-broadcast`. Publishes role, user, org, credit, and org-assignment events to applications. Handles routing keys, reconnection, and status |
+
+## Ports and Adapters Convention
+
+- Define messaging contracts in `ports/` (for example `ports/message-bus.ts`).
+- Implement broker-specific details in `adapters/` (for example `adapters/amazon-mq-adapter.ts`).
+- Services should rely on `MessageBusPort` accessors (`getMessageBus()`) rather than direct broker utilities where possible.
+- New brokers must be introduced as additional adapters behind the same message bus port.

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, boolean, decimal } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, boolean, decimal, uniqueIndex } from 'drizzle-orm/pg-core';
 import { tenants } from '../core/tenants.js';
 import { tenantUsers } from '../core/users.js';
 import { entities } from '../organizations/unified-entities.js';
@@ -17,7 +17,7 @@ export const creditPurchases = pgTable('credit_purchases', {
   totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
 
   // Credit Batch Details - SIMPLIFIED
-  batchId: uuid('batch_id').notNull().unique(), // Unique identifier for this credit batch
+  batchId: uuid('batch_id').notNull(), // Unique identifier for this credit batch
   expiryDate: timestamp('expiry_date'), // When these credits expire
 
   // Payment Information - SIMPLIFIED
@@ -37,7 +37,9 @@ export const creditPurchases = pgTable('credit_purchases', {
   // Audit - SIMPLIFIED
   requestedBy: uuid('requested_by').references(() => tenantUsers.userId).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => ({
+  batchIdUnique: uniqueIndex('credit_purchases_batch_id_unique').on(table.batchId),
+}));
 
 // REMOVED: All complex tables for MVP simplicity
 // - discountTiers: No volume discounts needed

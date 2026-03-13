@@ -17,5 +17,5 @@ export const changeLog = pgTable('change_log', {
 }, (table) => ({
   idxChangeLogTableTime: index('idx_change_log_table_time').on(table.tableName, table.changedAt),
   idxChangeLogUnprocessed: index('idx_change_log_unprocessed').on(table.processed),
-  idxChangeLogPriority: index('idx_change_log_priority').on(table.changedAt, table.priority),
+  idxChangeLogPriority: index('idx_change_log_priority').on(table.priority, table.changedAt),
 }));

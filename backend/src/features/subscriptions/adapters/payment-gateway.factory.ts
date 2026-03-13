@@ -19,6 +19,7 @@ import type { PaymentGatewayProvider } from './types.js';
 import type { PaymentGatewayPort } from './payment-gateway.port.js';
 import { StripePaymentGateway } from './stripe.adapter.js';
 import { MockPaymentGateway } from './mock.adapter.js';
+import { RazorpayPaymentGateway } from './razorpay.adapter.js';
 
 let instance: PaymentGatewayPort | null = null;
 
@@ -43,11 +44,17 @@ function createGateway(provider: PaymentGatewayProvider): PaymentGatewayPort {
       return gw;
     }
 
+    case 'razorpay': {
+      const gw = new RazorpayPaymentGateway();
+      if (!gw.isConfigured()) {
+        console.warn('⚠️ Razorpay adapter not configured — falling back to mock gateway');
+        return new MockPaymentGateway();
+      }
+      return gw;
+    }
+
     // ---------------------------------------------------------------
     // Future providers — uncomment and implement as needed:
-    //
-    // case 'razorpay':
-    //   return new RazorpayPaymentGateway();
     //
     // case 'paypal':
     //   return new PayPalPaymentGateway();

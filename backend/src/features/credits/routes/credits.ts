@@ -13,11 +13,6 @@ export default async function creditRoutes(
 ): Promise<void> {
   console.log('🔧 REGISTERING CREDIT ROUTES...');
 
-  // Test endpoint to verify route registration
-  fastify.get('/test-route', async (request: FastifyRequest, reply: FastifyReply) => {
-    console.log('🎯 CREDIT TEST ROUTE HIT!');
-    return { success: true, message: 'Credit routes are working!' };
-  });
   // Get current credit balance for authenticated user
   fastify.get('/current', {
     preHandler: authenticateToken
@@ -57,7 +52,7 @@ export default async function creditRoutes(
               message: 'Please complete organization setup to access credit features',
               resource: 'Organization',
               statusCode: 404,
-              requestId: `credit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              requestId: `credit_${Date.now()}`,
               timestamp: new Date().toISOString(),
               requiresOnboarding: true
             });
@@ -87,7 +82,7 @@ export default async function creditRoutes(
               message: 'Please complete organization setup to access credit features',
               resource: 'Organization',
               statusCode: 404,
-              requestId: `credit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              requestId: `credit_${Date.now()}`,
               timestamp: new Date().toISOString(),
               requiresOnboarding: true
             });
@@ -1009,7 +1004,9 @@ export default async function creditRoutes(
             // Import Stripe to get payment intent from checkout session
             const Stripe = (await import('stripe')).default;
             if (process.env.STRIPE_SECRET_KEY) {
-              const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+              const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+                timeout: Number(process.env.STRIPE_TIMEOUT_MS ?? 10_000)
+              });
               stripeSession = await stripe.checkout.sessions.retrieve(identifier, {
                 expand: ['payment_intent.payment_method']
               });
@@ -1249,7 +1246,9 @@ export default async function creditRoutes(
 
         if (signature && process.env.STRIPE_WEBHOOK_SECRET && !bypassSignature) {
           const Stripe = (await import('stripe')).default;
-          const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+          const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+            timeout: Number(process.env.STRIPE_TIMEOUT_MS ?? 10_000)
+          });
           const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
           event = stripe.webhooks.constructEvent(rawBodyStr, signature, endpointSecret) as typeof event;
           console.log('✅ Webhook signature verified');
@@ -1324,7 +1323,9 @@ export default async function creditRoutes(
             try {
               const Stripe = (await import('stripe')).default;
               if (process.env.STRIPE_SECRET_KEY && session.payment_intent) {
-                const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+                const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+                  timeout: Number(process.env.STRIPE_TIMEOUT_MS ?? 10_000)
+                });
                 const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent);
                 
                 if (paymentIntent.payment_method) {

@@ -4,7 +4,7 @@ import { db } from '../../../db/index.js';
 import { subscriptions, payments } from '../../../db/schema/index.js';
 import { webhookLogs } from '../../../db/schema/tracking/webhook-logs.js';
 import { EmailService } from '../../../utils/email.js';
-import { getCurrentSubscription, getAvailablePlans, isStripeConfiguredFn } from './subscription-core.js';
+import { getCurrentSubscription, getAvailablePlans } from './subscription-core.js';
 import { getPaymentGateway } from '../adapters/index.js';
 import { updateAdministratorRolesForPlan } from './subscription-plan-roles.js';
 import { createPaymentRecord, processRefund } from './subscription-payment-records.js';

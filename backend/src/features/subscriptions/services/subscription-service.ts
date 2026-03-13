@@ -19,8 +19,6 @@
  */
 
 import {
-  isStripeConfiguredFn,
-  getStripeConfigStatus,
   getPaymentGateway,
   getCurrentSubscription,
   getAvailablePlans,
@@ -92,10 +90,6 @@ export class SubscriptionService {
   static getPaymentGateway = getPaymentGateway;
 
   // Core
-  /** @deprecated Use `getPaymentGateway().isConfigured()` */
-  static isStripeConfigured = isStripeConfiguredFn;
-  /** @deprecated Use `getPaymentGateway().getConfigStatus()` */
-  static getStripeConfigStatus = getStripeConfigStatus;
   static getCurrentSubscription = getCurrentSubscription;
   static getAvailablePlans = getAvailablePlans;
   static getPlanIdFromPriceId = getPlanIdFromPriceId;
@@ -152,4 +146,12 @@ export class SubscriptionService {
   static handleChargeSucceeded = handleChargeSucceeded;
   static handleCreditPurchase = handleCreditPurchase;
   static handleSubscriptionDeleted = handleSubscriptionDeleted;
+
+  /**
+   * Backward-compatible helper for legacy route checks.
+   * Uses the configured payment gateway adapter status.
+   */
+  static isStripeConfigured(): boolean {
+    return getPaymentGateway().isConfigured();
+  }
 }

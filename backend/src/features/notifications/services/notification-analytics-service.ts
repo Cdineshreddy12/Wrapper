@@ -1,5 +1,5 @@
 import { db } from '../../../db/index.js';
-import { notifications, adminNotificationHistory } from '../../../db/schema/index.js';
+import { notifications } from '../../../db/schema/index.js';
 import { eq, sql, gte, lte, and, desc } from 'drizzle-orm';
 import { aiServiceFactory } from './ai/ai-service-factory.js';
 

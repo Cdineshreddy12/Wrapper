@@ -20,40 +20,6 @@ export default async function subscriptionRoutes(
     const r = req as any;
     return (r.user?.tenantId ?? (r.userContext as Record<string, unknown> | undefined)?.tenantId) as string | undefined;
   };
-  // Temporary debug endpoint to test authentication
-  fastify.get('/debug-auth', async (request: FastifyRequest, reply: FastifyReply) => {
-    console.log('🧪 Debug Auth Endpoint Hit');
-    console.log('🔍 User Context:', request.userContext);
-    console.log('🔍 Is Authenticated:', request.userContext?.isAuthenticated);
-    console.log('🔍 User Email:', request.userContext?.email);
-    console.log('🔍 Tenant ID:', request.userContext?.tenantId);
-    console.log('🔍 Kinde Org ID:', request.userContext?.kindeOrgId);
-    console.log('🔍 Needs Onboarding:', request.userContext?.needsOnboarding);
-    
-    if (!request.userContext?.isAuthenticated) {
-      console.log('❌ Debug: User not authenticated');
-      return reply.code(401).send({
-        error: 'Unauthorized',
-        message: 'Debug: Authentication failed',
-        statusCode: 401,
-      });
-    }
-
-    console.log('✅ Debug: Authentication successful');
-    return {
-      success: true,
-      message: 'Authentication working!',
-      user: {
-        email: request.userContext.email,
-        name: request.userContext.name,
-        userId: request.userContext.kindeUserId
-      },
-      tenantId: request.userContext.tenantId,
-      kindeOrgId: request.userContext.kindeOrgId,
-      needsOnboarding: request.userContext.needsOnboarding,
-        organization: ((request as any).userContext as Record<string, unknown> | undefined)?.organization
-    };
-  });
 
   // Get current subscription
   fastify.get('/current', {
@@ -533,72 +499,6 @@ export default async function subscriptionRoutes(
       return reply.code(500).send({
         error: 'Failed to change plan',
         message: error.message
-      });
-    }
-  });
-
-  // Debug Stripe configuration (for troubleshooting webhook issues)
-  fastify.get('/debug-stripe-config', async (request, reply) => {
-    try {
-      console.log('🔍 Debugging Stripe configuration...');
-      
-      const configStatus = SubscriptionService.getStripeConfigStatus();
-      
-      console.log('📊 Stripe configuration status:', configStatus);
-      
-      return reply.code(200).send({
-        success: true,
-        message: 'Stripe configuration status',
-        config: configStatus,
-        timestamp: new Date().toISOString()
-      });
-    } catch (err: unknown) {
-      const error = err as Error;
-      console.error('❌ Error checking Stripe config:', error);
-      return reply.code(500).send({ 
-        error: 'Failed to check Stripe configuration',
-        message: error.message 
-      });
-    }
-  });
-
-  // Test webhook processing (for debugging)
-  fastify.post('/test-webhook', async (request, reply) => {
-    try {
-      console.log('🧪 Testing webhook processing...');
-      
-      // Create a test webhook payload
-      const testPayload = {
-        id: 'evt_test_' + Date.now(),
-        type: 'checkout.session.completed',
-        data: {
-          object: {
-            id: 'cs_test_' + Date.now(),
-            mode: 'subscription',
-            metadata: {
-              tenantId: 'test-tenant',
-              planId: 'test-plan'
-            },
-            customer: 'cus_test',
-            subscription: 'sub_test'
-          }
-        }
-      };
-      
-      console.log('📝 Test webhook payload:', JSON.stringify(testPayload, null, 2));
-      
-      return reply.code(200).send({
-        success: true,
-        message: 'Test webhook endpoint working',
-        testPayload,
-        timestamp: new Date().toISOString()
-      });
-    } catch (err: unknown) {
-      const error = err as Error;
-      console.error('❌ Test webhook error:', error);
-      return reply.code(500).send({ 
-        error: 'Test webhook failed',
-        message: error.message 
       });
     }
   });

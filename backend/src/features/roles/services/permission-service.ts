@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { amazonMQPublisher } from '../../messaging/utils/amazon-mq-publisher.js';
 import { CRM_PERMISSION_MATRIX, CRM_SPECIAL_PERMISSIONS } from '../../../data/comprehensive-crm-permissions.js';
 // Role templates removed - using application/module based role creation
+const SYSTEM_ACTOR_UUID = '00000000-0000-0000-0000-000000000000';
 
 // --- Types ---
 type ModuleDisplay = { name: string; description: string; operations: Array<{ id: string; name: string; description: string; level: string }> };
@@ -279,7 +280,7 @@ class PermissionService {
     // Log the creation
     await this.logAuditEvent({
       tenantId,
-      userId: 'system', // Use 'system' as fallback since createdBy is not available
+      userId: SYSTEM_ACTOR_UUID, // UUID-safe fallback actor for system-generated events
       action: 'role_created',
       resourceType: 'role',
       resourceId: roleId,
@@ -360,7 +361,7 @@ class PermissionService {
     // Log the update
     await this.logAuditEvent({
       tenantId,
-      userId: updatedBy ?? 'system',
+      userId: updatedBy ?? SYSTEM_ACTOR_UUID,
       action: 'role_updated',
       resourceType: 'role',
       resourceId: roleId,
@@ -877,7 +878,7 @@ class PermissionService {
     // Log the creation
     await this.logAuditEvent({
       tenantId,
-      userId: 'system', // Use 'system' as fallback since createdBy is not available
+      userId: SYSTEM_ACTOR_UUID, // UUID-safe fallback actor for system-generated events
       action: 'advanced_role_created',
       resourceType: 'role',
       resourceId: roleId,
@@ -1864,7 +1865,7 @@ class PermissionService {
       try {
     await this.logAuditEvent({
       tenantId,
-      userId: updatedBy ?? 'system',
+      userId: updatedBy ?? SYSTEM_ACTOR_UUID,
       action: 'advanced_role_updated',
       resourceType: 'role',
       resourceId: String(roleId),

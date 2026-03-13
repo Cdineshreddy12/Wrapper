@@ -38,17 +38,27 @@ class DatabaseConnectionManager {
       //   - Postgres itself handles hundreds of connections; 30 is still conservative.
       const appPoolMax    = Number(process.env.DB_POOL_MAX         ?? 30);
       const systemPoolMax = Number(process.env.DB_SYSTEM_POOL_MAX  ?? 15);
+      const dbStatementTimeoutMs = Number(process.env.DB_STATEMENT_TIMEOUT_MS ?? 30_000);
+      const dbIdleTransactionTimeoutMs = Number(process.env.DB_IDLE_IN_TX_TIMEOUT_MS ?? 30_000);
 
       this.appConnection = postgres(databaseUrl, {
         max: appPoolMax,
         idle_timeout: 20,
         connect_timeout: 5,
+        connection: {
+          statement_timeout: dbStatementTimeoutMs,
+          idle_in_transaction_session_timeout: dbIdleTransactionTimeoutMs,
+        },
       });
 
       this.systemConnection = postgres(databaseUrl, {
         max: systemPoolMax,
         idle_timeout: 30,
         connect_timeout: 5,
+        connection: {
+          statement_timeout: dbStatementTimeoutMs,
+          idle_in_transaction_session_timeout: dbIdleTransactionTimeoutMs,
+        },
         transform: {
           value: (value: unknown) => value,
         },

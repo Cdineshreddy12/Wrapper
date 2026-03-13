@@ -3,6 +3,7 @@ import { customRoles, userRoleAssignments } from '../../../db/schema/core/permis
 import { tenantUsers, auditLogs } from '../../../db/schema/core/users.js';
 import { eq, and, or, inArray, count, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+const SYSTEM_ACTOR_UUID = '00000000-0000-0000-0000-000000000000';
 
 class PermissionMatrixService {
   // Get user permission context
@@ -37,8 +38,21 @@ class PermissionMatrixService {
 
       userRoles.forEach(role => {
         try {
-          const rolePermissions = JSON.parse(String(role.permissions ?? '{}')) as Record<string, unknown>;
-          const roleRestrictions = JSON.parse(String(role.restrictions ?? 'null')) as unknown;
+          // postgres-js returns JSONB columns as already-parsed JS values (objects/arrays).
+          // Guard against the legacy String() + JSON.parse() path that breaks on objects.
+          const rawPerms = role.permissions ?? {};
+          const rolePermissions = (
+            typeof rawPerms === 'string'
+              ? JSON.parse(rawPerms)
+              : rawPerms
+          ) as Record<string, unknown>;
+
+          const rawRestr = role.restrictions ?? null;
+          const roleRestrictions = (
+            typeof rawRestr === 'string'
+              ? JSON.parse(rawRestr)
+              : rawRestr
+          ) as unknown;
 
           // Merge permissions (higher priority roles override lower ones)
           Object.keys(rolePermissions).forEach(resource => {
@@ -399,7 +413,7 @@ class PermissionMatrixService {
       await db.insert(auditLogs).values({
         logId: uuidv4(),
         tenantId,
-        userId: 'system',
+        userId: SYSTEM_ACTOR_UUID,
         action: 'permissions_revoked',
         resourceType: 'user',
         resourceId: userId,

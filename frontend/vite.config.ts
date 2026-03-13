@@ -37,7 +37,13 @@ export default defineConfig(({ mode }) => {
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'], // Include SVG files in precaching
+        // New service worker takes over immediately without waiting for tabs to close.
+        // This is the main fix for "users must hard-refresh after deploy".
+        skipWaiting: true,
+        clientsClaim: true,
+        // Remove stale caches from previous deploys automatically.
+        cleanupOutdatedCaches: true,
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/api\./,

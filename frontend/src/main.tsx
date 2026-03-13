@@ -2,6 +2,46 @@ import React from "react"
 import { createRoot } from "react-dom/client"
 import "@/index.css"
 
+// ── Stale chunk recovery ──────────────────────────────────────────────────
+// After a deploy, rsync --delete removes old content-hashed chunks.
+// A user who has the app open will get a 404 when lazy-loading a new route.
+// We detect this and do ONE automatic reload to pick up the new index.html.
+// sessionStorage prevents an infinite reload loop if the chunk is genuinely missing.
+const CHUNK_RELOAD_KEY = "chunk_reload_attempted"
+
+function handleChunkError() {
+  if (!sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
+    sessionStorage.setItem(CHUNK_RELOAD_KEY, "1")
+    window.location.reload()
+  }
+}
+
+window.addEventListener("error", (event) => {
+  const msg = event.message ?? ""
+  if (
+    msg.includes("Failed to fetch dynamically imported module") ||
+    msg.includes("Unable to preload CSS for") ||
+    msg.includes("error loading dynamically imported module")
+  ) {
+    handleChunkError()
+  }
+})
+
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event.reason
+  const msg: string = reason?.message ?? ""
+  if (
+    reason?.name === "ChunkLoadError" ||
+    msg.includes("Failed to fetch dynamically imported module") ||
+    msg.includes("Unable to preload CSS for") ||
+    msg.includes("error loading dynamically imported module")
+  ) {
+    event.preventDefault()
+    handleChunkError()
+  }
+})
+// ─────────────────────────────────────────────────────────────────────────
+
 const startupStorageResetEnabled = import.meta.env.VITE_RESET_AUTH_STORAGE_ON_BOOT === "true"
 
 if (startupStorageResetEnabled) {

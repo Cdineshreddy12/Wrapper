@@ -12,3 +12,5 @@ export { default as NotificationQueueService } from './services/notification-que
 export { default as NotificationTemplateService } from './services/notification-template-service.js';
 export { default as NotificationCacheService } from './services/notification-cache-service.js';
 export { default as NotificationAnalyticsService } from './services/notification-analytics-service.js';
+export { getEmailProvider, setEmailProvider, resetEmailProvider } from './adapters/brevo-adapter.js';
+export type { EmailProviderPort } from './ports/email-provider.js';

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, jsonb, boolean, integer, decimal, text } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, jsonb, boolean, integer, decimal, text, index } from 'drizzle-orm/pg-core';
 import { tenants } from '../core/tenants.js';
 import { tenantUsers } from '../core/users.js';
 import { entities } from '../organizations/unified-entities.js';
@@ -48,7 +48,10 @@ export const seasonalCreditCampaigns = pgTable('seasonal_credit_campaigns', {
   metadata: jsonb('metadata'),
   sendNotifications: boolean('send_notifications').default(true),
   notificationTemplate: text('notification_template'),
-});
+}, (table) => ({
+  idxSeasonalCampaignsTenant: index('idx_seasonal_campaigns_tenant').on(table.tenantId),
+  idxSeasonalCampaignsStatus: index('idx_seasonal_campaigns_status').on(table.distributionStatus, table.isActive),
+}));
 
 /**
  * Seasonal Credit Allocations Table
@@ -88,4 +91,10 @@ export const seasonalCreditAllocations = pgTable('seasonal_credit_allocations', 
   // Audit
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (table) => ({
+  idxSeasonalAllocationsCampaign: index('idx_seasonal_allocations_campaign').on(table.campaignId),
+  idxSeasonalAllocationsTenantEntity: index('idx_seasonal_allocations_tenant_entity').on(table.tenantId, table.entityId),
+  idxSeasonalAllocationsTargetApp: index('idx_seasonal_allocations_target_app').on(table.targetApplication),
+  idxSeasonalAllocationsExpiry: index('idx_seasonal_allocations_expiry').on(table.expiresAt, table.isActive, table.isExpired),
+  idxSeasonalAllocationsExpiryApp: index('idx_seasonal_allocations_expiry_app').on(table.expiresAt, table.targetApplication, table.isActive, table.isExpired),
+}));

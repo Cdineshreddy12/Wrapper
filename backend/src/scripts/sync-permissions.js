@@ -36,13 +36,13 @@ class PermissionSyncService {
       throw new Error('DATABASE_URL environment variable is required');
     }
 
-    const client = postgres(process.env.DATABASE_URL, {
+    this.client = postgres(process.env.DATABASE_URL, {
       prepare: false,
       connection: {
         search_path: 'public'
       }
     });
-    this.db = drizzle(client);
+    this.db = drizzle(this.client);
   }
 
   // 🔍 **VALIDATE PERMISSION MATRIX**
@@ -301,6 +301,13 @@ class PermissionSyncService {
     console.log(`   Total Modules: ${this.stats.totalModules}`);
     console.log(`   Total Permissions: ${this.stats.totalPermissions}`);
   }
+
+  // 🔌 **CLOSE DATABASE CONNECTION**
+  async close() {
+    if (this.client) {
+      await this.client.end({ timeout: 5 });
+    }
+  }
 }
 
 // 🚀 **MAIN EXECUTION**
@@ -338,10 +345,11 @@ async function main() {
         await syncService.syncAll();
         break;
     }
-    
   } catch (error) {
     console.error('❌ Sync failed:', error);
     process.exit(1);
+  } finally {
+    await syncService.close();
   }
 }
 
