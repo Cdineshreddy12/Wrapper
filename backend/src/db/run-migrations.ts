@@ -17,7 +17,11 @@ async function runMigrations(): Promise<void> {
 
   try {
     console.log(`🗄️ Applying versioned migrations from: ${migrationsFolder}`);
-    await migrate(db, { migrationsFolder });
+    await migrate(db, {
+      migrationsFolder,
+      migrationsSchema: 'public',
+      migrationsTable: '__drizzle_migrations',
+    });
     console.log('✅ Migrations applied successfully');
   } finally {
     await client.end();
