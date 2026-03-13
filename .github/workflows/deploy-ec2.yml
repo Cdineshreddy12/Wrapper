@@ -43,6 +43,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Guard committed DB migrations
+        run: |
+          pnpm --filter wrapper-backend run db:generate
+          if [ -n "$(git status --porcelain -- backend/src/db/migrations)" ]; then
+            echo "::error::Schema changes detected without committed migration files."
+            echo "Run: pnpm --filter wrapper-backend run db:generate"
+            echo "Then commit changes under backend/src/db/migrations."
+            git status --short -- backend/src/db/migrations
+            exit 1
+          fi
+
       - name: Type-check backend
         working-directory: backend
         run: pnpm exec tsc --noEmit
