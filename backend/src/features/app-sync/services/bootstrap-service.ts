@@ -518,17 +518,12 @@ export class BootstrapService {
   }
 
   /**
-   * Credit configs: tenant-specific overrides take precedence over global defaults.
-   * Only returns configs in the appCode namespace (operationCode LIKE 'accounting.%').
+   * Credit configs for bootstrap:
+   * Return ONLY tenant-specific configs for the requested app namespace.
+   * If the tenant has no overrides, return an empty array.
    */
   private async fetchCreditConfigs(tx: any, tenantId: string, appCode: string): Promise<BootstrapCreditConfig[]> {
-    // Retrieve the pre-computed (cached) list of all operations in this app's
-    // permission matrix. First call builds it in O(P); subsequent calls O(1).
-    const skeleton = this.getMatrixSkeleton(appCode);
-
-    // Fetch all DB configs for this tenant+app (both global and tenant-specific).
-    // This is the only dynamic part — it must query the DB every time.
-    const dbConfigs = await tx
+    const tenantConfigs = await tx
       .select({
         configId:      creditConfigurations.configId,
         operationCode: creditConfigurations.operationCode,
@@ -539,54 +534,22 @@ export class BootstrapService {
       })
       .from(creditConfigurations)
       .where(and(
-        or(
-          eq(creditConfigurations.tenantId, tenantId),
-          eq(creditConfigurations.isGlobal, true),
-        ),
+        eq(creditConfigurations.tenantId, tenantId),
+        eq(creditConfigurations.isGlobal, false),
         eq(creditConfigurations.isActive, true),
         sql`${creditConfigurations.operationCode} LIKE ${appCode + '.%'}`,
-      ));
+      ))
+      .orderBy(creditConfigurations.operationCode);
 
-    // Build config map: global configs first, then tenant-specific overrides.
-    // Two-pass ensures tenant-specific always wins over global for the same opCode.
-    const configMap = new Map<string, any>();
-    for (const c of dbConfigs) {
-      if (c.isGlobal && !configMap.has(c.operationCode)) {
-        configMap.set(c.operationCode, { ...c, source: 'global' as const });
-      }
-    }
-    for (const c of dbConfigs) {
-      if (!c.isGlobal) {
-        configMap.set(c.operationCode, { ...c, source: 'tenant' as const });
-      }
-    }
-
-    // Merge DB entries into the cached skeleton.
-    // The skeleton is already sorted, so no final sort needed.
-    const result: BootstrapCreditConfig[] = skeleton.map(({ operationCode, operationName }) => {
-      const existing = configMap.get(operationCode);
-      return existing
-        ? {
-            configId:      existing.configId ?? null,
-            operationCode,
-            operationName: existing.operationName ?? operationName,
-            creditCost:    parseFloat(String(existing.creditCost ?? 0)),
-            unit:          existing.unit ?? 'operation',
-            isGlobal:      existing.isGlobal ?? true,
-            source:        existing.source,
-          }
-        : {
-            configId:      null,
-            operationCode,
-            operationName,
-            creditCost:    0,
-            unit:          'operation',
-            isGlobal:      true,
-            source:        'default' as const,
-          };
-    });
-
-    return result;
+    return tenantConfigs.map((config: any) => ({
+      configId:      config.configId ?? null,
+      operationCode: config.operationCode,
+      operationName: config.operationName ?? config.operationCode,
+      creditCost:    parseFloat(String(config.creditCost ?? 0)),
+      unit:          config.unit ?? 'operation',
+      isGlobal:      false,
+      source:        'tenant' as const,
+    }));
   }
 
   private async fetchEntityCredits(tx: any, tenantId: string, appCode: string): Promise<BootstrapEntityCredit[]> {
