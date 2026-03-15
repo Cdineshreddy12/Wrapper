@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { authenticateToken } from '../../../middleware/auth/auth.js';
+import { authenticateToken, invalidateRoleCache, invalidateUserCache } from '../../../middleware/auth/auth.js';
 import { db } from '../../../db/index.js';
 import { tenants, tenantUsers, customRoles, userRoleAssignments } from '../../../db/schema/index.js';
 import { eq } from 'drizzle-orm';
@@ -62,14 +62,19 @@ export default async function adminManagementRoutes(
       }
 
       // Reset onboarding status
-      await db
+      const [resetUser] = await db
         .update(tenantUsers)
         .set({
           onboardingCompleted: false,
           onboardingStep: null,
           updatedAt: new Date()
         })
-        .where(eq(tenantUsers.userId, userIdToReset));
+        .where(eq(tenantUsers.userId, userIdToReset))
+        .returning({ kindeUserId: tenantUsers.kindeUserId });
+
+      if (resetUser?.kindeUserId) {
+        invalidateUserCache(resetUser.kindeUserId);
+      }
 
       return {
         success: true,
@@ -340,6 +345,11 @@ export default async function adminManagementRoutes(
           roleId: adminRole.roleId,
           assignedBy: adminUser.userId
         });
+
+      if (adminUser.kindeUserId) {
+        invalidateUserCache(adminUser.kindeUserId);
+      }
+      invalidateRoleCache(adminUser.userId);
 
       console.log(`✅ [${requestId}] Admin role created and assigned`);
 

@@ -18,7 +18,7 @@ import { shouldLogVerbose } from '../../../utils/verbose-log.js';
 // Capacity    = VALIDATE_TOKEN_CACHE_MAX (default 1000 entries).
 import { createHash } from 'crypto';
 
-const VALIDATE_TOKEN_CACHE_TTL_MS  = Number(process.env.VALIDATE_TOKEN_CACHE_TTL_MS  || 2 * 60 * 1000); // 2 min
+const VALIDATE_TOKEN_CACHE_TTL_MS  = Number(process.env.VALIDATE_TOKEN_CACHE_TTL_MS  || 15 * 60 * 1000); // 15 min
 const VALIDATE_TOKEN_CACHE_MAX     = Number(process.env.VALIDATE_TOKEN_CACHE_MAX      || 1000);
 
 interface ValidateTokenCacheEntry {

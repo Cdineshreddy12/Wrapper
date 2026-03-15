@@ -4,8 +4,8 @@ import {
   creditConfigurations
 } from '../../../db/schema/index.js';
 import { eq, sql, count, avg, desc, and } from 'drizzle-orm';
-import { authenticateToken, requirePermission } from '../../../middleware/auth/auth.js';
-import { PERMISSIONS } from '../../../constants/permissions.js';
+import { authenticateToken } from '../../../middleware/auth/auth.js';
+import { requirePlatformPermission } from '../../../middleware/auth/platform-permission-middleware.js';
 import { amazonMQPublisher } from '../../messaging/utils/amazon-mq-publisher.js';
 
 /**
@@ -87,7 +87,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       description: 'Get global operation cost configurations only',
       tags: ['Admin', 'Operation Costs']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
+    preHandler: requirePlatformPermission('credit_config:read')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const queryParams = request.query as Record<string, string>;
     try {
@@ -169,7 +169,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       description: 'Get tenant-specific operation cost configurations only',
       tags: ['Admin', 'Operation Costs']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
+    preHandler: requirePlatformPermission('credit_config:read')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const params = request.params as Record<string, string>;
     const queryParams = request.query as Record<string, string>;
@@ -181,7 +181,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
 
       // Verify tenant access
       const userContext = (request as any).userContext;
-      if (!userContext?.isSuperAdmin && userContext?.tenantId !== tenantId) {
+      if (!userContext?.isSuperAdmin && !request.platformStaff && userContext?.tenantId !== tenantId) {
         return reply.code(403).send({
           success: false,
           error: 'Access denied to this tenant\'s operation costs'
@@ -263,7 +263,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       description: 'Create a new operation cost configuration (global or tenant-specific)',
       tags: ['Admin', 'Operation Costs']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_CREATE)
+    preHandler: requirePlatformPermission('credit_config:write')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as Record<string, unknown>;
     try {
@@ -471,7 +471,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       description: 'Update an operation cost configuration',
       tags: ['Admin', 'Operation Costs']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_EDIT)
+    preHandler: requirePlatformPermission('credit_config:write')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as Record<string, unknown>;
     const params = request.params as Record<string, string>;
@@ -554,7 +554,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       description: 'Delete an operation cost configuration',
       tags: ['Admin', 'Operation Costs']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_DELETE)
+    preHandler: requirePlatformPermission('credit_config:write')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const params = request.params as Record<string, string>;
     try {
@@ -605,7 +605,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       description: 'Get operation cost analytics',
       tags: ['Admin', 'Operation Costs']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
+    preHandler: requirePlatformPermission('credit_config:read')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       // Get basic stats
@@ -681,7 +681,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       description: 'Get cost configuration templates',
       tags: ['Admin', 'Operation Costs']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
+    preHandler: requirePlatformPermission('credit_config:read')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const templates = [
@@ -760,7 +760,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       description: 'Apply a cost configuration template',
       tags: ['Admin', 'Operation Costs']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_CREATE)
+    preHandler: requirePlatformPermission('credit_config:write')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as Record<string, unknown>;
     try {
@@ -883,7 +883,7 @@ export default async function operationCostRoutes(fastify: FastifyInstance, _opt
       description: 'Export operation costs as CSV',
       tags: ['Admin', 'Operation Costs']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_OPERATIONS_VIEW)
+    preHandler: requirePlatformPermission('credit_config:read')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const operations = await db

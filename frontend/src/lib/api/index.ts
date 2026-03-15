@@ -10,7 +10,7 @@
  */
 
 // Core client & helpers
-export { api, getKindeToken, setKindeTokenGetter } from './client'
+export { api, getKindeToken, setKindeTokenGetter, createCancelableRequest, NETWORK_QUALITY_EVENT } from './client'
 export { default } from './client'
 
 // Shared types

@@ -6,6 +6,7 @@ import { KindeProvider } from "@/components/auth/KindeProvider"
 import { Toaster } from "@/components/ui/sonner"
 import { ErrorBoundary } from "@/errors/ErrorBoundary"
 import { router } from "@/routes/router"
+import { NetworkQualityBanner } from "@/components/network/NetworkQualityBanner"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,6 +33,7 @@ export const AppRoot = () => {
         <NuqsAdapter>
           <ThemeProvider defaultTheme="system" storageKey="zopkit-theme">
             <Toaster position="top-right" richColors offset="80px" gap={12} />
+            <NetworkQualityBanner />
             <KindeProvider>
               <RouterProvider router={router} />
             </KindeProvider>

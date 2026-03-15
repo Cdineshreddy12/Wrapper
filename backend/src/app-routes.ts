@@ -42,6 +42,7 @@ import demoRoutes from './routes/demo.js';
 import contactRoutes from './routes/contact.js';
 import notificationRoutes from './features/notifications/routes/notifications.js';
 import entityScopeRoutes from './features/organizations/routes/entity-scope.js';
+import platformStaffManagementRoutes from './features/admin/routes/platform-staff-management.js';
 
 import { authMiddleware, csrfProtection } from './middleware/auth/auth.js';
 import { errorHandler } from './middleware/error-handler.js';
@@ -132,6 +133,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   await fastify.register(userVerificationRoutes, { prefix: '/api' });
   await fastify.register(healthRoutes, { prefix: '/api' });
   await fastify.register(entityScopeRoutes, { prefix: '/api/admin' });
+  await fastify.register(platformStaffManagementRoutes, { prefix: '/api/internal/platform-staff' });
 
   fastify.get('/api/applications', async (request: FastifyRequest, reply: FastifyReply) => {
     try {

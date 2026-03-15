@@ -4,7 +4,7 @@ import { tenants, tenantUsers, customRoles, userRoleAssignments, tenantInvitatio
 import { eq, and, desc, isNull } from 'drizzle-orm';
 import { kindeService } from '../../auth/index.js';
 import { v4 as uuidv4 } from 'uuid';
-import { authenticateToken } from '../../../middleware/auth/auth.js';
+import { authenticateToken, invalidateRoleCache, invalidateUserCache } from '../../../middleware/auth/auth.js';
 
 type OrgItem = { code: string; name?: string };
 
@@ -2653,6 +2653,12 @@ export default async function invitationRoutes(
         } catch (publishError) {
           console.warn('⚠️ Failed to publish role assignment events (invitation accept):', (publishError as Error).message);
         }
+      }
+
+      // Keep auth middleware caches coherent after invitation acceptance mutations.
+      invalidateRoleCache(newUser.userId);
+      if (newUser.kindeUserId) {
+        invalidateUserCache(newUser.kindeUserId);
       }
 
       // Update invitation status to accepted

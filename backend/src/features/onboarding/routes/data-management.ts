@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { authenticateToken } from '../../../middleware/auth/auth.js';
+import { authenticateToken, invalidateUserCache } from '../../../middleware/auth/auth.js';
 import { db } from '../../../db/index.js';
 import { tenants, tenantUsers, onboardingFormData } from '../../../db/schema/index.js';
 import { eq, and } from 'drizzle-orm';
@@ -95,14 +95,19 @@ export default async function dataManagementRoutes(
       }
 
       // Mark onboarding as completed
-      await db
+      const [updatedUser] = await db
         .update(tenantUsers)
         .set({
           onboardingCompleted: true,
           onboardingStep: 'completed',
           updatedAt: new Date()
         })
-        .where(eq(tenantUsers.userId, userId));
+        .where(eq(tenantUsers.userId, userId))
+        .returning({ kindeUserId: tenantUsers.kindeUserId });
+
+      if (updatedUser?.kindeUserId) {
+        invalidateUserCache(updatedUser.kindeUserId);
+      }
 
       return {
         success: true,

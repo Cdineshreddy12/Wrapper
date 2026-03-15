@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { ZopkitRoundLoader } from '@/components/common/feedback/ZopkitRoundLoader'
 import { useNavigate } from '@tanstack/react-router'
+import { clearStaleAuthStorage, isInvalidGrantError, markSessionRecoveryReason } from '@/lib/auth/session-recovery'
 
 export function AuthCallback() {
   const { isLoading, isAuthenticated, error, user } = useKindeAuth()
@@ -9,6 +10,7 @@ export function AuthCallback() {
   const hasProcessedRef = useRef(false)
   const processingRef = useRef(false)
   const hasNavigatedRef = useRef(false)
+  const hasRecoveredSessionRef = useRef(false)
 
   // Timeout fallback — if Kinde never resolves, redirect to login after 15s
   useEffect(() => {
@@ -34,10 +36,7 @@ export function AuthCallback() {
         const errorMessage = error.message || (error as any)?.error_description || ''
         const errorCode = (error as any)?.error || ''
 
-        const isInvalidGrant = errorMessage.includes('invalid_grant') ||
-                              errorMessage.includes('refresh token') ||
-                              errorMessage.includes('malformed') ||
-                              errorCode === 'invalid_grant'
+        const isInvalidGrant = isInvalidGrantError(error)
 
         const isServerError = errorMessage.includes('server_error') ||
                              errorCode === 'server_error' ||
@@ -46,6 +45,18 @@ export function AuthCallback() {
         if (isAuthenticated && user) {
           // Authentication succeeded despite the error — continue with normal flow
         } else {
+          if (isInvalidGrant && !hasRecoveredSessionRef.current) {
+            hasRecoveredSessionRef.current = true
+            clearStaleAuthStorage()
+            markSessionRecoveryReason('invalid_grant')
+            hasNavigatedRef.current = true
+            navigate({
+              to: '/login?error=Session%20expired.%20Please%20sign%20in%20again.',
+              replace: true,
+            })
+            return
+          }
+
           if (isServerError) {
             // Retry after a short delay
             setTimeout(() => {
@@ -125,10 +136,7 @@ export function AuthCallback() {
     const errorMessage = error.message || (error as any)?.error_description || ''
     const errorCode = (error as any)?.error || ''
 
-    const isInvalidGrant = errorMessage.includes('invalid_grant') ||
-                          errorMessage.includes('refresh token') ||
-                          errorMessage.includes('malformed') ||
-                          errorCode === 'invalid_grant'
+    const isInvalidGrant = isInvalidGrantError(error)
 
     const isServerError = errorMessage.includes('server_error') ||
                          errorCode === 'server_error' ||
@@ -189,14 +197,12 @@ export function AuthCallback() {
             <p className="text-yellow-600 text-sm mb-4">Please try logging in again.</p>
             <button
               onClick={() => {
-                try {
-                  localStorage.removeItem('kinde_backup_token')
-                  localStorage.removeItem('kinde_token')
-                  localStorage.removeItem('kinde_refresh_token')
-                } catch (e) {
-                  // ignore
-                }
-                navigate({ to: '/login', replace: true })
+                clearStaleAuthStorage()
+                markSessionRecoveryReason('invalid_grant')
+                navigate({
+                  to: '/login?error=Session%20expired.%20Please%20sign%20in%20again.',
+                  replace: true,
+                })
               }}
               className="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700"
             >

@@ -5,6 +5,7 @@ import { eq, and, gte, desc, count } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { tenantUsers, userRoleAssignments, customRoles, tenants, entities } from '../../../db/schema/index.js';
 import ActivityLogger, { ACTIVITY_TYPES } from '../../../services/activityLogger.js';
+import { invalidateUserCache } from '../../../middleware/auth/auth.js';
 
 export default async function userRoutes(
   fastify: FastifyInstance,
@@ -119,6 +120,10 @@ export default async function userRoutes(
         ActivityLogger.createRequestContext(request as unknown as Record<string, unknown>)
       );
 
+      if (updatedUser?.kindeUserId) {
+        invalidateUserCache(updatedUser.kindeUserId);
+      }
+
       return {
         success: true,
         data: updatedUser,
@@ -164,6 +169,10 @@ export default async function userRoutes(
         },
         ActivityLogger.createRequestContext(request as unknown as Record<string, unknown>)
       );
+
+      if (updatedUser?.kindeUserId) {
+        invalidateUserCache(updatedUser.kindeUserId);
+      }
 
       return {
         success: true,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import  { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import { useTenantApplications } from '@/hooks/useSharedQueries';
 interface CreditAllocationModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
   entityId: string;
   entityName: string;
   entityType: 'organization' | 'location';
@@ -22,9 +23,10 @@ interface CreditAllocationModalProps {
 export function CreditAllocationModal({
   isOpen,
   onClose,
+  onSuccess,
   entityId,
   entityName,
-  entityType,
+  entityType: _entityType,
   availableCredits = 0
 }: CreditAllocationModalProps) {
   const queryClient = useQueryClient();
@@ -52,6 +54,8 @@ export function CreditAllocationModal({
   }, [isOpen]);
 
   const handleAllocateCredits = async () => {
+    if (loading) return;
+
     if (!allocationForm.targetApplication || !allocationForm.creditAmount) {
       toast.error('Please fill in all required fields');
       return;
@@ -62,8 +66,11 @@ export function CreditAllocationModal({
       return;
     }
 
+    let loadingToastId: string | number | undefined;
     try {
       setLoading(true);
+      loadingToastId = toast.loading('Allocating credits...');
+      const idempotencyKey = `credit-allocation:${entityId}:${allocationForm.targetApplication}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
 
       const response = await api.post('/credits/allocate/application', {
         sourceEntityId: entityId,
@@ -71,6 +78,10 @@ export function CreditAllocationModal({
         creditAmount: allocationForm.creditAmount,
         allocationPurpose: allocationForm.allocationPurpose,
         autoReplenish: allocationForm.autoReplenish
+      }, {
+        headers: {
+          'X-Idempotency-Key': idempotencyKey
+        }
       });
 
       if (response.data.success) {
@@ -81,7 +92,8 @@ export function CreditAllocationModal({
           queryClient.invalidateQueries({ queryKey: ['credit'] });
           queryClient.invalidateQueries({ queryKey: ['creditStatus'], exact: false });
           queryClient.invalidateQueries({ queryKey: ['admin', 'entities'] });
-          queryClient.invalidateQueries({ queryKey: ['organization', 'hierarchy'] });
+          queryClient.invalidateQueries({ queryKey: ['organizations', 'hierarchy'] });
+          queryClient.refetchQueries({ queryKey: ['organizations', 'hierarchy'], type: 'active' });
         } catch (invalidateError) {
           console.warn('Failed to invalidate queries:', invalidateError);
         }
@@ -92,13 +104,20 @@ export function CreditAllocationModal({
           allocationPurpose: '',
           autoReplenish: false
         });
+        onSuccess?.();
         onClose();
+      } else {
+        toast.error(response.data?.message || 'Failed to allocate credits');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to allocate credits:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to allocate credits';
+      const errorWithResponse = error as { response?: { data?: { message?: string } } };
+      const errorMessage = errorWithResponse.response?.data?.message || 'Failed to allocate credits';
       toast.error(errorMessage);
     } finally {
+      if (loadingToastId !== undefined) {
+        toast.dismiss(loadingToastId);
+      }
       setLoading(false);
     }
   };

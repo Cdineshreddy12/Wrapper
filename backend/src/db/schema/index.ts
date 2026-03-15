@@ -31,6 +31,9 @@ export * from './tracking/event-tracking.js';
 export * from './tracking/webhook-logs.js';
 export * from './tracking/change-log.js';
 
+// Platform staff (cross-tenant access control)
+export * from './platform/platform-staff.js';
+
 // Define relationships
 import { relations } from 'drizzle-orm';
 import {

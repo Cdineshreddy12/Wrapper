@@ -74,6 +74,8 @@ const ApplicationCreditAllocations: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showAllocateDialog, setShowAllocateDialog] = useState(false);
   const [showTransferDialog, setShowTransferDialog] = useState(false);
+  const [isAllocatingCredits, setIsAllocatingCredits] = useState(false);
+  const [isTransferringCredits, setIsTransferringCredits] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<string>('');
   const [allocationForm, setAllocationForm] = useState({
     targetApplication: '',
@@ -149,19 +151,27 @@ const ApplicationCreditAllocations: React.FC = () => {
   }, [selectedTenant]);
 
   const handleAllocateCredits = async () => {
+    if (isAllocatingCredits) return;
+
     if (!allocationForm.targetApplication || !allocationForm.creditAmount) {
       toast.error('Please fill in all required fields');
       return;
     }
 
+    const loadingToastId = toast.loading('Allocating credits...');
+    const idempotencyKey = `app-alloc:${selectedTenant}:${allocationForm.targetApplication}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
     try {
+      setIsAllocatingCredits(true);
       const response = await api.post('/credits/allocate/application', {
         targetApplication: allocationForm.targetApplication,
         creditAmount: allocationForm.creditAmount,
         allocationPurpose: allocationForm.allocationPurpose,
         autoReplenish: allocationForm.autoReplenish
       }, {
-        headers: { 'X-Tenant-ID': selectedTenant }
+        headers: {
+          'X-Tenant-ID': selectedTenant,
+          'X-Idempotency-Key': idempotencyKey
+        }
       });
 
       if (response.data.success) {
@@ -189,14 +199,22 @@ const ApplicationCreditAllocations: React.FC = () => {
         if (selectedTenant) {
           fetchApplicationBalances(selectedTenant);
         }
+      } else {
+        toast.error(response.data?.message || 'Credit allocation failed');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to allocate credits:', error);
-      toast.error('Failed to allocate credits');
+      const apiError = error as { response?: { data?: { message?: string } } };
+      toast.error(apiError.response?.data?.message || 'Failed to allocate credits');
+    } finally {
+      toast.dismiss(loadingToastId);
+      setIsAllocatingCredits(false);
     }
   };
 
   const handleTransferCredits = async () => {
+    if (isTransferringCredits) return;
+
     if (!transferForm.fromApplication || !transferForm.toApplication || !transferForm.creditAmount) {
       toast.error('Please fill in all required fields');
       return;
@@ -207,14 +225,20 @@ const ApplicationCreditAllocations: React.FC = () => {
       return;
     }
 
+    const loadingToastId = toast.loading('Transferring credits...');
+    const idempotencyKey = `app-transfer:${selectedTenant}:${transferForm.fromApplication}:${transferForm.toApplication}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
     try {
+      setIsTransferringCredits(true);
       const response = await api.post('/credits/transfer/application', {
         fromApplication: transferForm.fromApplication,
         toApplication: transferForm.toApplication,
         creditAmount: transferForm.creditAmount,
         transferReason: transferForm.transferReason
       }, {
-        headers: { 'X-Tenant-ID': selectedTenant }
+        headers: {
+          'X-Tenant-ID': selectedTenant,
+          'X-Idempotency-Key': idempotencyKey
+        }
       });
 
       if (response.data.success) {
@@ -230,10 +254,16 @@ const ApplicationCreditAllocations: React.FC = () => {
         if (selectedTenant) {
           fetchApplicationBalances(selectedTenant);
         }
+      } else {
+        toast.error(response.data?.message || 'Credit transfer failed');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to transfer credits:', error);
-      toast.error('Failed to transfer credits');
+      const apiError = error as { response?: { data?: { message?: string } } };
+      toast.error(apiError.response?.data?.message || 'Failed to transfer credits');
+    } finally {
+      toast.dismiss(loadingToastId);
+      setIsTransferringCredits(false);
     }
   };
 
@@ -552,10 +582,17 @@ const ApplicationCreditAllocations: React.FC = () => {
             </div>
 
             <div className="flex gap-2">
-              <Button onClick={handleAllocateCredits}>
-                Allocate Credits
+              <Button onClick={handleAllocateCredits} disabled={isAllocatingCredits}>
+                {isAllocatingCredits ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Allocating...
+                  </>
+                ) : (
+                  'Allocate Credits'
+                )}
               </Button>
-              <Button variant="outline" onClick={() => setShowAllocateDialog(false)}>
+              <Button variant="outline" onClick={() => setShowAllocateDialog(false)} disabled={isAllocatingCredits}>
                 Cancel
               </Button>
             </div>
@@ -638,10 +675,17 @@ const ApplicationCreditAllocations: React.FC = () => {
             </div>
 
             <div className="flex gap-2">
-              <Button onClick={handleTransferCredits}>
-                Transfer Credits
+              <Button onClick={handleTransferCredits} disabled={isTransferringCredits}>
+                {isTransferringCredits ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Transferring...
+                  </>
+                ) : (
+                  'Transfer Credits'
+                )}
               </Button>
-              <Button variant="outline" onClick={() => setShowTransferDialog(false)}>
+              <Button variant="outline" onClick={() => setShowTransferDialog(false)} disabled={isTransferringCredits}>
                 Cancel
               </Button>
             </div>

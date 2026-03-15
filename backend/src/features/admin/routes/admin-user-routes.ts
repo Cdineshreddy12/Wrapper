@@ -4,7 +4,7 @@ import { tenantUsers, customRoles, userRoleAssignments, organizationMemberships,
 import { eq, and, or } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import EmailService from '../../../utils/email.js';
-import { authenticateToken, requirePermission } from '../../../middleware/auth/auth.js';
+import { authenticateToken, requirePermission, invalidateRoleCache, invalidateUserCache } from '../../../middleware/auth/auth.js';
 import { PERMISSIONS } from '../../../constants/permissions.js';
 import { checkUserLimit } from '../../../middleware/restrictions/planRestrictions.js';
 import Logger from '../../../utils/logger.js';
@@ -302,6 +302,10 @@ export default async function adminUserRoutes(
         });
       }
 
+      if (result[0]?.kindeUserId) {
+        invalidateUserCache(result[0].kindeUserId);
+      }
+
       console.log(`✅ [${requestId}] User admin status updated successfully`);
 
       return {
@@ -458,6 +462,11 @@ export default async function adminUserRoutes(
         userId,
         ((request as ReqWithUser).userContext?.internalUserId ?? '') as string
       );
+
+      invalidateRoleCache(userId);
+      if (userToDelete.kindeUserId) {
+        invalidateUserCache(userToDelete.kindeUserId);
+      }
 
       console.log(`✅ [${requestId}] User removed successfully`);
 

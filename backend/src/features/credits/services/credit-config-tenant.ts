@@ -5,6 +5,50 @@ import { amazonMQPublisher } from '../../messaging/utils/amazon-mq-publisher.js'
 import { getModulePermissions } from './credit-core.js';
 import { getGlobalOperationConfigs, getGlobalModuleConfigs, getGlobalAppConfigs } from './credit-config-global.js';
 
+const DEFAULT_CREDIT_EVENT_TARGET_APPS = ['crm', 'accounting', 'ops'];
+
+function getCreditEventTargetApps(): string[] {
+  const fromEnv = process.env.BUSINESS_SUITE_TARGET_APPS
+    ?.split(',')
+    .map((app) => app.trim().toLowerCase())
+    .filter(Boolean) ?? [];
+
+  const normalized = (fromEnv.length > 0 ? fromEnv : DEFAULT_CREDIT_EVENT_TARGET_APPS).map((app) =>
+    app === 'operations' ? 'ops' : app
+  );
+
+  if (!normalized.includes('ops')) normalized.push('ops');
+  return Array.from(new Set(normalized));
+}
+
+async function publishCreditConfigEventToSuite(
+  tenantId: string,
+  eventPayload: Record<string, unknown>
+): Promise<void> {
+  const targetApps = getCreditEventTargetApps();
+  const eventType = 'credit_config_updated';
+  const changeType = String(eventPayload.changeType ?? 'unknown');
+  const operationCode = eventPayload.operationCode ? String(eventPayload.operationCode) : undefined;
+
+  console.log('📣 Publishing credit config event', {
+    eventType,
+    changeType,
+    tenantId,
+    operationCode,
+    targetApps,
+  });
+
+  for (const app of targetApps) {
+    try {
+      await amazonMQPublisher.publishCreditEvent(app, eventType, tenantId, eventPayload);
+      console.log(`✅ Published ${eventType} to ${app} for tenant ${tenantId}`);
+    } catch (streamErr: unknown) {
+      const streamError = streamErr as Error;
+      console.warn(`⚠️ Failed to publish credit config change event to ${app}:`, streamError.message);
+    }
+  }
+}
+
 /**
  * Get all credit configurations for a tenant (tenant-specific + global fallback)
  */
@@ -205,14 +249,7 @@ export async function setTenantOperationConfig(operationCode: string, configData
         isActive: existing[0].isActive
       } : null
     };
-    for (const app of ['crm', 'operations']) {
-      try {
-        await amazonMQPublisher.publishCreditEvent(app, 'credit_config_updated', tenantId, configEventPayload);
-      } catch (streamErr: unknown) {
-        const streamError = streamErr as Error;
-        console.warn(`⚠️ Failed to publish credit config change event to ${app}:`, streamError.message);
-      }
-    }
+    await publishCreditConfigEventToSuite(tenantId, configEventPayload);
 
     return {
       success: true,
@@ -294,6 +331,18 @@ export async function setTenantModuleConfig(moduleCode: string, configData: Reco
     }
 
     console.log('✅ Tenant module config set successfully for', results.length, 'operations');
+    if (results.length > 0) {
+      await publishCreditConfigEventToSuite(tenantId, {
+        changeType: 'module_updated',
+        configType: 'module',
+        moduleCode,
+        operationsConfigured: results.length,
+        operationCodes: moduleOperations,
+        updatedBy: userId,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
     return {
       success: true,
       configs: results,
@@ -383,6 +432,18 @@ export async function setTenantAppConfig(appCode: string, configData: Record<str
     }
 
     console.log('✅ Tenant app config set successfully for', results.length, 'operations');
+    if (results.length > 0) {
+      await publishCreditConfigEventToSuite(tenantId, {
+        changeType: 'app_updated',
+        configType: 'app',
+        appCode,
+        operationsConfigured: results.length,
+        operationCodes: appOperations,
+        updatedBy: userId,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
     return {
       success: true,
       configs: results,
@@ -477,6 +538,15 @@ export async function resetTenantConfiguration(tenantId: string, configType: str
     }
 
     if (result && result.length > 0) {
+      await publishCreditConfigEventToSuite(tenantId, {
+        changeType: 'deleted',
+        configType,
+        configCode,
+        deletedCount: result.length,
+        operationCodes: result.map((row: { operationCode?: string }) => row.operationCode).filter(Boolean),
+        updatedBy: userId,
+        updatedAt: new Date().toISOString(),
+      });
 
       // Log configuration change for each deleted config
       for (const deletedConfig of result) {
@@ -557,13 +627,25 @@ export async function bulkUpdateTenantConfigurations(tenantId: string, configs: 
       }
     }
 
-    return {
+    const summary = {
       success: true,
       totalUpdates: configs.length,
       successfulUpdates: results.filter((r: { success: boolean }) => r.success).length,
       failedUpdates: results.filter((r: { success: boolean }) => !r.success).length,
       results
     };
+
+    await publishCreditConfigEventToSuite(tenantId, {
+      changeType: 'bulk_updated',
+      configType: 'bulk',
+      totalUpdates: summary.totalUpdates,
+      successfulUpdates: summary.successfulUpdates,
+      failedUpdates: summary.failedUpdates,
+      updatedBy: userId,
+      updatedAt: new Date().toISOString(),
+    });
+
+    return summary;
   } catch (error) {
     console.error('Error in bulk update:', error);
     throw error;

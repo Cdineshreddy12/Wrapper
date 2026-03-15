@@ -42,7 +42,15 @@ export const subscriptions = pgTable('subscriptions', {
   // Timestamps
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (table) => ({
+  // Every subscription query filters by tenantId — without this index
+  // Postgres does a full sequential scan of the entire table.
+  tenantIdIdx: index('idx_subscriptions_tenant_id').on(table.tenantId),
+  // Status lookups (e.g. "get active subscription for tenant") are very frequent.
+  tenantStatusIdx: index('idx_subscriptions_tenant_status').on(table.tenantId, table.status),
+  // Stripe webhook lookups by stripe subscription ID.
+  stripeSubIdIdx: index('idx_subscriptions_stripe_sub_id').on(table.stripeSubscriptionId),
+}));
 
 // Payment history - STREAMLINED
 export const payments = pgTable('payments', {
@@ -90,4 +98,8 @@ export const payments = pgTable('payments', {
 }, (table) => ({
   tenantIdIdx: index('idx_payments_tenant_id').on(table.tenantId),
   tenantCreatedAtIdx: index('idx_payments_tenant_created_at').on(table.tenantId, table.createdAt),
+  // JOIN from payments → subscriptions needs this index to avoid full scan.
+  subscriptionIdIdx: index('idx_payments_subscription_id').on(table.subscriptionId),
+  // Stripe webhook deduplication looks up by paymentIntentId.
+  stripePaymentIntentIdx: index('idx_payments_stripe_payment_intent').on(table.stripePaymentIntentId),
 }));

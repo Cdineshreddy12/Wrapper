@@ -4,9 +4,10 @@ import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { DynamicIcon } from '@/features/landing/components/Icons'
 import { ArrowRight, Play, ChevronRight, FileText, GraduationCap, Users, Zap, Mail, Phone, MapPin, Menu, X, LayoutDashboard, Rocket } from 'lucide-react'
-import api from '@/lib/api'
+import api, { createCancelableRequest } from '@/lib/api'
 import { Product } from '@/types'
 import toast from 'react-hot-toast'
+import { consumeSessionRecoveryReason } from '@/lib/auth/session-recovery'
 
 const StackedCardsSection = React.lazy(() =>
   import('@/features/landing/components/StackedCardsSection').then(m => ({ default: m.StackedCardsSection }))
@@ -40,6 +41,7 @@ const Landing: React.FC = () => {
   const [activeProduct, setActiveProduct] = useState<Product>(products[0])
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [onboardingCompleted, setOnboardingCompleted] = useState(false)
+  const [backendAuthenticated, setBackendAuthenticated] = useState<boolean | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
   const [showProductsDropdown, setShowProductsDropdown] = useState(false)
   const [showIndustriesDropdown, setShowIndustriesDropdown] = useState(false)
@@ -68,6 +70,17 @@ const Landing: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
 
+  useEffect(() => {
+    const recoveryReason = consumeSessionRecoveryReason()
+    if (recoveryReason === 'invalid_grant' || recoveryReason === 'session_expired') {
+      toast.error('Your session has expired. Please sign in again.', {
+        id: 'session-expired',
+        duration: 6000,
+        position: 'top-center',
+      })
+    }
+  }, [])
+
   // Close mobile menu when route changes
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -75,28 +88,37 @@ const Landing: React.FC = () => {
 
   // Check authentication and onboarding status in background
   useEffect(() => {
-    const checkAuthenticatedUser = async () => {
-      if (isAuthenticated) {
-        try {
-          const response = await api.get('/admin/auth-status')
-          const auth = response.data?.authStatus
+    const { signal, cancel } = createCancelableRequest()
 
-          if (
+    const checkAuthenticatedUser = async () => {
+      try {
+        const response = await api.get('/admin/auth-status', { signal })
+        const auth = response.data?.authStatus
+        const isBackendAuth = auth?.isAuthenticated === true
+
+        setBackendAuthenticated(isBackendAuth)
+
+        if (isBackendAuth) {
+          const hasCompletedOnboarding =
             auth?.onboardingCompleted === true ||
-            auth?.needsOnboarding === false ||
-            (auth?.tenantId && auth?.internalUserId)
-          ) {
-            setOnboardingCompleted(true)
-          }
-        } catch {
-          // Silently ignore — buttons will stay in default state
+            auth?.needsOnboarding === false
+
+          setOnboardingCompleted(hasCompletedOnboarding)
+        } else {
+          setOnboardingCompleted(false)
         }
+      } catch {
+        // Fall back to Kinde state when backend auth status is unavailable
+        setBackendAuthenticated(null)
       }
       setAuthChecked(true)
     }
 
     const timer = setTimeout(checkAuthenticatedUser, 100)
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      cancel()
+    }
   }, [isAuthenticated])
 
   // Auto-rotate products every 4 seconds
@@ -219,16 +241,51 @@ const Landing: React.FC = () => {
     }
   };
 
-  // Scroll to contact form section (used by "Schedule the Demo" button)
-  const scrollToContactForm = () => {
-    handleAnchorClick({ preventDefault: () => {} } as React.MouseEvent<HTMLAnchorElement>, '#contact');
-  };
-
   const navItems = [
     { name: "Pricing", link: "/pricing" },
     { name: "Workflows", link: "#workflows" },
     { name: "Contact Us", link: "#contact" },
   ];
+
+  const hasAuthenticatedSession = authChecked && (backendAuthenticated ?? isAuthenticated)
+
+  const getPrimaryCtaConfig = () => {
+    if (!authChecked) {
+      return {
+        label: 'Loading...',
+        icon: null as React.ReactNode,
+        action: () => undefined,
+        disabled: true,
+      }
+    }
+
+    if (!hasAuthenticatedSession) {
+      return {
+        label: isLoading ? 'Loading...' : 'Sign In',
+        icon: null as React.ReactNode,
+        action: handleLogin,
+        disabled: isLoading,
+      }
+    }
+
+    if (onboardingCompleted) {
+      return {
+        label: 'Go to Workspace',
+        icon: <LayoutDashboard className="w-4 h-4 mr-2 inline" />,
+        action: () => navigate({ to: '/dashboard' }),
+        disabled: false,
+      }
+    }
+
+    return {
+      label: 'Complete onboarding',
+      icon: <Rocket className="w-4 h-4 mr-2 inline" />,
+      action: () => navigate({ to: '/onboarding' }),
+      disabled: false,
+    }
+  }
+
+  const primaryCta = getPrimaryCtaConfig()
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 selection:bg-blue-100 selection:text-blue-900 font-sans overflow-x-clip relative">
@@ -346,47 +403,16 @@ const Landing: React.FC = () => {
             ))}
           </div>
           <div className="flex items-center gap-3 shrink-0 ml-4">
-            {isAuthenticated && onboardingCompleted ? (
-              <NavbarButton
-                variant="gradient"
-                onClick={() => navigate({ to: '/dashboard' })}
-                as="button"
-                className="rounded-xl px-6 py-2.5 cursor-pointer"
-              >
-                <LayoutDashboard className="w-4 h-4 mr-2 inline" />
-                Go to Dashboard
-              </NavbarButton>
-            ) : isAuthenticated && authChecked ? (
-              <NavbarButton
-                variant="gradient"
-                onClick={() => navigate({ to: '/onboarding' })}
-                as="button"
-                className="rounded-xl px-6 py-2.5 cursor-pointer"
-              >
-                <Rocket className="w-4 h-4 mr-2 inline" />
-                Complete Onboarding
-              </NavbarButton>
-            ) : (
-              <>
-                <NavbarButton
-                  variant="outline"
-                  onClick={handleLogin}
-                  disabled={isLoading}
-                  as="button"
-                  className="rounded-xl px-6 py-2.5 cursor-pointer"
-                >
-                  {isLoading ? 'Loading...' : 'Sign In'}
-                </NavbarButton>
-                <NavbarButton
-                  variant="gradient"
-                  onClick={scrollToContactForm}
-                  as="button"
-                  className="rounded-xl px-6 py-2.5 cursor-pointer"
-                >
-                  Schedule the Demo
-                </NavbarButton>
-              </>
-            )}
+            <NavbarButton
+              variant={hasAuthenticatedSession ? "gradient" : "outline"}
+              onClick={primaryCta.action}
+              disabled={primaryCta.disabled}
+              as="button"
+              className="rounded-xl px-6 py-2.5 cursor-pointer"
+            >
+              {primaryCta.icon}
+              {primaryCta.label}
+            </NavbarButton>
           </div>
         </NavBody>
 
@@ -451,59 +477,19 @@ const Landing: React.FC = () => {
               </a>
             ))}
             <div className="flex w-full flex-col gap-3">
-              {isAuthenticated && onboardingCompleted ? (
-                <NavbarButton
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    navigate({ to: '/dashboard' });
-                  }}
-                  variant="gradient"
-                  className="w-full rounded-xl cursor-pointer"
-                  as="button"
-                >
-                  <LayoutDashboard className="w-4 h-4 mr-2 inline" />
-                  Go to Dashboard
-                </NavbarButton>
-              ) : isAuthenticated && authChecked ? (
-                <NavbarButton
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    navigate({ to: '/onboarding' });
-                  }}
-                  variant="gradient"
-                  className="w-full rounded-xl cursor-pointer"
-                  as="button"
-                >
-                  <Rocket className="w-4 h-4 mr-2 inline" />
-                  Complete Onboarding
-                </NavbarButton>
-              ) : (
-                <>
-                  <NavbarButton
-                    onClick={() => {
-                      setIsMobileMenuOpen(false);
-                      handleLogin();
-                    }}
-                    variant="outline"
-                    className="w-full rounded-xl cursor-pointer"
-                    as="button"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? 'Loading...' : 'Sign In'}
-                  </NavbarButton>
-                  <NavbarButton
-                    onClick={() => {
-                      setIsMobileMenuOpen(false);
-                      scrollToContactForm();
-                    }}
-                    variant="gradient"
-                    className="w-full rounded-xl cursor-pointer"
-                    as="button"
-                  >
-                    Schedule the Demo
-                  </NavbarButton>
-                </>
-              )}
+              <NavbarButton
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  primaryCta.action();
+                }}
+                variant={hasAuthenticatedSession ? "gradient" : "outline"}
+                className="w-full rounded-xl cursor-pointer"
+                as="button"
+                disabled={primaryCta.disabled}
+              >
+                {primaryCta.icon}
+                {primaryCta.label}
+              </NavbarButton>
             </div>
           </MobileNavMenu>
         </MobileNav>
@@ -548,54 +534,23 @@ const Landing: React.FC = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row items-center mt-24 gap-4 z-20">
-              {isAuthenticated && onboardingCompleted ? (
-                <button
-                  onClick={() => navigate({ to: '/dashboard' })}
-                  className={`
-                    w-full sm:w-auto relative px-8 py-4 rounded-xl font-bold text-white transition-all duration-300 cursor-pointer
-                    bg-gradient-to-r ${activeProduct.gradient} shadow-lg shadow-blue-500/20
-                    overflow-hidden group hover:scale-105 active:scale-95
-                  `}
-                >
-                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                  <span className="relative flex items-center justify-center gap-2">
-                    <LayoutDashboard className="w-5 h-5" />
-                    Go to Dashboard
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </span>
-                </button>
-              ) : isAuthenticated && authChecked ? (
-                <button
-                  onClick={() => navigate({ to: '/onboarding' })}
-                  className={`
-                    w-full sm:w-auto relative px-8 py-4 rounded-xl font-bold text-white transition-all duration-300 cursor-pointer
-                    bg-gradient-to-r ${activeProduct.gradient} shadow-lg shadow-blue-500/20
-                    overflow-hidden group hover:scale-105 active:scale-95
-                  `}
-                >
-                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                  <span className="relative flex items-center justify-center gap-2">
-                    <Rocket className="w-5 h-5" />
-                    Complete Onboarding
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </span>
-                </button>
-              ) : (
-                <button
-                  onClick={scrollToContactForm}
-                  className={`
-                    w-full sm:w-auto relative px-8 py-4 rounded-xl font-bold text-white transition-all duration-300 cursor-pointer
-                    bg-gradient-to-r ${activeProduct.gradient} shadow-lg shadow-blue-500/20
-                    overflow-hidden group hover:scale-105 active:scale-95
-                  `}
-                >
-                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                  <span className="relative flex items-center justify-center gap-2">
-                    Schedule the Demo
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </span>
-                </button>
-              )}
+              <button
+                onClick={primaryCta.action}
+                disabled={primaryCta.disabled}
+                className={`
+                  w-full sm:w-auto relative px-8 py-4 rounded-xl font-bold text-white transition-all duration-300 cursor-pointer
+                  bg-gradient-to-r ${activeProduct.gradient} shadow-lg shadow-blue-500/20
+                  overflow-hidden group hover:scale-105 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed
+                `}
+              >
+                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                <span className="relative flex items-center justify-center gap-2">
+                  {hasAuthenticatedSession && onboardingCompleted ? <LayoutDashboard className="w-5 h-5" /> : null}
+                  {hasAuthenticatedSession && !onboardingCompleted ? <Rocket className="w-5 h-5" /> : null}
+                  {primaryCta.label}
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </span>
+              </button>
 
               <button
                 className="w-full sm:w-auto flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 transition-all group shadow-sm hover:scale-105 active:scale-95"

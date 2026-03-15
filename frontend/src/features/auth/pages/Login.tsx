@@ -7,9 +7,10 @@ import { ArrowLeft, Shield, Zap, BarChart3, Users, CheckCircle2, Globe, ChevronR
 import { ZopkitRoundLoader } from '@/components/common/feedback/ZopkitRoundLoader'
 import toast from 'react-hot-toast'
 import { motion, AnimatePresence } from 'framer-motion'
-import api from '@/lib/api'
+import api, { createCancelableRequest } from '@/lib/api'
 import { crmAuthService } from '@/services/crmAuthService'
 import { config } from '@/lib/config'
+import { consumeSessionRecoveryReason } from '@/lib/auth/session-recovery'
 
 // --- Animated Components ---
 
@@ -148,6 +149,13 @@ export function Login() {
   
   // Determine if this is a CRM request
   const isCrmRequest = source === 'crm' || crmRedirect === 'true'
+
+  useEffect(() => {
+    const recoveryReason = consumeSessionRecoveryReason()
+    if (recoveryReason === 'invalid_grant') {
+      toast.error('Session expired. Please sign in again.')
+    }
+  }, [])
   
   // Store user's intended path when CRM request is detected
   useEffect(() => {
@@ -252,6 +260,8 @@ export function Login() {
 
   // Handle post-login redirect for authenticated users
   useEffect(() => {
+    const { signal, cancel } = createCancelableRequest()
+
     const handlePostLoginRedirect = async () => {
       if (!isAuthenticated || !user || isLoading || returnTo || isRedirecting) {
         return
@@ -260,7 +270,7 @@ export function Login() {
       setIsRedirecting(true)
 
       try {
-        const response = await api.get('/onboarding/status')
+        const response = await api.get('/onboarding/status', { signal })
         const status = response.data
 
         if (status.user && status.isOnboarded && !status.needsOnboarding) {
@@ -279,6 +289,7 @@ export function Login() {
     }
 
     handlePostLoginRedirect()
+    return () => cancel()
   }, [isAuthenticated, user, isLoading, returnTo, navigate, isRedirecting])
 
   const handleBackToCRM = () => {

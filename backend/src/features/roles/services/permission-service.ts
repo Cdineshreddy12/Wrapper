@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 // Static imports — avoids repeated module-resolution overhead on every request.
 import { amazonMQPublisher } from '../../messaging/utils/amazon-mq-publisher.js';
 import { CRM_PERMISSION_MATRIX, CRM_SPECIAL_PERMISSIONS } from '../../../data/comprehensive-crm-permissions.js';
+import { invalidateRoleCache } from '../../../middleware/auth/auth.js';
 // Role templates removed - using application/module based role creation
 const SYSTEM_ACTOR_UUID = '00000000-0000-0000-0000-000000000000';
 
@@ -460,6 +461,13 @@ class PermissionService {
       throw new Error('Cannot delete Super Administrator role - this is the primary admin role for the organization');
     }
 
+    // Capture affected users so auth role cache can be invalidated after reassignment/removal.
+    const directAssignmentRows = await db
+      .select({ userId: userRoleAssignments.userId })
+      .from(userRoleAssignments)
+      .where(eq(userRoleAssignments.roleId, roleId));
+    const affectedUserIds = [...new Set(directAssignmentRows.map(row => row.userId))];
+
     // Check if role is assigned to users (direct assignments)
     const userAssignments = await db
       .select({ count: count() })
@@ -525,6 +533,9 @@ class PermissionService {
         }
       });
     }
+
+    // Role membership changed for these users (transfer or force removal).
+    affectedUserIds.forEach(invalidateRoleCache);
 
     return {
       deleted: true,
@@ -613,6 +624,7 @@ class PermissionService {
         .returning();
 
       console.log('✅ [PermissionService] Role assignment updated successfully');
+      invalidateRoleCache(userId);
       
       // Publish role assignment event (reassignment)
       try {
@@ -651,6 +663,7 @@ class PermissionService {
       .returning();
 
     console.log('✅ [PermissionService] New role assignment created successfully');
+    invalidateRoleCache(userId);
     
     // Publish role assignment event
     try {
@@ -704,6 +717,7 @@ class PermissionService {
       .where(eq(userRoleAssignments.id, assignment.id));
 
     console.log('✅ [PermissionService] Role assignment removed successfully');
+    invalidateRoleCache(userId);
     
     // Publish role unassignment event
     try {
@@ -751,6 +765,7 @@ class PermissionService {
       .where(eq(userRoleAssignments.id, assignmentId));
 
     console.log('✅ [PermissionService] Role assignment removed successfully');
+    invalidateRoleCache(assignment.userId);
     
     // Publish role unassignment event
     try {

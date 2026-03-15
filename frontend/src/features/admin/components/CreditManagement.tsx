@@ -23,7 +23,9 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { api } from '@/lib/api';
 import { operationCostAPI, creditConfigurationAPI, applicationAssignmentAPI } from '@/lib/api';
+import { runMutationWithFeedback } from '@/lib/mutation-feedback';
 import {
   Application,
   OperationCost,
@@ -94,8 +96,8 @@ const CreditManagement: React.FC = () => {
   };
 
   // Data Loading
-  const loadInitialData = useCallback(async () => {
-    setLoading(true);
+  const loadInitialData = useCallback(async (manageLoadingState = true) => {
+    if (manageLoadingState) setLoading(true);
     try {
       const [opsRes, tenantsRes, appsRes] = await Promise.all([
         operationCostAPI.getGlobalOperationCosts({ includeUsage: true }),
@@ -108,21 +110,21 @@ const CreditManagement: React.FC = () => {
     } catch (error) {
       toast.error('Failed to load initial data');
     } finally {
-      setLoading(false);
+      if (manageLoadingState) setLoading(false);
     }
   }, []);
 
   useEffect(() => { loadInitialData(); }, [loadInitialData]);
 
-  const loadTenantConfigurations = useCallback(async (tenantId: string) => {
+  const loadTenantConfigurations = useCallback(async (tenantId: string, manageLoadingState = true) => {
     try {
-      setLoading(true);
+      if (manageLoadingState) setLoading(true);
       const response = await creditConfigurationAPI.getTenantConfigurations(tenantId);
       setTenantConfigurations(response.data);
     } catch (error) {
       toast.error('Failed to load tenant configurations');
     } finally {
-      setLoading(false);
+      if (manageLoadingState) setLoading(false);
     }
   }, []);
 
@@ -220,43 +222,80 @@ const CreditManagement: React.FC = () => {
   };
 
   const handleConfirmChanges = async () => {
+    // Prevent double-submit if a save is already in progress
+    if (loading) return;
     try {
       setLoading(true);
-      const savePromises = [];
-      const pendingUpdates = new Map<string, number>();
+      await runMutationWithFeedback({
+        scope: 'credit-config-save',
+        idParts: [activeTab, selectedTenant?.tenantId, Object.keys(costChanges).length],
+        loadingMessage: 'Saving configuration...',
+        successMessage: 'Configuration saved',
+        errorMessage: 'Save failed',
+        execute: async (idempotencyKey) => {
+          const savePromises = [];
+          const pendingUpdates = new Map<string, number>();
 
-      for (const [appCode, appChanges] of Object.entries(costChanges)) {
-        const app = allAvailableApplications.find(a => a.appCode === appCode);
-        if (!app) continue;
-        app.modules?.forEach(mod => {
-          mod.permissions?.forEach(perm => {
-            const opCode = `${appCode}.${mod.moduleCode}.${perm.code}`;
-            let cost: number | null = null;
-            if (appChanges.operationCosts?.[opCode] !== undefined) cost = appChanges.operationCosts[opCode];
-            else if (appChanges.moduleCosts?.[mod.moduleCode] !== undefined) cost = appChanges.moduleCosts[mod.moduleCode];
-            else if (appChanges.appCost !== undefined) cost = appChanges.appCost;
-            if (cost !== null) pendingUpdates.set(opCode, cost);
-          });
-        });
-      }
+          for (const [appCode, appChanges] of Object.entries(costChanges)) {
+            const app = allAvailableApplications.find(a => a.appCode === appCode);
+            if (!app) continue;
+            app.modules?.forEach(mod => {
+              mod.permissions?.forEach(perm => {
+                const opCode = `${appCode}.${mod.moduleCode}.${perm.code}`;
+                let cost: number | null = null;
+                if (appChanges.operationCosts?.[opCode] !== undefined) cost = appChanges.operationCosts[opCode];
+                else if (appChanges.moduleCosts?.[mod.moduleCode] !== undefined) cost = appChanges.moduleCosts[mod.moduleCode];
+                else if (appChanges.appCost !== undefined) cost = appChanges.appCost;
+                if (cost !== null) pendingUpdates.set(opCode, cost);
+              });
+            });
+          }
 
-      for (const [opCode, cost] of pendingUpdates.entries()) {
-        const appCode = opCode.split('.')[0];
-        if (activeTab === 'global') {
-          savePromises.push(operationCostAPI.createOperationCost({ operationCode: opCode, operationName: opCode.split('.').pop() || '', creditCost: cost, unit: 'operation', unitMultiplier: 1, category: appCode.toUpperCase(), isActive: true, priority: 100 }));
-        } else if (selectedTenant) {
-          savePromises.push(creditConfigurationAPI.updateTenantOperationConfig(selectedTenant.tenantId, opCode, { creditCost: cost, unit: 'operation', unitMultiplier: 1, scope: 'tenant', isActive: true }));
+          for (const [opCode, cost] of pendingUpdates.entries()) {
+            const appCode = opCode.split('.')[0];
+            if (activeTab === 'global') {
+              savePromises.push(api.post('/admin/operation-costs', {
+                operationCode: opCode,
+                operationName: opCode.split('.').pop() || '',
+                creditCost: cost,
+                unit: 'operation',
+                unitMultiplier: 1,
+                category: appCode.toUpperCase(),
+                isActive: true,
+                priority: 100
+              }, {
+                headers: {
+                  'X-Idempotency-Key': `${idempotencyKey}:${opCode}`
+                }
+              }));
+            } else if (selectedTenant) {
+              savePromises.push(api.put(`/admin/credit-configurations/${selectedTenant.tenantId}/operation/${opCode}`, {
+                creditCost: cost,
+                unit: 'operation',
+                unitMultiplier: 1,
+                scope: 'tenant',
+                isActive: true
+              }, {
+                headers: {
+                  'X-Idempotency-Key': `${idempotencyKey}:${opCode}`
+                }
+              }));
+            }
+          }
+
+          await Promise.all(savePromises);
+          return { saved: savePromises.length };
         }
-      }
+      });
 
-      await Promise.all(savePromises);
-      toast.success('Configuration saved');
       setCostChanges({});
       setShowWarningModal(false);
-      loadInitialData();
-      if (selectedTenant) loadTenantConfigurations(selectedTenant.tenantId);
+      // Pass false so the inner functions don't fight over the loading state;
+      // the outer finally block owns the single loading=false at the end.
+      await loadInitialData(false);
+      if (selectedTenant) await loadTenantConfigurations(selectedTenant.tenantId, false);
     } catch (error) {
-      toast.error('Save failed');
+      // Toast is handled by mutation helper.
     } finally {
       setLoading(false);
     }

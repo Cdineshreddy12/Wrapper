@@ -63,6 +63,14 @@ interface KindeUser {
 }
 
 async function findUserInDatabase(kindeUserId: string): Promise<UserRecord | null> {
+  // Check in-process cache first — eliminates a DB round-trip on every request
+  // for the same user within the 5-minute TTL window.
+  const cached = userRecordCache.get(kindeUserId);
+  if (cached && Date.now() < cached.expiresAt) {
+    if (shouldLogVerbose()) console.log('🔍 User cache HIT:', kindeUserId);
+    return cached.value;
+  }
+
   try {
     if (shouldLogVerbose()) console.log('🔍 Looking up user:', kindeUserId);
 
@@ -84,11 +92,13 @@ async function findUserInDatabase(kindeUserId: string): Promise<UserRecord | nul
 
     if (!Array.isArray(userRecords) || userRecords.length === 0) {
       if (shouldLogVerbose()) console.log('⚠️ No user records found');
+      userRecordCache.set(kindeUserId, { value: null, expiresAt: Date.now() + USER_RECORD_CACHE_TTL_MS });
       return null;
     }
 
     const selectedUser = userRecords.find(u => u.onboardingCompleted) || userRecords[0];
     if (shouldLogVerbose()) console.log('Auth: user found', selectedUser.userId);
+    userRecordCache.set(kindeUserId, { value: selectedUser, expiresAt: Date.now() + USER_RECORD_CACHE_TTL_MS });
     return selectedUser;
 
   } catch (error: unknown) {
@@ -97,6 +107,32 @@ async function findUserInDatabase(kindeUserId: string): Promise<UserRecord | nul
     return null;
   }
 }
+
+// ── User record cache ─────────────────────────────────────────────────────
+// findUserInDatabase() runs on every authenticated request and is the single
+// most expensive repeated DB call. Cache by kindeUserId with a 5-minute TTL.
+// Invalidate via invalidateUserCache() whenever onboarding/isActive changes.
+const USER_RECORD_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+interface UserRecordCacheEntry { value: UserRecord | null; expiresAt: number }
+const userRecordCache = new Map<string, UserRecordCacheEntry>();
+
+export function invalidateUserCache(kindeUserId: string): void {
+  userRecordCache.delete(kindeUserId);
+}
+// ─────────────────────────────────────────────────────────────────────────
+
+// ── Super-admin role cache ────────────────────────────────────────────────
+// The role JOIN query runs on every authenticated request for non-null users.
+// Cache by internalUserId with a 5-minute TTL.
+// Invalidate via invalidateRoleCache() whenever roles are reassigned.
+const ROLE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+interface RoleCacheEntry { isSuperAdmin: boolean; expiresAt: number }
+const roleCacheByUserId = new Map<string, RoleCacheEntry>();
+
+export function invalidateRoleCache(internalUserId: string): void {
+  roleCacheByUserId.delete(internalUserId);
+}
+// ─────────────────────────────────────────────────────────────────────────
 
 // Short-lived cache for org-code → tenantId lookups.
 // Caches both hits (tenantId string) and misses (null sentinel) to prevent
@@ -189,8 +225,12 @@ export async function setupDatabaseConnection(request: FastifyRequest, tenantId:
 
   if (!analysis.requiresBypass && tenantId && request.db) {
     try {
-      await request.db`SELECT set_config('app.tenant_id', ${tenantId}, false)`;
-      await request.db`SELECT set_config('app.user_id', ${userId || ''}, false)`;
+      // Single round-trip instead of two separate SQL calls.
+      await request.db`
+        SELECT
+          set_config('app.tenant_id', ${tenantId}, false),
+          set_config('app.user_id',   ${userId || ''}, false)
+      `;
     } catch (error: unknown) {
       const err = error as Error;
       console.error('❌ Failed to set tenant context:', err.message);
@@ -264,20 +304,28 @@ async function processAuthenticatedUser(request: FastifyRequest, reply: FastifyR
 
   let isSuperAdmin = false;
   if (userRecord?.userId && tenantId) {
-    try {
-      const userRoles = await db
-        .select({
-          roleName: customRoles.roleName,
-          isSystemRole: customRoles.isSystemRole,
-          organizationId: userRoleAssignments.organizationId
-        })
-        .from(userRoleAssignments)
-        .innerJoin(customRoles, eq(userRoleAssignments.roleId, customRoles.roleId))
-        .where(eq(userRoleAssignments.userId, userRecord.userId));
+    // Check role cache first — eliminates a DB round-trip on every request
+    // for the same user within the 5-minute TTL window.
+    const cachedRole = roleCacheByUserId.get(userRecord.userId);
+    if (cachedRole && Date.now() < cachedRole.expiresAt) {
+      isSuperAdmin = cachedRole.isSuperAdmin;
+    } else {
+      try {
+        const userRoles = await db
+          .select({
+            roleName: customRoles.roleName,
+            isSystemRole: customRoles.isSystemRole,
+            organizationId: userRoleAssignments.organizationId
+          })
+          .from(userRoleAssignments)
+          .innerJoin(customRoles, eq(userRoleAssignments.roleId, customRoles.roleId))
+          .where(eq(userRoleAssignments.userId, userRecord.userId));
 
-      isSuperAdmin = userRoles.some(role => role.roleName === 'Super Administrator' && role.isSystemRole);
-    } catch (error) {
-      console.warn('⚠️ Failed to check super admin status:', error);
+        isSuperAdmin = userRoles.some(role => role.roleName === 'Super Administrator' && role.isSystemRole);
+        roleCacheByUserId.set(userRecord.userId, { isSuperAdmin, expiresAt: Date.now() + ROLE_CACHE_TTL_MS });
+      } catch (error) {
+        console.warn('⚠️ Failed to check super admin status:', error);
+      }
     }
   }
 

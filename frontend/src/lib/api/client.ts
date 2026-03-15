@@ -2,8 +2,125 @@ import axios, { AxiosError } from 'axios'
 import toast from 'react-hot-toast'
 import { logger } from '@/lib/logger'
 import { config } from '@/lib/config'
+import { markSessionRecoveryReason } from '@/lib/auth/session-recovery'
+
+// ─── Toast deduplication helpers ─────────────────────────────────────────────
+// Prevent flooding the user with repeated toasts for the same root cause.
+
+let _sessionExpiredLock = false
+
+/** Show a "session expired" toast once per expiry event. */
+function notifySessionExpired() {
+  // On public pages a 401 is expected — don't show a toast there.
+  const publicPaths = ['/', '/login', '/auth/callback', '/pricing', '/products', '/industries']
+  const isPublic = publicPaths.some(p =>
+    window.location.pathname === p || window.location.pathname.startsWith(p + '/')
+  )
+  if (isPublic || _sessionExpiredLock) return
+  _sessionExpiredLock = true
+  setTimeout(() => { _sessionExpiredLock = false }, 30_000)
+
+  markSessionRecoveryReason('session_expired')
+  toast.error('Your session has expired. Please sign in again.', {
+    id: 'session-expired',
+    duration: 8000,
+    position: 'top-center',
+  })
+}
+
+let _networkErrorLock = false
+
+/** Show a "server unavailable" or "offline" toast once per outage window. */
+function notifyNetworkError() {
+  if (_networkErrorLock) return
+  _networkErrorLock = true
+  setTimeout(() => { _networkErrorLock = false }, 15_000)
+
+  const message = !navigator.onLine
+    ? "You're offline. Please check your internet connection."
+    : 'Server is temporarily unavailable. Please try again in a moment.'
+  toast.error(message, {
+    id: 'network-error',
+    duration: 6000,
+    position: 'top-center',
+  })
+}
+
+let _forbiddenLock = false
+
+/** Show an "access denied" toast once per window. */
+function notifyForbidden() {
+  if (_forbiddenLock) return
+  _forbiddenLock = true
+  setTimeout(() => { _forbiddenLock = false }, 10_000)
+
+  toast.error("You don't have permission to perform this action.", {
+    id: 'forbidden',
+    duration: 5000,
+    position: 'top-center',
+  })
+}
 
 const API_BASE_URL = config.API_URL
+const REQUEST_TIMEOUT_MS = 20_000
+const SLOW_REQUEST_THRESHOLD_MS = 4_000
+const MAX_SAFE_RETRIES = 2
+const BASE_RETRY_DELAY_MS = 500
+
+export const NETWORK_QUALITY_EVENT = 'api-network-quality'
+export const BACKEND_STATUS_EVENT = 'api-backend-status'
+
+const activeSlowRequests = new Set<string>()
+let backendDown = false
+
+const emitBackendStatus = () => {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(BACKEND_STATUS_EVENT, {
+    detail: {
+      isBackendDown: backendDown,
+      apiBaseUrl: API_BASE_URL,
+    },
+  }))
+}
+
+const markBackendDown = () => {
+  if (backendDown) return
+  backendDown = true
+  emitBackendStatus()
+}
+
+const markBackendUp = () => {
+  if (!backendDown) return
+  backendDown = false
+  emitBackendStatus()
+}
+
+const emitNetworkQuality = () => {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(NETWORK_QUALITY_EVENT, {
+    detail: { slowRequestCount: activeSlowRequests.size },
+  }))
+}
+
+const markSlowRequestStarted = (requestKey: string) => {
+  if (activeSlowRequests.has(requestKey)) return
+  activeSlowRequests.add(requestKey)
+  emitNetworkQuality()
+}
+
+const markSlowRequestEnded = (requestKey?: string) => {
+  if (!requestKey) return
+  if (!activeSlowRequests.has(requestKey)) return
+  activeSlowRequests.delete(requestKey)
+  emitNetworkQuality()
+}
+
+const getRequestKey = (requestConfig: any): string => {
+  const method = (requestConfig?.method || 'GET').toUpperCase()
+  const base = requestConfig?.baseURL || API_BASE_URL || ''
+  const url = requestConfig?.url || ''
+  return `${method} ${base}${url}`
+}
 
 let kindeTokenGetter: (() => Promise<string | null>) | null = null;
 
@@ -49,6 +166,7 @@ export const getKindeToken = async (): Promise<string | null> => {
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: REQUEST_TIMEOUT_MS,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -56,6 +174,19 @@ export const api = axios.create({
 })
 
 api.interceptors.request.use(async (config) => {
+  const requestConfig = config as any
+  requestConfig.metadata = requestConfig.metadata || {}
+  requestConfig.metadata.requestStartedAt = Date.now()
+  requestConfig.metadata.requestKey = getRequestKey(requestConfig)
+  requestConfig.metadata.slowNetworkTriggered = false
+
+  if (typeof window !== 'undefined' && !requestConfig.metadata.skipSlowNetworkDetection) {
+    requestConfig.metadata.slowNetworkTimer = window.setTimeout(() => {
+      requestConfig.metadata.slowNetworkTriggered = true
+      markSlowRequestStarted(requestConfig.metadata.requestKey)
+    }, SLOW_REQUEST_THRESHOLD_MS)
+  }
+
   const authToken = await getKindeToken();
   
   if (authToken) {
@@ -72,28 +203,167 @@ api.interceptors.request.use(async (config) => {
   return Promise.reject(error);
 })
 
+const cleanupRequestTracking = (requestConfig?: any) => {
+  if (!requestConfig?.metadata) return
+  const timerId = requestConfig.metadata.slowNetworkTimer
+  if (timerId && typeof window !== 'undefined') {
+    window.clearTimeout(timerId)
+  }
+  if (requestConfig.metadata.slowNetworkTriggered) {
+    markSlowRequestEnded(requestConfig.metadata.requestKey)
+  }
+}
+
+const getRetryDelay = (retryAttempt: number): number => {
+  const exponentialDelay = BASE_RETRY_DELAY_MS * (2 ** (retryAttempt - 1))
+  const jitter = Math.floor(Math.random() * 250)
+  return exponentialDelay + jitter
+}
+
+const isSafeMethod = (method?: string): boolean => {
+  const normalized = (method || '').toUpperCase()
+  return normalized === 'GET' || normalized === 'HEAD' || normalized === 'OPTIONS'
+}
+
+const isCanceledRequest = (error: any): boolean => {
+  return error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError'
+}
+
+const shouldRetryRequest = (error: AxiosError): boolean => {
+  const requestConfig = error.config as any
+  if (!requestConfig) return false
+  if (isCanceledRequest(error)) return false
+  if (!isSafeMethod(requestConfig.method)) return false
+
+  const retryCount = requestConfig.__retryCount || 0
+  if (retryCount >= MAX_SAFE_RETRIES) return false
+
+  if (!error.response) return true
+
+  const status = error.response.status
+  return status === 408 || status === 429 || status >= 500
+}
+
+let _networkTimeoutLock = false
+function notifyNetworkTimeout() {
+  if (_networkTimeoutLock) return
+  _networkTimeoutLock = true
+  setTimeout(() => { _networkTimeoutLock = false }, 15_000)
+
+  toast.error('Request timed out on a slow connection. Please try again.', {
+    id: 'network-timeout',
+    duration: 6000,
+    position: 'top-center',
+  })
+}
+
+let _backendDownLock = false
+function notifyBackendDown() {
+  if (_backendDownLock) return
+  _backendDownLock = true
+  setTimeout(() => { _backendDownLock = false }, 20_000)
+
+  toast.error('Backend is temporarily unavailable. It will be up soon.', {
+    id: 'backend-down',
+    duration: 7000,
+    position: 'top-center',
+  })
+}
+
+const retryRequestIfEligible = async (error: AxiosError) => {
+  if (!shouldRetryRequest(error)) return null
+
+  const requestConfig = error.config as any
+  requestConfig.__retryCount = (requestConfig.__retryCount || 0) + 1
+  const retryDelay = getRetryDelay(requestConfig.__retryCount)
+
+  logger.debug('🔄 Retrying safe request after transient failure', {
+    retryCount: requestConfig.__retryCount,
+    url: requestConfig.url,
+    method: requestConfig.method,
+    retryDelay,
+    status: error.response?.status ?? 'NO_RESPONSE',
+  })
+
+  await new Promise(resolve => setTimeout(resolve, retryDelay))
+  return api.request(requestConfig)
+}
+
+export const createCancelableRequest = () => {
+  const controller = new AbortController()
+  return {
+    signal: controller.signal,
+    cancel: () => controller.abort('Request cancelled by user'),
+  }
+}
+
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    cleanupRequestTracking(response.config as any)
+    markBackendUp()
+    return response
+  },
   async (error: AxiosError) => {
-    if (error.response?.status !== 401) {
+    const requestConfig = error.config as any
+    cleanupRequestTracking(requestConfig)
+
+    const retriedResponse = await retryRequestIfEligible(error)
+    if (retriedResponse) return retriedResponse
+
+    // Timeout after configured request window
+    if ((error as any).code === 'ECONNABORTED' || String(error.message || '').toLowerCase().includes('timeout')) {
+      logger.error('🚨 Request timeout:', {
+        url: requestConfig?.url,
+        method: requestConfig?.method,
+      })
+      notifyNetworkTimeout()
+      return Promise.reject(error)
+    }
+
+    // ── No response at all: network down or backend unreachable ─────────────
+    if (!error.response) {
+      // Ignore cancelled requests (e.g. component unmounted)
+      if (isCanceledRequest(error)) {
+        return Promise.reject(error)
+      }
+      logger.error('🚨 Network error (no response):', error.message)
+      markBackendDown()
+      notifyBackendDown()
+      notifyNetworkError()
+      return Promise.reject(error)
+    }
+
+    markBackendUp()
+
+    const status = error.response.status
+
+    if (status !== 401) {
       logger.error('🚨 API Error:', {
-        status: error.response?.status,
+        status,
         url: error.config?.url,
         method: error.config?.method,
         data: error.response?.data
       })
     }
 
-    if (error.response?.status === 401) {
+    // ── 401 Unauthorized — stale session ───────────────────────────────────
+    if (status === 401) {
       logger.debug('Authentication required — session may have expired')
+      notifySessionExpired()
     }
 
-    if (error.response?.status === 200 && (error.response?.data as any)?.subscriptionExpired) {
+    // ── 403 Forbidden — platform/role permission denied ────────────────────
+    if (status === 403) {
+      notifyForbidden()
+    }
+
+    // ── Trial / subscription expired (encoded as 200) ──────────────────────
+    if (status === 200 && (error.response?.data as any)?.subscriptionExpired) {
       const responseData = error.response.data as any
-      
+
       if (responseData?.code === 'TRIAL_EXPIRED' || responseData?.code === 'SUBSCRIPTION_EXPIRED') {
         logger.debug('🚫 Trial/Subscription expired response intercepted:', responseData)
-        
+
         const expiredData = {
           expired: true,
           expiredAt: new Date().toISOString(),
@@ -108,40 +378,31 @@ api.interceptors.response.use(
           immediate: responseData.immediate,
           code: responseData.code
         }
-        
+
         localStorage.setItem('trialExpired', JSON.stringify(expiredData))
-        
+
         const lastEmitted = localStorage.getItem('trialExpiredEventEmitted')
         const now = Date.now()
-        
+
         if (!lastEmitted || (now - parseInt(lastEmitted)) > 5000) {
           localStorage.setItem('trialExpiredEventEmitted', now.toString())
-          
-          window.dispatchEvent(new CustomEvent('apiTrialExpired', { 
-            detail: responseData 
-          }))
-          
-          window.dispatchEvent(new CustomEvent('trialExpired', { 
-            detail: expiredData 
-          }))
+          window.dispatchEvent(new CustomEvent('apiTrialExpired', { detail: responseData }))
+          window.dispatchEvent(new CustomEvent('trialExpired', { detail: expiredData }))
         }
-        
+
         return Promise.reject(error)
       }
     }
 
-    if (error.response?.status && error.response.status >= 500) {
-      logger.error('🚨 Server error intercepted:', error.response.status)
-      
+    // ── 5xx Server errors ──────────────────────────────────────────────────
+    if (status >= 500) {
+      logger.error('🚨 Server error intercepted:', status)
       const trialExpired = localStorage.getItem('trialExpired')
       if (!trialExpired) {
-        toast.error('Server temporarily unavailable. Please try again in a moment.', {
-          duration: 4000,
-          position: 'top-center'
-        })
+        notifyNetworkError()
       }
     }
-    
+
     return Promise.reject(error)
   }
 )

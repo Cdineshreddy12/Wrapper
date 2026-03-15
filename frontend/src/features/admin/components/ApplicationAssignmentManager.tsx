@@ -33,7 +33,9 @@ import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { toast } from 'sonner';
 import { applicationAssignmentAPI } from '@/lib/api';
+import { api } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
+import { runMutationWithFeedback } from '@/lib/mutation-feedback';
 
 interface Application {
   appId: string;
@@ -227,8 +229,8 @@ const ApplicationAssignmentManager: React.FC = () => {
   const lastLoadedTenantId = React.useRef<string | null>(null);
 
   const loadTenantApplications = useCallback(async (tenant: Tenant) => {
-    // Only reload if it's a different tenant or it's the first load
-    if (lastLoadedTenantId.current === tenant.tenantId && tenantApplications.length > 0) return;
+    // Only reload if it's a different tenant — tracked via ref to avoid stale closure issues
+    if (lastLoadedTenantId.current === tenant.tenantId) return;
 
     try {
       setLoading(true);
@@ -288,9 +290,12 @@ const ApplicationAssignmentManager: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [tenantApplications.length]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps — guard uses ref, no stale closure risk
 
-  useEffect(() => { loadOverview(); loadTenants(); loadAllAvailableApplications(); }, [loadOverview, loadTenants, loadAllAvailableApplications]);
+  // Run once on mount — these callbacks have empty deps so their references never change
+  useEffect(() => { loadOverview(); loadAllAvailableApplications(); }, [loadOverview, loadAllAvailableApplications]);
+  // Re-run only when searchTerm changes (loadTenants dep tracks it)
+  useEffect(() => { loadTenants(); }, [loadTenants]);
 
   useEffect(() => {
     if (selectedTenant && activeTab === 'manage') {
@@ -302,8 +307,18 @@ const ApplicationAssignmentManager: React.FC = () => {
     if (!window.confirm(`Decommission ${appName} from ${tenantName}?`)) return;
     try {
       setLoading(true);
-      await applicationAssignmentAPI.removeAssignment(assignmentId);
-      toast.success(`${appName} decommissioned successfully`);
+      await runMutationWithFeedback({
+        scope: 'decommission-application-assignment',
+        idParts: [assignmentId],
+        loadingMessage: `Decommissioning ${appName}...`,
+        successMessage: `${appName} decommissioned successfully`,
+        errorMessage: 'Decommissioning failed',
+        execute: (idempotencyKey) => api.delete(`/admin/application-assignments/${assignmentId}`, {
+          headers: {
+            'X-Idempotency-Key': idempotencyKey
+          }
+        })
+      });
       queryClient.invalidateQueries({ queryKey: ['tenantApps'] });
       queryClient.invalidateQueries({ queryKey: ['applicationAllocations'] });
       lastLoadedTenantId.current = null;
@@ -350,33 +365,46 @@ const ApplicationAssignmentManager: React.FC = () => {
         return;
       }
 
-      // Execute sequential commitments to ensure database integrity
-      for (const app of appsWithChanges) {
-        const appModuleKeys = app.modules?.map(m => `${app.appId}::${m.moduleCode}`) || [];
-        const appEnabledModules = appModuleKeys
-          .filter(mk => assignmentConfig.enabledModules.includes(mk))
-          .map(mk => mk.split('::')[1]);
-        const appCustomPermissions: Record<string, string[]> = {};
+      await runMutationWithFeedback({
+        scope: 'commit-security-matrix',
+        idParts: [selectedTenant.tenantId, appsWithChanges.length],
+        loadingMessage: 'Committing security matrix...',
+        successMessage: 'Security matrix serialized successfully',
+        errorMessage: 'Commit protocol failed',
+        execute: async (idempotencyKey) => {
+          // Execute sequential commitments to ensure database integrity
+          for (const app of appsWithChanges) {
+            const appModuleKeys = app.modules?.map(m => `${app.appId}::${m.moduleCode}`) || [];
+            const appEnabledModules = appModuleKeys
+              .filter(mk => assignmentConfig.enabledModules.includes(mk))
+              .map(mk => mk.split('::')[1]);
+            const appCustomPermissions: Record<string, string[]> = {};
 
-        appModuleKeys.forEach(mk => {
-          if (assignmentConfig.enabledModules.includes(mk)) {
-            const moduleCode = mk.split('::')[1];
-            appCustomPermissions[moduleCode] = assignmentConfig.selectedPermissions[mk] || [];
+            appModuleKeys.forEach(mk => {
+              if (assignmentConfig.enabledModules.includes(mk)) {
+                const moduleCode = mk.split('::')[1];
+                appCustomPermissions[moduleCode] = assignmentConfig.selectedPermissions[mk] || [];
+              }
+            });
+
+            await api.post('/admin/application-assignments/assign', {
+              tenantId: selectedTenant.tenantId,
+              appId: app.appId,
+              enabledModules: appEnabledModules,
+              customPermissions: appCustomPermissions,
+              isEnabled: true
+            }, {
+              headers: {
+                'X-Idempotency-Key': `${idempotencyKey}:${app.appId}`
+              }
+            });
           }
-        });
-
-        await applicationAssignmentAPI.assignApplication({
-          tenantId: selectedTenant.tenantId,
-          appId: app.appId,
-          enabledModules: appEnabledModules,
-          customPermissions: appCustomPermissions,
-          isEnabled: true
-        });
-      }
+          return { committed: appsWithChanges.length };
+        }
+      });
 
       setOriginalPermissions({ ...assignmentConfig.selectedPermissions });
       setOriginalModules([...assignmentConfig.enabledModules]);
-      toast.success('Security matrix serialized successfully');
 
       queryClient.invalidateQueries({ queryKey: ['tenantApps'] });
       queryClient.invalidateQueries({ queryKey: ['applicationAllocations'] });
@@ -397,19 +425,29 @@ const ApplicationAssignmentManager: React.FC = () => {
     try {
       setLoading(true);
       const defaultModules = app.modules?.map(m => m.moduleCode) || [];
-      await applicationAssignmentAPI.assignApplication({
-        tenantId: selectedTenant.tenantId,
-        appId: app.appId,
-        enabledModules: defaultModules
+      await runMutationWithFeedback({
+        scope: 'assign-application-directly',
+        idParts: [selectedTenant.tenantId, app.appId],
+        loadingMessage: `Deploying ${app.appName}...`,
+        successMessage: `Domain ${app.appName} deployed to ${selectedTenant.companyName}`,
+        errorMessage: 'Deployment failed',
+        execute: (idempotencyKey) => api.post('/admin/application-assignments/assign', {
+          tenantId: selectedTenant.tenantId,
+          appId: app.appId,
+          enabledModules: defaultModules
+        }, {
+          headers: {
+            'X-Idempotency-Key': idempotencyKey
+          }
+        })
       });
-      toast.success(`Domain ${app.appName} deployed to ${selectedTenant.companyName}`);
       queryClient.invalidateQueries({ queryKey: ['tenantApps'] });
       queryClient.invalidateQueries({ queryKey: ['applicationAllocations'] });
       lastLoadedTenantId.current = null;
       loadTenants();
       if (selectedTenant) loadTenantApplications(selectedTenant);
     } catch (error) {
-      toast.error('Deployment failed');
+      console.error('Deployment failed:', error);
     } finally {
       setLoading(false);
     }
@@ -747,6 +785,7 @@ const ApplicationAssignmentManager: React.FC = () => {
                                   <Button
                                     size="sm"
                                     variant="outline"
+                                    disabled={loading}
                                     onClick={() => handleAssignApplicationDirectly(app)}
                                     className="rounded-xl px-4 h-9 text-[9px] font-black uppercase tracking-widest border-blue-200 text-blue-600 hover:bg-blue-600 hover:text-white transition-all"
                                   >
@@ -756,6 +795,7 @@ const ApplicationAssignmentManager: React.FC = () => {
                                   <Button
                                     size="sm"
                                     variant="ghost"
+                                    disabled={loading}
                                     onClick={() => handleRemoveAssignment(tenantApp.id, selectedTenant.companyName, app.appName)}
                                     className="rounded-xl px-4 h-9 text-[9px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 hover:text-rose-600 border border-transparent hover:border-rose-100"
                                   >

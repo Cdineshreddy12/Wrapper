@@ -260,6 +260,8 @@ async function registerPlugins() {
       'X-Organization-ID',    // CRM sends this
       'X-Tenant-ID',          // Frontend sends this
       'x-tenant-id',          // Alternative casing
+      'X-Idempotency-Key',    // Credit allocation idempotency
+      'x-idempotency-key',    // Lowercase variant from browser/client
       'Origin',               // Browser sends this
       'Accept',               // Browser sends this
       'Accept-Language',      // Browser sends this

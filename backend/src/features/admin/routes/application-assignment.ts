@@ -8,9 +8,9 @@ import {
   entities
 } from '../../../db/schema/index.js';
 import { eq, and, sql, count, inArray } from 'drizzle-orm';
-import { PERMISSIONS } from '../../../constants/permissions.js';
-import { authenticateToken, requirePermission } from '../../../middleware/auth/auth.js';
+import { authenticateToken } from '../../../middleware/auth/auth.js';
 import { publishTenantApplicationSyncEvent } from '../../messaging/services/tenant-application-event-service.js';
+import { requirePlatformPermission } from '../../../middleware/auth/platform-permission-middleware.js';
 
 /**
  * Admin Application Assignment Routes
@@ -25,7 +25,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       description: 'Get tenant-specific applications with modules and permissions',
       tags: ['Admin', 'Application Assignment']
     },
-    preHandler: []
+    preHandler: requirePlatformPermission('org_assignments:read')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as Record<string, unknown>;
     const params = request.params as Record<string, string>;
@@ -162,7 +162,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       description: 'Get overview of application assignments across all tenants',
       tags: ['Admin', 'Application Assignment']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_VIEW)
+    preHandler: requirePlatformPermission('org_assignments:read')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as Record<string, unknown>;
     const params = request.params as Record<string, string>;
@@ -237,7 +237,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       description: 'Get all tenants with their application assignments',
       tags: ['Admin', 'Application Assignment']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_VIEW)
+    preHandler: requirePlatformPermission('org_assignments:read')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as Record<string, unknown>;
     const params = request.params as Record<string, string>;
@@ -438,7 +438,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       description: 'Get application assignments for a specific tenant',
       tags: ['Admin', 'Application Assignment']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_VIEW)
+    preHandler: requirePlatformPermission('org_assignments:read')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const params = request.params as Record<string, string>;
@@ -578,7 +578,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       description: 'Assign an application to a tenant',
       tags: ['Admin', 'Application Assignment']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_ASSIGN)
+    preHandler: requirePlatformPermission('org_assignments:write')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = request.body as any;
@@ -800,7 +800,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       description: 'Update an application assignment',
       tags: ['Admin', 'Application Assignment']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_EDIT)
+    preHandler: requirePlatformPermission('org_assignments:write')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const params = request.params as any;
@@ -879,7 +879,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       description: 'Remove an application assignment',
       tags: ['Admin', 'Application Assignment']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_DELETE)
+    preHandler: requirePlatformPermission('org_assignments:write')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const params = request.params as any;
@@ -946,7 +946,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       description: 'Bulk assign applications to multiple tenants',
       tags: ['Admin', 'Application Assignment']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_BULK_ASSIGN)
+    preHandler: requirePlatformPermission('org_assignments:write')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = request.body as any;
@@ -1097,7 +1097,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       description: 'Get all available applications for assignment',
       tags: ['Admin', 'Application Assignment']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_VIEW)
+    preHandler: requirePlatformPermission('org_assignments:read')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const query = request.query as any;
@@ -1180,7 +1180,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       description: 'Assign a specific module to a tenant',
       tags: ['Admin', 'Application Assignment']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_ASSIGN)
+    preHandler: requirePlatformPermission('org_assignments:write')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = request.body as Record<string, unknown>;
@@ -1406,7 +1406,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       description: 'Update specific permissions for a module assigned to a tenant',
       tags: ['Admin', 'Application Assignment']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_ASSIGN)
+    preHandler: requirePlatformPermission('org_assignments:write')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = request.body as any;
@@ -1510,7 +1510,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       description: 'Remove a specific module from a tenant',
       tags: ['Admin', 'Application Assignment']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_ASSIGN)
+    preHandler: requirePlatformPermission('org_assignments:write')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = request.body as Record<string, unknown>;
@@ -1609,7 +1609,7 @@ export default async function applicationAssignmentRoutes(fastify: FastifyInstan
       description: 'Get all modules assigned to a specific tenant',
       tags: ['Admin', 'Application Assignment']
     },
-    preHandler: requirePermission(PERMISSIONS.ADMIN_APPS_VIEW)
+    preHandler: requirePlatformPermission('org_assignments:read')
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const params = request.params as Record<string, string>;

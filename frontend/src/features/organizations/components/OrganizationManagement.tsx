@@ -293,6 +293,7 @@ export function OrganizationTreeManagement({
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCreatingLocation, setIsCreatingLocation] = useState(false);
+  const [isTransferringCredits, setIsTransferringCredits] = useState(false);
 
   // Forms
   const [subForm, setSubForm] = useState({ name: '', description: '', responsiblePersonId: '', organizationType: 'department' });
@@ -639,15 +640,24 @@ export function OrganizationTreeManagement({
 
   // --- Actions ---
 
+  const createIdempotencyKey = (scope: string, entityId?: string): string =>
+    `${scope}:${entityId ?? 'na'}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
+
   const createSubOrganization = async () => {
     if (isCreating) return; // Prevent double submission
     if (!subForm.name || subForm.name.trim().length < 2) return toast.error('Name too short');
-    
+
+    const loadingToastId = toast.loading('Creating organization...');
+    const idempotencyKey = createIdempotencyKey('create-sub-organization', selectedOrg?.entityId);
     setIsCreating(true);
     try {
       const response = await makeRequest('/entities/organization', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Application': 'crm' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Application': 'crm',
+          'X-Idempotency-Key': idempotencyKey
+        },
         body: JSON.stringify({
           entityName: subForm.name.trim(), description: subForm.description, parentEntityId: selectedOrg?.entityId || null, parentTenantId: tenantId || '', responsiblePersonId: subForm.responsiblePersonId === 'none' ? null : subForm.responsiblePersonId || null, entityType: 'organization', organizationType: subForm.organizationType || 'department'
         })
@@ -660,20 +670,32 @@ export function OrganizationTreeManagement({
         queryClient.invalidateQueries({ queryKey: ['organizations', 'available'] });
         queryClient.invalidateQueries({ queryKey: ['entities', tenantId] });
         await loadData();
+      } else {
+        toast.error(response?.message || 'Failed to create organization');
       }
-    } catch (error: any) { toast.error(error.message || 'Failed'); }
-    finally { setIsCreating(false); }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to create organization');
+    } finally {
+      toast.dismiss(loadingToastId);
+      setIsCreating(false);
+    }
   };
 
   const updateOrganization = async () => {
     if (isUpdating) return; // Prevent double submission
     if (!selectedOrg) return;
-    
+
+    const loadingToastId = toast.loading('Updating organization...');
+    const idempotencyKey = createIdempotencyKey('update-organization', selectedOrg.entityId);
     setIsUpdating(true);
     try {
       const response = await makeRequest(`/entities/${selectedOrg.entityId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'X-Application': 'crm' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Application': 'crm',
+          'X-Idempotency-Key': idempotencyKey
+        },
         body: JSON.stringify({ ...editForm, entityName: editForm.name, parentTenantId: tenantId || '' })
       });
       if (response.success) {
@@ -684,9 +706,15 @@ export function OrganizationTreeManagement({
         queryClient.invalidateQueries({ queryKey: ['organizations', 'available'] });
         queryClient.invalidateQueries({ queryKey: ['entities', tenantId] });
         await loadData();
+      } else {
+        toast.error(response?.message || 'Failed to update organization');
       }
-    } catch (error: any) { toast.error(error.message || 'Failed'); }
-    finally { setIsUpdating(false); }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to update organization');
+    } finally {
+      toast.dismiss(loadingToastId);
+      setIsUpdating(false);
+    }
   };
 
   const deleteOrganization = async (orgId: string, orgName?: string) => {
@@ -702,9 +730,17 @@ export function OrganizationTreeManagement({
     const orgToDelete = orgName || org?.entityName || processedHierarchy.find(o => o.entityId === orgId)?.entityName || 'this organization';
     if (!confirm(`Are you sure you want to delete "${orgToDelete}"? This action cannot be undone.`)) return;
     
+    const loadingToastId = toast.loading(`Deleting "${orgToDelete}"...`);
+    const idempotencyKey = createIdempotencyKey('delete-organization', orgId);
     setIsDeleting(true);
     try {
-      const response = await makeRequest(`/entities/${orgId}`, { method: 'DELETE', headers: { 'X-Application': 'crm' } });
+      const response = await makeRequest(`/entities/${orgId}`, {
+        method: 'DELETE',
+        headers: {
+          'X-Application': 'crm',
+          'X-Idempotency-Key': idempotencyKey
+        }
+      });
       if (response.success) {
         toast.success('Deleted');
         // Invalidate queries and reload data immediately
@@ -712,20 +748,32 @@ export function OrganizationTreeManagement({
         queryClient.invalidateQueries({ queryKey: ['organizations', 'available'] });
         queryClient.invalidateQueries({ queryKey: ['entities', tenantId] });
         await loadData();
+      } else {
+        toast.error(response?.message || 'Failed to delete organization');
       }
-    } catch (error: any) { toast.error(error.message); }
-    finally { setIsDeleting(false); }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to delete organization');
+    } finally {
+      toast.dismiss(loadingToastId);
+      setIsDeleting(false);
+    }
   };
 
   const createLocation = async () => {
     if (isCreatingLocation) return; // Prevent double submission
     if (!selectedOrg) return;
-    
+
+    const loadingToastId = toast.loading('Creating location...');
+    const idempotencyKey = createIdempotencyKey('create-location', selectedOrg.entityId);
     setIsCreatingLocation(true);
     try {
       const response = await makeRequest('/entities/location', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Application': 'crm' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Application': 'crm',
+          'X-Idempotency-Key': idempotencyKey
+        },
         body: JSON.stringify({
           entityName: locationForm.name, entityType: 'location', locationType: locationForm.locationType,
           address: { street: locationForm.address, city: locationForm.city, state: locationForm.state, zipCode: locationForm.zipCode, country: locationForm.country },
@@ -739,20 +787,33 @@ export function OrganizationTreeManagement({
         queryClient.invalidateQueries({ queryKey: ['organizations', 'hierarchy', tenantId] });
         queryClient.invalidateQueries({ queryKey: ['entities', tenantId] });
         await loadData();
+      } else {
+        toast.error(response?.message || 'Failed to create location');
       }
-    } catch (error: any) { toast.error(error.message); }
-    finally { setIsCreatingLocation(false); }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to create location');
+    } finally {
+      toast.dismiss(loadingToastId);
+      setIsCreatingLocation(false);
+    }
   };
 
   const handleAllocateCredits = async () => {
+    if (allocating) return;
     if (!selectedEntity || !allocationForm.creditAmount) return toast.error('Fill required fields');
     if (allocationForm.creditAmount > Number(selectedEntity.availableCredits || 0)) return toast.error('Insufficient credits');
 
+    const idempotencyKey = `org-alloc:${selectedEntity.entityId}:${allocationForm.targetApplication}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
+    const loadingToastId = toast.loading('Allocating credits...');
     setAllocating(true);
     try {
       const response = await makeRequest('/credits/allocate/application', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Application': 'crm' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Application': 'crm',
+          'X-Idempotency-Key': idempotencyKey
+        },
         body: JSON.stringify({ sourceEntityId: selectedEntity.entityId, targetApplication: allocationForm.targetApplication, creditAmount: allocationForm.creditAmount, allocationPurpose: allocationForm.allocationPurpose, autoReplenish: allocationForm.autoReplenish })
       });
       if (response.success) {
@@ -764,8 +825,74 @@ export function OrganizationTreeManagement({
         queryClient.invalidateQueries({ queryKey: ['organizations', 'hierarchy', tenantId] });
         queryClient.invalidateQueries({ queryKey: ['entities', tenantId] });
         await loadData();
+      } else {
+        toast.error(response?.message || 'Credit allocation failed');
       }
-    } catch (error: any) { toast.error(error.message); } finally { setAllocating(false); }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to allocate credits');
+    } finally {
+      toast.dismiss(loadingToastId);
+      setAllocating(false);
+    }
+  };
+
+  const handleTransferCredits = async () => {
+    if (isTransferringCredits) return;
+    if (!selectedOrg) return;
+
+    const invalidDestination = !creditTransferForm.destinationEntityId
+      || creditTransferForm.destinationEntityId === 'no-orgs'
+      || creditTransferForm.destinationEntityId === 'no-locations';
+    if (invalidDestination || !creditTransferForm.amount) {
+      toast.error('Please select destination and amount');
+      return;
+    }
+
+    const creditAmount = parseFloat(creditTransferForm.amount);
+    if (!Number.isFinite(creditAmount) || creditAmount <= 0) {
+      toast.error('Please enter a valid credit amount');
+      return;
+    }
+
+    const loadingToastId = toast.loading('Transferring credits...');
+    const idempotencyKey = createIdempotencyKey('transfer-credits', selectedOrg.entityId);
+    setIsTransferringCredits(true);
+    try {
+      const transferData = {
+        fromEntityId: selectedOrg.entityId,
+        toEntityType: creditTransferForm.destinationEntityType,
+        toEntityId: creditTransferForm.destinationEntityId,
+        creditAmount,
+        reason: creditTransferForm.description || `Transfer from ${selectedOrg.entityName}`
+      };
+      const response = await makeRequest('/credits/transfer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Application': 'crm',
+          'X-Idempotency-Key': idempotencyKey
+        },
+        body: JSON.stringify(transferData)
+      });
+      if (response.success) {
+        toast.success(`Successfully transferred ${creditAmount} credits`);
+        setShowCreditTransfer(false);
+        setCreditTransferForm({ sourceEntityType: 'organization', sourceEntityId: '', destinationEntityType: 'organization', destinationEntityId: '', amount: '', transferType: 'direct', isTemporary: false, recallDeadline: '', description: '' });
+        queryClient.invalidateQueries({ queryKey: ['credit'] });
+        queryClient.invalidateQueries({ queryKey: ['creditStatus'] });
+        queryClient.invalidateQueries({ queryKey: ['entityScope'] });
+        queryClient.invalidateQueries({ queryKey: ['organizations', 'hierarchy', tenantId] });
+        queryClient.invalidateQueries({ queryKey: ['entities', tenantId] });
+        await loadData();
+      } else {
+        toast.error(response?.message || 'Credit transfer failed');
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to transfer credits');
+    } finally {
+      toast.dismiss(loadingToastId);
+      setIsTransferringCredits(false);
+    }
   };
 
   // --- Transformation & Filtering ---
@@ -1488,43 +1615,23 @@ export function OrganizationTreeManagement({
             </div>
           </div>
           <DialogFooter>
-            <PearlButton variant="outline" onClick={() => setShowCreditTransfer(false)}>Cancel</PearlButton>
+            <PearlButton variant="outline" onClick={() => setShowCreditTransfer(false)} disabled={isTransferringCredits}>Cancel</PearlButton>
             <PearlButton
-              onClick={async () => {
-                try {
-                  const transferData = {
-                    fromEntityId: selectedOrg?.entityId || undefined,
-                    toEntityType: creditTransferForm.destinationEntityType,
-                    toEntityId: creditTransferForm.destinationEntityId,
-                    creditAmount: parseFloat(creditTransferForm.amount),
-                    reason: creditTransferForm.description || `Transfer from ${selectedOrg?.entityName}`
-                  };
-                  const response = await makeRequest('/credits/transfer', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(transferData)
-                  });
-                  if (response.success) {
-                    toast.success(`Successfully transferred ${creditTransferForm.amount} credits!`);
-                    setShowCreditTransfer(false);
-                    setCreditTransferForm({ sourceEntityType: 'organization', sourceEntityId: '', destinationEntityType: 'organization', destinationEntityId: '', amount: '', transferType: 'direct', isTemporary: false, recallDeadline: '', description: '' });
-                    queryClient.invalidateQueries({ queryKey: ['credit'] });
-                    queryClient.invalidateQueries({ queryKey: ['creditStatus'] });
-                    queryClient.invalidateQueries({ queryKey: ['entityScope'] });
-                    queryClient.invalidateQueries({ queryKey: ['organizations', 'hierarchy', tenantId] });
-                    loadData();
-                  } else {
-                    toast.error(response.message || 'Credit transfer failed');
-                  }
-                } catch (error: any) {
-                  toast.error(error.message || 'Failed to transfer credits');
-                }
-              }}
-              disabled={!creditTransferForm.destinationEntityId || !creditTransferForm.amount || creditTransferForm.destinationEntityId === 'no-orgs' || creditTransferForm.destinationEntityId === 'no-locations'}
+              onClick={handleTransferCredits}
+              disabled={isTransferringCredits || !creditTransferForm.destinationEntityId || !creditTransferForm.amount || creditTransferForm.destinationEntityId === 'no-orgs' || creditTransferForm.destinationEntityId === 'no-locations'}
               className="bg-green-600 hover:bg-green-700"
             >
-              <ArrowRightLeft className="w-4 h-4 mr-2" />
-              Transfer Credits
+              {isTransferringCredits ? (
+                <>
+                  <ZopkitRoundLoader size="xs" className="mr-2" />
+                  Transferring...
+                </>
+              ) : (
+                <>
+                  <ArrowRightLeft className="w-4 h-4 mr-2" />
+                  Transfer Credits
+                </>
+              )}
             </PearlButton>
           </DialogFooter>
         </DialogContent>

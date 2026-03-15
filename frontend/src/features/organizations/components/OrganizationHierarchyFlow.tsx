@@ -484,6 +484,9 @@ function OrganizationHierarchyFlowInner({
             setShowCreditAllocationModal(false);
             setSelectedEntityForAllocation(null);
           }}
+          onSuccess={() => {
+            onRefresh?.();
+          }}
           entityId={selectedEntityForAllocation.id}
           entityName={selectedEntityForAllocation.name}
           entityType={selectedEntityForAllocation.type}

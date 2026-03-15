@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Loader2, Search, Users, Building2, CreditCard, Eye, Power, PowerOff, Download, Plus, ChevronRight, ChevronDown, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import { runMutationWithFeedback } from '@/lib/mutation-feedback';
 
 interface Tenant {
   tenantId: string;
@@ -76,6 +77,7 @@ export const TenantManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [mutatingTenantId, setMutatingTenantId] = useState<string | null>(null);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -83,7 +85,9 @@ export const TenantManagement: React.FC = () => {
     totalPages: 0
   });
 
-  const fetchTenants = async () => {
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchTenants = async (signal?: AbortSignal) => {
     try {
       setLoading(true);
       const response = await api.get('/admin/tenants/comprehensive', {
@@ -92,14 +96,17 @@ export const TenantManagement: React.FC = () => {
           status: statusFilter !== 'all' ? statusFilter : undefined,
           page: pagination.page,
           limit: pagination.limit
-        }
+        },
+        signal
       });
 
       if (response.data.success) {
         setTenants(response.data.data.tenants);
         setPagination(response.data.data.pagination);
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Ignore aborted requests (user typed again before previous completed)
+      if (error?.name === 'AbortError' || error?.code === 'ERR_CANCELED') return;
       console.error('Failed to fetch tenants:', error);
       toast.error('Failed to load tenants');
     } finally {
@@ -108,8 +115,21 @@ export const TenantManagement: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchTenants();
-  }, [searchTerm, statusFilter, pagination.page]);
+    const controller = new AbortController();
+
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+
+    // Debounce search input; fire immediately for filter/page changes
+    const delay = searchTerm ? 300 : 0;
+    searchDebounceRef.current = setTimeout(() => {
+      fetchTenants(controller.signal);
+    }, delay);
+
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+      controller.abort();
+    };
+  }, [searchTerm, statusFilter, pagination.page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleViewDetails = async (tenant: Tenant) => {
     try {
@@ -136,20 +156,33 @@ export const TenantManagement: React.FC = () => {
   };
 
   const handleToggleStatus = async (tenant: Tenant) => {
+    if (mutatingTenantId === tenant.tenantId) return;
+    setMutatingTenantId(tenant.tenantId);
     try {
-      const response = await api.patch(`/admin/tenants/${tenant.tenantId}/status`, {
-        isActive: !tenant.isActive,
-        reason: 'Admin action'
+      const response = await runMutationWithFeedback({
+        scope: 'admin-tenant-status',
+        idParts: [tenant.tenantId, !tenant.isActive ? 'activate' : 'deactivate'],
+        loadingMessage: `${!tenant.isActive ? 'Activating' : 'Deactivating'} tenant...`,
+        successMessage: `Tenant ${!tenant.isActive ? 'activated' : 'deactivated'} successfully`,
+        errorMessage: 'Failed to update tenant status',
+        execute: (idempotencyKey) => api.patch(`/admin/tenants/${tenant.tenantId}/status`, {
+          isActive: !tenant.isActive,
+          reason: 'Admin action'
+        }, {
+          headers: {
+            'X-Idempotency-Key': idempotencyKey
+          }
+        })
       });
 
       if (response.data.success) {
-        toast.success(`Tenant ${!tenant.isActive ? 'activated' : 'deactivated'} successfully`);
         queryClient.invalidateQueries({ queryKey: ['tenant'] });
         fetchTenants();
       }
     } catch (error) {
       console.error('Failed to toggle tenant status:', error);
-      toast.error('Failed to update tenant status');
+    } finally {
+      setMutatingTenantId(null);
     }
   };
 
@@ -170,8 +203,21 @@ export const TenantManagement: React.FC = () => {
       return;
     }
 
+    if (mutatingTenantId === tenantId) return;
+    setMutatingTenantId(tenantId);
     try {
-      const response = await api.post(`/admin/tenants/${tenantId}/clean-orphaned-credits`);
+      const response = await runMutationWithFeedback({
+        scope: 'admin-clean-orphaned-credits',
+        idParts: [tenantId],
+        loadingMessage: 'Cleaning orphaned credits...',
+        successMessage: null,
+        errorMessage: 'Failed to clean orphaned credits',
+        execute: (idempotencyKey) => api.post(`/admin/tenants/${tenantId}/clean-orphaned-credits`, {}, {
+          headers: {
+            'X-Idempotency-Key': idempotencyKey
+          }
+        })
+      });
       if (response.data.success) {
         toast.success(response.data.message);
         queryClient.invalidateQueries({ queryKey: ['tenant'] });
@@ -180,23 +226,34 @@ export const TenantManagement: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to clean orphaned credits:', error);
-      toast.error('Failed to clean orphaned credits');
+    } finally {
+      setMutatingTenantId(null);
     }
   };
 
   const handleAllocateCredits = async (entityId: string, amount: number, operationCode: string) => {
     try {
-      const response = await api.post('/admin/credits/bulk-allocate', {
-        allocations: [{
-          entityId,
-          amount: amount.toString(),
-          operationCode
-        }],
-        reason: 'Admin manual allocation'
+      const response = await runMutationWithFeedback({
+        scope: 'admin-bulk-credit-allocation',
+        idParts: [entityId, amount, operationCode],
+        loadingMessage: 'Allocating credits...',
+        successMessage: `Allocated ${amount} credits successfully`,
+        errorMessage: 'Failed to allocate credits',
+        execute: (idempotencyKey) => api.post('/admin/credits/bulk-allocate', {
+          allocations: [{
+            entityId,
+            amount: amount.toString(),
+            operationCode
+          }],
+          reason: 'Admin manual allocation'
+        }, {
+          headers: {
+            'X-Idempotency-Key': idempotencyKey
+          }
+        })
       });
 
       if (response.data.success) {
-        toast.success(`Allocated ${amount} credits successfully`);
         queryClient.invalidateQueries({ queryKey: ['tenant'] });
         queryClient.invalidateQueries({ queryKey: ['creditStatus'] });
         queryClient.invalidateQueries({ queryKey: ['credit'] });
@@ -206,7 +263,6 @@ export const TenantManagement: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to allocate credits:', error);
-      toast.error('Failed to allocate credits');
       throw error;
     }
   };
@@ -385,8 +441,11 @@ export const TenantManagement: React.FC = () => {
                           variant="outline"
                           size="sm"
                           onClick={() => handleToggleStatus(tenant)}
+                          disabled={mutatingTenantId === tenant.tenantId}
                         >
-                          {tenant.isActive ? (
+                          {mutatingTenantId === tenant.tenantId ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : tenant.isActive ? (
                             <PowerOff className="h-4 w-4" />
                           ) : (
                             <Power className="h-4 w-4" />
@@ -411,9 +470,14 @@ export const TenantManagement: React.FC = () => {
                           variant="outline"
                           size="sm"
                           onClick={() => handleCleanOrphanedCredits(tenant.tenantId)}
+                          disabled={mutatingTenantId === tenant.tenantId}
                           title="Clean Orphaned Credits"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          {mutatingTenantId === tenant.tenantId ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
                         </Button>
                       </div>
                     </TableCell>
@@ -506,11 +570,8 @@ const EntityHierarchyWithCredits: React.FC<EntityHierarchyWithCreditsProps> = ({
         ...prev,
         [entityId]: ''
       }));
-      setAllocatingEntity(null);
-      toast.success('Credits allocated successfully');
     } catch (error) {
       console.error('Allocation error:', error);
-      toast.error('Failed to allocate credits');
     } finally {
       setAllocatingEntity(null);
     }

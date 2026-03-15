@@ -86,22 +86,58 @@ apiOptimized.interceptors.request.use(async (config) => {
   return Promise.reject(error);
 })
 
-// Response interceptor - simplified
+// Response interceptor
 apiOptimized.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      logger.debug('Authentication required — session may have expired')
-      cachedToken = null;
-      tokenCacheTime = 0;
+    // ── No response: network failure or backend down ──────────────────────
+    if (!error.response) {
+      if ((error as any).code !== 'ERR_CANCELED' && (error as any).name !== 'CanceledError') {
+        const msg = !navigator.onLine
+          ? "You're offline. Please check your internet connection."
+          : 'Server is temporarily unavailable. Please try again in a moment.'
+        toast.error(msg, { id: 'network-error', duration: 6000, position: 'top-center' })
+      }
+      return Promise.reject(error)
     }
 
-    if (error.response?.status && error.response.status >= 500) {
+    const status = error.response.status
+
+    // ── 401: clear cached token + notify (deduped by toast id) ───────────
+    if (status === 401) {
+      logger.debug('Authentication required — session may have expired')
+      cachedToken = null
+      tokenCacheTime = 0
+      const publicPaths = ['/', '/login', '/auth/callback', '/pricing']
+      const isPublic = publicPaths.some(p =>
+        window.location.pathname === p || window.location.pathname.startsWith(p + '/')
+      )
+      if (!isPublic) {
+        toast.error('Your session has expired. Please sign in again.', {
+          id: 'session-expired',
+          duration: 8000,
+          position: 'top-center',
+        })
+      }
+    }
+
+    // ── 403: permission denied ────────────────────────────────────────────
+    if (status === 403) {
+      toast.error("You don't have permission to perform this action.", {
+        id: 'forbidden',
+        duration: 5000,
+        position: 'top-center',
+      })
+    }
+
+    // ── 5xx: server error ─────────────────────────────────────────────────
+    if (status >= 500) {
       const trialExpired = localStorage.getItem('trialExpired')
       if (!trialExpired) {
         toast.error('Server temporarily unavailable. Please try again in a moment.', {
-          duration: 4000,
-          position: 'top-center'
+          id: 'network-error',
+          duration: 6000,
+          position: 'top-center',
         })
       }
     }
